@@ -253,4 +253,17 @@ public class PolicyDefinitionTests
 
     [Fact]
     public void SettingKey_HasPolicyPrefix() => Int().SettingKey.Should().Be("policy.t.int");
+
+    [Theory]
+    [InlineData(PolicyModuleTarget.Main, false, true)]
+    [InlineData(PolicyModuleTarget.Main, true, false)]
+    [InlineData(PolicyModuleTarget.Detail, false, false)]
+    [InlineData(PolicyModuleTarget.Detail, true, true)]
+    [InlineData(PolicyModuleTarget.Any, false, true)]
+    [InlineData(PolicyModuleTarget.Any, true, true)]
+    public void AppliesTo(PolicyModuleTarget target, bool isDetail, bool expected) =>
+        (Int() with { Target = target }).AppliesTo(isDetail).Should().Be(expected);
+
+    [Fact]
+    public void Target_DefaultsToMain() => Int().Target.Should().Be(PolicyModuleTarget.Main);
 }

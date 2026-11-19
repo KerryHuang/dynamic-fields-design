@@ -4,6 +4,7 @@ using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Modules;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
@@ -65,10 +66,12 @@ public class GetModulePoliciesHandler(IModuleRepository modules, IPolicyReader r
 {
     public async Task<ServiceResult> Handle(GetModulePoliciesRequest request, CancellationToken ct)
     {
-        var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: false, ct);
+        // 要載入欄位：明細模組看啟用中的明細關聯欄位判斷
+        var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
         if (module is null) return ServiceResult.NotFound(PolicyMessages.ModuleNotFound);
+        var isDetail = ModuleRelations.IsDetail(module);
         var items = new List<ModulePolicyResponse>();
-        foreach (var def in PolicyCatalog.All.Where(d => d.Scope == PolicyScope.Module))
+        foreach (var def in PolicyCatalog.All.Where(d => d.Scope == PolicyScope.Module && d.AppliesTo(isDetail)))
             items.Add(PolicyJson.Module(def, await reader.ResolveAsync(def, module.Id, ct)));
         return ServiceResult.Success(items);
     }
@@ -81,11 +84,14 @@ public class UpdateModulePolicyHandler(
 {
     public async Task<ServiceResult> Handle(UpdateModulePolicyRequest request, CancellationToken ct)
     {
-        var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: false, ct);
+        // 要載入欄位：明細模組看啟用中的明細關聯欄位判斷
+        var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
         if (module is null) return ServiceResult.NotFound(PolicyMessages.ModuleNotFound);
         if (PolicyCatalog.Find(request.Code) is not { } def) return ServiceResult.NotFound(PolicyMessages.NotFound);
         if (def.Scope == PolicyScope.System)
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["code"] = [PolicyMessages.SystemOnly] });
+        if (!def.AppliesTo(ModuleRelations.IsDetail(module)))
+            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["code"] = [PolicyMessages.NotForThisModule] });
 
         var existing = await overrides.GetTrackedAsync(module.Id, def.Code, ct);
         var old = existing?.Value;

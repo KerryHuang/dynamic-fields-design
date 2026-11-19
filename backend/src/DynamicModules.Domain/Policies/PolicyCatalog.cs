@@ -226,6 +226,57 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition ApprovalAlertRecipients =
         new("approval.alertRecipients", "approval", PolicyKind.Recipients, PolicyScope.System, "admins", 1, 20);
 
+    /// <summary>A16：一個流程的狀態數（流程設計存檔與開啟套件時檢查；改既有流程沒增加狀態不擋）。</summary>
+    public static readonly PolicyDefinition DesignMaxWorkflowStates =
+        new("design.maxWorkflowStates", "design", PolicyKind.Integer, PolicyScope.System, "30", 1, 100, Unit: "count");
+
+    /// <summary>A16：一個流程的轉換數。</summary>
+    public static readonly PolicyDefinition DesignMaxWorkflowTransitions =
+        new("design.maxWorkflowTransitions", "design", PolicyKind.Integer, PolicyScope.System, "200", 1, 1000, Unit: "count");
+
+    /// <summary>A16：每個模組的欄位規則數（規則設計存檔與匯入、開啟套件時檢查）。</summary>
+    public static readonly PolicyDefinition DesignMaxRulesPerModule =
+        new("design.maxRulesPerModule", "design", PolicyKind.Integer, PolicyScope.System, "100", 1, 500, Unit: "count");
+
+    /// <summary>A16：套件內群組數（只在匯入與開啟套件時檢查，設計器不擋）。</summary>
+    public static readonly PolicyDefinition DesignMaxGroupsPerPackage =
+        new("design.maxGroupsPerPackage", "design", PolicyKind.Integer, PolicyScope.System, "20", 1, 100, Unit: "count");
+
+    /// <summary>A16：套件內模組數（也管 workflows 數；只在匯入與開啟套件時檢查）。</summary>
+    public static readonly PolicyDefinition DesignMaxModulesPerPackage =
+        new("design.maxModulesPerPackage", "design", PolicyKind.Integer, PolicyScope.System, "30", 1, 100, Unit: "count");
+
+    /// <summary>A16：套件內每個模組的欄位數（只在匯入與開啟套件時檢查）。</summary>
+    public static readonly PolicyDefinition DesignMaxFieldsPerModule =
+        new("design.maxFieldsPerModule", "design", PolicyKind.Integer, PolicyScope.System, "300", 1, 1000, Unit: "count");
+
+    /// <summary>A16：套件內每個欄位的選項數（含主檔貢獻欄位；只在匯入與開啟套件時檢查）。</summary>
+    public static readonly PolicyDefinition DesignMaxOptionsPerField =
+        new("design.maxOptionsPerField", "design", PolicyKind.Integer, PolicyScope.System, "200", 1, 1000, Unit: "count");
+
+    /// <summary>A16：套件內每個模組的檢視數（只在匯入與開啟套件時檢查）。</summary>
+    public static readonly PolicyDefinition DesignMaxViewsPerModule =
+        new("design.maxViewsPerModule", "design", PolicyKind.Integer, PolicyScope.System, "20", 1, 100, Unit: "count");
+
+    /// <summary>A16：套件內整合數（只在匯入與開啟套件時檢查）。</summary>
+    public static readonly PolicyDefinition DesignMaxIntegrationsPerPackage =
+        new("design.maxIntegrationsPerPackage", "design", PolicyKind.Integer, PolicyScope.System, "20", 1, 100, Unit: "count");
+
+    /// <summary>A19：新模組是否自動建「名稱」欄位並設為標題欄位；「基本資料」區塊一律建立（從範本建立固定不建）。</summary>
+    public static readonly PolicyDefinition ModuleCreateTitleField =
+        new("module.createTitleField", "design", PolicyKind.Boolean, PolicyScope.System, "true");
+
+    /// <summary>A25：新區塊的每列欄數；超過 <see cref="FormMaxColumns"/> 時用上限。一般與明細模組都可覆寫。</summary>
+    public static readonly PolicyDefinition FormDefaultColumns =
+        new("form.defaultColumns", "form", PolicyKind.Integer, PolicyScope.Module, "4", 1, 4, Unit: "count", Target: PolicyModuleTarget.Any);
+
+    /// <summary>
+    /// A25：區塊每列欄數上限；調低只管之後的設定（既有區塊照原欄數）。技術上限 4 對應前端 <c>form-layout.ts</c> 的
+    /// <c>fieldColClass</c> 斷點只排到 4 欄，兩邊一起改。
+    /// </summary>
+    public static readonly PolicyDefinition FormMaxColumns =
+        new("form.maxColumns", "form", PolicyKind.Integer, PolicyScope.System, "4", 1, 4, Unit: "count");
+
     public static DayOfWeek WeekStartOf(string choice) => Enum.Parse<DayOfWeek>(choice, ignoreCase: true);
 
     public static IReadOnlyList<PolicyDefinition> All { get; } =
@@ -241,7 +292,10 @@ public static class PolicyCatalog
          OpsLoginFailureWindowMinutes, OpsSchedulerLagIntervals,
          ApprovalMaxStages, ApprovalMaxBranches, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,
          ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups, ApprovalMaxAddSignUsers, ApprovalMaxAddSignStages,
-         ApprovalOverdueReminderHours, ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients];
+         ApprovalOverdueReminderHours, ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients,
+         DesignMaxWorkflowStates, DesignMaxWorkflowTransitions, DesignMaxRulesPerModule, DesignMaxGroupsPerPackage,
+         DesignMaxModulesPerPackage, DesignMaxFieldsPerModule, DesignMaxOptionsPerField, DesignMaxViewsPerModule,
+         DesignMaxIntegrationsPerPackage, ModuleCreateTitleField, FormDefaultColumns, FormMaxColumns];
 
     public static PolicyDefinition? Find(string code) =>
         All.FirstOrDefault(d => string.Equals(d.Code, code, StringComparison.Ordinal));

@@ -303,7 +303,7 @@ function saveSection() {
         <q-tab name="fields" :label="t('designer.fieldsTab')" />
         <q-tab name="rules" :label="t('designer.rules.tab')" data-testid="tab-rules" />
         <q-tab v-if="!mod?.detailOf" name="taskRules" :label="t('taskRules.tab')" data-testid="tab-task-rules" />
-        <q-tab v-if="!mod?.detailOf" name="policies" :label="t('policies.moduleTab')" data-testid="tab-policies" />
+        <q-tab name="policies" :label="t('policies.moduleTab')" data-testid="tab-policies" />
         <q-tab name="workflow" :label="t('docflow.workflow.tab')" data-testid="tab-workflow" />
         <q-tab v-if="hasApprovalFlows" name="approvalFlows" :label="t('approval.designer.tab')" data-testid="tab-approval-flows" />
         <q-tab v-if="showEventsLedger" name="events" :label="t('events.tab')" data-testid="tab-events" />
@@ -401,7 +401,7 @@ function saveSection() {
         <q-tab-panel v-if="!mod?.detailOf" name="taskRules" class="q-pa-none">
           <TaskRulesTab v-if="mod" :module="mod" :focus-rule="focusRule" />
         </q-tab-panel>
-        <q-tab-panel v-if="!mod?.detailOf" name="policies" class="q-pa-none">
+        <q-tab-panel name="policies" class="q-pa-none">
           <ModulePoliciesTab v-if="mod" :module="mod" />
         </q-tab-panel>
         <q-tab-panel name="workflow" class="q-pa-none">
