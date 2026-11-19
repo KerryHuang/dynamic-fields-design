@@ -26,6 +26,10 @@ import type {
 } from 'src/domain/dynamic/task-board-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
+import type {
+  AuditAction, AuditDetail, AuditFilter, AuditList, HealthCheckConfig, HealthCheckState, HealthCheckUpdate, HealthResults, IncidentDetail, IncidentFilter,
+  IncidentList, IncidentSummary, MailSettings, MailSettingsInput, MailTestResult, OpsOverview, SmtpChannel, SmtpChannelInput,
+} from 'src/domain/ops/ops-types';
 import { handleAuthFailure, http, toApiError } from './http';
 import {
   normalizeBoard, normalizeBoardPage, normalizeGantt, normalizeMoveResult, normalizeScheduleResult, normalizeShareTargets, normalizeViewDetail,
@@ -549,6 +553,35 @@ export const dynamicApi = {
   deleteTaskRule: (moduleKey: string, ruleKey: string) => http.delete(`/modules/${encodeURIComponent(moduleKey)}/task-rules/${encodeURIComponent(ruleKey)}`).then(data),
   applyTaskRule: (recordId: number, ruleKey: string) =>
     http.post<RecordTasks>(`/records/${recordId}/task-rules/${encodeURIComponent(ruleKey)}/apply`).then(data).then(normalizeRecordTasks),
+  resumeTaskRule: (moduleKey: string, ruleKey: string) =>
+    http.post<TaskRule>(`/modules/${encodeURIComponent(moduleKey)}/task-rules/${encodeURIComponent(ruleKey)}/resume`).then(data).then(normalizeTaskRule),
+  /** 維運監控、稽核、寄信設定（維運設計 §17.5）；全部只給系統管理員，伺服器省略 null 屬性。 */
+  getOpsOverview: () => http.get<OpsOverview>('/system/ops/overview').then(data),
+  getHealthChecks: () => http.get<HealthCheckConfig[]>('/system/ops/health-checks').then(data),
+  updateHealthCheck: (code: string, body: HealthCheckUpdate) =>
+    http.put<HealthCheckConfig>(`/system/ops/health-checks/${encodeURIComponent(code)}`, body).then(data),
+  runHealthCheck: (code: string) => http.post<HealthCheckState>(`/system/ops/health-checks/${encodeURIComponent(code)}/run`).then(data),
+  getHealthResults: (code: string, fromUtc: string, toUtc: string) =>
+    http.get<HealthResults>(`/system/ops/health-checks/${encodeURIComponent(code)}/results`, { params: { fromUtc, toUtc } }).then(data),
+  getIncidents: (f: IncidentFilter, cursor?: string) =>
+    http.get<IncidentList>('/system/ops/incidents', {
+      params: { status: f.status.length ? f.status.join(',') : undefined, category: f.category ?? undefined, severity: f.severity ?? undefined, cursor },
+    }).then(data),
+  getIncident: (id: number) => http.get<IncidentDetail>(`/system/ops/incidents/${id}`).then(data),
+  acknowledgeIncident: (id: number, expectedStatus: string) =>
+    http.post<IncidentSummary>(`/system/ops/incidents/${id}/acknowledge`, { expectedStatus }).then(data),
+  resolveIncident: (id: number, expectedStatus: string, note?: string) =>
+    http.post<IncidentSummary>(`/system/ops/incidents/${id}/resolve`, { expectedStatus, note: note || undefined }).then(data),
+  getSmtpChannel: () => http.get<SmtpChannel>('/system/ops/channels/smtp').then(data),
+  saveSmtpChannel: (body: SmtpChannelInput) => http.put('/system/ops/channels/smtp', body).then(data),
+  testSmtpChannel: () => http.post<MailTestResult>('/system/ops/channels/smtp/test').then(data),
+  getMailSettings: () => http.get<MailSettings>('/system/mail-settings').then(data),
+  saveMailSettings: (body: MailSettingsInput) => http.put('/system/mail-settings', body).then(data),
+  testMailSettings: () => http.post<MailTestResult>('/system/mail-settings/test').then(data),
+  getAudit: (f: AuditFilter, cursor?: string) =>
+    http.get<AuditList>('/system/ops/audit', { params: { ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)), cursor } }).then(data),
+  getAuditEntry: (id: number) => http.get<AuditDetail>(`/system/ops/audit/${id}`).then(data),
+  getAuditActions: () => http.get<AuditAction[]>('/system/ops/audit/actions').then(data),
   /** Policy endpoints; an absent `value`/`override` in a response means "not set" (the server omits nulls). Sending `null` goes back to the layer above. */
   getSystemPolicies: () => http.get<SystemPolicy[]>('/system/policies').then(data),
   saveSystemPolicy: (code: string, value: PolicyValue | null) =>

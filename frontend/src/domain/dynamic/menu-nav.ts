@@ -51,6 +51,9 @@ export function systemLinks(me: Pick<Me, 'isSystemAdmin' | 'designer'> | undefin
       { to: '/system/dashboards', label: 'menu.dashboardsAdmin', icon: 'space_dashboard', testid: 'dashboards-admin-menu' },
       { to: '/system/appearance', label: 'theme.adminMenu', icon: 'palette', testid: 'appearance-menu' },
       { to: '/system/policies', label: 'policies.menu', icon: 'tune', testid: 'policies-menu' },
+      { to: '/system/mail', label: 'menu.mail', icon: 'mail', testid: 'mail-menu' },
+      { to: '/system/ops', label: 'menu.ops', icon: 'monitor_heart', testid: 'ops-menu' },
+      { to: '/system/audit', label: 'menu.audit', icon: 'fact_check', testid: 'audit-menu' },
     );
   }
   if (me.isSystemAdmin && me.designer.read)

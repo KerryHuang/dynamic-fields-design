@@ -61,6 +61,11 @@ watch([() => route.query.tab, () => route.query.target, hasApprovalFlows], ([q, 
   if (Number.isFinite(id)) void openFlows(id);
   else tab.value = 'approvalFlows';
 }, { immediate: true });
+// 規則自動暫停的通知連結帶 ?tab=taskRules&rule=<規則代碼>：切到任務規則分頁並捲到那條規則（維運設計 §17.2.5）
+const focusRule = computed(() => (route.query.tab === 'taskRules' && typeof route.query.rule === 'string' ? route.query.rule : null));
+watch([() => route.query.tab, mod], ([q, m]) => {
+  if (q === 'taskRules' && m && !m.detailOf) tab.value = 'taskRules';
+}, { immediate: true });
 const forbidden = computed(() => isForbidden(query.error.value));
 const notFound = computed(() => (query.error.value as ApiError | null)?.status === 404);
 
@@ -394,7 +399,7 @@ function saveSection() {
           <RulesTab :module="mod" />
         </q-tab-panel>
         <q-tab-panel v-if="!mod?.detailOf" name="taskRules" class="q-pa-none">
-          <TaskRulesTab v-if="mod" :module="mod" />
+          <TaskRulesTab v-if="mod" :module="mod" :focus-rule="focusRule" />
         </q-tab-panel>
         <q-tab-panel v-if="!mod?.detailOf" name="policies" class="q-pa-none">
           <ModulePoliciesTab v-if="mod" :module="mod" />

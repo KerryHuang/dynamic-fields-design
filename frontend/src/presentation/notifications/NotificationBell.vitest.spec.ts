@@ -123,6 +123,19 @@ describe('NotificationBell', () => {
     w.unmount();
   });
 
+  it('維運通知依 titleKey 照目前語系組標題；沒有 titleKey 用存檔時的標題', async () => {
+    const { w } = await mountBell({ items: [
+      note(1, { kind: 'opsRulePaused', title: '舊標題', titleKey: 'ops.title.rulePaused', titleParams: { ruleKey: 'follow', failures: 5 } }),
+      note(2, { kind: 'opsIncident', title: '存檔時的標題' }),
+    ], unreadCount: 2 });
+    await w.get('[data-testid="notification-bell"]').trigger('click');
+    await flushPromises();
+    expect(body('[data-testid="notification-item-1"]')!.textContent).toContain('維運事件： 任務規則「follow」連續失敗 5 次，已自動暫停');
+    expect(body('[data-testid="notification-item-1"]')!.textContent).not.toContain('舊標題');
+    expect(body('[data-testid="notification-item-2"]')!.textContent).toContain('維運事件： 存檔時的標題');
+    w.unmount();
+  });
+
   it('approval notification link opens the record detail', async () => {
     const { w, push } = await mountBell({ items: [note(7, { kind: 'approvalPending', title: 'PO-0007', link: '/dynamic/m/5' })], unreadCount: 1 });
     await w.get('[data-testid="notification-bell"]').trigger('click');

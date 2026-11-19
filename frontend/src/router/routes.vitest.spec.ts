@@ -29,6 +29,14 @@ describe('policies route', () => {
   });
 });
 
+describe('ops routes', () => {
+  it('/system/ops、/system/audit、/system/mail 開啟監控、稽核、寄信設定頁', () => {
+    expect(loaderOf('/system/ops').source).toContain('OpsPage');
+    expect(loaderOf('/system/audit').source).toContain('AuditPage');
+    expect(loaderOf('/system/mail').source).toContain('MailSettingsPage');
+  });
+});
+
 describe('conversions route', () => {
   it('/system/conversions opens ConversionsPage', () => {
     expect(loaderOf('/system/conversions').source).toContain('ConversionsPage');

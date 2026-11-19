@@ -13,10 +13,11 @@ import { dynamicApi } from 'src/services/api/dynamic-api';
 import ApprovalFlowsTab from 'src/presentation/dynamic/approval-designer/ApprovalFlowsTab.vue';
 import WorkflowTab from 'src/presentation/dynamic/workflow/WorkflowTab.vue';
 import FieldEditorDialog from 'src/presentation/dynamic/designer/FieldEditorDialog.vue';
+import TaskRulesTab from 'src/presentation/dynamic/tasks/TaskRulesTab.vue';
 import ModuleEditorPage from './ModuleEditorPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn(), deleteCheck: vi.fn(), deleteTarget: vi.fn(), getMe: vi.fn(),
-  getEvents: vi.fn(), getChecks: vi.fn(), getLedger: vi.fn(), getWorkflow: vi.fn(), getApprovalFlows: vi.fn(), getModules: vi.fn(), getModulePolicies: vi.fn(), saveModulePolicy: vi.fn() } }));
+  getEvents: vi.fn(), getChecks: vi.fn(), getLedger: vi.fn(), getWorkflow: vi.fn(), getApprovalFlows: vi.fn(), getModules: vi.fn(), getModulePolicies: vi.fn(), saveModulePolicy: vi.fn(), getTaskRules: vi.fn(), getEffectivePolicies: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
 const detail: ModuleDetail = {
@@ -67,6 +68,14 @@ describe('ModuleEditorPage', () => {
     expect(plain.findComponent(ApprovalFlowsTab).exists()).toBe(true);
     expect(plain.findComponent(ApprovalFlowsTab).props('focusTarget')).toBeFalsy();
     plain.unmount();
+  });
+
+  it('?tab=taskRules&rule= 開任務規則分頁並把規則代碼交給分頁捲過去（規則自動暫停通知的連結）', async () => {
+    api.getTaskRules.mockResolvedValue([]);
+    const w = await mountPage(detail, true, true, true, '/m/m?tab=taskRules&rule=follow');
+    expect(w.findComponent(TaskRulesTab).exists()).toBe(true);
+    expect(w.findComponent(TaskRulesTab).props('focusRule')).toBe('follow');
+    w.unmount();
   });
 
   it('approval flows tab hidden for detail and extension modules', async () => {

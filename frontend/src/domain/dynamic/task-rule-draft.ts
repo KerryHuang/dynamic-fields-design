@@ -1,5 +1,6 @@
 import { pruneCondition } from './condition';
 import type { ConditionNode, I18nText, Locale, SchemaField } from './types';
+import type { TaskRuleAutoPause, TaskRuleFailureStreak, TaskRuleLastPause } from 'src/domain/ops/ops-types';
 
 export type TaskRuleOn = 'onCreate' | 'onUpdateMatch' | 'onFieldBecomes' | 'manual';
 export type TaskRuleRepeat = 'once' | 'everyTime';
@@ -40,6 +41,12 @@ export interface TaskRule extends TaskRuleInput {
   moduleKey: string;
   appKey?: string | null;
   warnings: string[];
+  /** 系統自動暫停中（維運設計 §17.2.7）；null＝沒暫停。 */
+  autoPause?: TaskRuleAutoPause | null;
+  /** 已恢復、還沒再暫停：上次暫停的起訖與略過次數。 */
+  lastPause?: TaskRuleLastPause | null;
+  /** 沒暫停但有連續失敗。 */
+  failureStreak?: TaskRuleFailureStreak | null;
 }
 
 /** Editing copy: conditions may still hold half-filled rows, descriptions may be empty. */
