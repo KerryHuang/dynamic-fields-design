@@ -83,7 +83,7 @@ public sealed class AlertOutboxWriter(
     /// </summary>
     public async Task ReconcileBackfillAsync(string transitionId, CancellationToken ct)
     {
-        var reserved = direct.Reserve(transitionId, AlertOutboxStatus.Pending);
+        var reserved = direct.Reserve(transitionId, null);
         if (reserved.Kind == DirectHandoff.None) return;
         // 沒有佇列列（政策不寄）或佇列已經領走時，兩個條件式更新都影響 0 列
         if (reserved is { Kind: DirectHandoff.Sent, SentUtc: { } sentAt }) await outbox.MarkSentDirectAsync(transitionId, sentAt, ct);

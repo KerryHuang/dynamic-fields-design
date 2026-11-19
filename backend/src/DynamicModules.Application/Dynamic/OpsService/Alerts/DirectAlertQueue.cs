@@ -98,9 +98,11 @@ public sealed class DirectAlertQueue(
 
     /// <summary>
     /// 補寫（交易內）或去重核對要把這個轉換交給佇列：還沒開始寄的保留、不再開始寄；在途的記下「佇列列由直送領著」。
-    /// <paramref name="fallback"/> 是沒寄出時佇列列該記的狀態。之後提交成功呼叫 <see cref="Confirm"/>。
+    /// <paramref name="fallback"/> 是沒寄出時佇列列該記的狀態：補寫每次都帶這一次的判定，覆寫先前（可能已回滾的）保留；
+    /// 去重核對帶 null，保留既有交接的狀態（那是已提交那次補寫的判定），新保留才記 <c>pending</c>（只有 <c>pending</c> 的列會被改由直送領著）。
+    /// 之後提交成功呼叫 <see cref="Confirm"/>。
     /// </summary>
-    public DirectReservation Reserve(string transitionId, AlertOutboxStatus fallback)
+    public DirectReservation Reserve(string transitionId, AlertOutboxStatus? fallback)
     {
         lock (_sync)
         {
@@ -110,8 +112,9 @@ public sealed class DirectAlertQueue(
             if (item.ReservedUtc is null)
             {
                 item.ReservedUtc = time.GetUtcNow().UtcDateTime;
-                item.Fallback = fallback;
+                item.Fallback = fallback ?? AlertOutboxStatus.Pending;
             }
+            else if (fallback is { } latest) item.Fallback = latest;
             if (item.SentUtc is { } sent) return new(DirectHandoff.Sent, sent);
             if (!item.Sending) return new(DirectHandoff.Queued);
             item.RowClaimed = true;

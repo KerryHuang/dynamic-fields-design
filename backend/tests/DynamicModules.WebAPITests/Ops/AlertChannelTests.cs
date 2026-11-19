@@ -741,6 +741,71 @@ public class AlertChannelTests
         mail.Sent.Should().HaveCount(2);
     }
 
+    /// <summary>
+    /// 交接 fallback 跟著最新一次補寫（codex 短核對 P2）：SMTP 在途時補寫以 <c>pending</c> 保留後回滾；同一檢查回到正常，
+    /// 再次補寫判定已過時（<c>skipped</c>）並提交；之後 SMTP 失敗，交回的佇列列是 <c>skipped</c>、過時的開啟信不會再寄。
+    /// <c>reconcile</c>：第二次補寫提交後回傳失敗，重試走去重核對（<see cref="AlertOutboxWriter.ReconcileBackfillAsync"/>），也不能把交接改回 <c>pending</c>。
+    /// </summary>
+    [Theory]
+    [InlineData("backfill")]
+    [InlineData("reconcile")]
+    public async Task DirectHandoff_RolledBackThenRecovered_RetryBackfillSuperseded_SmtpFails_RowSkipped_StaleMailNotSent(string path)
+    {
+        var mail = new FakeMailSender();
+        var readOnly = new ReadOnlySwitch();
+        var rollback = new ThrowBeforeCommit();
+        var afterCommit = new ThrowAfterCommit();
+        using var app = App(mail);
+        app.Interceptors.Add(readOnly);
+        app.Interceptors.Add(rollback);
+        app.Interceptors.Add(afterCommit);
+        await Configure(app);
+        await EnsureChecks(app);
+        var direct = app.Services.GetRequiredService<DirectAlertQueue>();
+        var def = HealthCheckCatalog.Find(Disk)!;
+        var engine = Engine(app, new ScriptedProbe(Disk, new ProbeResult(HealthStatus.Critical, 500), new ProbeResult(HealthStatus.Ok, 50_000)));
+        readOnly.On = true;
+        await engine.RunAsync(def, EffectiveHealthSettings.Of(def, null), null, CancellationToken.None);
+        var diskId = direct.PendingTransitionIds().Should().ContainSingle().Subject;
+
+        var (entered, release) = mail.HoldFirst();
+        mail.Result = m => m.Body.Contains("看門狗直接寄出") ? new MailSendResult(false, MailSendResult.Send) : MailSendResult.Success;
+        var sending = direct.SendDueAsync(CancellationToken.None);
+        await Within(entered);
+        // 1. SMTP 在途，補寫以 pending 保留，交易回滾
+        readOnly.On = false;
+        rollback.Armed = true;
+        await engine.FlushAsync(CancellationToken.None);
+        engine.PendingCount.Should().Be(1);
+        // 2. 同一檢查回到正常（資料庫仍寫不進），寬限內再次補寫：這次判定已過時
+        readOnly.On = true;
+        app.Time.Advance(TimeSpan.FromMinutes(1));
+        await engine.RunAsync(def, EffectiveHealthSettings.Of(def, null), null, CancellationToken.None);
+        engine.PendingCount.Should().Be(2);
+        readOnly.On = false;
+        if (path == "reconcile")
+        {
+            afterCommit.Armed = 1;
+            await engine.FlushAsync(CancellationToken.None);
+            engine.PendingCount.Should().Be(2, "提交後丟例外：執行器以為沒寫入");
+        }
+        await engine.FlushAsync(CancellationToken.None);
+        engine.PendingCount.Should().Be(0);
+        var opened = (await Outbox(app)).Single(r => r.TransitionId == diskId);
+        opened.Status.Should().Be(AlertOutboxStatus.Sending, "在途：佇列列由直送領著");
+        // 3. SMTP 失敗：交回的是這一次補寫的判定
+        release.SetResult();
+        await Within(sending);
+        await direct.SendDueAsync(CancellationToken.None);
+
+        opened = (await Outbox(app)).Single(r => r.TransitionId == diskId);
+        opened.Status.Should().Be(AlertOutboxStatus.Skipped, "已過時的開啟信交回 skipped，不是第一次保留時的 pending");
+        opened.ClaimedBy.Should().BeNull();
+        await Dispatch(app);
+        mail.Sent.Should().NotContain(m => m.Subject == opened.Subject, "過時的開啟信不會被佇列寄出");
+        direct.PendingTransitionIds().Should().BeEmpty();
+    }
+
     /// <summary>審查修正必修 3：收件信箱陣列含 null 回 400（<c>toAddresses</c> 欄位錯誤），不是 500；啟用、停用都一樣。</summary>
     [Theory]
     [InlineData(true)]

@@ -2509,6 +2509,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 
 - 必修 1：直送從快照寄出已交給佇列或已撤回的信、在途信被佇列再寄一次 → 上述交接協定；測試 `AlertChannelTests.DirectHandoff_BackfillWhileSmtpInFlight_InFlightRowSentDirect_QueuedOneLeftToOutbox_EachSentOnce`、`DirectWithdraw_BackToNormalWhileSendingAnother_WithdrawnNotSent`（可阻塞的假寄送器控制在途時點），回滾保護 `DirectHandoff_BackfillRolledBack_DirectResumesAfterGrace_SentOnce`。
 - 必修 2：提交成功但回傳失敗後，直送與佇列各寄一次、去重返回不交接 → 直送寄前查結果列、去重返回核對佇列列；測試 `HealthCheckTests.C14b_CommitThenThrow_SmtpConfigured_BothSendersRun_SentExactlyOnce`（佇列先跑、直送先跑、直送時資料庫讀不到三種順序）。
+- 短核對 P2（codex）：交接的 fallback 只在第一次保留時設定——在途時補寫以 `pending` 保留後回滾、同一檢查回到正常，再次補寫判定過時（`skipped`）並提交，SMTP 失敗後佇列列卻被交回 `pending`、寄出過時的開啟信 → 補寫每次保留都以這一次的判定覆寫 fallback；去重核對不帶判定、保留既有交接的狀態（新保留才記 `pending`）；測試 `AlertChannelTests.DirectHandoff_RolledBackThenRecovered_RetryBackfillSuperseded_SmtpFails_RowSkipped_StaleMailNotSent`（直接補寫、提交後回傳失敗走去重核對兩種）。
 - 必修 3：`toAddresses` 含 null 元素時 `Trim()` 丟例外回 500 → 正規化前擋下，回 `toAddresses` 的 400 欄位錯誤（`EmailFormat`）；測試 `AlertChannelTests.UpdateValidation_NullRecipient_400ToAddresses`（啟用、停用）。
 - 必修 4：摘要信用 `CreatedUtc` 判斷，整點前建立、整點後才摘要化的列下一次領取就寄出 → 摘要化時把時間記進 `NextAttemptUtc`、以它判斷（偏離 1 已改寫；政策說明「下一個整點併成一封摘要信」不變，現在與程式一致）；測試 `AlertChannelTests.D03b_CreatedBeforeHour_DigestedAfterHour_WaitsForNextHour`。
 - 不修（主控裁決）：密碼省略或 null＝保留、`""`＝清除，照 §17.5 與 D05（§17.5 補「或 null」、D05 表補這兩步，與 D05 測試一致）。
