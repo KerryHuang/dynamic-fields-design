@@ -398,7 +398,7 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 - approve、reject（預演＝下一關、會觸發的轉移與效果）。
 - 確認碼機制在 mcp1 已建好，mcp2b 只新增工具，並新增 `mcp.highRiskTools` 政策與「多選代碼」政策型別。
 
-**mcp3 設計器**（`design.read`、`design.write`；工具一律走 `IDesignerRequest`，沒有設計權就被 behavior 擋下）
+**mcp3 設計器**（`design.read`、`design.write`；工具照對應 request 原本的宣告把關——`IDesignerRequest`、`IPermissionAdminRequest`、`ISystemAdminRequest`——沒有對應權限就被 behavior 擋下。權限軸起，宣告 `IPermissionAdminRequest` 的請求（改模組權限、開關應用程式、帳號與成員）在 MCP 通道一律拒絕，直到 mcp3-4 有答案並加權杖範圍，見[權限軸設計](2026-11-19-permission-axes-design.md) §14、M8）
 
 - 讀：describe_module_design（含規則、流程、檢視、權限設定）、list_apps、get_app。
 - 一般寫入：create_module、add_field、update_field、add_block、set_workflow、create_view、create_report。
