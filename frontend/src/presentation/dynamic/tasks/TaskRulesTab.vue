@@ -6,7 +6,7 @@ import { useI18n } from 'vue-i18n';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useEffectivePolicies } from 'src/application/dynamic/queries/policies-queries';
 import { useDeleteTaskRule, useResumeTaskRule, useSaveTaskRule, useTaskRulesQuery } from 'src/application/dynamic/queries/task-rules-queries';
-import { formatTime } from 'src/domain/ops/ops-format';
+import { formatTime, labelOr } from 'src/domain/ops/ops-format';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { fromTaskRule, toTaskRuleBody, type TaskRule } from 'src/domain/dynamic/task-rule-draft';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
@@ -17,7 +17,7 @@ import TaskRuleEditorDialog from './TaskRuleEditorDialog.vue';
 
 /** focusRule：暫停通知的連結帶 `rule=<規則代碼>`，捲到那條規則並展開暫停資訊（維運設計 §17.2.5）。 */
 const props = defineProps<{ module: ModuleDetail; focusRule?: string | null }>();
-const { t, locale } = useI18n();
+const { t, te, locale } = useI18n();
 const $q = useQuasar();
 
 const key = computed(() => props.module.key);
@@ -126,7 +126,7 @@ function confirmDelete() {
           <div v-if="r.autoPause && expandedPause === r.key" class="text-caption q-mt-xs" :data-testid="`task-rule-pause-info-${r.key}`" @click.stop>
             <div>{{ t('taskRules.pause.since', { time: formatTime(r.autoPause.pausedUtc) }) }}</div>
             <div>{{ t('taskRules.pause.failures', { n: r.autoPause.consecutiveFailures }) }}</div>
-            <div v-if="r.autoPause.lastErrorCode">{{ t('taskRules.pause.lastError', { code: r.autoPause.lastErrorCode }) }}</div>
+            <div v-if="r.autoPause.lastErrorCode">{{ t('taskRules.pause.lastError', { code: labelOr(t, te, `ops.ruleError.${r.autoPause.lastErrorCode}`, r.autoPause.lastErrorCode) }) }}</div>
             <div v-if="r.autoPause.lastRequestId">{{ t('taskRules.pause.requestId', { code: r.autoPause.lastRequestId.slice(0, 8) }) }}</div>
             <div>{{ t('taskRules.pause.skipped', { n: r.autoPause.skippedWhilePaused }) }}</div>
           </div>

@@ -302,7 +302,7 @@ describe('TaskRulesTab 自動暫停', () => {
     await flushPromises();
     const info = q('[data-testid="task-rule-pause-info-follow"]').textContent!;
     expect(info).toContain('連續失敗：5 次');
-    expect(info).toContain('effect.targetUnavailable');
+    expect(info).toContain('效果的目標模組未啟用或已關閉');
     expect(info).toContain('01234567');
     expect(info).not.toContain('89abcdef');
     expect(info).toContain('暫停期間略過 3 次存檔');

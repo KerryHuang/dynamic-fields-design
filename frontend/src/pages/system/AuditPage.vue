@@ -27,7 +27,8 @@ const RESULTS = ['success', 'denied', 'invalid', 'failed'];
 
 const form = ref({ from: null as string | null, to: null as string | null, actor: null as string | null, action: null as string | null,
   channel: null as string | null, result: null as string | null });
-const showFilters = ref(false);
+/** 篩選列：手機預設收起，其他寬度展開。 */
+const showFilters = ref(!$q.screen.lt.sm);
 /** 動作選單的值：`group:<分組>` 或動作代碼。 */
 const actionOptions = computed(() => [
   ...GROUPS.value.map((g) => ({ value: `group:${g}`, label: t('audit.groupOption', { group: labelOr(t, te, `audit.groups.${g}`, g) }) })),
@@ -97,7 +98,7 @@ function onLoad(_index: number, done: (stop?: boolean) => void) {
     <ForbiddenNotice v-if="forbidden" />
     <template v-else>
       <div class="text-h6 q-mb-sm">{{ t('audit.title') }}</div>
-      <q-expansion-item v-model="showFilters" dense icon="filter_list" :label="t('ops.filters')" :default-opened="!$q.screen.lt.sm" class="q-mb-sm" data-testid="audit-filters">
+      <q-expansion-item v-model="showFilters" dense icon="filter_list" :label="t('ops.filters')" class="q-mb-sm" data-testid="audit-filters">
         <div class="row q-col-gutter-sm q-pa-sm">
           <div class="col-12 col-sm-6 col-md-4 col-xl-2"><DateSelect v-model="form.from" :label="t('audit.from')" data-testid="audit-from" /></div>
           <div class="col-12 col-sm-6 col-md-4 col-xl-2"><DateSelect v-model="form.to" :label="t('audit.to')" data-testid="audit-to" /></div>
