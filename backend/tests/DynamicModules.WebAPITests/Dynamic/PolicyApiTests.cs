@@ -255,6 +255,22 @@ public class PolicyApiTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Module_Put_DetailPolicyOnMainModule_400()
+    {
+        var admin = _app.AsUser();
+        var (parent, child) = await DetailModules(admin);
+
+        var res = await PutModule(admin, parent, "record.maxDetailRows", new { value = 2 });
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await FirstError(res, "code")).Should().Be("這個政策不適用於這種模組");
+        (await PutModule(admin, child, "record.maxDetailRows", new { value = 2 })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await ModuleCodes(admin, parent)).Should().NotContain("record.maxDetailRows");
+        (await ModuleCodes(admin, child)).Should().Contain("record.maxDetailRows");
+    }
+
+    [Fact]
     public async Task Effective_AnyLoggedInUser()
     {
         var admin = _app.AsUser();

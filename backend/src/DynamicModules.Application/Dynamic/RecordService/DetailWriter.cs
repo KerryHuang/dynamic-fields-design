@@ -2,12 +2,14 @@ using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Modules;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.Rollups;
 using DynamicModules.Domain.Rules;
@@ -41,9 +43,8 @@ public sealed class DetailPlan
 public class DetailWriter(
     IModuleRepository modules, IRecordRepository records, INumberSequenceRepository sequences, FieldTypeRegistry registry,
     IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ICurrentUser user, IBusinessTime time, RecordHistoryWriter history,
-    ICurrentLocale locale)
+    ICurrentLocale locale, IPolicyReader policies)
 {
-    public const int MaxRows = 200;
 
     /// <param name="parentRecord">null 表示新增表頭（沒有既有列）。</param>
     /// <param name="headerValues">算出表頭這次存檔後的值（ParentDefault 用）；只在新增的列需要時才呼叫，最多一次。</param>
@@ -89,7 +90,10 @@ public class DetailWriter(
                     return new DetailPlan { Failure = ServiceResult.Stale() };
 
             var after = existing.Count + set.Changes.Count(c => c.Before is null) - set.Changes.Count(c => c.After is null);
-            if (after > MaxRows) plan.Errors[$"details.{child.Key}"] = [MessageText.Get(locale.Locale, MessageText.TooManyDetailRows)];
+            // 政策 A23（覆寫設在明細模組上）：調低後只擋這次比原本多的存檔（§3.5）
+            var maxRows = await policies.IntAsync(PolicyCatalog.RecordMaxDetailRows, child.Id, ct);
+            if (after > maxRows && after > existing.Count)
+                plan.Errors[$"details.{child.Key}"] = [MessageText.Get(locale.Locale, MessageText.TooManyDetailRows, maxRows)];
             ComputeRollups(parent, set, userIds, plan.RollupValues);
             plan.Sets.Add(set);
         }
