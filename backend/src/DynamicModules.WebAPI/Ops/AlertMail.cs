@@ -60,7 +60,10 @@ public sealed class MailKitAlertMailSender(ILogger<MailKitAlertMailSender> logge
     }
 }
 
-/// <summary>SMTP 密碼以 Data Protection 加密（purpose <c>ops-alert-smtp</c>，與登入 cookie 同一套金鑰；O2-T10）。金鑰不見時解不開回 null。</summary>
+/// <summary>
+/// SMTP 密碼以 Data Protection 加密（purpose <c>ops-alert-smtp</c>，與登入 cookie 同一套金鑰；O2-T10）。金鑰不見時解不開回 null。
+/// 密碼已搬到核心寄信設定，purpose 名稱刻意不改：既有密文是用這個 purpose 加密、由 migration 原樣搬過去的，改名就解不開。
+/// </summary>
 public sealed class DataProtectionAlertSecretProtector(IDataProtectionProvider provider) : IAlertSecretProtector
 {
     public const string Purpose = "ops-alert-smtp";

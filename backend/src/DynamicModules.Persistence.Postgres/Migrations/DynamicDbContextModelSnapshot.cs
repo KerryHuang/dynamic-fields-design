@@ -35,21 +35,6 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("FromAddress")
-                        .HasMaxLength(255)
-                        .HasColumnType("text")
-                        .UseCollation("C");
-
-                    b.Property<string>("FromName")
-                        .HasMaxLength(100)
-                        .HasColumnType("text")
-                        .UseCollation("C");
-
-                    b.Property<string>("Host")
-                        .HasMaxLength(255)
-                        .HasColumnType("text")
-                        .UseCollation("C");
-
                     b.Property<DateTime?>("LastClaimUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -77,26 +62,8 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                     b.Property<DateTime?>("ModifiedUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("PasswordProtected")
-                        .HasColumnType("text")
-                        .UseCollation("C");
-
-                    b.Property<int>("Port")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Security")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("text")
-                        .UseCollation("C");
-
                     b.Property<string>("ToAddresses")
                         .HasMaxLength(2000)
-                        .HasColumnType("text")
-                        .UseCollation("C");
-
-                    b.Property<string>("UserName")
-                        .HasMaxLength(255)
                         .HasColumnType("text")
                         .UseCollation("C");
 
@@ -2036,6 +2003,59 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                     b.HasIndex("ModuleId", "OwnerUserId");
 
                     b.ToTable("Dynamic_ListView", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.MailSettings", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("FromAddress")
+                        .HasMaxLength(255)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("FromName")
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Host")
+                        .HasMaxLength(255)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("ModifiedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PasswordProtected")
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<int>("Port")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Security")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(255)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.HasKey("Kind");
+
+                    b.ToTable("Dynamic_MailSettings", (string)null);
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Module", b =>

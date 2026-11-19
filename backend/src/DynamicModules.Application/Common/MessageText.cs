@@ -106,7 +106,9 @@ public static class MessageText
         OpsExpectedStatusInvalid = nameof(OpsExpectedStatusInvalid), OpsNoteTooLong = nameof(OpsNoteTooLong),
         // 告警通道（維運設計 §17.5）
         SmtpPlaintextAuth = nameof(SmtpPlaintextAuth), SmtpRecipientsCount = nameof(SmtpRecipientsCount), SmtpNotConfigured = nameof(SmtpNotConfigured),
-        SmtpTestTooSoon = nameof(SmtpTestTooSoon), SmtpTestFailed = nameof(SmtpTestFailed);
+        SmtpTestTooSoon = nameof(SmtpTestTooSoon), SmtpTestFailed = nameof(SmtpTestFailed),
+        // 寄信設定（帳號信與告警信共用的 SMTP 連線）
+        MailNotConfigured = nameof(MailNotConfigured);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -450,6 +452,10 @@ public static class MessageText
         [SmtpTestTooSoon] = ("測試信剛寄過，請 {0} 秒後再試", "A test email was just sent. Try again in {0} seconds",
             "เพิ่งส่งอีเมลทดสอบไป โปรดลองใหม่ใน {0} วินาที", "Vừa gửi email thử, vui lòng thử lại sau {0} giây"),
         [SmtpTestFailed] = ("測試信寄不出去", "The test email could not be sent", "ส่งอีเมลทดสอบไม่ได้", "Không gửi được email thử"),
+        [MailNotConfigured] = ("寄信設定還沒設定好（主機或寄件地址沒填，或密碼需要重填）",
+            "Email settings are not set up yet (host or sender address is missing, or the password needs to be re-entered)",
+            "การตั้งค่าอีเมลยังไม่ครบ (ไม่ได้กรอกโฮสต์หรือที่อยู่ผู้ส่ง หรือต้องกรอกรหัสผ่านใหม่)",
+            "Cài đặt email chưa được thiết lập xong (thiếu máy chủ hoặc địa chỉ người gửi, hoặc cần nhập lại mật khẩu)"),
     };
 
     /// <summary>無參數訊息的繁中原文 → 鍵；兩鍵同一句時建表就會丟例外。</summary>

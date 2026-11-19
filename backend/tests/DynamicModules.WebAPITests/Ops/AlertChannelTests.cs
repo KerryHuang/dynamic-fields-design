@@ -21,7 +21,7 @@ using static DynamicModules.WebAPITests.Ops.SchedulerTestKit;
 
 namespace DynamicModules.WebAPITests.Ops;
 
-/// <summary>告警通道：寄送佇列、重試、節流與摘要、通道設定與測試信、直送（維運設計 §17.2.6、§17.8 C13、D01–D13）。</summary>
+/// <summary>告警通道：寄送佇列、重試、節流與摘要、寄信設定與通道設定、測試信、直送（維運設計 §17.2.6、§17.8 C13、D01–D13）。</summary>
 [Trait("Category", "Postgres")]
 public class AlertChannelTests
 {
@@ -165,48 +165,62 @@ public class AlertChannelTests
     {
         using var app = App(new FakeMailSender());
         await Configure(app);
-        var row = (await ChannelRow(app))!;
+        var row = (await MailRow(app))!;
         row.PasswordProtected.Should().NotBeNullOrEmpty().And.NotContain("s3cret-pw");
         var protector = app.Services.GetRequiredService<IAlertSecretProtector>();
         protector.TryUnprotect(row.PasswordProtected!).Should().Be("s3cret-pw");
 
-        var get = await app.AsUser().GetFromJsonAsync<JsonElement>(Channel);
+        var get = await app.AsUser().GetFromJsonAsync<JsonElement>(Mail);
         get.GetProperty("hasPassword").GetBoolean().Should().BeTrue();
         get.GetProperty("passwordUnreadable").GetBoolean().Should().BeFalse();
+        get.GetProperty("configured").GetBoolean().Should().BeTrue();
         get.TryGetProperty("password", out _).Should().BeFalse();
         get.TryGetProperty("passwordProtected", out _).Should().BeFalse();
         get.GetRawText().Should().NotContain("s3cret-pw").And.NotContain(row.PasswordProtected!);
         get.GetProperty("editable").GetBoolean().Should().BeTrue();
-        get.GetProperty("mailLocale").GetProperty("isFactory").GetBoolean().Should().BeTrue();
+        var channel = await app.AsUser().GetFromJsonAsync<JsonElement>(Channel);
+        channel.GetProperty("mailLocale").GetProperty("isFactory").GetBoolean().Should().BeTrue();
+        channel.GetProperty("mailConfigured").GetBoolean().Should().BeTrue();
+        foreach (var moved in new[] { "host", "port", "security", "userName", "hasPassword", "passwordUnreadable", "fromAddress", "fromName" })
+            channel.TryGetProperty(moved, out _).Should().BeFalse($"{moved} 已搬到寄信設定");
 
         // password 省略（null）＝不變
         await Configure(app, b => b.Remove("password"));
-        (await ChannelRow(app))!.PasswordProtected.Should().Be(row.PasswordProtected);
+        (await MailRow(app))!.PasswordProtected.Should().Be(row.PasswordProtected);
 
         // 換一套金鑰加密的密碼：解不開
         await using (var scope = app.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
-            var tracked = await db.Set<AlertChannel>().SingleAsync();
+            var tracked = await db.Set<MailSettings>().SingleAsync();
             tracked.PasswordProtected = new EphemeralDataProtectionProvider().CreateProtector("ops-alert-smtp").Protect("other");
             await db.SaveChangesAsync();
         }
-        get = await app.AsUser().GetFromJsonAsync<JsonElement>(Channel);
+        get = await app.AsUser().GetFromJsonAsync<JsonElement>(Mail);
         get.GetProperty("hasPassword").GetBoolean().Should().BeTrue();
         get.GetProperty("passwordUnreadable").GetBoolean().Should().BeTrue();
-        var test = await app.AsUser().PostAsync($"{Channel}/test", null);
-        test.StatusCode.Should().Be(HttpStatusCode.Conflict, "密碼解不開＝設定不完整");
-        (await Json(test)).GetProperty("code").GetString().Should().Be("smtpNotConfigured");
+        foreach (var url in new[] { $"{Channel}/test", $"{Mail}/test" })
+        {
+            var test = await app.AsUser().PostAsync(url, null);
+            test.StatusCode.Should().Be(HttpStatusCode.Conflict, $"密碼解不開＝設定不完整（{url}）");
+            (await Json(test)).GetProperty("code").GetString().Should().Be("smtpNotConfigured");
+        }
 
         // ""＝清除
         await Configure(app, b => b["password"] = "");
-        (await ChannelRow(app))!.PasswordProtected.Should().BeNull();
+        (await MailRow(app))!.PasswordProtected.Should().BeNull();
+        (await app.AsUser().GetFromJsonAsync<JsonElement>(Mail)).GetProperty("hasPassword").GetBoolean().Should().BeFalse();
 
         await using var audit = app.Services.CreateAsyncScope();
-        var updates = await audit.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AuditLogEntry>().AsNoTracking()
-            .Where(a => a.Action == "ops.channel.update").ToListAsync();
-        updates.Should().HaveCount(3).And.OnlyContain(a => a.TargetKind == "channel" && a.TargetId == "smtp");
-        updates.Should().OnlyContain(a => a.SummaryJson == null || !a.SummaryJson.Contains("s3cret-pw"));
+        var entries = await audit.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AuditLogEntry>().AsNoTracking()
+            .Where(a => a.Action == "mailSettings.update" || a.Action == "ops.channel.update").OrderBy(a => a.Id).ToListAsync();
+        var updates = entries.Where(a => a.Action == "mailSettings.update").ToList();
+        updates.Should().HaveCount(3).And.OnlyContain(a => a.TargetKind == "mailSettings" && a.TargetId == "default");
+        entries.Should().OnlyContain(a => a.SummaryJson == null || !a.SummaryJson.Contains("s3cret-pw"));
+        updates[0].SummaryJson.Should().Contain("passwordChanged");
+        updates[1].SummaryJson.Should().NotContain("passwordChanged", "省略密碼＝不變");
+        entries.Where(a => a.Action == "ops.channel.update").Should().HaveCount(3)
+            .And.OnlyContain(a => a.TargetKind == "channel" && a.TargetId == "smtp");
     }
 
     private sealed class DemoSiteApp : TestApp
@@ -215,14 +229,21 @@ public class AlertChannelTests
     }
 
     [Fact]
-    public async Task D06_DemoLoginEnabled_PutAndTest403()
+    public async Task D06_DemoLoginEnabled_PutAndTest403_ChannelAndMailSettings()
     {
         using var app = new DemoSiteApp();
-        (await app.AsUser().PutAsJsonAsync(Channel, Settings())).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await PutChannel(app)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await app.AsUser().PostAsync($"{Channel}/test", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await PutMail(app)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await app.AsUser().PostAsync($"{Mail}/test", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var get = await app.AsUser().GetFromJsonAsync<JsonElement>(Channel);
         get.GetProperty("editable").GetBoolean().Should().BeFalse();
+        get.GetProperty("mailConfigured").GetBoolean().Should().BeFalse();
+        var mail = await app.AsUser().GetFromJsonAsync<JsonElement>(Mail);
+        mail.GetProperty("editable").GetBoolean().Should().BeFalse();
+        mail.GetProperty("configured").GetBoolean().Should().BeFalse();
         (await ChannelRow(app)).Should().BeNull();
+        (await MailRow(app)).Should().BeNull();
     }
 
     [Fact]
@@ -346,12 +367,21 @@ public class AlertChannelTests
     {
         await using var server = new NoStartTlsSmtpServer();
         using var app = new TestApp();
-        var res = await app.AsUser().PutAsJsonAsync(Channel, Settings(b => b["security"] = "none"));
+        var res = await PutMail(app, b => b["security"] = "none");
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var bad = await Json(res);
         bad.GetProperty("code").GetString().Should().Be("smtpPlaintextAuth");
         bad.GetProperty("errors").GetRawText().Should().Contain(Application.Common.MessageText.Get("zh-TW", Application.Common.MessageText.SmtpPlaintextAuth));
-        (await ChannelRow(app)).Should().BeNull();
+        (await MailRow(app)).Should().BeNull();
+        // 帳號清掉、但保留中的密碼還在：一樣不准
+        await Configure(app);
+        res = await PutMail(app, b =>
+        {
+            b["security"] = "none";
+            b["userName"] = null;
+            b.Remove("password");
+        });
+        (await Json(res)).GetProperty("code").GetString().Should().Be("smtpPlaintextAuth");
 
         await Configure(app, b =>
         {
@@ -536,35 +566,101 @@ public class AlertChannelTests
     public async Task UpdateValidation_RequiredWhenEnabled_Formats_RecipientCount()
     {
         using var app = App(new FakeMailSender());
-        async Task<JsonElement> Bad(Action<Dictionary<string, object?>> change)
+        async Task<JsonElement> Bad(Func<Task<HttpResponseMessage>> put, string field)
         {
-            var res = await app.AsUser().PutAsJsonAsync(Channel, Settings(change));
+            var res = await put();
             res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-            return await Json(res);
+            var json = await Json(res);
+            json.GetProperty("errors").TryGetProperty(field, out _).Should().BeTrue(json.GetRawText());
+            return json;
         }
 
-        await Bad(b => b["host"] = "");
-        await Bad(b => b["fromAddress"] = "not-an-email");
-        await Bad(b => b["toAddresses"] = Array.Empty<string>());
-        await Bad(b => b["toAddresses"] = Enumerable.Range(0, 21).Select(i => $"u{i}@test.invalid").ToArray());
-        await Bad(b => b["toAddresses"] = new[] { "x@test.invalid", "bad" });
-        await Bad(b => b["port"] = 0);
-        await Bad(b => b["security"] = "tls13");
-        await Bad(b => b["mailLocale"] = "ja");
+        // 寄信設定：主機與寄件地址只填一個時另一個必填；格式、埠、加密方式
+        await Bad(() => PutMail(app, b => b["host"] = ""), "host");
+        await Bad(() => PutMail(app, b => b["fromAddress"] = null), "fromAddress");
+        await Bad(() => PutMail(app, b => b["fromAddress"] = "not-an-email"), "fromAddress");
+        await Bad(() => PutMail(app, b => b["port"] = 0), "port");
+        await Bad(() => PutMail(app, b => b["port"] = 65536), "port");
+        await Bad(() => PutMail(app, b => b["security"] = "tls13"), "security");
+        await Bad(() => PutMail(app, b => b["fromName"] = new string('n', 101)), "fromName");
+        (await MailRow(app)).Should().BeNull();
+        // 告警通道：啟用時收件信箱 1–20 個、格式、語系
+        await Bad(() => PutChannel(app, b => b["toAddresses"] = Array.Empty<string>()), "toAddresses");
+        await Bad(() => PutChannel(app, b => b["toAddresses"] = Enumerable.Range(0, 21).Select(i => $"u{i}@test.invalid").ToArray()), "toAddresses");
+        await Bad(() => PutChannel(app, b => b["toAddresses"] = new[] { "x@test.invalid", "bad" }), "toAddresses");
+        await Bad(() => PutChannel(app, b => b["mailLocale"] = "ja"), "mailLocale");
         (await ChannelRow(app)).Should().BeNull();
 
-        // 停用時可以存不完整的設定
-        (await app.AsUser().PutAsJsonAsync(Channel, Settings(b =>
+        // 主機與寄件地址都空＝未設定，可以存；寄信設定未設定時通道照樣可以存（畫面提示先去寄信設定）
+        (await PutMail(app, b =>
+        {
+            b["host"] = null;
+            b["fromAddress"] = " ";
+        })).EnsureSuccessStatusCode();
+        (await app.AsUser().GetFromJsonAsync<JsonElement>(Mail)).GetProperty("configured").GetBoolean().Should().BeFalse();
+        (await PutChannel(app)).EnsureSuccessStatusCode();
+        (await app.AsUser().GetFromJsonAsync<JsonElement>(Channel)).GetProperty("mailConfigured").GetBoolean().Should().BeFalse();
+        var overview = await app.AsUser().GetFromJsonAsync<JsonElement>($"{Base}/overview");
+        overview.GetProperty("channel").GetProperty("configured").GetBoolean().Should().BeFalse("寄信設定沒設定好");
+        var notConfigured = await app.AsUser().PostAsync($"{Channel}/test", null);
+        notConfigured.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await Json(notConfigured)).GetProperty("code").GetString().Should().Be("smtpNotConfigured");
+        // 停用時可以沒有收件信箱
+        (await PutChannel(app, b =>
         {
             b["enabled"] = false;
-            b["host"] = null;
             b["toAddresses"] = Array.Empty<string>();
-        }))).EnsureSuccessStatusCode();
+        })).EnsureSuccessStatusCode();
         (await app.AsUser("sales01").GetAsync(Channel)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await app.AsUser("sales01").PutAsJsonAsync(Channel, Settings())).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        var test = await app.AsUser().PostAsync($"{Channel}/test", null);
-        test.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await Json(test)).GetProperty("code").GetString().Should().Be("smtpNotConfigured");
+        (await app.AsUser("sales01").PutAsJsonAsync(Channel, ChannelPart(Settings()))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await app.AsUser("sales01").GetAsync(Mail)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await app.AsUser("sales01").PutAsJsonAsync(Mail, MailPart(Settings()))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await app.AsUser("sales01").PostAsync($"{Mail}/test", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        foreach (var url in new[] { $"{Channel}/test", $"{Mail}/test" })
+        {
+            var test = await app.AsUser().PostAsync(url, null);
+            test.StatusCode.Should().Be(HttpStatusCode.Conflict, url);
+            (await Json(test)).GetProperty("code").GetString().Should().Be("smtpNotConfigured");
+        }
+    }
+
+    /// <summary>寄信設定的測試信：用已儲存的設定寄到寄件地址本身，語系跟 X-Locale；與告警通道測試信共用 30 秒節流；稽核 mailSettings.test。</summary>
+    [Fact]
+    public async Task MailSettingsTest_SentToFromAddress_LocaleFromHeader_SharedThrottle_Audited()
+    {
+        var mail = new FakeMailSender();
+        using var app = App(mail);
+        await Configure(app);
+        var client = app.AsUser();
+        client.DefaultRequestHeaders.Add("X-Locale", "en-US");
+        var res = await client.PostAsync($"{Mail}/test", null);
+        res.EnsureSuccessStatusCode();
+        (await Json(res)).GetProperty("sentTo").EnumerateArray().Select(e => e.GetString()).Should().Equal("ops@test.invalid");
+        var call = mail.Calls.Should().ContainSingle().Subject;
+        call.Settings.ToAddresses.Should().Equal("ops@test.invalid");
+        call.Settings.Host.Should().Be("smtp.test.invalid");
+        call.Password.Should().Be("s3cret-pw");
+        call.Mail.Subject.Should().Be("[Formwright] Email settings test email");
+
+        var tooSoon = await app.AsUser().PostAsync($"{Channel}/test", null);
+        tooSoon.StatusCode.Should().Be(HttpStatusCode.Conflict, "兩種測試信共用同一管理員 30 秒一次");
+        (await Json(tooSoon)).GetProperty("code").GetString().Should().Be("smtpTestTooSoon");
+        app.Time.Advance(TimeSpan.FromSeconds(31));
+        mail.Result = _ => new MailSendResult(false, MailSendResult.Auth, 535);
+        var failed = await app.AsUser().PostAsync($"{Mail}/test", null);
+        failed.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var body = await Json(failed);
+        body.GetProperty("code").GetString().Should().Be("smtpTestFailed");
+        body.GetProperty("params").GetProperty("stage").GetString().Should().Be("auth");
+        body.GetProperty("params").GetProperty("serverCode").GetInt32().Should().Be(535);
+        mail.Calls[1].Mail.Subject.Should().Be("[Formwright] 寄信設定測試信", "沒帶 X-Locale 用繁中");
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var audits = await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AuditLogEntry>().AsNoTracking()
+            .Where(a => a.Action == "mailSettings.test").OrderBy(a => a.Id).ToListAsync();
+        audits.Select(a => a.Result).Should().Equal(AuditResult.Success, AuditResult.Failed);
+        audits.Should().OnlyContain(a => a.TargetKind == "mailSettings" && a.TargetId == "default");
+        audits[1].ReasonCode.Should().Be("auth");
     }
 
     [Fact]
@@ -813,11 +909,11 @@ public class AlertChannelTests
     public async Task UpdateValidation_NullRecipient_400ToAddresses(bool enabled)
     {
         using var app = App(new FakeMailSender());
-        var res = await app.AsUser().PutAsJsonAsync(Channel, Settings(b =>
+        var res = await PutChannel(app, b =>
         {
             b["enabled"] = enabled;
             b["toAddresses"] = new[] { "a@test.invalid", null };
-        }));
+        });
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
         (await Json(res)).GetProperty("errors").TryGetProperty("toAddresses", out _).Should().BeTrue();
         (await ChannelRow(app)).Should().BeNull();
@@ -884,15 +980,8 @@ public class AlertChannelTests
         await using var server = new NoStartTlsSmtpServer();
         using var app = new TestApp();
         const string inject = "\r\nBcc: evil@test.invalid\r\nX-Injected: 1";
-        foreach (var change in new Action<Dictionary<string, object?>>[]
-        {
-            b => b["toAddresses"] = new[] { "a@test.invalid" + inject },
-            b => b["fromAddress"] = "ops@test.invalid" + inject,
-        })
-        {
-            var res = await app.AsUser().PutAsJsonAsync(Channel, Settings(change));
-            res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        }
+        (await PutChannel(app, b => b["toAddresses"] = new[] { "a@test.invalid" + inject })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await PutMail(app, b => b["fromAddress"] = "ops@test.invalid" + inject)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         var settings = new SmtpSettings("127.0.0.1", server.Port, AlertSecurity.None, null, null, "ops@test.invalid", "Ops" + inject,
             ["a@test.invalid"], null);

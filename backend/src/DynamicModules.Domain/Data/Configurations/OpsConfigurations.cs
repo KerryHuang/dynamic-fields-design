@@ -206,11 +206,6 @@ public class AlertChannelConfiguration : IEntityTypeConfiguration<AlertChannel>
         b.ToTable("Dynamic_AlertChannel");
         b.HasKey(x => x.Kind);
         b.Property(x => x.Kind).HasMaxLength(20);
-        b.Property(x => x.Host).HasMaxLength(255);
-        b.Property(x => x.Security).AsCamelText();
-        b.Property(x => x.UserName).HasMaxLength(255);
-        b.Property(x => x.FromAddress).HasMaxLength(255);
-        b.Property(x => x.FromName).HasMaxLength(100);
         b.Property(x => x.ToAddresses).HasMaxLength(2000);
         b.Property(x => x.MailLocale).HasMaxLength(10);
         b.Property(x => x.LastClaimUtc).AsUtc();
@@ -219,6 +214,25 @@ public class AlertChannelConfiguration : IEntityTypeConfiguration<AlertChannel>
         b.Property(x => x.LastError).HasMaxLength(500);
         b.Property(x => x.ModifiedUserId).HasMaxLength(50);
         b.Property(x => x.ModifiedUtc).AsUtc();
+    }
+}
+
+/// <summary>核心寄信設定（單列）：欄位長度沿用 o2c 告警通道的連線欄位（資料從那裡搬過來）。</summary>
+public class MailSettingsConfiguration : IEntityTypeConfiguration<MailSettings>
+{
+    public void Configure(EntityTypeBuilder<MailSettings> b)
+    {
+        b.ToTable("Dynamic_MailSettings");
+        b.HasKey(x => x.Kind);
+        b.Property(x => x.Kind).HasMaxLength(20);
+        b.Property(x => x.Host).HasMaxLength(255);
+        b.Property(x => x.Security).AsCamelText();
+        b.Property(x => x.UserName).HasMaxLength(255);
+        b.Property(x => x.FromAddress).HasMaxLength(255);
+        b.Property(x => x.FromName).HasMaxLength(100);
+        b.Property(x => x.ModifiedUserId).HasMaxLength(50);
+        b.Property(x => x.ModifiedUtc).AsUtc();
+        b.Ignore(x => x.Configured);
     }
 }
 

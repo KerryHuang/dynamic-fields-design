@@ -1,3 +1,4 @@
+using DynamicModules.Application.Dynamic.MailService;
 using DynamicModules.Application.Dynamic.OpsService;
 using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Application.Dynamic.OpsService.Audit;
@@ -76,37 +77,62 @@ public class OpsController(IMediator mediator) : ControllerBase
 
     public sealed record IncidentStateBody(string? ExpectedStatus, string? Note);
 
-    /// <summary>SMTP 告警通道設定（維運設計 §17.5）：密碼不回傳，只回 hasPassword／passwordUnreadable。</summary>
+    /// <summary>SMTP 告警通道設定（維運設計 §17.5）：啟用、收件信箱、信件語系；連線在寄信設定（system/mail-settings）。</summary>
     [HttpGet("system/ops/channels/smtp")]
     public async Task<IActionResult> SmtpChannel() => (await mediator.Send(new GetSmtpChannelRequest())).ToActionResult(this);
 
-    /// <summary>存 SMTP 設定：password 省略或 null＝不變、""＝清除；mailLocale 省略＝不變、null＝回出廠。Demo 站 403。</summary>
+    /// <summary>存告警通道：mailLocale 省略＝不變、null＝回出廠。Demo 站 403。</summary>
     [HttpPut("system/ops/channels/smtp")]
     public async Task<IActionResult> UpdateSmtpChannel([FromBody] JsonElement body)
     {
         if (body.ValueKind != JsonValueKind.Object) return BadRequest();
-        SmtpChannelBody? b;
-        try
-        {
-            b = body.Deserialize<SmtpChannelBody>(JsonBody);
-        }
-        catch (JsonException)
-        {
-            throw new BadHttpRequestException("SMTP 設定的欄位型別不對");
-        }
+        var b = Read<SmtpChannelBody>(body, "告警通道");
         if (b is null) return BadRequest();
         var localeSet = body.TryGetProperty("mailLocale", out var locale);
         if (localeSet && locale.ValueKind is not (JsonValueKind.Null or JsonValueKind.String)) throw new BadHttpRequestException("欄位 mailLocale 的型別不對");
-        return (await mediator.Send(new UpdateSmtpChannelRequest(b.Enabled, b.Host, b.Port, b.Security, b.UserName, b.Password, b.FromAddress,
-            b.FromName, b.ToAddresses, localeSet, localeSet && locale.ValueKind == JsonValueKind.String ? locale.GetString() : null))).ToActionResult(this);
+        return (await mediator.Send(new UpdateSmtpChannelRequest(b.Enabled, b.ToAddresses, localeSet,
+            localeSet && locale.ValueKind == JsonValueKind.String ? locale.GetString() : null))).ToActionResult(this);
     }
 
-    /// <summary>用已儲存的設定寄測試信到全部收件信箱（不能臨時填地址）；失敗 422 帶 stage 與 serverCode。Demo 站 403。</summary>
+    /// <summary>用已儲存的寄信設定寄測試信到全部收件信箱（不能臨時填地址）；失敗 422 帶 stage 與 serverCode。Demo 站 403。</summary>
     [HttpPost("system/ops/channels/smtp/test")]
     public async Task<IActionResult> TestSmtpChannel() => (await mediator.Send(new SendSmtpTestRequest())).ToActionResult(this);
 
-    public sealed record SmtpChannelBody(bool Enabled, string? Host, int Port, string? Security, string? UserName, string? Password,
-        string? FromAddress, string? FromName, IReadOnlyList<string>? ToAddresses);
+    public sealed record SmtpChannelBody(bool Enabled, IReadOnlyList<string>? ToAddresses);
+
+    /// <summary>核心寄信設定（帳號信與告警信共用的 SMTP 連線）：密碼不回傳，只回 hasPassword／passwordUnreadable。</summary>
+    [HttpGet("system/mail-settings")]
+    public async Task<IActionResult> MailSettings() => (await mediator.Send(new GetMailSettingsRequest())).ToActionResult(this);
+
+    /// <summary>存寄信設定：password 省略或 null＝不變、""＝清除。Demo 站 403。</summary>
+    [HttpPut("system/mail-settings")]
+    public async Task<IActionResult> UpdateMailSettings([FromBody] JsonElement body)
+    {
+        if (body.ValueKind != JsonValueKind.Object) return BadRequest();
+        var b = Read<MailSettingsBody>(body, "寄信設定");
+        if (b is null) return BadRequest();
+        return (await mediator.Send(new UpdateMailSettingsRequest(b.Host, b.Port, b.Security, b.UserName, b.Password, b.FromAddress, b.FromName)))
+            .ToActionResult(this);
+    }
+
+    /// <summary>用已儲存的寄信設定寄測試信到寄件地址本身；失敗 422 帶 stage 與 serverCode。Demo 站 403。</summary>
+    [HttpPost("system/mail-settings/test")]
+    public async Task<IActionResult> TestMailSettings() => (await mediator.Send(new SendMailSettingsTestRequest())).ToActionResult(this);
+
+    public sealed record MailSettingsBody(string? Host, int Port, string? Security, string? UserName, string? Password, string? FromAddress,
+        string? FromName);
+
+    private static T? Read<T>(JsonElement body, string what)
+    {
+        try
+        {
+            return body.Deserialize<T>(JsonBody);
+        }
+        catch (JsonException)
+        {
+            throw new BadHttpRequestException($"{what}的欄位型別不對");
+        }
+    }
 
     private static readonly JsonSerializerOptions JsonBody = new(JsonSerializerDefaults.Web);
 

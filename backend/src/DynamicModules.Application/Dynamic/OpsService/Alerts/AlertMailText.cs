@@ -16,7 +16,8 @@ public static class AlertMailText
     public const string
         Subject = nameof(Subject), SubjectDirect = nameof(SubjectDirect), DigestSubject = nameof(DigestSubject),
         DigestIntro = nameof(DigestIntro), DigestMore = nameof(DigestMore), DigestLine = nameof(DigestLine),
-        TestSubject = nameof(TestSubject), TestBody = nameof(TestBody), DirectNote = nameof(DirectNote), TooLong = nameof(TooLong),
+        TestSubject = nameof(TestSubject), TestBody = nameof(TestBody), MailTestSubject = nameof(MailTestSubject), MailTestBody = nameof(MailTestBody),
+        DirectNote = nameof(DirectNote), TooLong = nameof(TooLong),
         Category = nameof(Category), Handler = nameof(Handler), Transition = nameof(Transition), Count = nameof(Count),
         FirstSeen = nameof(FirstSeen), LastSeen = nameof(LastSeen), CheckedAt = nameof(CheckedAt), Version = nameof(Version), Link = nameof(Link),
         // 事件標題（§17.2.2 標題表；組字只在 IncidentTitles）
@@ -42,6 +43,12 @@ public static class AlertMailText
             "This is a test email from the Formwright alert channel. Receiving it means the SMTP settings work; future alert emails will be sent to these addresses.",
             "นี่คืออีเมลทดสอบจากช่องทางแจ้งเตือนของ Formwright เมื่อได้รับอีเมลนี้แสดงว่าการตั้งค่า SMTP ใช้ส่งอีเมลได้ อีเมลแจ้งเตือนต่อไปจะส่งมายังที่อยู่ชุดนี้",
             "Đây là email thử từ kênh cảnh báo Formwright. Nhận được email này nghĩa là cài đặt SMTP gửi được thư; các email cảnh báo sau sẽ gửi đến những địa chỉ này."),
+        [MailTestSubject] = ("[Formwright] 寄信設定測試信", "[Formwright] Email settings test email", "[Formwright] อีเมลทดสอบการตั้งค่าอีเมล",
+            "[Formwright] Email thử cài đặt email"),
+        [MailTestBody] = ("這是 Formwright 寄信設定的測試信。收到這封信表示 SMTP 連線與寄件地址可以寄信；帳號信與告警信都用這組設定寄出。",
+            "This is a test email for the Formwright email settings. Receiving it means the SMTP connection and sender address work; account and alert emails are sent with these settings.",
+            "นี่คืออีเมลทดสอบการตั้งค่าอีเมลของ Formwright เมื่อได้รับอีเมลนี้แสดงว่าการเชื่อมต่อ SMTP และที่อยู่ผู้ส่งใช้ส่งอีเมลได้ อีเมลบัญชีและอีเมลแจ้งเตือนจะส่งด้วยการตั้งค่านี้",
+            "Đây là email thử cho cài đặt email Formwright. Nhận được email này nghĩa là kết nối SMTP và địa chỉ người gửi gửi được thư; email tài khoản và email cảnh báo đều gửi bằng cài đặt này."),
         [DirectNote] = ("資料庫目前寫不進去，這封信由看門狗直接寄出；事件編號要等資料庫恢復、補寫事件後才會產生。",
             "The database cannot be written to right now, so this email was sent directly by the watchdog. The incident number will exist only after the database recovers and the incident is written.",
             "ขณะนี้ไม่สามารถเขียนฐานข้อมูลได้ อีเมลนี้จึงส่งโดยตรงจากตัวเฝ้าระบบ หมายเลขเหตุการณ์จะมีหลังจากฐานข้อมูลกลับมาและบันทึกเหตุการณ์แล้ว",

@@ -19,7 +19,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace DynamicModules.WebAPITests.Ops;
 
-/// <summary>o2c 測試共用：假寄送器、設定通道、讀寄送佇列、跑一輪寄送者。</summary>
+/// <summary>o2c 測試共用：假寄送器、設定寄信設定與通道、讀寄送佇列、跑一輪寄送者。</summary>
 internal static class AlertKit
 {
     public const string Channel = OpsIncidentKit.Base + "/channels/smtp";
@@ -34,7 +34,15 @@ internal static class AlertKit
     public static TestApp App(FakeMailSender sender, bool noLock = false) =>
         new() { WithoutWriteSerialization = noLock, ExtraServices = s => UseFakeMail(s, sender) };
 
-    /// <summary>經 API 存一份可寄信的通道設定；<paramref name="change"/> 改其中幾個欄位。</summary>
+    /// <summary>核心寄信設定（帳號信與告警信共用的 SMTP 連線）。</summary>
+    public const string Mail = "/api/v3/dynamic/system/mail-settings";
+
+    private static readonly HashSet<string> ChannelKeys = ["enabled", "toAddresses", "mailLocale"];
+
+    /// <summary>
+    /// 一份可寄信的設定：寄信設定（連線、寄件人）與告警通道（啟用、收件信箱、語系）的欄位放在同一個字典，
+    /// <see cref="Configure"/> 依鍵分送兩支 API；<paramref name="change"/> 改其中幾個欄位（移除鍵＝那支 API 不帶這個欄位）。
+    /// </summary>
     public static Dictionary<string, object?> Settings(Action<Dictionary<string, object?>>? change = null)
     {
         var body = new Dictionary<string, object?>
@@ -47,13 +55,37 @@ internal static class AlertKit
         return body;
     }
 
-    public static async Task Configure(TestApp app, Action<Dictionary<string, object?>>? change = null) =>
-        (await app.AsUser().PutAsJsonAsync(Channel, Settings(change))).EnsureSuccessStatusCode();
+    /// <summary>只取寄信設定的欄位。</summary>
+    public static Dictionary<string, object?> MailPart(Dictionary<string, object?> all) =>
+        all.Where(kv => !ChannelKeys.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
+
+    /// <summary>只取告警通道的欄位。</summary>
+    public static Dictionary<string, object?> ChannelPart(Dictionary<string, object?> all) =>
+        all.Where(kv => ChannelKeys.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
+
+    public static Task<HttpResponseMessage> PutMail(TestApp app, Action<Dictionary<string, object?>>? change = null) =>
+        app.AsUser().PutAsJsonAsync(Mail, MailPart(Settings(change)));
+
+    public static Task<HttpResponseMessage> PutChannel(TestApp app, Action<Dictionary<string, object?>>? change = null) =>
+        app.AsUser().PutAsJsonAsync(Channel, ChannelPart(Settings(change)));
+
+    /// <summary>經 API 存寄信設定與告警通道。</summary>
+    public static async Task Configure(TestApp app, Action<Dictionary<string, object?>>? change = null)
+    {
+        (await PutMail(app, change)).EnsureSuccessStatusCode();
+        (await PutChannel(app, change)).EnsureSuccessStatusCode();
+    }
 
     public static async Task<List<AlertOutbox>> Outbox(TestApp app)
     {
         await using var scope = app.Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AlertOutbox>().AsNoTracking().OrderBy(r => r.Id).ToListAsync();
+    }
+
+    public static async Task<MailSettings?> MailRow(TestApp app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<MailSettings>().AsNoTracking().SingleOrDefaultAsync();
     }
 
     public static async Task<AlertChannel?> ChannelRow(TestApp app)

@@ -2,15 +2,26 @@ using DynamicModules.Domain.Entities.Dynamic;
 
 namespace DynamicModules.Application.Dynamic.OpsService.Alerts;
 
-/// <summary>寄一封信要用的 SMTP 設定（密碼仍是加密字串，寄送時才解；§17.2.6「資料庫寫不進時的直送」）。</summary>
+/// <summary>
+/// 寄一封信要用的 SMTP 設定（密碼仍是加密字串，寄送時才解；§17.2.6「資料庫寫不進時的直送」）：
+/// 連線與寄件人來自核心寄信設定（<see cref="MailSettings"/>），收件人與信件語系來自告警通道或呼叫端。
+/// </summary>
 public sealed record SmtpSettings(
     string Host, int Port, AlertSecurity Security, string? UserName, string? PasswordProtected, string FromAddress, string? FromName,
     IReadOnlyList<string> ToAddresses, string? MailLocale)
 {
-    /// <summary>通道設定可以寄信：啟用（測試信不看啟用）、主機、寄件地址、至少一個收件信箱都有。</summary>
-    public static SmtpSettings? From(AlertChannel? c, bool requireEnabled = true) =>
-        c is { Host.Length: > 0, FromAddress.Length: > 0 } && (c.Enabled || !requireEnabled) && AlertAddresses.Split(c.ToAddresses) is { Count: > 0 } to
-            ? new SmtpSettings(c.Host!, c.Port, c.Security, c.UserName, c.PasswordProtected, c.FromAddress!, c.FromName, to, c.MailLocale)
+    /// <summary>
+    /// 告警信可以寄：寄信設定有主機與寄件地址，通道啟用（測試信不看啟用）且至少一個收件信箱。
+    /// </summary>
+    public static SmtpSettings? From(MailSettings? mail, AlertChannel? channel, bool requireEnabled = true) =>
+        channel is not null && (channel.Enabled || !requireEnabled) && AlertAddresses.Split(channel.ToAddresses) is { Count: > 0 } to
+            ? To(mail, to, channel.MailLocale)
+            : null;
+
+    /// <summary>寄信設定（主機與寄件地址都有）寄給指定收件人；設定不完整回 null。</summary>
+    public static SmtpSettings? To(MailSettings? mail, IReadOnlyList<string> to, string? mailLocale) =>
+        mail is { Configured: true } m
+            ? new SmtpSettings(m.Host!, m.Port, m.Security, m.UserName, m.PasswordProtected, m.FromAddress!, m.FromName, to, mailLocale)
             : null;
 }
 
@@ -47,7 +58,10 @@ public interface IAlertMailSender
     Task<MailSendResult> SendAsync(SmtpSettings settings, string? password, AlertMail mail, CancellationToken ct);
 }
 
-/// <summary>SMTP 密碼的加解密（WebAPI 以 Data Protection 實作，purpose <c>ops-alert-smtp</c>，O2-T10）。</summary>
+/// <summary>
+/// SMTP 密碼的加解密（WebAPI 以 Data Protection 實作，purpose <c>ops-alert-smtp</c>，O2-T10）。密碼搬到核心寄信設定後 purpose 名稱不改：
+/// 既有的密文是用這個 purpose 加密、原樣搬過去的，換名字就解不開。
+/// </summary>
 public interface IAlertSecretProtector
 {
     string Protect(string plain);
