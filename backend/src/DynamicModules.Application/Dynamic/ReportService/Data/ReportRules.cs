@@ -14,10 +14,9 @@ public static class ReportRules
 {
     public const string ReportNotFound = "報表不存在";
     public const int MaxNameLength = 100;
-    public const int DrillLimit = 500;
-    public const int DetailLimit = 1000;
 
-    private const int MaxDays = ReportDateRange.MaxN, MaxListItems = 50, MaxTextLength = 440;
+    /// <summary>技術限制（設計 §10）；下鑽、明細列數與查詢天數是政策 A24，由呼叫端傳 <see cref="ReportLimits"/> 的值。</summary>
+    private const int MaxListItems = 50, MaxTextLength = 440;
 
     private static readonly string[] Vizs = ["table", "indicator", "line", "bar", "donut"];
     private static readonly string[] Buckets = ["day", "week", "month", "quarter", "year"];
@@ -31,9 +30,9 @@ public static class ReportRules
 
     private static readonly Regex NoOffsetDateTime = new(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$", RegexOptions.CultureInvariant);
 
-    /// <summary>畫面上的明細最多 <see cref="DetailLimit"/> 列，幾萬列的 DOM 打不開；總計與 DetailTotal 仍是全部列，要看全部用匯出。</summary>
-    public static ReportResult CapDetail(ReportResult r) =>
-        r.DetailRows is { Count: > DetailLimit } ? TakeDetail(r, DetailLimit) with { DetailTruncated = true } : r;
+    /// <summary>畫面上的明細最多 detailLimit 列（政策 report.detailLimit），幾萬列的 DOM 打不開；總計與 DetailTotal 仍是全部列，要看全部用匯出。</summary>
+    public static ReportResult CapDetail(ReportResult r, int detailLimit) =>
+        r.DetailRows is { } rows && rows.Count > detailLimit ? TakeDetail(r, detailLimit) with { DetailTruncated = true } : r;
 
     /// <summary>明細截到 n 列，TaskIds 跟著截（J12）；其餘欄位不動。下鑽、卡片、畫面上限都走這裡。</summary>
     public static ReportResult TakeDetail(ReportResult r, int n) => r with
@@ -48,12 +47,12 @@ public static class ReportRules
     public static string? CheckName(string? name) =>
         string.IsNullOrWhiteSpace(name) ? "名稱必填" : name.Trim().Length > MaxNameLength ? $"名稱最多 {MaxNameLength} 個字" : null;
 
-    /// <summary>日期區間：種類合法，N 給了就必須 1 到 3650。覆寫用的區間（run、drill）也走這裡。</summary>
-    public static string? CheckRange(ReportDateRange? r)
+    /// <summary>日期區間：種類合法，N 給了就必須 1 到 maxDays（政策 report.maxRangeDays，出廠 3650）。覆寫用的區間（run、drill）也走這裡。</summary>
+    public static string? CheckRange(ReportDateRange? r, int maxDays)
     {
         if (r is null) return null;
         if (r.Kind is null || !RangeKinds.Contains(r.Kind)) return "日期區間種類不合法";
-        if (r.N is { } n && (n < 1 || n > MaxDays)) return $"日期區間的 N 必須介於 1 到 {MaxDays}";
+        if (r.N is { } n && (n < 1 || n > maxDays)) return $"日期區間的 N 必須介於 1 到 {maxDays}";
         if (r.N is null && LastKinds.Contains(r.Kind)) return "日期區間需要 N";
         return null;
     }
@@ -70,7 +69,7 @@ public static class ReportRules
     private static bool IsIgnoredCondition(ReportMeasure? m) => m is { Condition: not null, Kind: "min" or "max" or "countMain" or "countChild" };
 
     /// <summary>結構檢查：版本、清單與引用不可缺、量值 Id 唯一、量值與分組的組合合法。通過後才能載入模組做後續檢查。</summary>
-    public static List<string> CheckShape(ReportDefinition d)
+    public static List<string> CheckShape(ReportDefinition d, int maxDays)
     {
         var errors = new List<string>();
         if (d.Version != ReportDefinition.CurrentVersion) errors.Add($"定義版本必須是 {ReportDefinition.CurrentVersion}");
@@ -117,7 +116,7 @@ public static class ReportRules
         if (d.Groups.GroupBy(g => ReportCalculator.KeyOf(g.Field)).Any(g => g.Count() > 1 && g.Any(x => x.Bucket is not null)))
             errors.Add("同一欄位不可用兩種分桶分組");
 
-        if (CheckRange(d.DateRange) is { } rangeError) errors.Add(rangeError);
+        if (CheckRange(d.DateRange, maxDays) is { } rangeError) errors.Add(rangeError);
         if (d.DateRange is not null && d.PrimaryDateField is null) errors.Add("設定日期區間需要選主要日期欄位");
         return errors;
     }
@@ -127,7 +126,7 @@ public static class ReportRules
     /// 運算子與條件值沿用欄位型別 handler（與列表篩選相同），正規化後的值才存檔；不帶偏移的日期時間條件值視為台北牆上時間。
     /// </summary>
     public static (List<string> Errors, ReportDefinition? Normalized) Check(
-        ReportDefinition d, ReportModuleSet set, FieldTypeRegistry registry, IReadOnlySet<string> userIds)
+        ReportDefinition d, ReportModuleSet set, FieldTypeRegistry registry, IReadOnlySet<string> userIds, int maxDays)
     {
         var errors = new List<string>();
         if (set.Main is null) return (["主模組不存在或未啟用"], null);
@@ -200,7 +199,7 @@ public static class ReportRules
                 errors.Add($"欄位 {f.Field.FieldId} 不支援運算子 {f.Op}");
                 return null;
             }
-            if (NormalizeValue(field, handler, op, f.Value, registry, userIds) is not { } value)
+            if (NormalizeValue(field, handler, op, f.Value, registry, userIds, maxDays) is not { } value)
             {
                 errors.Add($"欄位 {f.Field.FieldId} 的條件值格式錯誤");
                 return null;
@@ -230,7 +229,7 @@ public static class ReportRules
 
     /// <summary>回傳 null 代表格式錯誤；有效但無值（isEmpty）回 (null)。結構與 <c>ConditionParser.ParseValue</c> 相同。</summary>
     private static Norm? NormalizeValue(
-        Field field, IFieldTypeHandler handler, FilterOperator op, JsonElement? value, FieldTypeRegistry registry, IReadOnlySet<string> userIds)
+        Field field, IFieldTypeHandler handler, FilterOperator op, JsonElement? value, FieldTypeRegistry registry, IReadOnlySet<string> userIds, int maxDays)
     {
         if (value is { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined }) value = null;
         switch (op)
@@ -238,7 +237,7 @@ public static class ReportRules
             case FilterOperator.IsEmpty or FilterOperator.IsNotEmpty or FilterOperator.BeforeToday:
                 return value is null ? new Norm(null) : null;
             case FilterOperator.WithinNextDays or FilterOperator.WithinLastDays:
-                return value is { ValueKind: JsonValueKind.Number } n && n.TryGetInt32(out var days) && days is >= 0 and <= MaxDays ? new Norm(value) : null;
+                return value is { ValueKind: JsonValueKind.Number } n && n.TryGetInt32(out var days) && days >= 0 && days <= maxDays ? new Norm(value) : null;
             case FilterOperator.Contains or FilterOperator.StartsWith:
                 return value is { ValueKind: JsonValueKind.String } s && s.GetString()!.Length is >= 1 and <= MaxTextLength ? new Norm(value) : null;
             case FilterOperator.In or FilterOperator.NotIn:

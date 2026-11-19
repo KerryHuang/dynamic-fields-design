@@ -1273,6 +1273,71 @@ public class ReportsApiTests
         drill.GetProperty("detailTruncated").GetBoolean().Should().BeFalse();
     }
 
+    // ---- 政策 A24：明細列數、下鑽筆數、查詢天數 ----
+
+    private static async Task SetPolicy(HttpClient admin, string code, int value) =>
+        (await admin.PutAsJsonAsync($"{Base}/system/policies/{code}", new { value })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Run_DetailLimitPolicy()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        for (var i = 0; i < 3; i++) await AddRecord(admin, w, i);
+        var id = await Create(admin, Def(w.Main, columns: [Ref(w.Amount)]));
+        await SetPolicy(admin, "report.detailLimit", 2);
+
+        var run = await Run(admin, id);
+
+        run.GetProperty("detailRows").GetArrayLength().Should().Be(2);
+        run.GetProperty("detailTotal").GetInt32().Should().Be(3);
+        run.GetProperty("detailTruncated").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Drill_DrillLimitPolicy()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        await AddRecord(admin, w, 1, w.Options[0]);
+        await AddRecord(admin, w, 2, w.Options[0]);
+        var id = await Create(admin, ByStatus(w));
+        await SetPolicy(admin, "report.drillLimit", 1);
+
+        var res = await admin.PostAsJsonAsync($"{Reports}/{id}/drill", new { groupKeys = new[] { w.Options[0] } });
+
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var drill = await JsonOf(res);
+        drill.GetProperty("detailRows").GetArrayLength().Should().Be(1);
+        drill.GetProperty("truncated").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Run_RangeDaysPolicy()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var id = await Create(admin, ByStatus(w));
+        await SetPolicy(admin, "report.maxRangeDays", 30);
+
+        var res = await admin.PostAsJsonAsync($"{Reports}/{id}/run", new { range = new { kind = "lastDays", n = 31 } });
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await JsonOf(res)).GetProperty("errors").GetProperty("range")[0].GetString().Should().Be("日期區間的 N 必須介於 1 到 30");
+        (await admin.PostAsJsonAsync($"{Reports}/{id}/run", new { range = new { kind = "lastDays", n = 30 } })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var within = await admin.PostAsJsonAsync(Reports, new
+        {
+            name = "近期", definition = Def(w.Main, measures: [Count()], filters: [new { field = Ref(w.Due), op = "withinLastDays", value = 31 }])
+        });
+        within.StatusCode.Should().Be(HttpStatusCode.BadRequest, await within.Content.ReadAsStringAsync());
+    }
+
     // ---- 最終審查補的測試缺口 ----
 
     private static async Task Disable(HttpClient c, long fieldId) =>

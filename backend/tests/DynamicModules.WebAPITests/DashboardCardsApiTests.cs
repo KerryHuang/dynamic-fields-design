@@ -36,6 +36,29 @@ public class DashboardCardsApiTests
         result.GetProperty("groups").EnumerateArray().Select(g => g.GetProperty("groupLabels")[0].GetString()!).ToArray();
 
     [Fact]
+    public async Task Layout_LoweredMaxCards_MoveAllowed_AddRejected()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var report = await CreateReport(admin, ByStatus(w));
+        object Cards(int n, int x = 0) => Layout(Enumerable.Range(0, n).Select(i => Card($"c{i}", report, x: x, y: i * 3)).ToArray());
+        var created = await admin.PostAsJsonAsync(Dashboards, new { name = "我的", layout = Cards(3) });
+        created.EnsureSuccessStatusCode();
+        var id = (await JsonOf(created)).GetProperty("id").GetInt64();
+        (await admin.PutAsJsonAsync($"{Base}/system/policies/dashboard.maxCards", new { value = 2 })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var moved = await admin.PutAsJsonAsync($"{Dashboards}/{id}/layout", new { layout = Cards(3, x: 6) });
+        moved.StatusCode.Should().Be(HttpStatusCode.OK, await moved.Content.ReadAsStringAsync());
+        var more = await admin.PutAsJsonAsync($"{Dashboards}/{id}/layout", new { layout = Cards(4) });
+        more.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await JsonOf(more)).GetProperty("errors").GetProperty("layout")[0].GetString().Should().Be("卡片最多 2 張");
+        var fresh = await admin.PostAsJsonAsync(Dashboards, new { name = "新的", layout = Cards(3) });
+        fresh.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await JsonOf(fresh)).GetProperty("errors").GetProperty("layout")[0].GetString().Should().Be("卡片最多 2 張");
+    }
+
+    [Fact]
     public async Task TopN_TotalStillAll_NoOtherGroup()
     {
         using var app = new TestApp();

@@ -6,17 +6,18 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.ReportService.Queries.RunReport;
 
 /// <summary>分享只給定義；資料權限由 runner 依執行者計算，沒權限回 restricted 狀態（HTTP 200）。</summary>
-public class RunReportHandler(ReportAccess access, ReportRunner runner) : IRequestHandler<RunReportRequest, ServiceResult>
+public class RunReportHandler(ReportAccess access, ReportRunner runner, ReportLimitReader limitReader) : IRequestHandler<RunReportRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(RunReportRequest request, CancellationToken ct)
     {
         var (report, _) = await access.FindAsync(request.Id, ct);
         if (report is null) return ServiceResult.NotFound(ReportRules.ReportNotFound);
-        if (ReportRules.CheckRange(request.Range) is { } error)
+        var limits = await limitReader.GetAsync(ct);
+        if (ReportRules.CheckRange(request.Range, limits.MaxRangeDays) is { } error)
             return ServiceResult.Invalid(ReportRules.ToErrors("range", [error]));
 
         var result = await runner.RunAsync(ReportDefinition.Parse(report.DefinitionJson), new ReportRunOptions(request.Range, null, request.Locale,
                 DepartmentIds: request.DepartmentIds, IncludeSubDepartments: request.IncludeSubDepartments), ct);
-        return ServiceResult.Success(ReportRules.CapDetail(result));
+        return ServiceResult.Success(ReportRules.CapDetail(result, limits.DetailLimit));
     }
 }

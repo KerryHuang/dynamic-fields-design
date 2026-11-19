@@ -11,13 +11,14 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.DashboardService.Commands.AdminCreateDashboard;
 
 /// <summary>建立指派版（還沒指派給任何群組，沒人看得到）；排在現有指派版的最後。</summary>
-public class AdminCreateDashboardHandler(IDashboardRepository dashboards, IUnitOfWork uow, IBusinessTime time, DashboardAccess access, ReportAccess reportAccess)
+public class AdminCreateDashboardHandler(IDashboardRepository dashboards, IUnitOfWork uow, IBusinessTime time, DashboardAccess access, ReportAccess reportAccess,
+    ReportLimitReader limitReader)
     : IRequestHandler<AdminCreateDashboardRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(AdminCreateDashboardRequest request, CancellationToken ct)
     {
         var viewer = await reportAccess.ViewerAsync(ct);
-        var errors = DashboardRules.CheckLayout(request.Layout);
+        var errors = DashboardRules.CheckLayout(request.Layout, await limitReader.GetAsync(ct), await limitReader.MaxCardsAsync(ct));
         if (ReportRules.CheckName(request.Name) is { } nameError) errors.Add(nameError);
         if (errors.Count == 0 && await access.CheckReportsAsync(request.Layout, [], viewer, ct) is { } reportError) errors.Add(reportError);
         if (errors.Count > 0) return ServiceResult.Invalid(ReportRules.ToErrors("layout", errors));

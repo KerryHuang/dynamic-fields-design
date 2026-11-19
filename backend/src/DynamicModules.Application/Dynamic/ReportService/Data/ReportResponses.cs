@@ -61,7 +61,7 @@ public record ReportDetail(
     long Id, string Name, string OwnerName, bool IsOwner, List<long> SharedGroupIds, string MainModuleKey, JsonElement Definition,
     bool CanExport);
 
-/// <summary>下鑽結果：同 <see cref="ReportResult"/>，明細最多 <see cref="ReportRules.DrillLimit"/> 列，超過時 Truncated 為 true。</summary>
+/// <summary>下鑽結果：同 <see cref="ReportResult"/>，明細最多到下鑽上限（政策 report.drillLimit）列，超過時 Truncated 為 true。</summary>
 public sealed record DrillResult : ReportResult
 {
     public DrillResult(ReportResult result, bool truncated) : base(result) => Truncated = truncated;

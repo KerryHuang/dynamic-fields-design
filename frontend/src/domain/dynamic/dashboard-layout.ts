@@ -3,7 +3,6 @@ import { DEFAULT_CARD_OPTIONS } from './dashboard-types';
 import type { ReportViz } from './report-types';
 
 export const GRID_COLUMNS = 12;
-export const MAX_CARDS = 40;
 
 const DEFAULT_SIZE: Record<ReportViz, { w: number; h: number }> = {
   indicator: { w: 4, h: 2 },
