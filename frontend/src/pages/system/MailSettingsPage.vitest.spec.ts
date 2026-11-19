@@ -96,6 +96,29 @@ describe('MailSettingsPage', () => {
     w.unmount();
   });
 
+  it('短核對修正 1：失敗後離頁，快取裡留著的 mutation 再執行也讀不到草稿密碼', async () => {
+    const w = await mountPage(settings(), undefined, new HttpFail(500, { message: 'boom' }));
+    await typePassword('s3cret-left');
+    expect((await save()).password).toBe('s3cret-left');
+    const m = qc.getMutationCache().getAll().at(-1)!;
+    w.unmount();
+    await (m.options.mutationFn as (v: unknown) => Promise<unknown>)(m.state.variables).catch(() => undefined);
+    const last = bodyOf(calls.filter((c) => c.url === '/system/mail-settings' && c.method === 'put').at(-1)) as Record<string, unknown>;
+    expect(last).not.toHaveProperty('password');
+  });
+
+  it('短核對修正 1：按了清除密碼後離頁，留著的 mutation 再執行也不會送清除', async () => {
+    const w = await mountPage(settings(), undefined, new HttpFail(500, { message: 'boom' }));
+    q('mail-clear-password')!.click();
+    await flushPromises();
+    expect((await save()).password).toBe('');
+    const m = qc.getMutationCache().getAll().at(-1)!;
+    w.unmount();
+    await (m.options.mutationFn as (v: unknown) => Promise<unknown>)(m.state.variables).catch(() => undefined);
+    const last = bodyOf(calls.filter((c) => c.url === '/system/mail-settings' && c.method === 'put').at(-1)) as Record<string, unknown>;
+    expect(last).not.toHaveProperty('password');
+  });
+
   it('審查修正 1：清除密碼儲存成功後清除旗標復原（不再顯示「儲存後會清除」）', async () => {
     const w = await mountPage(settings());
     q('mail-clear-password')!.click();
