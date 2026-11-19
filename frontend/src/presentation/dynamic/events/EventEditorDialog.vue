@@ -5,11 +5,12 @@ import { useI18n } from 'vue-i18n';
 import { useEvents, useHiddenFieldIds, useSaveEventMutation } from 'src/application/dynamic/queries/events-queries';
 import { useModules } from 'src/application/dynamic/queries/modules-queries';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
+import { useEffectivePolicies } from 'src/application/dynamic/queries/policies-queries';
 import { useWorkflowQuery } from 'src/application/dynamic/queries/workflow-queries';
 import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
 import { useSelectFilter } from 'src/components/framework/useSelectFilter';
 import {
-  buildEvent, draftFromEvent, emptyEffect, emptyEventDraft, groupEventErrors, MAX_EFFECTS, nextEffectCode, setIsComplete, usesAllowHiddenSource,
+  buildEvent, draftFromEvent, emptyEffect, emptyEventDraft, groupEventErrors, nextEffectCode, setIsComplete, usesAllowHiddenSource,
   type EffectDraft, type EventDraft,
 } from 'src/domain/dynamic/event-draft';
 import type { EventTriggerOn, ModuleEvent } from 'src/domain/dynamic/events-ledger';
@@ -72,6 +73,9 @@ const watchSel = useSelectFilter(watchOptions);
 const setWhen = (n: ConditionNode | undefined) => { if (n) form.when = n; else delete form.when; };
 
 // ---- effects ----
+// 效果數上限（政策 event.maxEffects，全系統）；生效值還沒回來時新增鈕停用
+const policies = useEffectivePolicies(null);
+const maxEffects = computed(() => policies.data.value?.values['event.maxEffects'] as number | undefined);
 const addEffect = () => { form.effects.push(emptyEffect(nextEffectCode(form.effects))); };
 const setEffect = (i: number, e: EffectDraft) => { form.effects[i] = e; error.value = null; };
 const removeEffect = (i: number) => { form.effects.splice(i, 1); error.value = null; };
@@ -160,10 +164,10 @@ const joined = (lines: string[]) => joinList(lines) || undefined;
         <div class="text-subtitle1">{{ t('events.effects') }}</div>
         <q-space />
         <q-btn
-          dense color="primary" icon="add" :label="t('events.addEffect')" :disable="form.effects.length >= MAX_EFFECTS" data-testid="event-add-effect" @click="addEffect"
+          dense color="primary" icon="add" :label="t('events.addEffect')" :disable="maxEffects === undefined || form.effects.length >= maxEffects" data-testid="event-add-effect" @click="addEffect"
         />
       </div>
-      <div class="text-caption text-muted">{{ t('events.effectsHint', { max: MAX_EFFECTS }) }}</div>
+      <div v-if="maxEffects !== undefined" class="text-caption text-muted">{{ t('events.effectsHint', { max: maxEffects }) }}</div>
       <div v-if="!form.effects.length" class="text-muted">{{ t('events.noEffects') }}</div>
       <EventEffectEditor
         v-for="(effect, i) in form.effects" :key="i" :model-value="effect" :index="i" :source-module="module" :modules="modules.data.value ?? []"
