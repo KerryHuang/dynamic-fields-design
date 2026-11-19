@@ -1,10 +1,12 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.DeleteRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 
@@ -210,5 +212,24 @@ public class WriteJournalAndIdempotencyTests : DesignerTestBase
         Svc<IOperationContext>().ClientKey = "key-AAAA-0005";
         await Create(m, t, "x");
         Db.Context.Set<OperationRecord>().AsNoTracking().Select(o => o.Key).ToList().Should().BeEquivalentTo(["key-AAAA-0005"]);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Purge_FollowsRetentionPolicy()
+    {
+        var (m, t) = await Module("id-g");
+        (await Send(new UpdateSystemPolicyRequest(PolicyCatalog.MaintenanceIdempotencyRetentionDays.Code, JsonSerializer.SerializeToElement(1))))
+            .IsSuccess.Should().BeTrue();
+        var now = new DateTime(2026, 11, 4, 9, 0, 0);
+        Db.Context.Set<OperationRecord>().AddRange(
+            new OperationRecord { UserId = "admin", Key = "key-OLD-00002", RequestHash = "h", ResultKind = 1, ResultJson = "{}", CreatedTime = now.AddDays(-2) },
+            new OperationRecord { UserId = "admin", Key = "key-NEW-00001", RequestHash = "h", ResultKind = 1, ResultJson = "{}", CreatedTime = now.AddHours(-12) });
+        await Db.Context.SaveChangesAsync();
+
+        Svc<IOperationContext>().ClientKey = "key-AAAA-0006";
+        await Create(m, t, "x");
+        Db.Context.Set<OperationRecord>().AsNoTracking().Select(o => o.Key).ToList()
+            .Should().BeEquivalentTo(["key-NEW-00001", "key-AAAA-0006"]);
     }
 }

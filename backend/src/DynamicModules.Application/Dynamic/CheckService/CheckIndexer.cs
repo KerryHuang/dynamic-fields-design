@@ -1,10 +1,12 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Domain.Conditions;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.Rules;
 
@@ -15,9 +17,9 @@ namespace DynamicModules.Application.Dynamic.CheckService;
 /// 並讓加總欄位的 ScaledValue 完整。回填與儲存檢查同一個交易，持有寫入鎖到結束。
 /// </summary>
 public class CheckIndexer(
-    IRecordRepository records, IModuleRepository modules, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time)
+    IRecordRepository records, IModuleRepository modules, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
+    IPolicyReader policies)
 {
-    public const int MaxRecords = 200_000;
     public const int BatchSize = 1000;
 
     /// <summary>需要索引的欄位：組鍵、加總欄位、where 用到的欄位（上限欄位從記錄值讀，不需要）。</summary>
@@ -62,8 +64,8 @@ public class CheckIndexer(
         if (toBackfill.Count > 0)
         {
             var count = await records.CountByModuleAsync(module.Id, ct);
-            if (count > MaxRecords)
-                return (ServiceResult.Conflict($"這個模組有 {count} 筆記錄，超過 {MaxRecords} 筆，一次回填索引會長時間占住寫入鎖；請在低峰時段分次處理"), notices);
+            var max = await policies.IntAsync(PolicyCatalog.CheckMaxBackfillRecords, null, ct);
+            if (count > max) return (ServiceResult.Conflict(CheckMessages.TooManyToBackfill(count, max)), notices);
 
             foreach (var field in toBackfill)
                 if (await BackfillAsync(module, field, def.FieldId == field.Id, ct) is { } failure)

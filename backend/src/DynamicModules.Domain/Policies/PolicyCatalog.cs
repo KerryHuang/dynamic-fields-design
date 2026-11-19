@@ -328,6 +328,30 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition DashboardMaxCards =
         new("dashboard.maxCards", "report", PolicyKind.Integer, PolicyScope.System, "40", 1, 100, Unit: "count");
 
+    /// <summary>A26：重送保護（Idempotency-Key）紀錄保留天數；過期的在下一次帶 key 的寫入時清掉。代碼 maintenance.*，分類沿用 O1 的 ops。</summary>
+    public static readonly PolicyDefinition MaintenanceIdempotencyRetentionDays =
+        new("maintenance.idempotencyRetentionDays", "ops", PolicyKind.Integer, PolicyScope.System, "7", 1, 90, Unit: "days");
+
+    /// <summary>A27：孤兒附件清掃的寬限分鐘數；清掃 API 沒帶 graceMinutes 時才用（明確傳值含 0 照參數）。</summary>
+    public static readonly PolicyDefinition MaintenanceOrphanSweepGraceMinutes =
+        new("maintenance.orphanSweepGraceMinutes", "ops", PolicyKind.Integer, PolicyScope.System, "60", 1, 1440, Unit: "minutes");
+
+    /// <summary>A28：檢查試跑最多回報幾組違規。</summary>
+    public static readonly PolicyDefinition CheckScanMaxViolations =
+        new("check.scanMaxViolations", "check", PolicyKind.Integer, PolicyScope.System, "50", 1, 500, Unit: "count");
+
+    /// <summary>A28：檢查試跑最多掃描幾組，超過時停止並標示未掃完。</summary>
+    public static readonly PolicyDefinition CheckScanMaxGroups =
+        new("check.scanMaxGroups", "check", PolicyKind.Integer, PolicyScope.System, "20000", 1000, 200000, Unit: "count");
+
+    /// <summary>A29：一次寫入後最多驗證幾組跨記錄檢查，超過時整筆取消。</summary>
+    public static readonly PolicyDefinition CheckMaxGroupsPerWrite =
+        new("check.maxGroupsPerWrite", "check", PolicyKind.Integer, PolicyScope.System, "500", 1, 5000, Unit: "count");
+
+    /// <summary>A30：儲存檢查時回填索引的模組記錄數上限（回填與儲存同一個交易，持有寫入鎖）；每批筆數 <c>CheckIndexer.BatchSize</c> 是技術常數。</summary>
+    public static readonly PolicyDefinition CheckMaxBackfillRecords =
+        new("check.maxBackfillRecords", "check", PolicyKind.Integer, PolicyScope.System, "200000", 1000, 1000000, Unit: "count");
+
     public static DayOfWeek WeekStartOf(string choice) => Enum.Parse<DayOfWeek>(choice, ignoreCase: true);
 
     public static IReadOnlyList<PolicyDefinition> All { get; } =
@@ -348,7 +372,9 @@ public static class PolicyCatalog
          DesignMaxModulesPerPackage, DesignMaxFieldsPerModule, DesignMaxOptionsPerField, DesignMaxViewsPerModule,
          DesignMaxIntegrationsPerPackage, ModuleCreateTitleField, FormDefaultColumns, FormMaxColumns,
          ImportMaxRows, ImportMaxFileBytes, EventMaxEventsPerModule, EventMaxEffects, EventMaxDepth, EventMaxWritesPerRequest,
-         EventMaxEachRows, RecordMaxDetailRows, ReportDrillLimit, ReportDetailLimit, ReportMaxRangeDays, DashboardMaxCards];
+         EventMaxEachRows, RecordMaxDetailRows, ReportDrillLimit, ReportDetailLimit, ReportMaxRangeDays, DashboardMaxCards,
+         MaintenanceIdempotencyRetentionDays, MaintenanceOrphanSweepGraceMinutes, CheckScanMaxViolations, CheckScanMaxGroups,
+         CheckMaxGroupsPerWrite, CheckMaxBackfillRecords];
 
     public static PolicyDefinition? Find(string code) =>
         All.FirstOrDefault(d => string.Equals(d.Code, code, StringComparison.Ordinal));

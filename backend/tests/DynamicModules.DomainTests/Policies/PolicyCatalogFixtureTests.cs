@@ -122,6 +122,23 @@ public class PolicyCatalogFixtureTests
                 PolicyCatalog.EventMaxEachRows, PolicyCatalog.ReportDrillLimit, PolicyCatalog.ReportDetailLimit,
                 PolicyCatalog.ReportMaxRangeDays, PolicyCatalog.DashboardMaxCards }
             .Should().OnlyContain(d => d.Scope == PolicyScope.System);
+        // p2c：維運上限（A26、A27 進 O1 的 ops 分類，代碼仍是 maintenance.*）與跨記錄檢查（A28–A30）
+        PolicyCatalog.MaintenanceIdempotencyRetentionDays.Factory.Should().Be("7");
+        PolicyCatalog.MaintenanceIdempotencyRetentionDays.Max.Should().Be(90);
+        PolicyCatalog.MaintenanceOrphanSweepGraceMinutes.Factory.Should().Be("60");
+        PolicyCatalog.MaintenanceOrphanSweepGraceMinutes.Max.Should().Be(1440);
+        PolicyCatalog.CheckScanMaxViolations.Factory.Should().Be("50");
+        PolicyCatalog.CheckScanMaxGroups.Factory.Should().Be("20000");
+        PolicyCatalog.CheckScanMaxGroups.Min.Should().Be(1000);
+        PolicyCatalog.CheckMaxGroupsPerWrite.Factory.Should().Be("500");
+        PolicyCatalog.CheckMaxBackfillRecords.Factory.Should().Be("200000");
+        PolicyCatalog.CheckMaxBackfillRecords.Min.Should().Be(1000);
+        PolicyCatalog.CheckMaxBackfillRecords.Max.Should().Be(1000000);
+        new[] { PolicyCatalog.MaintenanceIdempotencyRetentionDays, PolicyCatalog.MaintenanceOrphanSweepGraceMinutes }
+            .Should().OnlyContain(d => d.Scope == PolicyScope.System && d.Category == "ops");
+        new[] { PolicyCatalog.CheckScanMaxViolations, PolicyCatalog.CheckScanMaxGroups, PolicyCatalog.CheckMaxGroupsPerWrite,
+                PolicyCatalog.CheckMaxBackfillRecords }
+            .Should().OnlyContain(d => d.Scope == PolicyScope.System && d.Category == "check");
         PolicyCatalog.WeekStartOf("sunday").Should().Be(DayOfWeek.Sunday);
         PolicyCatalog.WeekStartOf("monday").Should().Be(DayOfWeek.Monday);
     }

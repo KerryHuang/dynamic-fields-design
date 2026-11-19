@@ -1,12 +1,14 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.CheckService;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.DeleteRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -296,5 +298,41 @@ public class CheckRuntimeTests : EffectsTestBase
         var scan = (CheckScanResponse)(await Send(new ScanCheckRequest(s.Move + "-min"))).Data!;
         scan.Violations.Should().ContainSingle();
         scan.Violations[0].Value.Should().Be(-4m);
+        scan.Truncated.Should().BeFalse();
+    }
+
+    // ---- 政策 A28、A29：試跑回報組數、寫入後驗證組數 ----
+
+    private async Task SetPolicy(PolicyDefinition def, int value) =>
+        (await Send(new UpdateSystemPolicyRequest(def.Code, JsonSerializer.SerializeToElement(value)))).IsSuccess.Should().BeTrue();
+
+    [Fact]
+    public async Task Scan_ViolationPolicy()
+    {
+        var s = await BuildStock("crv");
+        await MustCreate(s.Move, Move(s, "a", "A", "-4"));
+        await MustCreate(s.Move, Move(s, "b", "B", "-2"));
+        await StockCheck(s);
+        await SetPolicy(PolicyCatalog.CheckScanMaxViolations, 1);
+
+        var scan = (CheckScanResponse)(await Send(new ScanCheckRequest(s.Move + "-min"))).Data!;
+        scan.Violations.Should().ContainSingle();
+        scan.Truncated.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Write_GroupPolicy()
+    {
+        var s = await BuildStock("crw");
+        await StockCheck(s);
+        var incoming = await MustCreate(s.Move, Move(s, "in", "A", "10"));
+        await SetPolicy(PolicyCatalog.CheckMaxGroupsPerWrite, 1);
+
+        // 品項 A 改成 B：寫入前的 A 組與寫入後的 B 組都要驗
+        var r = await Run(new UpdateRecordRequest(incoming.Id, Vals((s.MoveItem, "\"B\"")), incoming.RowVersion));
+        r.IsConflict.Should().BeTrue();
+        r.Message.Should().Be("這次請求牽涉的檢查組數超過 1，請分批處理");
+        // 只牽涉一組的寫入照常
+        (await Create(s.Move, Move(s, "in2", "A", "1"))).IsCreated.Should().BeTrue();
     }
 }

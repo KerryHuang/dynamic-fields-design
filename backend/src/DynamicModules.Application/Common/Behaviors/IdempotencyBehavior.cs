@@ -4,7 +4,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
@@ -14,12 +16,13 @@ namespace DynamicModules.Application.Common.Behaviors;
 /// 請求層冪等（設計 §3.2）。在交易「內」、handler 之前，所以查詢與後面的寫入在同一把寫入鎖之下：
 /// 兩個帶同一把 key 的請求同時進來，後者排隊等到前者提交後，查到紀錄，直接回放。
 /// 只處理帶 Idempotency-Key 的 <see cref="IRecordWriteRequest"/>；只有成功的結果會存，失敗的請求整筆回滾、沒有紀錄。
+/// 紀錄保留天數是政策 A26（maintenance.idempotencyRetentionDays）。
 /// </summary>
 public class IdempotencyBehavior<TReq, TRes>(
-    IOperationContext operation, IOperationRepository operations, ICurrentUser user, IBusinessTime time, IUnitOfWork uow)
+    IOperationContext operation, IOperationRepository operations, ICurrentUser user, IBusinessTime time, IUnitOfWork uow,
+    IPolicyReader policies)
     : IPipelineBehavior<TReq, TRes> where TReq : notnull
 {
-    public const int RetentionDays = 7;
     private const int Success = 1, Created = 2;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -52,7 +55,8 @@ public class IdempotencyBehavior<TReq, TRes>(
             ResultJson = result.Data is null ? "" : JsonSerializer.Serialize(result.Data, result.Data.GetType(), Json),
             CreatedTime = time.Now
         });
-        await operations.PurgeOlderThanAsync(time.Now.AddDays(-RetentionDays), ct);
+        var retentionDays = await policies.IntAsync(PolicyCatalog.MaintenanceIdempotencyRetentionDays, null, ct);
+        await operations.PurgeOlderThanAsync(time.Now.AddDays(-retentionDays), ct);
         await uow.CommitAsync(ct);
         return response;
     }

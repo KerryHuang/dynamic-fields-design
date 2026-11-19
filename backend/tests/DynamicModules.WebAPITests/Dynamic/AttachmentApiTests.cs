@@ -305,6 +305,30 @@ public class AttachmentApiTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Sweep_NoGrace_UsesPolicy()
+    {
+        var w = await MakeWorld();
+        await UploadOk(w);
+        var rowVersion = (await JsonOf(await Admin.GetAsync($"{Base}/records/{w.RecordId}"))).GetProperty("rowVersion").GetString();
+        (await Admin.DeleteAsync($"{Base}/records/{w.RecordId}?rowVersion={rowVersion}")).EnsureSuccessStatusCode();
+        (await Admin.PostAsync($"{Base}/modules/{w.Module}/deactivate", null)).EnsureSuccessStatusCode();
+        (await Admin.DeleteAsync($"{Base}/modules/{w.Module}?purged=1")).StatusCode.Should().Be(HttpStatusCode.OK);
+        var orphan = DiskFiles().Should().ContainSingle().Subject;
+        File.SetLastWriteTimeUtc(orphan, DateTime.UtcNow.AddMinutes(-10));
+
+        // 不帶參數、出廠值 60 分鐘：10 分鐘前的孤兒檔還在寬限內
+        (await JsonOf(await Admin.PostAsync($"{Base}/attachments/sweep", null))).GetProperty("deleted").GetInt32().Should().Be(0);
+
+        (await Admin.PutAsJsonAsync($"{Base}/system/policies/maintenance.orphanSweepGraceMinutes", new { value = 5 }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        // 明確帶值時照參數，不看政策
+        (await JsonOf(await Admin.PostAsync($"{Base}/attachments/sweep?graceMinutes=60", null))).GetProperty("deleted").GetInt32().Should().Be(0);
+        (await JsonOf(await Admin.PostAsync($"{Base}/attachments/sweep", null))).GetProperty("deleted").GetInt32().Should().Be(1);
+        DiskFiles().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Sweep_RequiresSystemAdmin()
     {
         var res = await _app.AsUser("sales01").PostAsync($"{Base}/attachments/sweep", null);

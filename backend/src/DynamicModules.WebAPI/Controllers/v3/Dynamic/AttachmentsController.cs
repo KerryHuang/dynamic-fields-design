@@ -47,6 +47,7 @@ public class AttachmentsController(IMediator mediator, AttachmentUploadTracker t
     }
 
     [HttpPost("attachments/sweep")]
-    public async Task<IActionResult> Sweep([FromQuery] int graceMinutes = 60, CancellationToken ct = default) =>
-        (await mediator.Send(new SweepAttachmentsRequest(TimeSpan.FromMinutes(Math.Max(0, graceMinutes))), ct)).ToActionResult(this);
+    public async Task<IActionResult> Sweep([FromQuery] int? graceMinutes = null, CancellationToken ct = default) =>
+        (await mediator.Send(new SweepAttachmentsRequest(graceMinutes is { } g ? TimeSpan.FromMinutes(Math.Max(0, g)) : null), ct))
+        .ToActionResult(this);
 }
