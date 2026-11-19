@@ -50,6 +50,19 @@ async function submit(user = 'Admin', pw = 'secret-pw') {
   await flushPromises();
 }
 
+/** 共用快取（查詢與 mutation，含 variables、結果與錯誤）序列化後的全文。 */
+const cacheText = (qc: QueryClient) => JSON.stringify([
+  qc.getQueryCache().getAll().map((x) => x.state),
+  qc.getMutationCache().getAll().map((x) => x.state),
+]);
+/** 離頁後把快取裡留著的 mutation 用它的 variables 再跑一次（模擬 MutationCache 保留的 mutationFn 閉包被叫用）。 */
+async function rerunLeftover(qc: QueryClient) {
+  const m = qc.getMutationCache().getAll().at(-1)!;
+  mounted!.unmount();
+  mounted = undefined;
+  await (m.options.mutationFn as (v: unknown) => Promise<unknown>)(m.state.variables).catch(() => undefined);
+}
+
 const off = { demoLoginEnabled: false, demoGenerating: false, demoAccounts: [] };
 const on = { demoLoginEnabled: true, demoGenerating: false, demoAccounts: [{ userId: 'sales01', displayName: '業務一' }, { userId: 'floor01', displayName: '現場一' }] };
 
@@ -146,5 +159,32 @@ describe('LoginPage', () => {
   it('has a language switcher on the login page', async () => {
     await mountPage(off);
     expect(q('locale-open')).not.toBeNull();
+  });
+  describe('密碼不留在共用快取', () => {
+    it('登入成功後共用快取不含明文密碼', async () => {
+      const { queryClient } = await mountPage(off);
+      api.login.mockResolvedValue({ userId: 'admin', displayName: 'A', mustChangePassword: false });
+      await submit('Admin', 's3cret-ok');
+      expect(api.login).toHaveBeenCalledWith({ userId: 'Admin', password: 's3cret-ok' });
+      expect(cacheText(queryClient)).not.toContain('s3cret-ok');
+    });
+
+    it('登入失敗後共用快取不含明文密碼（密碼欄保留，可修正後重送）', async () => {
+      const { queryClient } = await mountPage(off);
+      api.login.mockRejectedValue({ status: 401, message: 'x' });
+      await submit('Admin', 's3cret-fail');
+      expect(api.login).toHaveBeenCalledWith({ userId: 'Admin', password: 's3cret-fail' });
+      expect(cacheText(queryClient)).not.toContain('s3cret-fail');
+      expect((q('login-password') as HTMLInputElement).value).toBe('s3cret-fail');
+    });
+
+    it('失敗後離頁，快取裡留著的 mutation 再執行也讀不到密碼', async () => {
+      const { queryClient } = await mountPage(off);
+      api.login.mockRejectedValue({ status: 401, message: 'x' });
+      await submit('Admin', 's3cret-left');
+      await rerunLeftover(queryClient);
+      expect(api.login).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(api.login.mock.calls.at(-1))).not.toContain('s3cret-left');
+    });
   });
 });

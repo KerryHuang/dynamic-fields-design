@@ -14,6 +14,7 @@ vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { changePassword: v
 const api = vi.mocked(dynamicApi);
 
 let mounted: ReturnType<typeof mount> | undefined;
+let queryClient: QueryClient;
 
 async function mountPage(forced = true) {
   setActivePinia(createPinia());
@@ -24,9 +25,10 @@ async function mountPage(forced = true) {
   });
   await router.push('/change-password');
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+  queryClient = new QueryClient();
   const w = mount(ChangePasswordPage, {
     attachTo: document.body,
-    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], i18n, router, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], i18n, router, [VueQueryPlugin, { queryClient }]] },
   });
   await flushPromises();
   mounted = w;
@@ -46,6 +48,12 @@ async function submit(oldPw: string, next: string, confirm: string) {
   q('cp-submit')!.click();
   await flushPromises();
 }
+
+/** 共用快取（查詢與 mutation，含 variables、結果與錯誤）序列化後的全文。 */
+const cacheText = () => JSON.stringify([
+  queryClient.getQueryCache().getAll().map((x) => x.state),
+  queryClient.getMutationCache().getAll().map((x) => x.state),
+]);
 
 describe('ChangePasswordPage', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -109,5 +117,34 @@ describe('ChangePasswordPage', () => {
     q('cp-back')!.click();
     await flushPromises();
     expect(router.currentRoute.value.path).toBe('/');
+  });
+  describe('密碼不留在共用快取', () => {
+    it('改密碼成功後共用快取不含新舊密碼明文', async () => {
+      await mountPage();
+      api.changePassword.mockResolvedValue({ userId: 'admin', displayName: 'A', mustChangePassword: false });
+      await submit('s3cret-old', 's3cret-new-1', 's3cret-new-1');
+      expect(api.changePassword).toHaveBeenCalledWith({ oldPassword: 's3cret-old', newPassword: 's3cret-new-1' });
+      expect(cacheText()).not.toContain('s3cret');
+    });
+
+    it('改密碼失敗後共用快取不含新舊密碼明文', async () => {
+      await mountPage();
+      api.changePassword.mockRejectedValue({ status: 400, errors: { OldPassword: ['目前密碼不正確'] } });
+      await submit('s3cret-old', 's3cret-new-1', 's3cret-new-1');
+      expect(api.changePassword).toHaveBeenCalledTimes(1);
+      expect(cacheText()).not.toContain('s3cret');
+    });
+
+    it('失敗後離頁，快取裡留著的 mutation 再執行也讀不到密碼', async () => {
+      await mountPage();
+      api.changePassword.mockRejectedValue({ status: 400, errors: { OldPassword: ['目前密碼不正確'] } });
+      await submit('s3cret-old', 's3cret-new-1', 's3cret-new-1');
+      const m = queryClient.getMutationCache().getAll().at(-1)!;
+      mounted!.unmount();
+      mounted = undefined;
+      await (m.options.mutationFn as (v: unknown) => Promise<unknown>)(m.state.variables).catch(() => undefined);
+      expect(api.changePassword).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(api.changePassword.mock.calls.at(-1))).not.toContain('s3cret');
+    });
   });
 });

@@ -16,9 +16,11 @@ function useAdminMutation<V>(fn: (v: V) => Promise<unknown>, keys = ['admin-user
   });
 }
 
-export const useCreateUser = () => useAdminMutation((body: AdminUserCreate) => dynamicApi.createUser(body));
+/** 密碼由頁面在送出當下提供，不進 mutation variables（MutationCache 保留 variables 與 mutationFn 閉包）。 */
+export const useCreateUser = (secret: () => Pick<AdminUserCreate, 'password'>) =>
+  useAdminMutation((body: Omit<AdminUserCreate, 'password'>) => dynamicApi.createUser({ ...body, ...secret() }));
 export const useUpdateUser = () => useAdminMutation((v: { id: string; body: AdminUserUpdate }) => dynamicApi.updateUser(v.id, v.body));
-export const useResetPassword = () => useAdminMutation((v: { id: string; password: string }) => dynamicApi.resetUserPassword(v.id, v.password));
+export const useResetPassword = (secret: () => string) => useAdminMutation((id: string) => dynamicApi.resetUserPassword(id, secret()));
 export const useSetUserActive = () => useAdminMutation((v: { id: string; active: boolean }) => dynamicApi.setUserActive(v.id, v.active));
 
 export function useAdminGroups() {

@@ -78,6 +78,19 @@ async function fill(id: string, value: string) {
   await flushPromises();
 }
 
+/** 共用快取（查詢與 mutation，含 variables、結果與錯誤）序列化後的全文。 */
+const cacheText = () => JSON.stringify([
+  queryClient.getQueryCache().getAll().map((x) => x.state),
+  queryClient.getMutationCache().getAll().map((x) => x.state),
+]);
+/** 離頁後把快取裡留著的 mutation 用它的 variables 再跑一次（模擬 MutationCache 保留的 mutationFn 閉包被叫用）。 */
+async function rerunLeftover() {
+  const m = queryClient.getMutationCache().getAll().at(-1)!;
+  mounted!.unmount();
+  mounted = undefined;
+  await (m.options.mutationFn as (v: unknown) => Promise<unknown>)(m.state.variables).catch(() => undefined);
+}
+
 describe('UsersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -322,6 +335,64 @@ describe('UsersPage', () => {
       await settled();
       expect(api.resetUserPassword).toHaveBeenCalledTimes(1);
       expect(state(w).resetPassword).toBe('');
+    });
+  });
+  describe('passwords stay out of the shared cache', () => {
+    async function openReset(pw: string) {
+      await mountPage();
+      await click('user-reset-sales01');
+      await fill('user-reset-password', pw);
+      await click('user-reset-submit');
+    }
+    async function createWith(pw: string) {
+      await mountPage();
+      await click('user-create');
+      await fill('user-id', 'new01');
+      await fill('user-name', '新人');
+      await fill('user-password', pw);
+      await click('user-save');
+    }
+
+    it('重設密碼成功與失敗後，共用快取都不含明文', async () => {
+      api.resetUserPassword.mockResolvedValue(undefined as never);
+      await openReset('s3cret-ok-1');
+      expect(api.resetUserPassword).toHaveBeenCalledWith('sales01', 's3cret-ok-1');
+      expect(cacheText()).not.toContain('s3cret-ok-1');
+      mounted!.unmount();
+      document.body.innerHTML = '';
+      api.resetUserPassword.mockRejectedValue({ status: 500, message: 'boom' });
+      await openReset('s3cret-fail-1');
+      expect(api.resetUserPassword).toHaveBeenLastCalledWith('sales01', 's3cret-fail-1');
+      expect(cacheText()).not.toContain('s3cret-fail-1');
+    });
+
+    it('重設密碼失敗後離頁，快取裡留著的 mutation 再執行也讀不到密碼', async () => {
+      api.resetUserPassword.mockRejectedValue({ status: 500, message: 'boom' });
+      await openReset('s3cret-left-1');
+      await rerunLeftover();
+      expect(api.resetUserPassword).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(api.resetUserPassword.mock.calls.at(-1))).not.toContain('s3cret-left-1');
+    });
+
+    it('建立帳號成功與失敗後，共用快取都不含初始密碼明文', async () => {
+      api.createUser.mockResolvedValue(user('new01'));
+      await createWith('s3cret-ok-2');
+      expect(api.createUser).toHaveBeenCalledWith(expect.objectContaining({ password: 's3cret-ok-2' }));
+      expect(cacheText()).not.toContain('s3cret-ok-2');
+      mounted!.unmount();
+      document.body.innerHTML = '';
+      api.createUser.mockRejectedValue({ status: 409, message: '帳號已存在' });
+      await createWith('s3cret-fail-2');
+      expect(api.createUser).toHaveBeenLastCalledWith(expect.objectContaining({ password: 's3cret-fail-2' }));
+      expect(cacheText()).not.toContain('s3cret-fail-2');
+    });
+
+    it('建立帳號失敗後離頁，快取裡留著的 mutation 再執行也讀不到密碼', async () => {
+      api.createUser.mockRejectedValue({ status: 409, message: '帳號已存在' });
+      await createWith('s3cret-left-2');
+      await rerunLeftover();
+      expect(api.createUser).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(api.createUser.mock.calls.at(-1))).not.toContain('s3cret-left-2');
     });
   });
 });

@@ -26,9 +26,10 @@ function useStartSession() {
   };
 }
 
-export function useLogin() {
+/** 密碼由頁面在送出當下提供，不進 mutation variables（MutationCache 保留 variables 與 mutationFn 閉包）。 */
+export function useLogin(secret: () => { password: string }) {
   const start = useStartSession();
-  return useMutation({ mutationFn: (body: { userId: string; password: string }) => dynamicApi.login(body), onSuccess: start });
+  return useMutation({ mutationFn: (body: { userId: string }) => dynamicApi.login({ ...body, ...secret() }), onSuccess: start });
 }
 
 export function useDemoLogin() {
@@ -52,10 +53,11 @@ export function useLogout() {
   });
 }
 
-export function useChangePassword() {
+/** 同 useLogin：新舊密碼送出當下才向頁面取，不進 mutation variables。 */
+export function useChangePassword(secret: () => { oldPassword: string; newPassword: string }) {
   const identity = useIdentityStore();
   return useMutation({
-    mutationFn: (body: { oldPassword: string; newPassword: string }) => dynamicApi.changePassword(body),
+    mutationFn: () => dynamicApi.changePassword(secret()),
     onSuccess: (u) => identity.setSession(u.userId, u.mustChangePassword),
   });
 }
