@@ -606,7 +606,8 @@ public class TaskReportRunnerTests : TaskTestBase
     [Fact]
     public async Task Drill_OverLimit_TruncatesTaskIdsToo()
     {
-        Db.Context.AddRange(Enumerable.Range(0, ReportRules.DrillLimit + 1).Select(i => new TaskItem
+        var drillLimit = int.Parse(DynamicModules.Domain.Policies.PolicyCatalog.ReportDrillLimit.Factory);
+        Db.Context.AddRange(Enumerable.Range(0, drillLimit + 1).Select(i => new TaskItem
         {
             Title = $"任務{i}", CreatedBy = "admin", AssigneeUserId = "sales01", Status = TaskItemStatus.Todo, CreatedTime = SeedTime,
         }));
@@ -619,8 +620,8 @@ public class TaskReportRunnerTests : TaskTestBase
         r.IsSuccess.Should().BeTrue(r.Message);
         var drill = (DrillResult)r.Data!;
         drill.Truncated.Should().BeTrue();
-        drill.DetailRows!.Should().HaveCount(ReportRules.DrillLimit);
-        drill.TaskIds!.Should().HaveCount(ReportRules.DrillLimit).And.OnlyHaveUniqueItems();
+        drill.DetailRows!.Should().HaveCount(drillLimit);
+        drill.TaskIds!.Should().HaveCount(drillLimit).And.OnlyHaveUniqueItems();
     }
 
     [Fact]

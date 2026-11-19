@@ -8,6 +8,7 @@ using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Application.Dynamic.ReportService.Queries.RunReport;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Repositories.Dynamic;
 using FluentAssertions;
@@ -45,7 +46,7 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
             report.Shares.Select(s => groups[s.GroupId]).Should().BeEquivalentTo(spec.GroupKeys, spec.Name);
 
             // 定義本身通過存檔驗證的結構規則，並以主管身分實際執行
-            ReportRules.CheckShape(ReportDefinition.Parse(report.DefinitionJson)).Should().BeEmpty(spec.Name);
+            ReportRules.CheckShape(ReportDefinition.Parse(report.DefinitionJson), int.Parse(PolicyCatalog.ReportMaxRangeDays.Factory)).Should().BeEmpty(spec.Name);
             var run = (ReportResult)(await fx.As(Managers[spec.GroupKeys[0]], new RunReportRequest(report.Id, null, "zh-TW"))).Data!;
             run.State.Should().Be("ok", $"{spec.Name}：{run.Message}");
         }

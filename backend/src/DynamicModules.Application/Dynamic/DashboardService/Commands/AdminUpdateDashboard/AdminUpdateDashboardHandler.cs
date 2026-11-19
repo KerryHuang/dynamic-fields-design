@@ -10,7 +10,8 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.DashboardService.Commands.AdminUpdateDashboard;
 
 /// <summary>更新指派版：版本加一，不動任何個人版（個人版的基準版本較舊時使用者會看到「已更新」）。</summary>
-public class AdminUpdateDashboardHandler(IDashboardRepository dashboards, IUnitOfWork uow, IBusinessTime time, DashboardAccess access, ReportAccess reportAccess)
+public class AdminUpdateDashboardHandler(IDashboardRepository dashboards, IUnitOfWork uow, IBusinessTime time, DashboardAccess access, ReportAccess reportAccess,
+    ReportLimitReader limitReader)
     : IRequestHandler<AdminUpdateDashboardRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(AdminUpdateDashboardRequest request, CancellationToken ct)
@@ -20,7 +21,7 @@ public class AdminUpdateDashboardHandler(IDashboardRepository dashboards, IUnitO
         if (d.Version != request.Version) return ServiceResult.Conflict("儀表板已被其他人更新，請重新載入後再改");
 
         var viewer = await reportAccess.ViewerAsync(ct);
-        var errors = DashboardRules.CheckLayout(request.Layout);
+        var errors = DashboardRules.CheckLayout(request.Layout, await limitReader.GetAsync(ct), await limitReader.MaxCardsAsync(ct), DashboardLayout.Parse(d.LayoutJson).Cards.Count);
         if (ReportRules.CheckName(request.Name) is { } nameError) errors.Add(nameError);
         if (errors.Count == 0 && await access.CheckReportsAsync(request.Layout, DashboardLayout.Parse(d.LayoutJson).ReportIds(), viewer, ct) is { } reportError)
             errors.Add(reportError);

@@ -14,7 +14,7 @@ namespace DynamicModules.Application.Dynamic.ReportService.Queries.ExportReport;
 /// 匯出 xlsx：要有所有涉及模組的 PrintExport，否則報表會變成繞過匯出權限的路（spec §7）。數字取自 runner，與畫面一致。
 /// 有明細欄位就匯出明細，否則匯出分組表（最後一列總計）。帶報表頁目前的期間與部門篩選（與畫面一致）。
 /// </summary>
-public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader, ReportRunner runner, IBusinessTime time)
+public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader, ReportRunner runner, IBusinessTime time, ReportLimitReader limitReader)
     : IRequestHandler<ExportReportRequest, ServiceResult>
 {
     private const string XlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -24,7 +24,7 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
         var (report, _) = await access.FindAsync(request.Id, ct);
         if (report is null) return ServiceResult.NotFound(ReportRules.ReportNotFound);
 
-        if (ReportRules.CheckRange(request.Range) is { } rangeError)
+        if (ReportRules.CheckRange(request.Range, (await limitReader.GetAsync(ct)).MaxRangeDays) is { } rangeError)
             return ServiceResult.Invalid(ReportRules.ToErrors("range", [rangeError]));
 
         var definition = ReportDefinition.Parse(report.DefinitionJson);

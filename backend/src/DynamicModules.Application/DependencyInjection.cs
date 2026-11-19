@@ -110,6 +110,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.DashboardService.DashboardAccess>();
         services.AddScoped<Dynamic.DashboardService.DashboardCardRunner>();
         services.AddScoped<Dynamic.ReportService.ReportDefinitionValidator>();
+        services.AddScoped<Dynamic.ReportService.ReportLimitReader>();
         services.AddScoped<Dynamic.ReportService.TaskReportSource>();
         services.AddSingleton(_ => Dynamic.TemplateService.TemplateCatalog.Load(Dynamic.TemplateService.TemplateCatalog.DefaultDirectory));
         services.AddScoped<Dynamic.TemplateService.ITemplateSource, Dynamic.TemplateService.TemplateSource>();
