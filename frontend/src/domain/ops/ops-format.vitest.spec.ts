@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import enUS from 'src/i18n/en-US.json';
 import zhTW from 'src/i18n/zh-TW.json';
-import { auditDiff, formatHealthValue, incidentTitle, mailTestError } from './ops-format';
+import { auditDiff, formatHealthValue, incidentTitle, localDayEndUtc, localDayStartUtc, mailTestError } from './ops-format';
 
 const i18n = (locale: 'zh-TW' | 'en-US') => {
   const g = createI18n({ legacy: false, locale, messages: { 'zh-TW': zhTW, 'en-US': enUS } }).global;
@@ -58,5 +58,31 @@ describe('mailTestError', () => {
     expect(mailTestError({ code: 'smtpTestFailed', params: { stage: 'connect' } }, t, te)).toBe('測試信寄不出去：連線');
     expect(mailTestError({ code: 'smtpTestFailed', params: { stage: 'auth', serverCode: 535 } }, t, te)).toBe('測試信寄不出去：認證，伺服器回應 535');
     expect(mailTestError({ code: 'smtpTestTooSoon', message: '請 30 秒後再試' }, t, te)).toBe('請 30 秒後再試');
+  });
+});
+
+// 審查修正 4：日末用本地日曆的隔天 0 點減 1 ms，不是加固定 24 小時（夏令時間切換日一天是 23 或 25 小時）
+describe('localDayStartUtc／localDayEndUtc（夏令時間切換日）', () => {
+  const tz = process.env.TZ;
+  afterEach(() => {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  });
+
+  it('DST 前進日（23 小時）：日末不跨到隔天', () => {
+    process.env.TZ = 'America/New_York';
+    expect(localDayStartUtc('2026-03-08')).toBe('2026-03-08T05:00:00.000Z');
+    expect(localDayEndUtc('2026-03-08')).toBe('2026-03-09T03:59:59.999Z');
+  });
+
+  it('DST 退回日（25 小時）：日末包含最後一小時', () => {
+    process.env.TZ = 'America/New_York';
+    expect(localDayStartUtc('2026-11-01')).toBe('2026-11-01T04:00:00.000Z');
+    expect(localDayEndUtc('2026-11-01')).toBe('2026-11-02T04:59:59.999Z');
+  });
+
+  it('沒有夏令時間的時區：照常 24 小時', () => {
+    process.env.TZ = 'Asia/Taipei';
+    expect(localDayEndUtc('2026-11-01')).toBe('2026-11-01T15:59:59.999Z');
   });
 });

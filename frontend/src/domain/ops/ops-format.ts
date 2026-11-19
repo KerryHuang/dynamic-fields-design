@@ -127,3 +127,12 @@ export function mailTestError(e: { code?: string; message?: string; params?: Rec
   }
   return e.message || t('ops.saveFailed');
 }
+
+/** 本地日期（YYYY-MM-DD）當天 0 點的 UTC ISO。 */
+export const localDayStartUtc = (d: string) => new Date(`${d}T00:00:00`).toISOString();
+
+/** 本地日期（YYYY-MM-DD）的最後一毫秒（UTC ISO）：本地日曆的隔天 0 點減 1 ms。 */
+export function localDayEndUtc(d: string): string {
+  const day = new Date(`${d}T00:00:00`);
+  return new Date(new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime() - 1).toISOString();
+}
