@@ -56,6 +56,7 @@ var port = Environment.GetEnvironmentVariable("PORT");
 builder.WebHost.UseUrls(port is null ? "http://127.0.0.1:5180" : $"http://0.0.0.0:{port}");
 builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
 builder.Services.AddApplication();
+DynamicModules.WebAPI.Ops.TaskRuleFaultInjection.Configure(builder.Services, builder.Configuration, builder.Environment, startupWarnings);
 builder.Services.AddSingleton(new ReportOptions
 {
     MaxRows = builder.Configuration.GetValue("Reports:MaxRows", 50_000),

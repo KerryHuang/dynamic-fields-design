@@ -72,6 +72,7 @@ public static class MessageText
         // 任務規則的執行與手動套用
         TaskRuleAlreadyRun = nameof(TaskRuleAlreadyRun), TaskRuleApplied = nameof(TaskRuleApplied), TaskRulePreviousOpen = nameof(TaskRulePreviousOpen),
         TaskRuleNotApplicable = nameof(TaskRuleNotApplicable), TaskRuleNotFound = nameof(TaskRuleNotFound),
+        TaskRuleNotPaused = nameof(TaskRuleNotPaused),
         TasksDisabled = nameof(TasksDisabled),
         // 任務欄位
         TaskStartAfterDue = nameof(TaskStartAfterDue),
@@ -360,6 +361,7 @@ public static class MessageText
         [TaskRuleNotApplicable] = ("這筆記錄不符合規則條件", "This record does not meet the rule's conditions",
             "ระเบียนนี้ไม่ตรงตามเงื่อนไขของกฎ", "Bản ghi này không thỏa điều kiện của quy tắc"),
         [TaskRuleNotFound] = ("找不到任務規則", "Task rule not found", "ไม่พบกฎงาน", "Không tìm thấy quy tắc công việc"),
+        [TaskRuleNotPaused] = ("這條任務規則沒有被暫停", "This task rule is not paused", "กฎงานนี้ไม่ได้ถูกหยุดไว้", "Quy tắc công việc này không bị tạm dừng"),
         [TasksDisabled] = ("這個模組未啟用任務", "Tasks are turned off for this module",
             "โมดูลนี้ปิดการใช้งานงานอยู่", "Mô-đun này đang tắt tính năng công việc"),
         [TaskStartAfterDue] = ("開始日不能晚於到期日", "Start date cannot be later than the due date",

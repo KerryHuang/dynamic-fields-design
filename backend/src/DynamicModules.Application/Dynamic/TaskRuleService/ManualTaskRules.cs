@@ -3,6 +3,7 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
+using DynamicModules.Application.Dynamic.OpsService.RulePause;
 using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
@@ -12,13 +13,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DynamicModules.Application.Dynamic.TaskRuleService;
 
-/// <summary>手動套用的規則：啟用中、觸發方式是 manual、沒有應用程式或應用程式開啟中。不保留跨呼叫的狀態。</summary>
+/// <summary>
+/// 手動套用的規則：啟用中、觸發方式是 manual、沒有應用程式或應用程式開啟中、沒有被系統自動暫停（維運設計 §17.2.7）。不保留跨呼叫的狀態。
+/// </summary>
 public sealed class ManualTaskRules(ITaskRuleRepository rules, ITaskRepository tasks, IAppRepository apps, IModuleRepository modules,
-    FieldTypeRegistry registry, IBusinessTime time)
+    FieldTypeRegistry registry, IBusinessTime time, TaskRuleHealthGate gate)
 {
     public async Task<List<TaskRule>> ListUsableAsync(long moduleId, CancellationToken ct)
     {
         var list = (await rules.ListActiveByModuleAsync(moduleId, ct)).Where(r => r.Trigger.On == "manual").ToList();
+        if (list.Count == 0) return list;
+        var health = await gate.LoadAsync(list.Select(r => r.Id).ToList(), ct);
+        list = list.Where(r => !TaskRuleHealthGate.IsPaused(health, r.Id)).ToList();
         if (!list.Any(r => r.AppId is not null)) return list;
         var open = (await apps.ListAsync(ct)).Where(a => a.Status == AppStatus.Open).Select(a => a.Id).ToHashSet();
         return list.Where(r => r.AppId is not { } appId || open.Contains(appId)).ToList();
@@ -53,7 +59,7 @@ public sealed class ManualTaskRules(ITaskRuleRepository rules, ITaskRepository t
 /// </summary>
 public class ApplyTaskRuleHandler(
     TaskAccess access, ManualTaskRules manual, ITaskRuleRepository rules, ITaskRepository tasks, IModuleRepository modules,
-    IPermissionRepository permissions, TaskRuleApplier applier, TaskWriter writer, TaskSupport support, IDatabaseErrors errors)
+    IPermissionRepository permissions, TaskRuleApplier applier, TaskWriter writer, TaskSupport support, IDatabaseErrors errors, TaskRuleHealthGate gate)
     : IRequestHandler<ApplyTaskRuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ApplyTaskRuleRequest request, CancellationToken ct)
@@ -74,7 +80,15 @@ public class ApplyTaskRuleHandler(
             return ServiceResult.Conflict(MessageRef.Of(MessageText.TaskRulePreviousOpen));
 
         var activeUsers = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive).Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);
-        await applier.GenerateAsync(rule, target.Module, target.Record.Id, (latest ?? 0) + 1, target.Record.Title, values, activeUsers, userIds, ct);
+        // 手動套用的失敗同樣計入自動暫停（維運設計 §17.2.7）：評估時間、例外標記、在途登記與成功的 reset 都照 TaskRuleStage
+        var evaluated = gate.Now();
+        try
+        {
+            gate.Inject(rule);
+            await applier.GenerateAsync(rule, target.Module, target.Record.Id, (latest ?? 0) + 1, target.Record.Title, values, activeUsers, userIds, ct);
+        }
+        catch (Exception e) when (gate.OnFailure(e, rule.Id, evaluated)) { throw; }
+        await gate.OnSuccessAsync(await gate.LoadAsync([rule.Id], ct), rule.Id, evaluated, ct);
         try
         {
             await writer.FlushAsync(ct);

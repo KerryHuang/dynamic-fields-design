@@ -1,6 +1,7 @@
-using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Behaviors;
 using DynamicModules.Application.Common.Observability;
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.OpsService.RulePause;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -13,7 +14,8 @@ namespace DynamicModules.Application.Dynamic.CheckService;
 /// 這裡只負責「在同一個交易、寫完之後」求值。
 /// </summary>
 public class CheckStage(
-    IWriteJournal journal, IModuleRepository modules, ICheckRepository checks, IUnitOfWork uow, CheckEvaluator evaluator) : IWriteStage
+    IWriteJournal journal, IModuleRepository modules, ICheckRepository checks, IUnitOfWork uow, CheckEvaluator evaluator, RuleFailureNote notes)
+    : IWriteStage
 {
     public const int MaxGroups = 500;
     public const string TooBig = "數值太大，無法精確加總（此欄位被跨記錄驗證引用）";
@@ -43,7 +45,13 @@ public class CheckStage(
                 try
                 {
                     var (prepared, failure) = await evaluator.PrepareAsync(module, check, ct);
-                    if (failure is not null) return failure;
+                    if (failure is not null)
+                    {
+                        // 條件已不可用（引用的欄位被刪等）：已知錯誤碼，請求失敗時開客戶設定事件（維運設計 §17.2.2）；設計器試算不經這裡
+                        if (failure.IsConflict)
+                            notes.Add(RuleFailureTag.Check, check.Id, RuleErrorCodes.CheckConditionInvalid, module.Key, check.Key, RuleIncidents.EditorOf(check));
+                        return failure.IsConflict ? ServiceResult.Conflict(failure.Message, RuleErrorCodes.CheckConditionInvalid) : failure;
+                    }
 
                     if (TooLarge(prepared!, byModule) is { } big) return ServiceResult.Invalid(
                         new Dictionary<string, string[]> { [RecordValueProcessor.RecordErrorKey] = [big] });

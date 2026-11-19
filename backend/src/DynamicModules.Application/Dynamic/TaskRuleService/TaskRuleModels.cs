@@ -14,10 +14,21 @@ public sealed record TaskRuleTaskInput(
 public sealed record TaskRuleInput(
     string Key, I18nText Name, bool Active, TaskRuleRepeat Repeat, TaskRuleTriggerInput Trigger, JsonElement? When, List<TaskRuleTaskInput> Tasks);
 
-/// <summary>Warnings 在讀取時即時算出，例如規則引用的欄位已被刪除。</summary>
+/// <summary>
+/// Warnings 在讀取時即時算出，例如規則引用的欄位已被刪除。AutoPause、LastPause、FailureStreak 只在設計器的規則清單與恢復的回應帶
+/// （維運設計 §17.5；套件匯出不帶暫停狀態）：暫停中、已恢復還沒再暫停、未暫停但有連續失敗。不帶錯誤訊息文字（§17.2.7）。
+/// </summary>
 public sealed record TaskRuleResponse(
     string Key, I18nText Name, string ModuleKey, bool Active, string? AppKey, TaskRuleRepeat Repeat,
-    TaskRuleTriggerInput Trigger, JsonElement? When, List<TaskRuleTaskInput> Tasks, IReadOnlyList<string> Warnings);
+    TaskRuleTriggerInput Trigger, JsonElement? When, List<TaskRuleTaskInput> Tasks, IReadOnlyList<string> Warnings,
+    TaskRuleAutoPause? AutoPause = null, TaskRuleLastPause? LastPause = null, TaskRuleFailureStreak? FailureStreak = null);
+
+public sealed record TaskRuleAutoPause(DateTime PausedUtc, int ConsecutiveFailures, string? LastErrorCode, string? LastRequestId,
+    int SkippedWhilePaused, int PauseCount);
+
+public sealed record TaskRuleLastPause(DateTime PausedUtc, DateTime ResumedUtc, int SkippedWhilePaused);
+
+public sealed record TaskRuleFailureStreak(int ConsecutiveFailures, DateTime LastFailureUtc);
 
 public static class TaskRuleMessages
 {
@@ -48,6 +59,20 @@ public static class TaskRuleMessages
 
 public static class TaskRuleMapping
 {
+    /// <summary>健康列換成規則回應的三個暫停欄位（§17.5）；沒有列就全是 null。</summary>
+    public static TaskRuleResponse WithHealth(this TaskRuleResponse r, RuleHealth? h) => h is null ? r : r with
+    {
+        AutoPause = h.PausedUtc is { } paused
+            ? new TaskRuleAutoPause(paused, h.ConsecutiveFailures, h.LastErrorCode, h.LastRequestId, h.SkippedWhilePaused, h.PauseCount)
+            : null,
+        LastPause = h.PausedUtc is null && h.LastPausedUtc is { } last && h.ResumedUtc is { } resumed
+            ? new TaskRuleLastPause(last, resumed, h.SkippedWhilePaused)
+            : null,
+        FailureStreak = h.PausedUtc is null && h.ConsecutiveFailures > 0 && h.LastFailureUtc is { } lastFailure
+            ? new TaskRuleFailureStreak(h.ConsecutiveFailures, lastFailure)
+            : null,
+    };
+
     public static JsonElement? ParseWhen(string? whenJson)
     {
         if (string.IsNullOrWhiteSpace(whenJson)) return null;

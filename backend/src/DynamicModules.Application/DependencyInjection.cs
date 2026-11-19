@@ -19,6 +19,7 @@ public static class DependencyInjection
             cfg.AddOpenBehavior(typeof(SystemAdminBehavior<,>));
             cfg.AddOpenBehavior(typeof(MasterDesignerBehavior<,>));
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
+            cfg.AddOpenBehavior(typeof(RuleFailureBehavior<,>));
             cfg.AddOpenBehavior(typeof(ApprovalAlertBehavior<,>));
             cfg.AddOpenBehavior(typeof(TransactionBehavior<,>));
             // 在交易之內、冪等之外：稽核和業務寫入同交易（維運設計 §17.2.1）
@@ -150,6 +151,14 @@ public static class DependencyInjection
         services.AddSingleton<Dynamic.OpsService.Incidents.IIncidentInbox>(sp => sp.GetRequiredService<Dynamic.OpsService.Incidents.IncidentInbox>());
         services.AddSingleton<Dynamic.OpsService.Incidents.IncidentInboxDrain>();
         services.AddScoped<Dynamic.OpsService.Incidents.IncidentRecorder>();
+        // 規則失控自動暫停（維運設計 §17.2.7）：在途失敗是整個實例共用的記憶體；故障注入預設空實作，開發環境由 WebAPI 換掉
+        services.AddSingleton<Dynamic.OpsService.RulePause.RuleFailureInFlight>();
+        services.AddSingleton<Dynamic.OpsService.RulePause.RuleFailureClassifier>();
+        services.TryAddSingleton<Dynamic.OpsService.RulePause.ITaskRuleFaultInjector, Dynamic.OpsService.RulePause.NoTaskRuleFaults>();
+        services.AddScoped<Dynamic.OpsService.RulePause.RuleFailureNote>();
+        services.AddScoped<Dynamic.OpsService.RulePause.TaskRuleHealthGate>();
+        services.AddScoped<Dynamic.OpsService.RulePause.RuleIncidents>();
+        services.AddScoped<Dynamic.OpsService.RulePause.RulePauseCleanup>();
         services.AddScoped<Dynamic.OpsService.Incidents.OpsNotifier>();
         services.AddScoped<Dynamic.OpsService.Incidents.SecurityIncidents>();
         services.AddSingleton<Dynamic.OpsService.Health.HealthCheckEngine>();
