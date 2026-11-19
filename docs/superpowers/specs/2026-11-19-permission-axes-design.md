@@ -243,19 +243,21 @@
 
 1. 反射：實作 `IPermissionAdminRequest` 的正式型別恰為 §7.2 的 13 個。
 2. 開許可的位置：`AuthorizationWriteScope.RunAsync` 的呼叫恰為上表四處（gate、`BindFieldAsync`、`RunCleanupAsync`、`SeedData`），種類相符；`RunForTestsAsync` 不得出現在 `src`。新增要改清單並在測試註解寫理由。
-3. 守衛實體的取得點：`Set<守衛型別>` 只准出現在登記檔案（`PermissionRepository`、`SharedMasterRepository`、`AccountRepository`、`DeletionRepository`、`DemoPeople`、`PermissionAxesImport`）；`src` 不得有型別參數不具體的 `Set<T>()`、`Set(typeof…)`。
+3. 守衛實體的取得點：`Set<守衛型別>` 只准出現在登記檔案（`PermissionRepository`、`SharedMasterRepository`、`AccountRepository`、`DeletionRepository`、`DemoPeople`、`PermissionAxesImport`）；`src` 不得有型別參數不具體的 `Set<T>()`、`Set(typeof…)`；`src` 任何成員（含 Domain 的 repository 介面）的回傳型別、參數、欄位、屬性都不得是 `IQueryable<守衛型別>`、`DbSet<守衛型別>` 或其衍生介面，守衛列只以已具體化的 `List`／`IReadOnlyList` 交出登記檔案。
 4. 模型掃描：沒有任何 navigation 指向守衛型別（否則別的實體能經導覽屬性查出守衛列再批次刪）。加上 3，`Set<守衛型別>` 就是在 EF 裡取得守衛列的唯一途徑。
-5. 批次指令：登記檔案內的 `ExecuteDelete*`／`ExecuteUpdate*` 只准在四個批次入口方法內（以方法簽章切段比對），且入口方法在第一個寫入前呼叫 `Demand`；`src` 中呼叫 `ExecuteUpdate*` 的方法內不得出現 `VisibilityRestricted`、`ExcludeFromAi`（`SetProperty` 的 lambda 與字串屬性名都含這兩個識別字，經 `Module` 的導覽屬性取得欄位也一樣抓得到）。
-6. 原生 SQL：EF 的 `ExecuteSql*`／`FromSql*`／`SqlQuery*`、Dapper、`CreateCommand` 的使用檔案恰為登記清單（現有：記錄與報表查詢、報表快照、SQLite 健康檢查與 mmap、PostgreSQL 寫入鎖與啟動鎖，實作時照掃描結果登記並逐檔確認不寫守衛表）；`src` 除 `Domain/Data/Configurations/` 外，任何字串常值不得含守衛表名或 `Dynamic_Field`（含加引號、加 schema 的寫法）。
-7. migration 檔不得有對守衛表或 `Dynamic_Field` 的 `Sql`、`InsertData`、`UpdateData`、`DeleteData`。
+5. 批次指令（全域、逐方法登記）：`src` 每一個呼叫 `ExecuteDelete*`／`ExecuteUpdate*` 的方法都要在清單裡（檔案＋方法名），分兩類：四個守衛批次入口（第一個寫入前呼叫 `Demand`），以及其餘非守衛的批次方法（現有約 14 個檔案，實作時照掃描結果登記，例如 `OpsIncidentRepository`、`SeedData` 的 `OwnerUserId` 更新）。非守衛批次方法的每個呼叫，接收的查詢要能在同一個方法內、或同檔案的私有屬性／欄位定義裡，沿呼叫鏈追到 `Set<具體的非守衛型別>()`；追不到（接收者是參數、別的檔案的成員、方法回傳值）就判違規，寧可誤擋。`src` 中呼叫 `ExecuteUpdate*` 的方法內不得出現 `VisibilityRestricted`、`ExcludeFromAi`（`SetProperty` 的 lambda 與字串屬性名都含這兩個識別字，經 `Module` 的導覽屬性取得欄位也一樣抓得到）。新增批次方法要改清單並在測試註解寫理由。
+6. 原生 SQL：EF 的 `ExecuteSql*`／`FromSql*`／`SqlQuery*`、Dapper、`CreateCommand` 的使用檔案恰為登記清單（現有：記錄與報表查詢、報表快照、SQLite 健康檢查與 mmap、PostgreSQL 寫入鎖與啟動鎖，實作時照掃描結果登記並逐檔確認不寫守衛表）。`src` 的字串常值不得含守衛表名或 `Dynamic_Field`（含加引號、加 schema 的寫法），窄例外只有三處：`Domain/Data/Configurations/` 的 `ToTable` 等模型設定、`AuthorizationTables` 常數檔本身、兩個 provider 的 `Migrations/` 目錄（migration、`.Designer.cs`、`ModelSnapshot` 的 schema 定義）。例外處的資料寫入仍由 7 禁止。
+7. migration 檔（兩個 provider 的 `Migrations/`，不含 `.Designer.cs`、`ModelSnapshot`）不得有對守衛表或 `Dynamic_Field` 的 `Sql`、`InsertData`、`UpdateData`、`DeleteData`；`CreateTable`、`AddColumn`、`CreateIndex` 等 schema 操作允許。
 8. 分層：Application 不得引用 `DbContext`；WebAPI 只准登記的 `Program.cs`、`SessionMiddleware`、`AdminBootstrap`，且這三個檔案不得出現守衛型別。
 9. 模型裡表名含 `Privilege`、`Permission`、`Scope`、`Grant`、`GroupMapping` 的實體必須在守衛表或排除清單（`Dynamic_PermissionGroup`）裡；守衛表常數裡的每一張表都存在於模型（防改名後漏守）。
-10. 掃描器自測：3、5、6、7 的比對函式對測試專案內的違規樣本各回報一筆——對 `UserGroupMapping` 下 `ExecuteDeleteAsync`、經 `Set<Module>()` 的導覽屬性取得欄位再 `ExecuteUpdateAsync` 改 `VisibilityRestricted`、`"DELETE FROM public.\"Dynamic_FieldPermission\""`、`WITH x AS (…) DELETE FROM "Dynamic_FieldGrant"`、兩個陳述式串在一起、未登記檔案用 Dapper `ExecuteAsync`、經變數或屬性取得 `Set<FieldGrant>()` 再批次刪、migration 的 `UpdateData`。
+10. 掃描器自測（違規樣本各回報一筆、合法樣本回報零，兩邊都要測）：
+    - 違規：對 `UserGroupMapping` 下 `ExecuteDeleteAsync`；經 `Set<Module>()` 的導覽屬性取得欄位再 `ExecuteUpdateAsync` 改 `VisibilityRestricted`；`"DELETE FROM public.\"Dynamic_FieldPermission\""`；`WITH x AS (…) DELETE FROM "Dynamic_FieldGrant"`；兩個陳述式串在一起；未登記檔案用 Dapper `ExecuteAsync`；登記檔案內經變數或屬性取得 `Set<FieldGrant>()` 再批次刪；**跨檔傳遞查詢**——登記 repository 的方法回傳 `IQueryable<FieldGrant>`，另一個檔案接住後 `ExecuteDeleteAsync`；接收者是方法參數 `IQueryable<T>` 的批次刪；未登記的方法對非守衛型別批次刪；migration 的 `UpdateData`。
+    - 合法：`SharedMasterConfigurations` 的 `ToTable("Dynamic_FieldGrant")`；`AuthorizationTables` 的常數；migration 的 `CreateTable(name: "Dynamic_FieldGrant", …)`；`.Designer.cs` 與 `ModelSnapshot` 的 `b.ToTable("Dynamic_FieldGrant")`；登記的非守衛批次方法對 `Set<Record>()`（含以子查詢當條件）批次刪；同檔案私有屬性 `Incidents => db.Set<OpsIncident>()` 再 `ExecuteUpdateAsync`。
 
 **涵蓋範圍與取捨**（不宣稱更多）：
 
 - 執行期 fail closed 的是**追蹤式寫入**（攔截器逐列）與**四個批次入口**（`Demand` 查許可與參數）。
-- 其餘批次與原生 SQL 寫入是**開發期** fail closed：程式裡沒有不經 3、4、6 的方式取得守衛表，出現就讓清單測試失敗、CI 擋下合併；執行期不另檢查。直接 ADO.NET 或 Dapper 不在攔截器範圍內，靠 6 禁止。
+- 其餘批次與原生 SQL 寫入是**開發期** fail closed：程式裡沒有不經 3、4、5、6 的方式取得守衛表，出現就讓清單測試失敗、CI 擋下合併；執行期不另檢查。直接 ADO.NET 或 Dapper 不在攔截器範圍內，靠 6 禁止。
 - 掃不到的：登記的原生 SQL 檔案裡在執行期拼出守衛表名的 SQL、反射。登記時逐檔審查，現有登記檔案只動記錄表、報表、PRAGMA 與鎖。程式外直接連資料庫的寫入不在本設計範圍。
 - 拿掉指令層 SQL 文字比對（`DbCommandInterceptor`）：要 fail closed 就得拒絕所有無法分類的寫入，而 EF 自己的存檔批次（多陳述式、`RETURNING`、`MERGE`）也會落入無法分類，等於要另寫 SQL 解析器；它又看不到列內容，擋得下的只有「有沒有許可」，列層規則終究要靠窄入口。留著只會給「執行期全涵蓋」的錯覺，又多一個會誤擋 migration 的地方。
 
@@ -719,3 +721,9 @@
 2. 🔴 指令層看不到列內容、Derived 缺批次限制、raw SQL 管不住 → 列內容一律在追蹤式寫入時逐列檢查；批次入口以 `Demand` 檢查許可與參數、拒絕系統代碼，Derived 不准批次；Cleanup 結束時驗目標已刪；模型禁止指向守衛型別的 navigation，`Set<守衛型別>` 限登記檔案（§7.4；PAX-23a–e、23k）。
 3. `BeginAsync` 與 `AsyncLocal` 生命週期 → 許可只能以 `RunAsync(permit, body)` 開，`body` 內必須存檔、結束時關閉許可；拿掉 `BeginAsync`；`DemoPeople` 不自己開許可，`GenerateDemoDataRequest` 另宣告系統管理員（§7.1、§7.3、§7.4、§6.3、T13；PAX-23h、23i）。
 4. PAX-13b 的 T 金額欄位不在 fixture → fixture 的 T 加金額欄位 P（§18；PAX-13b）。另：EF migration 不經 SaveChanges，不需要 Migration 許可，改由清單測試禁止 migration 對守衛表寫資料，並補雙 provider 升級冒煙（§7.4；PAX-01b）。
+
+**第三輪短核對（2026-11-19）**
+
+短核對全文在本機 `.tmp/plans/20261119-perm-axes/verify2.md`（基準 c5c83129）。
+
+1. 清單測試邊界：登記 repository 回傳 `IQueryable` 後跨檔批次刪會漏擋、表名字串禁令會誤擋常數與 schema 定義 → 批次呼叫全域逐方法登記，接收者追不到 `Set<具體非守衛型別>()` 就判違規；禁止對外交出守衛型別的查詢型別；表名禁令明列設定、常數、`Migrations/` 三處窄例外，migration 資料寫入仍由 7 禁止；自測補跨檔傳遞的違規樣本與應通過的合法樣本（§7.4 清單測試 3、5、6、7、10；PAX-23j）。
