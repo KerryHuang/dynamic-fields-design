@@ -9,11 +9,16 @@ namespace DynamicModules.Application.Dynamic.OpsService.RulePause;
 /// 健康列沒有外鍵（§17.4），不清會留下孤兒與永遠不會結案的暫停事件。恢復時的結案（<c>ruleResumed</c>）也走 <see cref="ResolvePausedAsync"/>。
 /// 只依賴事件 repository（刪模組、刪應用程式的路徑不必帶入通知與寄送佇列）。
 /// </summary>
-public sealed class RulePauseCleanup(IRuleHealthRepository health, IOpsIncidentRepository incidents, TimeProvider clock)
+public sealed class RulePauseCleanup(IRuleHealthRepository health, IOpsIncidentRepository incidents, ITaskRuleRepository rules, TimeProvider clock)
 {
+    /// <summary>
+    /// 先鎖規則列（與失敗補記同一把，<see cref="ITaskRuleRepository.LockAsync"/>）再刪：補記先拿到鎖時，刪除等它提交後才刪、看得到它寫的列；
+    /// 刪除先拿到鎖時，補記等刪除提交後發現規則已不在、什麼都不寫（§17.14 審查修正 2）。呼叫端要在規則列真的刪掉之前、同一交易內呼叫。
+    /// </summary>
     public async Task RulesDeletedAsync(IReadOnlyCollection<long> ruleIds, CancellationToken ct)
     {
         if (ruleIds.Count == 0) return;
+        await rules.LockAsync(ruleIds, ct);
         await health.DeleteAsync(RuleFailureTag.TaskRule, ruleIds, ct);
         await ResolvePausedAsync(ruleIds, IncidentResolvedReason.RuleDeleted, null, ct);
     }

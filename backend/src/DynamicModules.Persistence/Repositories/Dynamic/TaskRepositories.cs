@@ -423,6 +423,11 @@ public class TaskRuleRepository(DynamicDbContext db) : ITaskRuleRepository
     public Task<List<TaskRule>> ListByAppAsync(long appId, CancellationToken ct) =>
         WithTasks(track: true).Where(r => r.AppId == appId).OrderBy(r => r.Key).ToListAsync(ct);
 
+    public Task<int> LockAsync(IReadOnlyCollection<long> ids, CancellationToken ct) =>
+        ids.Count == 0
+            ? Task.FromResult(0)
+            : db.Set<TaskRule>().Where(r => ids.Contains(r.Id)).ExecuteUpdateAsync(s => s.SetProperty(r => r.Key, r => r.Key), ct);
+
     public Task<TaskRule?> GetByIdAsync(long id, CancellationToken ct) =>
         WithTasks().FirstOrDefaultAsync(r => r.Id == id, ct);
 

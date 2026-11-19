@@ -145,6 +145,11 @@ public interface ITaskRuleRepository
     Task<List<TaskRule>> ListByAppAsync(long appId, CancellationToken ct);
     /// <summary>不追蹤，含 Tasks。</summary>
     Task<TaskRule?> GetByIdAsync(long id, CancellationToken ct);
+    /// <summary>
+    /// 鎖住這些規則列到交易結束（條件式更新、值不變；PostgreSQL 取列鎖，SQLite 取寫入鎖），回傳還存在的列數。
+    /// 失敗補記與刪規則的三條路徑先取這把鎖，補記才不會在刪除提交之後重建健康列（維運設計 §17.14 審查修正 2）。
+    /// </summary>
+    Task<int> LockAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
     /// <summary>這筆記錄最近一次觸發這條規則的次數（Occurrence）；沒有觸發過回 null。</summary>
     Task<int?> GetLatestOccurrenceAsync(long ruleId, long recordId, CancellationToken ct);
     /// <summary>觸發條件、任務的負責人或到期基準、條件引用了任一欄位的規則；追蹤，含 Tasks。</summary>
