@@ -11,6 +11,7 @@ namespace DynamicModules.Application.Dynamic.AppService;
 // 欄位型別、與資料庫既有事件合併後的循環，開啟時由既有的設計器指令負責，失敗整批回滾。
 public static partial class AppPackageValidator
 {
+    // 技術限制，見設計 §10
     public const int MaxEvents = 100, MaxChecks = 100;
 
     private static void V4References(AppPackageData p, Dictionary<string, TemplateField> fields, MasterScope scope, List<string> errors)

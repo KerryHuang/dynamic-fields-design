@@ -18,7 +18,7 @@ public sealed partial class AppOpenPlanner(
     AppPackageSource packages, IAppRepository apps, IModuleRepository modules, IPermissionRepository permissions,
     IAccountRepository accounts, AppDependencyChecker dependencies, IConversionRepository conversions,
     IEventRepository events, ICheckRepository checks, SharedMasters.MasterSymbols symbols, SharedMasters.ContributionOrphans orphans,
-    IPolicyReader policies, IApprovalFlowRepository approvalFlows)
+    IApprovalFlowRepository approvalFlows, PackageLimitReader limits)
 {
     [GeneratedRegex(ModuleRules.ModuleKeyPattern)]
     private static partial Regex ModuleKey();
@@ -56,11 +56,9 @@ public sealed partial class AppOpenPlanner(
         var validation = AppPackageValidator.Validate(package, new Dictionary<string, AppPackageData>());
         var warnings = new List<string>(AppPackageValidator.Validate(package, knownMasters).Warnings);
         var errors = new List<string>(validation.Errors);
-        // 規則總數（A2）與每條任務數（A1 全系統值）：匯入後上限可能被調低，開啟時再檢查一次
-        errors.AddRange(AppPackageValidator.TaskRuleLimitErrors(package,
-            await policies.IntAsync(PolicyCatalog.TaskMaxRulesPerPackage, null, ct), await policies.IntAsync(PolicyCatalog.TaskMaxTasksPerRule, null, ct)));
-        // 簽核上限的系統層生效值（J5）；模組層覆寫值在開啟時由 CreateApprovalFlowRequest 檢查
-        if (package.ApprovalFlows.Count > 0) errors.AddRange(AppPackageValidator.ApprovalLimitErrors(package, await SystemApprovalLimitsAsync(policies, ct)));
+        // 規則總數（A2）、每條任務數（A1 全系統值）、簽核上限的系統層生效值（J5）、設計上限（A16）：匯入後上限可能被調低，開啟時再檢查一次；
+        // 簽核的模組層覆寫值在開啟時由 CreateApprovalFlowRequest 檢查
+        errors.AddRange(await limits.ErrorsAsync(package, ct));
         if (errors.Count > 0)
             return new Plan(null, source, new Dictionary<string, string>(), new Dictionary<string, string>(), Empty with { Errors = errors }, new Dictionary<string, long>());
 

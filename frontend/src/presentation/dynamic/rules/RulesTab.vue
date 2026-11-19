@@ -4,6 +4,7 @@ import { useQuasar } from 'quasar';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
+import { useEffectivePolicies } from 'src/application/dynamic/queries/policies-queries';
 import { useRulesQuery, useSaveRulesMutation } from 'src/application/dynamic/queries/rules-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ConditionNode, ModuleDetail, Rule } from 'src/domain/dynamic/types';
@@ -14,8 +15,6 @@ import RuleEditorDialog from './RuleEditorDialog.vue';
 import { conditionSummary } from './condition-summary';
 import { joinList } from 'src/i18n/translate';
 
-const MAX_RULES = 100;
-
 const props = defineProps<{ module: ModuleDetail }>();
 const { t, locale } = useI18n();
 const $q = useQuasar();
@@ -24,6 +23,9 @@ const key = computed(() => props.module.key);
 const rulesQuery = useRulesQuery(key);
 const me = useMe();
 const save = useSaveRulesMutation(key);
+const policies = useEffectivePolicies(key);
+// 規則數上限（政策 design.maxRulesPerModule）；生效值還沒回來時新增鈕停用
+const maxRules = computed(() => policies.data.value?.values['design.maxRulesPerModule'] as number | undefined);
 
 const fields = computed(() => toSchemaFields(props.module));
 const blocks = computed(() => props.module.blocks.map((b) => ({ id: b.id, label: b.label })));
@@ -107,10 +109,10 @@ function submit() {
     <div class="row items-center q-mb-sm">
       <q-space />
       <q-btn
-        color="primary" icon="add" dense :label="t('designer.rules.add')" :disable="readonly || draft!.length >= MAX_RULES"
+        color="primary" icon="add" dense :label="t('designer.rules.add')" :disable="readonly || maxRules === undefined || draft!.length >= maxRules"
         data-testid="add-rule" @click="open(null)"
       >
-        <q-tooltip v-if="draft!.length >= MAX_RULES">{{ t('designer.rules.limit') }}</q-tooltip>
+        <q-tooltip v-if="maxRules !== undefined && draft!.length >= maxRules">{{ t('designer.rules.limit', { max: maxRules }) }}</q-tooltip>
       </q-btn>
     </div>
 
