@@ -73,12 +73,11 @@ public class TaskRuleStage(
 
             foreach (var rule in list)
             {
-                if (TaskRuleHealthGate.IsPaused(health, rule.Id))
+                if (TaskRuleHealthGate.IsPaused(health, rule.Id) || await gate.BeginAsync(health, rule.Id, ct) is not { } evaluated)
                 {
                     await gate.SkipAsync(rule.Id, ct);
                     continue;
                 }
-                var evaluated = gate.Now();
                 try
                 {
                     gate.Inject(rule);

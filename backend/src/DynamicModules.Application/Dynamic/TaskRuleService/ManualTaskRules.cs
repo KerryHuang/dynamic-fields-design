@@ -81,14 +81,15 @@ public class ApplyTaskRuleHandler(
 
         var activeUsers = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive).Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);
         // 手動套用的失敗同樣計入自動暫停（維運設計 §17.2.7）：評估時間、例外標記、在途登記與成功的 reset 都照 TaskRuleStage
-        var evaluated = gate.Now();
+        var health = await gate.LoadAsync([rule.Id], ct);
+        if (await gate.BeginAsync(health, rule.Id, ct) is not { } evaluated) return ServiceResult.NotFound(MessageRef.Of(MessageText.TaskRuleNotFound));
         try
         {
             gate.Inject(rule);
             await applier.GenerateAsync(rule, target.Module, target.Record.Id, (latest ?? 0) + 1, target.Record.Title, values, activeUsers, userIds, ct);
         }
         catch (Exception e) when (gate.OnFailure(e, rule.Id, evaluated)) { throw; }
-        await gate.OnSuccessAsync(await gate.LoadAsync([rule.Id], ct), rule.Id, evaluated, ct);
+        await gate.OnSuccessAsync(health, rule.Id, evaluated, ct);
         try
         {
             await writer.FlushAsync(ct);
