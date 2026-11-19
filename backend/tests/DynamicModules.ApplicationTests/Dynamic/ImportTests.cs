@@ -11,11 +11,13 @@ using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.RuleService.Commands.SaveRules;
 using DynamicModules.Application.Dynamic.RuleService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -134,6 +136,28 @@ public class ImportTests : DesignerTestBase
             new ImportColumn("QTY", null, "對到多個欄位，請改用欄位代碼"),
             new ImportColumn(qty.Key, qty.Key, null));
         p.Valid.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Import_RowPolicy()
+    {
+        await NewModule("memo", activate: true);
+        var title = await TitleKey("memo");
+        (await Send(new UpdateSystemPolicyRequest(PolicyCatalog.ImportMaxRows.Code, JsonSerializer.SerializeToElement(2))))
+            .IsSuccess.Should().BeTrue();
+
+        Err(await Send(new ImportRecordsRequest("memo", Csv(title, "a", "b", "c"))), "file").Should().Be("一次最多匯入 2 筆");
+        (await Commit("memo", Csv(title, "a", "b"))).Created.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Preview_FilePolicy_MessageInMegabytes()
+    {
+        await NewModule("memo", activate: true);
+        (await Send(new UpdateSystemPolicyRequest(PolicyCatalog.ImportMaxFileBytes.Code, JsonSerializer.SerializeToElement(524288))))
+            .IsSuccess.Should().BeTrue();
+
+        Err(await Send(new PreviewImportRequest("memo", new byte[524289])), "file").Should().Be("檔案不能超過 0.5 MB");
     }
 
     [Fact]

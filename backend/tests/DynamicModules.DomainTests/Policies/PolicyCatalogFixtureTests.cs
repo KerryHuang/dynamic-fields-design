@@ -97,6 +97,31 @@ public class PolicyCatalogFixtureTests
         PolicyCatalog.FormMaxColumns.Max.Should().Be(4);
         PolicyCatalog.All.Where(d => d.Code.StartsWith("design.", StringComparison.Ordinal) || d.Code == "module.createTitleField")
             .Should().OnlyContain(d => d.Scope == PolicyScope.System && d.Category == "design");
+        // p2b：匯入（A21）、連動事件（A22）、明細列（A23）、報表與儀表板（A24）
+        PolicyCatalog.ImportMaxRows.Factory.Should().Be("1000");
+        PolicyCatalog.ImportMaxFileBytes.Factory.Should().Be("1048576");
+        PolicyCatalog.ImportMaxFileBytes.Min.Should().Be(1024);
+        PolicyCatalog.ImportMaxFileBytes.Max.Should().Be(10485760);
+        PolicyCatalog.EventMaxEventsPerModule.Factory.Should().Be("20");
+        PolicyCatalog.EventMaxEffects.Factory.Should().Be("10");
+        PolicyCatalog.EventMaxEffects.Max.Should().Be(50);
+        PolicyCatalog.EventMaxDepth.Factory.Should().Be("5");
+        PolicyCatalog.EventMaxWritesPerRequest.Factory.Should().Be("500");
+        PolicyCatalog.EventMaxEachRows.Factory.Should().Be("200");
+        PolicyCatalog.RecordMaxDetailRows.Factory.Should().Be("200");
+        PolicyCatalog.RecordMaxDetailRows.Scope.Should().Be(PolicyScope.Module);
+        PolicyCatalog.RecordMaxDetailRows.Target.Should().Be(PolicyModuleTarget.Detail);
+        PolicyCatalog.ReportDrillLimit.Factory.Should().Be("500");
+        PolicyCatalog.ReportDetailLimit.Factory.Should().Be("1000");
+        PolicyCatalog.ReportMaxRangeDays.Factory.Should().Be("3650");
+        // 等於 Domain ConditionParser.MaxDays（列表與規則條件的「近 N 天」），只能調低（計畫判斷 13）
+        PolicyCatalog.ReportMaxRangeDays.Max.Should().Be(3650);
+        PolicyCatalog.DashboardMaxCards.Factory.Should().Be("40");
+        new[] { PolicyCatalog.ImportMaxRows, PolicyCatalog.ImportMaxFileBytes, PolicyCatalog.EventMaxEventsPerModule,
+                PolicyCatalog.EventMaxEffects, PolicyCatalog.EventMaxDepth, PolicyCatalog.EventMaxWritesPerRequest,
+                PolicyCatalog.EventMaxEachRows, PolicyCatalog.ReportDrillLimit, PolicyCatalog.ReportDetailLimit,
+                PolicyCatalog.ReportMaxRangeDays, PolicyCatalog.DashboardMaxCards }
+            .Should().OnlyContain(d => d.Scope == PolicyScope.System);
         PolicyCatalog.WeekStartOf("sunday").Should().Be(DayOfWeek.Sunday);
         PolicyCatalog.WeekStartOf("monday").Should().Be(DayOfWeek.Monday);
     }

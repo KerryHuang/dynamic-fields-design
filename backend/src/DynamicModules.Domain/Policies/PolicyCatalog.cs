@@ -277,6 +277,57 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition FormMaxColumns =
         new("form.maxColumns", "form", PolicyKind.Integer, PolicyScope.System, "4", 1, 4, Unit: "count");
 
+    /// <summary>A21：一次匯入的筆數（CSV 資料列，不含表頭）。</summary>
+    public static readonly PolicyDefinition ImportMaxRows =
+        new("import.maxRows", "import", PolicyKind.Integer, PolicyScope.System, "1000", 1, 10000, Unit: "count");
+
+    /// <summary>A21：匯入檔案大小（位元組）；匯入端點的請求上限＝兩倍這個值＋multipart 開銷。</summary>
+    public static readonly PolicyDefinition ImportMaxFileBytes =
+        new("import.maxFileBytes", "import", PolicyKind.Integer, PolicyScope.System, "1048576", 1024, 10485760, Unit: "bytes");
+
+    /// <summary>A22：每個來源模組的連動事件數（新增事件時檢查；更新既有事件不擋）。套件的事件總數 100 是技術限制。</summary>
+    public static readonly PolicyDefinition EventMaxEventsPerModule =
+        new("event.maxEventsPerModule", "event", PolicyKind.Integer, PolicyScope.System, "20", 1, 100, Unit: "count");
+
+    /// <summary>A22：每個事件的效果數（編輯既有事件只在效果數增加時檢查）。</summary>
+    public static readonly PolicyDefinition EventMaxEffects =
+        new("event.maxEffects", "event", PolicyKind.Integer, PolicyScope.System, "10", 1, 50, Unit: "count");
+
+    /// <summary>A22：連動事件的串聯層數。</summary>
+    public static readonly PolicyDefinition EventMaxDepth =
+        new("event.maxDepth", "event", PolicyKind.Integer, PolicyScope.System, "5", 1, 10, Unit: "count");
+
+    /// <summary>A22：一次存檔中連動事件寫入的記錄數。</summary>
+    public static readonly PolicyDefinition EventMaxWritesPerRequest =
+        new("event.maxWritesPerRequest", "event", PolicyKind.Integer, PolicyScope.System, "500", 1, 5000, Unit: "count");
+
+    /// <summary>A22：逐列產生記錄時，來源明細的列數上限。</summary>
+    public static readonly PolicyDefinition EventMaxEachRows =
+        new("event.maxEachRows", "event", PolicyKind.Integer, PolicyScope.System, "200", 1, 1000, Unit: "count");
+
+    /// <summary>A23：每張單據的明細列數；覆寫設在明細模組上（調低後只擋這次比原本多的存檔）。</summary>
+    public static readonly PolicyDefinition RecordMaxDetailRows =
+        new("record.maxDetailRows", "record", PolicyKind.Integer, PolicyScope.Module, "200", 1, 1000, Unit: "count", Target: PolicyModuleTarget.Detail);
+
+    /// <summary>A24：報表下鑽最多回幾筆。</summary>
+    public static readonly PolicyDefinition ReportDrillLimit =
+        new("report.drillLimit", "report", PolicyKind.Integer, PolicyScope.System, "500", 1, 5000, Unit: "count");
+
+    /// <summary>A24：報表明細最多回幾列。</summary>
+    public static readonly PolicyDefinition ReportDetailLimit =
+        new("report.detailLimit", "report", PolicyKind.Integer, PolicyScope.System, "1000", 1, 10000, Unit: "count");
+
+    /// <summary>
+    /// A24：報表日期區間與「近 N 天」的天數上限。技術上限 3650 等於 Domain <c>ConditionParser.MaxDays</c>（列表與規則條件的「近 N 天」），
+    /// 只能調低，避免報表比列表寬（使用者 2026-11-12 裁決）。
+    /// </summary>
+    public static readonly PolicyDefinition ReportMaxRangeDays =
+        new("report.maxRangeDays", "report", PolicyKind.Integer, PolicyScope.System, "3650", 1, 3650, Unit: "days");
+
+    /// <summary>A24：每個儀表板的卡片數（調低後只擋這次比原本多的存檔）。</summary>
+    public static readonly PolicyDefinition DashboardMaxCards =
+        new("dashboard.maxCards", "report", PolicyKind.Integer, PolicyScope.System, "40", 1, 100, Unit: "count");
+
     public static DayOfWeek WeekStartOf(string choice) => Enum.Parse<DayOfWeek>(choice, ignoreCase: true);
 
     public static IReadOnlyList<PolicyDefinition> All { get; } =
@@ -295,7 +346,9 @@ public static class PolicyCatalog
          ApprovalOverdueReminderHours, ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients,
          DesignMaxWorkflowStates, DesignMaxWorkflowTransitions, DesignMaxRulesPerModule, DesignMaxGroupsPerPackage,
          DesignMaxModulesPerPackage, DesignMaxFieldsPerModule, DesignMaxOptionsPerField, DesignMaxViewsPerModule,
-         DesignMaxIntegrationsPerPackage, ModuleCreateTitleField, FormDefaultColumns, FormMaxColumns];
+         DesignMaxIntegrationsPerPackage, ModuleCreateTitleField, FormDefaultColumns, FormMaxColumns,
+         ImportMaxRows, ImportMaxFileBytes, EventMaxEventsPerModule, EventMaxEffects, EventMaxDepth, EventMaxWritesPerRequest,
+         EventMaxEachRows, RecordMaxDetailRows, ReportDrillLimit, ReportDetailLimit, ReportMaxRangeDays, DashboardMaxCards];
 
     public static PolicyDefinition? Find(string code) =>
         All.FirstOrDefault(d => string.Equals(d.Code, code, StringComparison.Ordinal));
