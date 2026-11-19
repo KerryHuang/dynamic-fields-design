@@ -496,7 +496,7 @@
 | 小周 zhou | 已停用、session 仍有效 | — | G-both |
 | 老林 lin | 系統管理員、已停用 | — | G-both |
 
-模組（皆 Active）：A 一般模組（欄位：單價 Currency、薪資 Decimal 對 G-design 設 Hidden、F1 公式 `{薪資} * 1`、F2 公式 `{F1} + 0`）；M 一般模組；T 事件目標模組（小數欄位 N、金額欄位 P，Currency）；H 表頭與 D 明細（H.薪資對 G-design Hidden、H.單價 Currency、H.F1 `{薪資} * 1`；D.X、D.Y、D.Z 帶表頭的值分別指向 H.薪資、H.單價、H.F1）；S 共用主檔成員模組；範本 `t-perm`（測試範本：一個模組、群組權限建議指向 G-design、含一個 `UpdateField` 步驟）。
+模組（皆 Active）：A 一般模組（欄位：單價 Currency、薪資 Decimal 對 G-design 設 Hidden、F1 公式 `{薪資} * 1`、F2 公式 `{F1} + 0`）；M 一般模組；T 事件目標模組（小數欄位 N、金額欄位 P，Currency）；H 表頭與 D 明細（H.薪資對 G-design Hidden、H.單價 Currency、H.F1 `{薪資} * 1`；D.X、D.Y 帶表頭的值分別指向 H.薪資、H.單價；原寫的 D.Z 指向 H.F1 不成立，見 §25）；S 共用主檔成員模組；範本 `t-perm`（測試範本：一個模組、群組權限建議指向 G-design、含一個 `UpdateField` 步驟）。
 
 **資料與升級帶入**
 
@@ -523,7 +523,7 @@
 - **PAX-12** 小王 `POST demo-data/generate` → 403 `permissionAdminRequired`，執行器狀態沒有變成 Running；小陳 → 200、狀態 running；直接以小王身分送 `GenerateDemoDataRequest` → 403、沒有任何寫入。
 - **PAX-13** 事件旗標：小王 `POST events`（某個對應 `allowHiddenSource = true`）→ 403 `eventHiddenSourceNeedsPermissionAdmin`、事件不存在；小王改成 false 且來源欄位沒被隱藏 → 201；小陳勾旗標 → 201；小李勾旗標 → 403、沒有 `code`（沒有設計器修改，gate 不取代設計器守衛）；admin 先建一個勾旗標的事件，小王 `PUT events/{key}` 只改名稱（旗標仍在）→ 403 `eventHiddenSourceNeedsPermissionAdmin`；小陳同樣修改 → 200。
 - **PAX-13b** 公式閉包（M5 擴大）：小陳（有權限設定）在旗標為 false 時建立事件，來源是 A：對應 `from` F2 → T.N → 400，錯誤鍵 `…set[0].allowHiddenSource`；對應公式 `{F1} * 1` → 400；對應 `from` 單價（Currency，未設隱藏）→ T.P 201（L4 路徑二，固定已知限制）；把旗標改成 true → 201。`HiddenAsync(A)` 回傳集合含薪資、F1、F2。另：小陳把 A 的公式 F3 由 `{單價}` 改成 `{F1}`，而已有事件從 F3 複製且旗標為 false → `PUT fields/{F3}` 400（既有 `UpdateFieldHandler` 比對接上新規則）。
-- **PAX-14** 帶表頭的值（M6）：小王以 API 修改既有 H 記錄、新增一列 D 並省略 X、Y、Z → 該列 X、Y、Z 都是空值；admin 做同樣操作 → X、Y、Z 等於表頭的薪資、單價、F1。小王新增表頭（`POST`）時同樣檢查一次。H 既有明細列的 X 值在小王修改表頭後不變。另以 `DetailWriter` 單元測試傳入 `HiddenFieldIds` 含某限定可見欄位的表頭權限，確認被過濾；並確認傳入的是表頭權限而非明細權限（明細權限沒有隱藏任何欄位時，結果仍是空值）。
+- **PAX-14** 帶表頭的值（M6）：小王以 API 修改既有 H 記錄、新增一列 D 並省略 X、Y → 該列 X、Y 都是空值；admin 做同樣操作 → X、Y 等於表頭的薪資、單價。小王新增表頭（`POST`）時同樣檢查一次。H 既有明細列的 X 值在小王修改表頭後不變。另以 `DetailWriter` 單元測試傳入 `HiddenFieldIds` 含某限定可見欄位的表頭權限，確認被過濾；並確認傳入的是表頭權限而非明細權限（明細權限沒有隱藏任何欄位時，結果仍是空值）。
 
 **跨模組與共用主檔**
 
@@ -727,3 +727,41 @@
 短核對全文在本機 `.tmp/plans/20261119-perm-axes/verify2.md`（基準 c5c83129）。
 
 1. 清單測試邊界：登記 repository 回傳 `IQueryable` 後跨檔批次刪會漏擋、表名字串禁令會誤擋常數與 schema 定義 → 批次呼叫全域逐方法登記，接收者追不到 `Set<具體非守衛型別>()` 就判違規；禁止對外交出守衛型別的查詢型別；表名禁令明列設定、常數、`Migrations/` 三處窄例外，migration 資料寫入仍由 7 禁止；自測補跨檔傳遞的違規樣本與應通過的合法樣本（§7.4 清單測試 3、5、6、7、10；PAX-23j）。
+
+## 25. 權限軸-a 實作補記（2026-11-20）
+
+分支 `feature/pax-a`：6bf965e0（主體）、673d9861（PAX-24）、bb6632c1（PAX-01–21b、25）、92a08256（PAX-23、23a–k）。
+
+**與設計不同的技術決定（主控裁決）**
+
+- 攔截器放 `Domain/Data/AuthorizationSaveChangesInterceptor.cs`，由 `DynamicDbContext.OnConfiguring` 掛上，不在各 provider 註冊：測試自組與 design-time 的 context 也一定有，不會漏掛。
+- 巢狀 `RunAsync`：開始時已有外層留下的未存守衛變更，結束時不檢查「body 內存檔」，交給外層。
+- `PermissionAdminGate.RunAsync(systemAdminVerified: true)` 自己再查一次啟用中的系統管理員，不採信呼叫端。
+- `SystemPrivilegeHolders` 比對前後時跳過任一邊是系統管理員的人，切換管理員旗標不算 `privilege.changed`。
+- `PermissionAxesImport` 已在外層交易內時沿用外層交易。
+- `DesignerFlags.Any`、`SystemPrivilegesDto.Any` 加 `[JsonIgnore]`，回應維持與請求同形（§8；PAX-18 測出）。
+- 清單測試 5 照「接收者是方法回傳值判違規」不放寬；`RuleHealthRepository.One`、`TaskRepositories.SameVersion` 改成回傳條件式，SQL 不變。
+- 掃描器自測的「跨檔傳遞」樣本回報 2 筆（兩道防線各一筆），解讀為「每個樣本都要被回報」。
+
+**驗收案例與 fixture 的修正**
+
+- D.Z（明細帶表頭公式 H.F1）刪除：`FieldRules` 只准同型別且在 `ParentDefaultTypes` 內的欄位當表頭預設來源，公式不在其中，此路徑不存在（主控裁決，待使用者確認）。PAX-14 以 D.X、D.Y 驗，並做過反向驗證（拿掉 `headerPermissions.CanSee` 會紅）。
+- 明細模組不存群組權限（沿用表頭），「G-design 對 D 讀＋新增＋修改」由 H 的列提供；PAX-16 對 D 只存欄位例外。
+- 預設測試主機沒有共用主檔；PAX-15 匯入只需 partner 主檔的最小測試套件，以 `master-partner` 當 S。
+- 系統權限 API 先驗 body 缺鍵（400）再驗管理員（403）：照 model binding 慣例，缺鍵訊息只揭露公開欄位名（主控裁決，待使用者確認）。
+- 稽核目錄 `group.systemPrivileges`、`user.systemPrivileges` 訂為 HighRisk（主控裁決，待使用者確認）。
+
+**登記名單（清單測試的常數，逐項附理由在 `AuthorizationWriteInventoryTests`）**
+
+- 開許可位置 4 處：`PermissionAdminGate.RunAsync`（Authorized）、`MasterDesigner.BindFieldAsync`（Derived）、`DeletionRepository.RunCleanupAsync`（Cleanup）、`SeedData.EnsureSeededAsync`（Seed，含升級帶入）。
+- 可取 `Set<守衛型別>` 的檔案 6 個：`PermissionRepository`、`SharedMasterRepository`、`AccountRepository`、`DeletionRepository`、`DemoPeople`、`PermissionAxesImport`。
+- 守衛批次入口 4 個，每個在第一個寫入前 `Demand` 對應入口值。
+- 非守衛批次方法 58 個（11 檔）：告警、簽核、稽核清理、effects 清理、健康檢查、事件、記錄索引、規則健康、排程、任務、Seed 的擁有者改歸。
+- 原生 SQL 檔案 10 個，逐檔確認只讀、只用 PRAGMA 或鎖；另禁止它們取用 `AuthorizationTables`、`GetTableName` 或出現守衛型別名。
+- WebAPI 允許清單：`Program.cs`、`Security/SessionMiddleware.cs`、`Security/AdminBootstrap.cs`。非 EF 例外：`UploadGuard.cs` 的 `Features.Set<IFormFeature>`。
+
+**方法切段**：先把註解與字串內容換成空白（保留插值程式碼，含原始字串）；以大括號切型別與成員，expression-bodied 與欄位初始值切到型別層 `;`；local function 與 lambda 算外層方法；批次或開許可呼叫落在成員段外整檔違規。接收者只追同方法區域變數與同檔私有欄位、屬性，其他一律違規。表名比對不分大小寫、以完整識別字比對。
+
+**§23 實測結論**：攔截器先呼叫 `DetectChanges` 的做法在兩個 provider 由 PAX-23f、23k（追蹤式改值、離線 `Update`）實測通過；PAX-24 改了 67 個測試檔。
+
+**未做**：PAX-22 屬 mcp1a；完整套件交 CI。
