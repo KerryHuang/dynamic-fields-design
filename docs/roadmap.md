@@ -62,7 +62,7 @@
 | O3 | 廠商維運中心（Cloudflare Workers＋D1）、外部探測、匿名回報與新版本通知、告警推播 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | bk1 | 產品內備份：排程備份、存放位置（雲端版用隔離、只寫不刪的儲存空間）、O2「備份新鮮度」檢查接上真實時間；還原留在階段 5（使用者 11-19 裁決；開工前先寫設計） | 未開始（設計待寫） | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) |
 | pkg1 | 套件更新入口：把新版內建應用程式套到客戶已開啟的應用程式（先寫設計；第一個客戶上線前必須有結論；方向為升級預覽與逐項套用，使用者 11-17 裁決） | 未開始（設計待寫） | — |
-| au1 | 帳號安全：核心寄信能力（SMTP 設定與寄信佇列）、寄信重設密碼、雙因素登入 TOTP（使用者 11-17 裁決，雲端版對外開放前必須有；開工前先寫設計） | 未開始（設計待寫） | [ERP 路線](superpowers/specs/2026-11-06-erp-roadmap-design.md) 2026-11-17 一節 |
+| au1 | 帳號安全：帳號信的寄信佇列（不節流、不摘要）、寄信重設密碼、雙因素登入 TOTP（使用者 11-17 裁決，雲端版對外開放前必須有；開工前先寫設計）。SMTP 連線已在 o2e 抽成核心「寄信設定」，與告警信共用連線、佇列分開（使用者 11-19 裁決） | 未開始（設計待寫） | [功能清單](feature.md)「寄信重設密碼與核心寄信能力」「雙因素登入」兩列、[維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §17.2.6 |
 | O4、mcpO1 | agent L1 唯讀診斷；產品端維運唯讀工具與維運服務帳號 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | O5 | agent L3 修正 PR、CI gate | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | O6、mcpO2 | 雲端版 L2 自動處置；產品端維運處置工具 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
