@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
+using MediatR;
 
 namespace DynamicModules.Application.Dynamic.OpsService.Alerts;
 
@@ -34,8 +35,8 @@ public sealed record AlertBackfill(string TransitionId, bool Superseded);
 /// <summary>
 /// 事件轉換時寫一列告警寄送佇列（維運設計 §17.2.6「寄送」）：和事件轉換、站內通知在同一個交易；主旨與內文以通道的信件語系組好存成快照。
 /// 通道失敗事件永遠不寄（防自己觸發自己，§17.9）；不在寄信類別或低於最低嚴重度的不寫；通道停用或沒設定照寫、標 <c>skipped</c>。
-/// 補寫時：直送已寄出的記 <c>sentDirect</c>（不再寄）、已過時的記 <c>skipped</c>，其餘 <c>pending</c>；
-/// 不是 <c>sentDirect</c> 的，提交後從直送佇列撤回（之後交給佇列，不會兩邊都寄）。
+/// 補寫時先向直送佇列保留這個轉換（<see cref="DirectAlertQueue.Reserve"/>，§17.13 審查修正）：直送已寄出的記 <c>sentDirect</c>；
+/// SMTP 在途的記成由直送領著的 <c>sending</c>（寄完由直送記結果）；其餘照寫（已過時的 <c>skipped</c>、否則 <c>pending</c>），直送不再寄。提交後確認交接。
 /// </summary>
 public sealed class AlertOutboxWriter(
     IAlertChannelRepository channels, IAlertOutboxRepository outbox, IOpsIncidentRepository incidents, IPolicyReader policies,
@@ -52,18 +53,52 @@ public sealed class AlertOutboxWriter(
         var row = new AlertOutbox
         {
             Channel = AlertChannel.Smtp, IncidentId = incident.Id, Transition = transition, TransitionId = backfill?.TransitionId,
-            Subject = mail.Subject, Body = mail.Body, CreatedUtc = now, NextAttemptUtc = now, Status = AlertOutboxStatus.Pending,
+            Subject = mail.Subject, Body = mail.Body, CreatedUtc = now, NextAttemptUtc = now,
+            Status = SmtpSettings.From(channel) is null || backfill is { Superseded: true } ? AlertOutboxStatus.Skipped : AlertOutboxStatus.Pending,
         };
-        if (SmtpSettings.From(channel) is null) row.Status = AlertOutboxStatus.Skipped;
-        else if (backfill is not null && direct.SentUtc(backfill.TransitionId) is { } sentAt)
+        if (backfill is not null)
         {
-            row.Status = AlertOutboxStatus.SentDirect;
-            row.SentUtc = sentAt;
+            var reserved = direct.Reserve(backfill.TransitionId, row.Status);
+            switch (reserved.Kind)
+            {
+                case DirectHandoff.Sent:
+                    row.Status = AlertOutboxStatus.SentDirect;
+                    row.SentUtc = reserved.SentUtc;
+                    break;
+                case DirectHandoff.InFlight:
+                    row.Status = AlertOutboxStatus.Sending;
+                    row.ClaimedBy = DirectAlertQueue.ClaimerFor(backfill.TransitionId);
+                    row.ClaimedUntilUtc = now + DirectAlertQueue.HandoffClaim;
+                    break;
+            }
+            if (reserved.Kind != DirectHandoff.None) afterCommit.Add("直送交接", () => direct.Confirm(backfill.TransitionId));
         }
-        else if (backfill is { Superseded: true }) row.Status = AlertOutboxStatus.Skipped;
-        if (backfill is not null && row.Status != AlertOutboxStatus.SentDirect)
-            afterCommit.Add("撤回直送", () => direct.Withdraw(backfill.TransitionId));
         outbox.Add(row);
         return row.Status;
     }
+
+    /// <summary>
+    /// 補寫去重返回（結果列已在，§17.13 審查修正必修 2）：上一次其實已提交、執行器卻以為沒寫入而交給了直送。核對持久化的佇列列完成交接：
+    /// 直送已寄出的，還在 <c>pending</c> 的列記 <c>sentDirect</c>；在途的，還在 <c>pending</c> 的列改由直送領著；還沒開始寄的不再寄。提交後確認交接。
+    /// </summary>
+    public async Task ReconcileBackfillAsync(string transitionId, CancellationToken ct)
+    {
+        var reserved = direct.Reserve(transitionId, AlertOutboxStatus.Pending);
+        if (reserved.Kind == DirectHandoff.None) return;
+        // 沒有佇列列（政策不寄）或佇列已經領走時，兩個條件式更新都影響 0 列
+        if (reserved is { Kind: DirectHandoff.Sent, SentUtc: { } sentAt }) await outbox.MarkSentDirectAsync(transitionId, sentAt, ct);
+        else if (reserved.Kind == DirectHandoff.InFlight)
+            await outbox.ClaimForDirectAsync(transitionId, DirectAlertQueue.ClaimerFor(transitionId), time.GetUtcNow().UtcDateTime + DirectAlertQueue.HandoffClaim, ct);
+        afterCommit.Add("直送交接", () => direct.Confirm(transitionId));
+    }
+}
+
+/// <summary>直送寄完（或在途交接後寄失敗）：把直送領著的佇列列記成 <c>sentDirect</c> 或交回（短交易，§17.13 審查修正）。回傳有沒有更新到。</summary>
+public sealed record ReleaseDirectAlertRequest(string TransitionId, DateTime? SentUtc, AlertOutboxStatus Fallback) : IRequest<ServiceResult>, ITransactionalRequest;
+
+public sealed class ReleaseDirectAlertHandler(IAlertOutboxRepository outbox, TimeProvider time) : IRequestHandler<ReleaseDirectAlertRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(ReleaseDirectAlertRequest r, CancellationToken ct) => ServiceResult.Success(
+        await outbox.ReleaseDirectAsync(r.TransitionId, DirectAlertQueue.ClaimerFor(r.TransitionId),
+            r.SentUtc is null ? r.Fallback : AlertOutboxStatus.SentDirect, r.SentUtc, time.GetUtcNow().UtcDateTime, ct));
 }

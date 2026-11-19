@@ -228,12 +228,13 @@ public class AlertChannelTests
     [Fact]
     public async Task D07_ConnectFails_422StageConnect_NoExceptionText_Then409TooSoon()
     {
-        // 真的 MailKit 寄送器連一個沒人聽的本機埠（不連外網）
+        // 真的 MailKit 寄送器連本機假伺服器：收下連線就中斷（埠在測試期間一直由它持有，不連外網）
+        await using var server = LocalTcpServer.Resetting();
         using var app = new TestApp();
         await Configure(app, b =>
         {
             b["host"] = "127.0.0.1";
-            b["port"] = ClosedPort();
+            b["port"] = server.Port;
         });
         var res = await app.AsUser().PostAsync($"{Channel}/test", null);
         res.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
@@ -241,7 +242,7 @@ public class AlertChannelTests
         var json = JsonDocument.Parse(body).RootElement;
         json.GetProperty("code").GetString().Should().Be("smtpTestFailed");
         json.GetProperty("params").GetProperty("stage").GetString().Should().Be("connect");
-        body.Should().NotContain("Exception").And.NotContain("refused").And.NotContain("127.0.0.1");
+        body.Should().NotContain("Exception").And.NotContain("reset").And.NotContain("disconnected").And.NotContain("127.0.0.1");
 
         var again = await app.AsUser().PostAsync($"{Channel}/test", null);
         again.StatusCode.Should().Be(HttpStatusCode.Conflict);
@@ -616,5 +617,251 @@ public class AlertChannelTests
         row.TransitionId.Should().Be(transitionId);
         await Dispatch(app);
         mail.Sent.Should().HaveCount(1, "補寫後沒有第二封");
+    }
+
+    private const string Disk = HealthCheckCatalog.StorageDiskFree, Writable = HealthCheckCatalog.DatabaseWritable;
+
+    /// <summary>資料庫唯讀時跑一輪磁碟與資料庫可寫的嚴重檢查：直送佇列依序排進兩封開啟信（磁碟、資料庫可寫）。</summary>
+    private static async Task<(HealthCheckEngine Engine, DirectAlertQueue Direct, string DiskId, string WritableId)> TwoDirectItems(
+        TestApp app, ReadOnlySwitch readOnly)
+    {
+        await Configure(app);
+        await EnsureChecks(app);
+        var direct = app.Services.GetRequiredService<DirectAlertQueue>();
+        var engine = Engine(app, new ScriptedProbe(Disk, new ProbeResult(HealthStatus.Critical, 500)),
+            new ScriptedProbe(Writable, new ProbeResult(HealthStatus.Critical, null, "readOnly")));
+        readOnly.On = true;
+        foreach (var code in new[] { Disk, Writable })
+        {
+            var def = HealthCheckCatalog.Find(code)!;
+            await engine.RunAsync(def, EffectiveHealthSettings.Of(def, null), null, CancellationToken.None);
+            app.Time.Advance(TimeSpan.FromSeconds(1));
+        }
+        var ids = direct.PendingTransitionIds();
+        ids.Should().HaveCount(2);
+        return (engine, direct, ids[0], ids[1]);
+    }
+
+    /// <summary>
+    /// 審查修正必修 1（直送與補寫交接）：直送正在寄磁碟那封（SMTP 在途）時資料庫恢復、補寫兩筆。
+    /// 在途的那封佇列列由直送領著、寄完記 <c>sentDirect</c>；還沒開始寄的資料庫可寫那封交給佇列，直送不再從快照寄。每個轉換剛好寄一次。
+    /// </summary>
+    [Fact]
+    public async Task DirectHandoff_BackfillWhileSmtpInFlight_InFlightRowSentDirect_QueuedOneLeftToOutbox_EachSentOnce()
+    {
+        var mail = new FakeMailSender();
+        var readOnly = new ReadOnlySwitch();
+        using var app = App(mail);
+        app.Interceptors.Add(readOnly);
+        var (engine, direct, diskId, writableId) = await TwoDirectItems(app, readOnly);
+
+        var (entered, release) = mail.HoldFirst();
+        var sending = direct.SendDueAsync(CancellationToken.None);
+        await Within(entered);
+        readOnly.On = false;
+        await engine.FlushAsync(CancellationToken.None);
+        engine.PendingCount.Should().Be(0);
+        var rows = await Outbox(app);
+        rows.Single(r => r.TransitionId == diskId).Status.Should().Be(AlertOutboxStatus.Sending, "在途：佇列列由直送領著，佇列不會再寄");
+        rows.Single(r => r.TransitionId == writableId).Status.Should().Be(AlertOutboxStatus.Pending);
+        release.SetResult();
+        await Within(sending);
+
+        rows = await Outbox(app);
+        var diskRow = rows.Single(r => r.TransitionId == diskId);
+        diskRow.Status.Should().Be(AlertOutboxStatus.SentDirect);
+        diskRow.SentUtc.Should().NotBeNull();
+        diskRow.ClaimedBy.Should().BeNull();
+        await Dispatch(app);
+        await direct.SendDueAsync(CancellationToken.None);
+        await Dispatch(app);
+        mail.Sent.Should().HaveCount(2, "磁碟由直送、資料庫可寫由佇列，各寄一次");
+        mail.Sent.Should().ContainSingle(m => m.Body.Contains("看門狗直接寄出"));
+        (await Outbox(app)).Single(r => r.TransitionId == writableId).Status.Should().Be(AlertOutboxStatus.Sent);
+        direct.PendingTransitionIds().Should().BeEmpty();
+    }
+
+    /// <summary>審查修正必修 1（回到正常撤回）：直送正在寄第一封時，第二封的檢查回到正常；撤回的那封不再從快照寄出。</summary>
+    [Fact]
+    public async Task DirectWithdraw_BackToNormalWhileSendingAnother_WithdrawnNotSent()
+    {
+        var mail = new FakeMailSender();
+        var readOnly = new ReadOnlySwitch();
+        using var app = App(mail);
+        app.Interceptors.Add(readOnly);
+        var (_, direct, _, writableId) = await TwoDirectItems(app, readOnly);
+
+        var (entered, release) = mail.HoldFirst();
+        var sending = direct.SendDueAsync(CancellationToken.None);
+        await Within(entered);
+        direct.Consider(new HealthObservation(Writable, Guid.NewGuid().ToString("N"), Now(app), HealthStatus.Ok, null, null, 1, "x"),
+            HealthStatus.Critical);
+        release.SetResult();
+        await Within(sending);
+
+        mail.Sent.Should().ContainSingle("資料庫可寫已回到正常，它的開啟信撤回");
+        direct.SentUtc(writableId).Should().BeNull();
+        direct.PendingTransitionIds().Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// 交接協定的回滾（審查修正必修 1 的保護）：補寫寫完卻沒提交（交易回滾）時，直送的信先保留不寄；
+    /// 過了交接寬限、資料庫查不到這筆結果，直送收回來照寄；之後補寫成功記 <c>sentDirect</c>，總共寄一次。
+    /// </summary>
+    [Fact]
+    public async Task DirectHandoff_BackfillRolledBack_DirectResumesAfterGrace_SentOnce()
+    {
+        var mail = new FakeMailSender();
+        var readOnly = new ReadOnlySwitch();
+        var rollback = new ThrowBeforeCommit();
+        using var app = App(mail);
+        app.Interceptors.Add(readOnly);
+        app.Interceptors.Add(rollback);
+        var (engine, direct, diskId, _) = await TwoDirectItems(app, readOnly);
+
+        readOnly.On = false;
+        rollback.Armed = true;
+        await engine.FlushAsync(CancellationToken.None);
+        engine.PendingCount.Should().Be(2, "第一筆沒提交，停在那一筆");
+        (await Results(app, Disk)).Should().BeEmpty();
+        readOnly.On = true;
+        await direct.SendDueAsync(CancellationToken.None);
+        mail.Sent.Should().ContainSingle("磁碟那封交接中、先不寄；資料庫可寫那封照寄");
+
+        app.Time.Advance(DirectAlertQueue.HandoffGrace);
+        await direct.SendDueAsync(CancellationToken.None);
+        mail.Sent.Should().HaveCount(2, "寬限過後查不到結果：交易沒提交，直送收回照寄");
+        direct.SentUtc(diskId).Should().NotBeNull();
+
+        readOnly.On = false;
+        await engine.FlushAsync(CancellationToken.None);
+        engine.PendingCount.Should().Be(0);
+        (await Outbox(app)).Should().OnlyContain(r => r.Status == AlertOutboxStatus.SentDirect);
+        await Dispatch(app);
+        mail.Sent.Should().HaveCount(2);
+    }
+
+    /// <summary>審查修正必修 3：收件信箱陣列含 null 回 400（<c>toAddresses</c> 欄位錯誤），不是 500；啟用、停用都一樣。</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task UpdateValidation_NullRecipient_400ToAddresses(bool enabled)
+    {
+        using var app = App(new FakeMailSender());
+        var res = await app.AsUser().PutAsJsonAsync(Channel, Settings(b =>
+        {
+            b["enabled"] = enabled;
+            b["toAddresses"] = new[] { "a@test.invalid", null };
+        }));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await Json(res)).GetProperty("errors").TryGetProperty("toAddresses", out _).Should().BeTrue();
+        (await ChannelRow(app)).Should().BeNull();
+    }
+
+    /// <summary>
+    /// 審查修正必修 4（§17.13 偏離 1）：整點前建立、整點後才被摘要化的列等下一個整點。01:50 建立、02:05 額度滿而摘要化，
+    /// 02:06 本小時雖然還沒有摘要信也不寄；03:00 之後的第一輪才寄摘要信。
+    /// </summary>
+    [Fact]
+    public async Task D03b_CreatedBeforeHour_DigestedAfterHour_WaitsForNextHour()
+    {
+        var mail = new FakeMailSender();
+        using var app = App(mail);
+        SetTime(app, Start.AddMinutes(50));
+        await SetPolicy(app, PolicyCatalog.OpsAlertEmailMaxPerHour, "1");
+        await Configure(app);
+        await Open(app, "fp-d03b-1");
+        await Open(app, "fp-d03b-2");
+
+        SetTime(app, Start.AddMinutes(65));
+        await Dispatch(app);
+        mail.Sent.Should().ContainSingle();
+        (await Outbox(app)).Should().ContainSingle(r => r.Status == AlertOutboxStatus.Digested);
+
+        SetTime(app, Start.AddMinutes(66));
+        await Dispatch(app);
+        SetTime(app, Start.AddMinutes(119));
+        await Dispatch(app);
+        mail.Sent.Should().ContainSingle("02:05 才摘要化，等 03:00");
+
+        SetTime(app, Start.AddMinutes(121));
+        await Dispatch(app);
+        mail.Sent.Should().HaveCount(2);
+        mail.Sent.Last().Subject.Should().Be("[Formwright] 過去一小時另有 1 則告警");
+    }
+
+    /// <summary>審查建議（直送停用語意）：直送成功讀到通道已停用，還沒寄的信丟掉（同佇列 pending → skipped）；之後重新啟用不補寄。</summary>
+    [Fact]
+    public async Task DirectQueue_ChannelDisabledRead_PendingDropped_NotSentAfterReEnable()
+    {
+        var mail = new FakeMailSender();
+        var readOnly = new ReadOnlySwitch();
+        using var app = App(mail);
+        app.Interceptors.Add(readOnly);
+        var (_, direct, _, _) = await TwoDirectItems(app, readOnly);
+
+        readOnly.On = false;
+        await Configure(app, b => b["enabled"] = false);
+        await direct.SendDueAsync(CancellationToken.None);
+        direct.PendingTransitionIds().Should().BeEmpty();
+        await Configure(app);
+        await direct.SendDueAsync(CancellationToken.None);
+        mail.Calls.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// 審查建議（安全測試）：收件地址、寄件地址帶 CRLF 回 400；寄件名稱與主旨帶 CRLF 時，真的 MailKit 寄到本機假 relay，
+    /// 信件標頭沒有多出注入的 <c>Bcc:</c>／<c>X-Injected:</c>，也沒有多寄給注入的收件人。
+    /// </summary>
+    [Fact]
+    public async Task MailKitSender_CrlfInRecipientFromNameSubject_RejectedOrEncoded_NoHeaderInjection()
+    {
+        await using var server = new NoStartTlsSmtpServer();
+        using var app = new TestApp();
+        const string inject = "\r\nBcc: evil@test.invalid\r\nX-Injected: 1";
+        foreach (var change in new Action<Dictionary<string, object?>>[]
+        {
+            b => b["toAddresses"] = new[] { "a@test.invalid" + inject },
+            b => b["fromAddress"] = "ops@test.invalid" + inject,
+        })
+        {
+            var res = await app.AsUser().PutAsJsonAsync(Channel, Settings(change));
+            res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+
+        var settings = new SmtpSettings("127.0.0.1", server.Port, AlertSecurity.None, null, null, "ops@test.invalid", "Ops" + inject,
+            ["a@test.invalid"], null);
+        var sender = app.Services.GetRequiredService<IAlertMailSender>();
+        var result = await sender.SendAsync(settings, null, new AlertMail("[Formwright] disk" + inject, "body"), CancellationToken.None);
+        result.Ok.Should().BeTrue();
+        server.Lines.Should().NotContain(l => l.StartsWith("Bcc:", StringComparison.OrdinalIgnoreCase)
+            || l.StartsWith("X-Injected:", StringComparison.OrdinalIgnoreCase));
+        server.Lines.Where(l => l.StartsWith("RCPT TO:")).Should().Equal("RCPT TO:<a@test.invalid>");
+        server.Lines.Should().ContainSingle(l => l.StartsWith("Subject:"));
+    }
+
+    /// <summary>審查建議（安全測試）：<c>sslOnConnect</c> 連到出示自簽（不受信任）憑證的本機伺服器，連線失敗歸 <c>tls</c>，沒有略過憑證驗證。</summary>
+    [Fact]
+    public async Task MailKitSender_UntrustedCertificate_422StageTls()
+    {
+        await using var server = LocalTcpServer.SelfSignedTls();
+        // 對照：接受任何憑證的用戶端握得成功（伺服器確實出示了憑證，失敗只因為不受信任）
+        using (var probe = new System.Net.Sockets.TcpClient())
+        {
+            await probe.ConnectAsync(System.Net.IPAddress.Loopback, server.Port);
+            await using var tls = new System.Net.Security.SslStream(probe.GetStream(), false, (_, _, _, _) => true);
+            await Within(tls.AuthenticateAsClientAsync("127.0.0.1"));
+            tls.RemoteCertificate.Should().NotBeNull();
+        }
+        using var app = new TestApp();
+        await Configure(app, b =>
+        {
+            b["host"] = "127.0.0.1";
+            b["port"] = server.Port;
+            b["security"] = "sslOnConnect";
+        });
+        var res = await app.AsUser().PostAsync($"{Channel}/test", null);
+        res.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await Json(res)).GetProperty("params").GetProperty("stage").GetString().Should().Be("tls");
     }
 }

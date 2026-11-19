@@ -19,6 +19,8 @@ public interface IHealthCheckRepository
     /// <summary>彙總交易的鎖：更新 <c>LastAggregatedUtc</c>，只當列鎖用。</summary>
     Task<bool> LockAsync(string code, DateTime nowUtc, CancellationToken ct);
     Task<bool> ResultExistsAsync(string transitionId, CancellationToken ct);
+    /// <summary>這些識別碼裡已經有結果列的（直送寄前核對「其實已提交」，§17.13 審查修正）。</summary>
+    Task<List<string>> ExistingResultIdsAsync(IReadOnlyCollection<string> transitionIds, CancellationToken ct);
     void AddResult(HealthCheckResult result);
     /// <summary>截至 asOf（含）、晚於 sinceUtc 的結果，每個實例取最新一筆。</summary>
     Task<List<HealthCheckResult>> LatestPerInstanceAsync(string code, DateTime asOfUtc, DateTime sinceUtc, CancellationToken ct);

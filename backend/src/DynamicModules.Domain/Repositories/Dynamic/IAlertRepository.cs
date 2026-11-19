@@ -33,16 +33,29 @@ public interface IAlertOutboxRepository
     Task<AlertOutbox?> NextClaimableAsync(string channel, DateTime nowUtc, bool digestOnly, CancellationToken ct);
     /// <summary>條件式領取；影響 0 列（別人領走）回 false。</summary>
     Task<bool> TryClaimAsync(long id, string claimedBy, DateTime nowUtc, DateTime claimedUntilUtc, CancellationToken ct);
-    /// <summary>節流：未領取、到期、不是摘要信的 <c>pending</c> 改成 <c>digested</c>；回傳筆數。</summary>
+    /// <summary>
+    /// 節流：未領取、到期、不是摘要信的 <c>pending</c> 改成 <c>digested</c>，並把 <c>NextAttemptUtc</c> 記成摘要化的時間（<c>digested</c> 不再領取，
+    /// 這個欄位改當摘要化時間用，不加欄位）；回傳筆數。
+    /// </summary>
     Task<int> DigestPendingAsync(string channel, DateTime nowUtc, CancellationToken ct);
     /// <summary>從 sinceUtc 起有沒有建過摘要信。</summary>
     Task<bool> DigestExistsSinceAsync(string channel, DateTime sinceUtc, CancellationToken ct);
-    /// <summary>還沒掛到摘要信、建立時間早於 beforeUtc 的 <c>digested</c> 列（依 Id）。</summary>
+    /// <summary>還沒掛到摘要信、摘要化時間（<c>NextAttemptUtc</c>）早於 beforeUtc 的 <c>digested</c> 列（依 Id）。</summary>
     Task<List<AlertOutbox>> ListUnattachedDigestedAsync(string channel, DateTime beforeUtc, CancellationToken ct);
     /// <summary>把列掛到摘要信（<c>WHERE Status = digested AND DigestOutboxId IS NULL</c>）；回傳筆數。</summary>
     Task<int> AttachToDigestAsync(IReadOnlyCollection<long> ids, long digestId, CancellationToken ct);
     /// <summary>記結果（<c>WHERE Id = ? AND ClaimedBy = 我 AND Status = sending</c>），同時清領取者與期限；影響 0 列回 false。</summary>
     Task<bool> TryCompleteAsync(long id, string claimedBy, AlertOutboxStatus status, DateTime nextAttemptUtc, string? error, DateTime? sentUtc,
+        CancellationToken ct);
+    /// <summary>直送已寄出（補寫去重返回時核對直送交接，§17.13 審查修正）：還在 <c>pending</c> 的那列記 <c>sentDirect</c>；影響 0 列回 false。</summary>
+    Task<bool> MarkSentDirectAsync(string transitionId, DateTime sentUtc, CancellationToken ct);
+    /// <summary>直送正在寄：還在 <c>pending</c> 的那列改由直送領著（<c>sending</c>），佇列不再領；影響 0 列回 false。</summary>
+    Task<bool> ClaimForDirectAsync(string transitionId, string claimedBy, DateTime claimedUntilUtc, CancellationToken ct);
+    /// <summary>
+    /// 直送寄完交出：直送領著的那列（<c>WHERE TransitionId = ? AND Status = sending AND ClaimedBy = 直送</c>）記 <paramref name="status"/>，
+    /// 清領取者；<c>pending</c> 立刻可領。影響 0 列回 false（佇列已經接手）。
+    /// </summary>
+    Task<bool> ReleaseDirectAsync(string transitionId, string claimedBy, AlertOutboxStatus status, DateTime? sentUtc, DateTime nowUtc,
         CancellationToken ct);
     /// <summary>通道停用或沒設定：還在 <c>pending</c> 的列改成 <c>skipped</c>。</summary>
     Task<int> SkipPendingAsync(string channel, CancellationToken ct);

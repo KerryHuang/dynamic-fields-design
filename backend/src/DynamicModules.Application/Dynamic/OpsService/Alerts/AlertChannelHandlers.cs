@@ -66,7 +66,9 @@ public sealed class UpdateSmtpChannelHandler(
         void Error(string key, MessageRef m) => errors.TryAdd(key, [m]);
         var host = Blank(r.Host);
         var from = Blank(r.FromAddress);
-        var to = (r.ToAddresses ?? []).Select(a => a.Trim()).Where(a => a.Length > 0).ToList();
+        // JSON 陣列可能帶 null 元素（契約是字串陣列）：正規化前擋下，回欄位錯誤而不是 500（審查修正必修 3）
+        var nullRecipient = r.ToAddresses?.Any(a => a is null) == true;
+        var to = (r.ToAddresses ?? []).Where(a => a is not null).Select(a => a.Trim()).Where(a => a.Length > 0).ToList();
         var security = r.Security switch
         {
             "none" => AlertSecurity.None, "startTls" => AlertSecurity.StartTls, "sslOnConnect" => AlertSecurity.SslOnConnect, _ => (AlertSecurity?)null,
@@ -79,7 +81,8 @@ public sealed class UpdateSmtpChannelHandler(
         if (from is not null && (from.Length > AddressMax || !IsEmail(from))) Error("fromAddress", MessageRef.Of(MessageText.EmailFormat));
         if (Blank(r.FromName) is { Length: > NameMax }) Error("fromName", MessageRef.Of(MessageText.TooLong, NameMax));
         if (Blank(r.UserName) is { Length: > AddressMax }) Error("userName", MessageRef.Of(MessageText.TooLong, AddressMax));
-        if ((to.Count == 0 && r.Enabled) || to.Count > AlertLimits.MaxRecipients)
+        if (nullRecipient) Error("toAddresses", MessageRef.Of(MessageText.EmailFormat));
+        else if ((to.Count == 0 && r.Enabled) || to.Count > AlertLimits.MaxRecipients)
             Error("toAddresses", MessageRef.Of(MessageText.SmtpRecipientsCount, 1, AlertLimits.MaxRecipients));
         else if (to.Any(a => a.Length > AddressMax || !IsEmail(a))) Error("toAddresses", MessageRef.Of(MessageText.EmailFormat));
         else if (string.Join(",", to).Length > ToJoinedMax) Error("toAddresses", MessageRef.Of(MessageText.TooLong, ToJoinedMax));

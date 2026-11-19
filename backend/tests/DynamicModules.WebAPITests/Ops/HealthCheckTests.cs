@@ -342,6 +342,62 @@ public class HealthCheckTests
         (await Notifications(app)).Should().HaveCount(notified);
     }
 
+    /// <summary>
+    /// C14 變體（審查修正必修 2）：SMTP 已設定，提交成功、回傳失敗時執行器以為沒寫入、交給直送；佇列寄送者與直送都實際跑，
+    /// 不論誰先跑、或直送時資料庫讀不到（只能先寄），總寄送剛好一次（直送寄前核對結果已持久化；去重返回時核對佇列列、完成交接）。
+    /// </summary>
+    [Theory]
+    [InlineData("dispatchFirst")]
+    [InlineData("directFirst")]
+    [InlineData("directWhileUnreadable")]
+    public async Task C14b_CommitThenThrow_SmtpConfigured_BothSendersRun_SentExactlyOnce(string order)
+    {
+        var fault = new ThrowAfterCommit();
+        var unreadable = new ReadFailSwitch();
+        var mail = new FakeMailSender();
+        using var app = App(new FakeDiskSpace(), mail: mail);
+        app.Interceptors.Add(fault);
+        app.Interceptors.Add(unreadable);
+        await AlertKit.Configure(app);
+        await EnsureChecks(app);
+        var direct = app.Services.GetRequiredService<DirectAlertQueue>();
+        await direct.SendDueAsync(CancellationToken.None);   // 直送先讀到一份通道設定
+        var def = HealthCheckCatalog.Find(Disk)!;
+        var engine = OpsIncidentKit.Engine(app, new ScriptedProbe(Disk, new ProbeResult(HealthStatus.Critical, 500)));
+
+        fault.Armed = 1;
+        await engine.RunAsync(def, EffectiveHealthSettings.Of(def, null), null, CancellationToken.None);
+        engine.PendingCount.Should().Be(1, "提交後丟例外：呼叫端不知道其實已寫入");
+        direct.PendingTransitionIds().Should().ContainSingle("執行器以為寫不進去，交給直送");
+        (await AlertKit.Outbox(app)).Should().ContainSingle().Which.Status.Should().Be(AlertOutboxStatus.Pending);
+
+        switch (order)
+        {
+            case "dispatchFirst":
+                await AlertKit.Dispatch(app);
+                await direct.SendDueAsync(CancellationToken.None);
+                break;
+            case "directFirst":
+                await direct.SendDueAsync(CancellationToken.None);
+                break;
+            default:
+                unreadable.On = true;
+                await direct.SendDueAsync(CancellationToken.None);
+                unreadable.On = false;
+                mail.Sent.Should().ContainSingle("資料庫讀不到時直送只能先寄");
+                break;
+        }
+        await engine.FlushAsync(CancellationToken.None);
+        engine.PendingCount.Should().Be(0);
+        await AlertKit.Dispatch(app);
+        await direct.SendDueAsync(CancellationToken.None);
+        await AlertKit.Dispatch(app);
+
+        mail.Sent.Should().ContainSingle("佇列與直送合計只寄一次");
+        (await AlertKit.Outbox(app)).Single().Status.Should().Be(order == "directWhileUnreadable" ? AlertOutboxStatus.SentDirect : AlertOutboxStatus.Sent);
+        direct.PendingTransitionIds().Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

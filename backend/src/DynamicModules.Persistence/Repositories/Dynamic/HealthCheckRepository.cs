@@ -26,6 +26,9 @@ public class HealthCheckRepository(DynamicDbContext db) : IHealthCheckRepository
 
     public Task<bool> ResultExistsAsync(string transitionId, CancellationToken ct) => Results.AnyAsync(r => r.TransitionId == transitionId, ct);
 
+    public Task<List<string>> ExistingResultIdsAsync(IReadOnlyCollection<string> transitionIds, CancellationToken ct) =>
+        Results.AsNoTracking().Where(r => transitionIds.Contains(r.TransitionId)).Select(r => r.TransitionId).ToListAsync(ct);
+
     public void AddResult(HealthCheckResult result) => Results.Add(result);
 
     public async Task<List<HealthCheckResult>> LatestPerInstanceAsync(string code, DateTime asOfUtc, DateTime sinceUtc, CancellationToken ct)

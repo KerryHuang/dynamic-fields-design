@@ -83,15 +83,6 @@ internal static class AlertKit
         rows.Count(r => r.Transition != AlertTransition.Digest
             && (r.Status == AlertOutboxStatus.Sending || (r.Status == AlertOutboxStatus.Sent && r.SentUtc >= nowUtc.AddHours(-1))));
 
-    /// <summary>一個保證沒人聽的本機埠（綁定後立刻關掉）。</summary>
-    public static int ClosedPort()
-    {
-        var l = new TcpListener(IPAddress.Loopback, 0);
-        l.Start();
-        var port = ((IPEndPoint)l.LocalEndpoint).Port;
-        l.Stop();
-        return port;
-    }
 }
 
 /// <summary>假的 SMTP 寄送器：記下每次寄送（含失敗）；<see cref="Result"/> 決定結果，預設成功。</summary>
@@ -103,15 +94,85 @@ internal sealed class FakeMailSender : IAlertMailSender
 
     public Func<AlertMail, MailSendResult>? Result { get; set; }
 
+    /// <summary>寄送前先等它（模擬 SMTP 在途，測試控制在途的時點）。</summary>
+    public Func<AlertMail, Task>? Before { get; set; }
+
     public IReadOnlyList<Call> Calls => [.. _calls];
 
     public IReadOnlyList<AlertMail> Sent => [.. _calls.Where(c => c.Result.Ok).Select(c => c.Mail)];
 
-    public Task<MailSendResult> SendAsync(SmtpSettings settings, string? password, AlertMail mail, CancellationToken ct)
+    public async Task<MailSendResult> SendAsync(SmtpSettings settings, string? password, AlertMail mail, CancellationToken ct)
     {
+        if (Before is { } before) await before(mail);
         var result = Result?.Invoke(mail) ?? MailSendResult.Success;
         _calls.Enqueue(new Call(settings, password, mail, result));
-        return Task.FromResult(result);
+        return result;
+    }
+
+    /// <summary>第一封卡住直到 <c>release</c> 完成（進入時 <c>entered</c> 完成），之後的照常寄。</summary>
+    public (Task Entered, TaskCompletionSource Release) HoldFirst()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = 0;
+        Before = async _ =>
+        {
+            if (Interlocked.Exchange(ref first, 1) != 0) return;
+            entered.TrySetResult();
+            await release.Task;
+        };
+        return (entered.Task, release);
+    }
+}
+
+/// <summary>模擬資料庫讀不到（連不上）：開啟時每個查詢指令（SELECT）都丟例外，寫入照常。</summary>
+internal sealed class ReadFailSwitch : DbCommandInterceptor
+{
+    public volatile bool On;
+
+    public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
+    {
+        Check(command);
+        return result;
+    }
+
+    public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+        InterceptionResult<DbDataReader> result, CancellationToken ct = default)
+    {
+        Check(command);
+        return ValueTask.FromResult(result);
+    }
+
+    private void Check(DbCommand command)
+    {
+        if (On && command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("讀不到資料庫（測試注入）");
+    }
+}
+
+/// <summary>讓交易在<b>提交之前</b>丟例外（交易回滾）：補寫走完了寫入，卻沒有提交。只在 <see cref="Armed"/> 時作用一次。</summary>
+internal sealed class ThrowBeforeCommit : DbTransactionInterceptor
+{
+    public volatile bool Armed;
+
+    public override InterceptionResult TransactionCommitting(DbTransaction transaction, TransactionEventData eventData, InterceptionResult result)
+    {
+        Maybe();
+        return result;
+    }
+
+    public override ValueTask<InterceptionResult> TransactionCommittingAsync(DbTransaction transaction, TransactionEventData eventData,
+        InterceptionResult result, CancellationToken ct = default)
+    {
+        Maybe();
+        return ValueTask.FromResult(result);
+    }
+
+    private void Maybe()
+    {
+        if (!Armed) return;
+        Armed = false;
+        throw new InvalidOperationException("提交前丟例外（測試注入）");
     }
 }
 
@@ -222,6 +283,84 @@ internal sealed class NoStartTlsSmtpServer : IAsyncDisposable
         catch (IOException)
         {
         }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _stop.Cancel();
+        _listener.Stop();
+        try
+        {
+            await _loop;
+        }
+        catch (Exception)
+        {
+            // 關閉時的例外不影響測試結果
+        }
+    }
+}
+
+/// <summary>
+/// 只聽本機埠的假伺服器（審查建議：取代「綁定後立刻關掉的埠」，那個埠可能被別人重用）：埠在測試期間一直由這裡持有，
+/// 每條連線交給 <c>handle</c>（例如收下就以 RST 中斷、或直接做 TLS 握手）。不連外網。
+/// </summary>
+internal sealed class LocalTcpServer : IAsyncDisposable
+{
+    private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+    private readonly CancellationTokenSource _stop = new();
+    private readonly Task _loop;
+
+    public LocalTcpServer(Func<TcpClient, CancellationToken, Task> handle)
+    {
+        _listener.Start();
+        _loop = Task.Run(async () =>
+        {
+            try
+            {
+                while (!_stop.IsCancellationRequested)
+                {
+                    using var client = await _listener.AcceptTcpClientAsync(_stop.Token);
+                    try
+                    {
+                        await handle(client, _stop.Token);
+                    }
+                    catch (Exception) when (!_stop.IsCancellationRequested)
+                    {
+                        // 對方（MailKit）中途放棄連線：等下一條
+                    }
+                }
+            }
+            catch (Exception) when (_stop.IsCancellationRequested)
+            {
+            }
+        });
+    }
+
+    public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+    /// <summary>收下連線就以 RST 中斷（不送 SMTP 招呼）：寄送器歸 <c>connect</c>。</summary>
+    public static LocalTcpServer Resetting() => new((client, _) =>
+    {
+        client.LingerState = new LingerOption(true, 0);
+        client.Close();
+        return Task.CompletedTask;
+    });
+
+    /// <summary>直接 TLS（<c>sslOnConnect</c>）、出示自簽憑證的伺服器：主機不信任這張憑證，寄送器歸 <c>tls</c>。</summary>
+    public static LocalTcpServer SelfSignedTls()
+    {
+        using var key = System.Security.Cryptography.RSA.Create(2048);
+        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest("CN=127.0.0.1", key,
+            System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        using var ephemeral = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        // 匯出再匯入：macOS／Windows 的 SslStream 伺服器端要可用的私鑰
+        var certificate = new System.Security.Cryptography.X509Certificates.X509Certificate2(
+            ephemeral.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Pfx));
+        return new(async (client, ct) =>
+        {
+            await using var tls = new System.Net.Security.SslStream(client.GetStream());
+            await tls.AuthenticateAsServerAsync(new System.Net.Security.SslServerAuthenticationOptions { ServerCertificate = certificate }, ct);
+        });
     }
 
     public async ValueTask DisposeAsync()

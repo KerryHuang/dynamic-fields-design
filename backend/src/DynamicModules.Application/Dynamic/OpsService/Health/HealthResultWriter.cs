@@ -17,7 +17,8 @@ public sealed record RecordHealthResultRequest(HealthObservation Observation, Da
     : IRequest<ServiceResult>, ITransactionalRequest;
 
 public sealed class RecordHealthResultHandler(
-    IHealthCheckRepository checks, IncidentRecorder recorder, IOpsEnvironment env, IUnitOfWork uow, IDatabaseErrors errors, TimeProvider time)
+    IHealthCheckRepository checks, IncidentRecorder recorder, AlertOutboxWriter alerts, IOpsEnvironment env, IUnitOfWork uow, IDatabaseErrors errors,
+    TimeProvider time)
     : IRequestHandler<RecordHealthResultRequest, ServiceResult>
 {
     public const string MissingCode = "healthCheckRowMissing";
@@ -28,8 +29,12 @@ public sealed class RecordHealthResultHandler(
         var def = HealthCheckCatalog.Find(o.Code) ?? throw new InvalidOperationException($"未登記的健康檢查 {o.Code}");
         // 第一句：取得檢查列的列鎖，同一檢查的多個實例在 PostgreSQL 上依序彙總
         if (!await checks.LockAsync(o.Code, time.GetUtcNow().UtcDateTime, ct)) return ServiceResult.Conflict(null, MissingCode);
-        // 持久化的去重：有這筆結果列就表示這次結果已完整處理過
-        if (await checks.ResultExistsAsync(o.TransitionId, ct)) return ServiceResult.Success(false);
+        // 持久化的去重：有這筆結果列就表示這次結果已完整處理過；上一次可能提交成功卻回傳失敗、已交給直送，核對佇列列完成交接（§17.13 審查修正）
+        if (await checks.ResultExistsAsync(o.TransitionId, ct))
+        {
+            await alerts.ReconcileBackfillAsync(o.TransitionId, ct);
+            return ServiceResult.Success(false);
+        }
         checks.AddResult(new HealthCheckResult
         {
             Code = o.Code, CheckedUtc = o.CheckedUtc, Status = o.Status, Value = o.Value, MessageCode = o.MessageCode,

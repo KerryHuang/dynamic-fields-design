@@ -61,14 +61,16 @@ public class AlertOutboxRepository(DynamicDbContext db) : IAlertOutboxRepository
     public Task<int> DigestPendingAsync(string channel, DateTime nowUtc, CancellationToken ct) =>
         Rows.Where(r => r.Channel == channel && r.Status == AlertOutboxStatus.Pending && r.ClaimedBy == null && r.NextAttemptUtc <= nowUtc
                 && r.Transition != AlertTransition.Digest)
-            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, AlertOutboxStatus.Digested), ct);
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.Status, AlertOutboxStatus.Digested)
+                .SetProperty(r => r.NextAttemptUtc, nowUtc), ct);
 
     public Task<bool> DigestExistsSinceAsync(string channel, DateTime sinceUtc, CancellationToken ct) =>
         Rows.AnyAsync(r => r.Channel == channel && r.Transition == AlertTransition.Digest && r.CreatedUtc >= sinceUtc, ct);
 
     public Task<List<AlertOutbox>> ListUnattachedDigestedAsync(string channel, DateTime beforeUtc, CancellationToken ct) =>
         Rows.AsNoTracking()
-            .Where(r => r.Channel == channel && r.Status == AlertOutboxStatus.Digested && r.DigestOutboxId == null && r.CreatedUtc < beforeUtc)
+            .Where(r => r.Channel == channel && r.Status == AlertOutboxStatus.Digested && r.DigestOutboxId == null && r.NextAttemptUtc < beforeUtc)
             .OrderBy(r => r.Id).ToListAsync(ct);
 
     public Task<int> AttachToDigestAsync(IReadOnlyCollection<long> ids, long digestId, CancellationToken ct) =>
@@ -85,6 +87,29 @@ public class AlertOutboxRepository(DynamicDbContext db) : IAlertOutboxRepository
                 .SetProperty(r => r.SentUtc, sentUtc)
                 .SetProperty(r => r.ClaimedBy, (string?)null)
                 .SetProperty(r => r.ClaimedUntilUtc, (DateTime?)null), ct) == 1;
+
+    public async Task<bool> MarkSentDirectAsync(string transitionId, DateTime sentUtc, CancellationToken ct) =>
+        await Rows.Where(r => r.TransitionId == transitionId && r.Status == AlertOutboxStatus.Pending)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.Status, AlertOutboxStatus.SentDirect)
+                .SetProperty(r => r.SentUtc, sentUtc), ct) > 0;
+
+    public async Task<bool> ClaimForDirectAsync(string transitionId, string claimedBy, DateTime claimedUntilUtc, CancellationToken ct) =>
+        await Rows.Where(r => r.TransitionId == transitionId && r.Status == AlertOutboxStatus.Pending)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.Status, AlertOutboxStatus.Sending)
+                .SetProperty(r => r.ClaimedBy, claimedBy)
+                .SetProperty(r => r.ClaimedUntilUtc, claimedUntilUtc), ct) > 0;
+
+    public async Task<bool> ReleaseDirectAsync(string transitionId, string claimedBy, AlertOutboxStatus status, DateTime? sentUtc, DateTime nowUtc,
+        CancellationToken ct) =>
+        await Rows.Where(r => r.TransitionId == transitionId && r.Status == AlertOutboxStatus.Sending && r.ClaimedBy == claimedBy)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.Status, status)
+                .SetProperty(r => r.SentUtc, sentUtc)
+                .SetProperty(r => r.NextAttemptUtc, nowUtc)
+                .SetProperty(r => r.ClaimedBy, (string?)null)
+                .SetProperty(r => r.ClaimedUntilUtc, (DateTime?)null), ct) > 0;
 
     public Task<int> SkipPendingAsync(string channel, CancellationToken ct) =>
         Rows.Where(r => r.Channel == channel && r.Status == AlertOutboxStatus.Pending)
