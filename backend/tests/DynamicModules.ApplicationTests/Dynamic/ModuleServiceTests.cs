@@ -10,6 +10,7 @@ using DynamicModules.Application.Dynamic.ModuleService.Commands.UpdateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.ModuleService.Queries.GetModule;
 using DynamicModules.Application.Dynamic.ModuleService.Queries.GetModules;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.ApplicationTests.Persistence;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -85,6 +86,24 @@ public class ModuleServiceTests : IAsyncLifetime
         programs.Select(p => p.ProgramCode).Should().Equal("DYN00001", "DYN00002");
         programs.Should().OnlyContain(p => p.IsBeta);
         programs[0].NameI18n.Values["zh-TW"].Should().Be("訂單");
+    }
+
+    /// <summary>政策 A19 關掉時只建「基本資料」區塊；沒有標題欄位不能啟用（既有檢查）。</summary>
+    [Fact]
+    public async Task CreateModule_TitleFieldPolicyOff_OnlyBlock()
+    {
+        (await Send(new UpdateSystemPolicyRequest("module.createTitleField", System.Text.Json.JsonSerializer.SerializeToElement(false))))
+            .IsSuccess.Should().BeTrue();
+
+        (await Create()).IsCreated.Should().BeTrue();
+
+        var module = await _db.Context.Set<Module>().AsNoTracking()
+            .Include(m => m.Blocks).ThenInclude(b => b.Fields).SingleAsync();
+        module.Blocks.Should().ContainSingle().Which.Fields.Should().BeEmpty();
+        module.Blocks[0].LabelI18n.Values["zh-TW"].Should().Be("基本資料");
+        module.TitleFieldId.Should().BeNull();
+        var activate = await Send(new ActivateModuleRequest("order"));
+        activate.Errors["TitleFieldId"][0].Should().Be("啟用前必須指定記錄標題欄位");
     }
 
     [Fact]
