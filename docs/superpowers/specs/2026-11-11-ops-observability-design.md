@@ -1245,6 +1245,8 @@ O2 做六件事：
 | `backup.freshness` | 最近一次備份距今時數 | 時數 | 26／50 | 60 分 | 排程 | 基礎設施 | 兩種；備份還沒做時回「未設定」（B20） |
 | `security.loginFailures` | 稽核表最近 `ops.loginFailureWindowMinutes` 分鐘（出廠 15）的 `login.failed` 列數 | 次數 | 20／100 | 5 分 | 排程 | 安全 | 兩種 |
 
+- **Demo 站不跑 `storage.diskFree`**（使用者裁決 2026-11-19）：Render 的容器是 overlay 檔案系統，量到的剩餘空間不代表資料庫所在磁碟，數字不可靠。開 Demo 登入時這項檢查一律不適用：清單照列、`applicable: false`、狀態 `notApplicable`、訊息代碼 `demoSite`，立即檢查回 409 `healthCheckNotApplicable`；不改表。畫面顯示「不適用（Demo 站）」。
+
 - 每個檢查：可開關、間隔（1–1440 分）、警告與嚴重門檻（各自有技術上下限，見 §17.6.2），存在 `Dynamic_HealthCheck`；沒設的欄位是 null、讀出廠值（政策目錄同一套規則）。門檻的先後要合理（「越大越糟」時警告 ≤ 嚴重，「越小越糟」相反），不合理回 400。
 - 結果狀態：`ok`、`warning`、`critical`，另有 `error`（檢查本身丟例外或逾時，事件以警告處理，訊息「檢查本身失敗」）、`notConfigured`、`notApplicable`（都不開事件）。
 - 單一檢查最長 60 秒（技術限制），逾時記 `error`。
@@ -1298,12 +1300,15 @@ O2 做六件事：
 
 #### 17.2.6 SMTP 告警通道
 
-**設定存哪**：
+**設定存哪**（使用者裁決 2026-11-19：共用 SMTP 連線、佇列各自獨立）：
 
-- 一張 `Dynamic_AlertChannel`，一個通道一列，O2 只有 `smtp`（O3 可加其他通道，不改表）。欄位見 §17.4。
-- 密碼用 Data Protection 加密（purpose `ops-alert-smtp`，與登入 cookie 同一套金鑰；O2-T10）。金鑰不見時（PostgreSQL 沒設 `KeysDirectory` 而重啟，pg0 §5.8）解不開：GET 回 `passwordUnreadable: true`，畫面要求重填；寄送時當作設定不完整，開通道失敗事件。
+- **SMTP 連線是核心的「寄信設定」**，全系統一份：一張 `Dynamic_MailSettings`，單列（主鍵 `Kind` 固定 `default`），欄位是主機、埠、加密方式、帳號、密碼、寄件地址與名稱。之後的帳號信（重設密碼等）與告警信共用這一份連線；各自的收件人、語系、節流佇列分開。系統管理選單另有「寄信設定」頁（`/system/mail`）與它自己的測試信。
+- **告警通道只留通道自己的東西**：`Dynamic_AlertChannel` 一個通道一列，O2 只有 `smtp`（O3 可加其他通道，不改表），只剩啟用、收件信箱、信件語系、寄送佇列的鎖欄與最近狀態。欄位見 §17.4。寄告警信時把寄信設定的連線與通道的收件人、語系合起來用。
+- o2e 的 migration `SharedMailSettings` 建 `Dynamic_MailSettings`、把既有 `Dynamic_AlertChannel` 的 `smtp` 列連線欄位原樣搬過去（密文不重新加密），再從通道表拿掉那七個欄位；沒有通道列就不建寄信設定列（GET 回預設值：埠 587、`startTls`、`configured: false`）。
+- 密碼用 Data Protection 加密（purpose 維持 `ops-alert-smtp`，搬過去的密文才解得開；與登入 cookie 同一套金鑰；O2-T10）。金鑰不見時（PostgreSQL 沒設 `KeysDirectory` 而重啟，pg0 §5.8）解不開：寄信設定的 GET 回 `passwordUnreadable: true`，寄信設定頁要求重填；寄送時當作設定不完整，開通道失敗事件。
 - 收件人是通道設定裡的**一組 Email 地址**（1–20 個），不是使用者帳號：`AppUser` 沒有 Email 欄位（O2-U1）。站內通知的收件人照收件人政策，兩者分開設。
-- 開 Demo 登入時通道設定唯讀、測試信停用（回 403，比照 `UpdateSiteThemeHandler` 的 Demo 檢查）：公開 Demo 人人是管理員，可以把主機設成任意位址，讓伺服器替他連內網或寄信（§17.9 安全、O2-U10）。
+- 開 Demo 登入時寄信設定與通道設定都唯讀、兩種測試信都停用（回 403，比照 `UpdateSiteThemeHandler` 的 Demo 檢查）：公開 Demo 人人是管理員，可以把主機設成任意位址，讓伺服器替他連內網或寄信（§17.9 安全、O2-U10）。
+- 監控頁的「告警通道」分頁只顯示通道欄位；寄信設定還沒設定好（`mailConfigured` 為否）時顯示提示與「請先到寄信設定」連結。總覽的 `channel.configured`＝寄信設定已設定好且通道至少有一個收件人。
 
 **正式環境的安全邊界**（寫死，§17.9）：
 
@@ -1351,9 +1356,10 @@ O2 做六件事：
 
 **測試信**：
 
-- `POST .../channels/smtp/test`：不經佇列、立刻用**已儲存**的設定寄一封到清單上的全部收件人（不能臨時填地址，避免被當成寄信工具；O2-U1），30 秒逾時；內容用通道的信件語系，讓管理員確認收件人看得懂。
-- 成功回寄到哪些地址；失敗回 422 與失敗階段（連線、TLS、認證、寄送）和伺服器回應碼，不回例外全文。
-- 同一管理員 30 秒內只能寄一次（技術限制）；寫稽核 `ops.channel.test`。
+- `POST .../channels/smtp/test`：不經佇列、立刻用**已儲存**的寄信設定寄一封到通道清單上的全部收件人（不能臨時填地址，避免被當成寄信工具；O2-U1），30 秒逾時；內容用通道的信件語系，讓管理員確認收件人看得懂。
+- `POST system/mail-settings/test`：寄信設定頁的測試信，用已儲存的連線寄到**寄件地址本身**（帳號沒有 Email 欄位、也不能臨時填地址）；語系用請求的語系。稽核 `mailSettings.test`。
+- 成功回寄到哪些地址；失敗回 422 與失敗階段（連線、TLS、認證、寄送）和伺服器回應碼，不回例外全文；寄信設定不完整（主機或寄件地址沒填、密碼解不開）或通道沒有收件人回 409 `smtpNotConfigured`。
+- 兩種測試信共用節流：同一管理員合計 30 秒內只能寄一次（技術限制；兩者打同一台 SMTP）；通道測試信寫稽核 `ops.channel.test`。
 
 **資料庫寫不進時的直送**（O2-T8）：
 
@@ -1494,14 +1500,16 @@ O2 做六件事：
 
 ### 17.3 前端
 
-**入口**：系統管理選單新增「維運監控」（`/system/ops`）與「稽核紀錄」（`/system/audit`），只給系統管理員（`systemLinks` 的管理員區塊）；首頁的系統管理捷徑共用同一份清單。
+**入口**：系統管理選單新增「寄信設定」（`/system/mail`）、「維運監控」（`/system/ops`）與「稽核紀錄」（`/system/audit`），只給系統管理員（`systemLinks` 的管理員區塊）；首頁的系統管理捷徑共用同一份清單。
 
 **監控頁** `/system/ops`，四個分頁（URL query `tab` 記住）：
 
 1. **總覽**：最上面一列狀態卡：整體（取最糟的檢查）、資料庫可寫、未結事件（嚴重／警告數）、告警通道狀態、版本與版別、資料庫種類。下面是「需要處理」清單（未結且嚴重或警告的前 10 件，連到事件詳細）與排程器表（讀 ops info 的 jobs）。狀態板有只在記憶體的內容時顯示頁首提示（§17.2.9），有待補寫遺失時一併顯示筆數。API 回 503 `databaseUnavailable` 時整頁顯示「資料庫目前無法連線，監控頁暫時不能用；請看伺服器 log 或告警信」。
 2. **事件**：篩選（狀態、類別、嚴重度）＋清單；每列：嚴重度圖示、標題、類別與處理者、回歸標記、次數、最近時間、動作（確認、結案；不能手動結案的不出現按鈕）。點開是詳細：全部欄位、狀態歷程（從稽核讀這件事件的確認與結案）、樣本（原文與 stack 用等寬字型、可捲動，預設摺疊）。
 3. **健康檢查**：每個檢查一張卡：狀態、數值（依單位格式化，萬分比顯示成百分比）、上次與下次時間、「立即檢查」；彙總範圍是 `instance` 的另列各實例的最新狀態（只有一個實例時不列）；展開看趨勢（最近 24 小時／7 天的數值折線，用既有 echarts，比照 `ReportChart.vue` 的載入方式）與設定（開關、間隔、警告、嚴重；顯示出廠值與允許範圍，留空＝出廠值）。
-4. **告警通道**：SMTP 表單（啟用、主機、埠、加密方式、帳號、密碼〔顯示「已設定」，留空不變，另有「清除」〕、寄件地址與名稱、收件信箱清單、信件語系〔四語下拉，留空＝出廠，顯示出廠是哪一種〕）＋「寄測試信」＋最近狀態（最近成功、最近失敗與原因、連續失敗次數）。Demo 站整頁唯讀並說明原因。
+4. **告警通道**（使用者裁決 2026-11-19）：只有通道欄位（啟用、收件信箱清單、信件語系〔四語下拉，留空＝出廠，顯示出廠是哪一種〕）＋「寄測試信」＋最近狀態（最近成功、最近失敗與原因、連續失敗次數）；寄信設定未完成時顯示提示與「請先到寄信設定」連結。Demo 站整頁唯讀並說明原因。
+
+**寄信設定頁** `/system/mail`（使用者裁決 2026-11-19）：主機、埠、加密方式、帳號、密碼〔顯示「已設定」；留空＝PUT 不送 `password` 鍵（不變）；另有「清除密碼」鈕，按了送 `""`〕、寄件地址與名稱＋「寄測試信」（寄到寄件地址）。密碼解不開時顯示重填提示。Demo 站整頁唯讀並說明原因。
 
 **稽核頁** `/system/audit`：篩選列（時間區間、行為者、動作分組或動作、來源管道、結果）＋清單（時間、行為者、動作標籤、目標、結果、來源管道）；點開是詳細抽屜：全部欄位與摘要（差異以「欄位：舊值 → 新值」列出，其餘結構化摘要縮排顯示）。無限捲動（keyset）。
 
@@ -1679,19 +1687,26 @@ O2 做六件事：
 - 索引：`(RuleKind, RuleId, FailedUtc)`（計數與清理）；`FailedUtc`（`ops.upkeep` 清殘留）。
 - 量：每條規則最多約門檻筆數（失敗時清掉窗口外與最近一次成功之前的列，暫停後不再失敗）；刪規則與恢復時一起刪。
 
-**`Dynamic_AlertChannel`**
+**`Dynamic_MailSettings`**（o2e 新增，使用者裁決 2026-11-19；連線欄位從 `Dynamic_AlertChannel` 搬來）
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| Kind | string(20)，主鍵 | 固定 `default`（單列） |
+| Host | string(255)，可空 | |
+| Port | int | 出廠 587 |
+| Security | string(20) | `none`、`startTls`、`sslOnConnect` |
+| UserName | string(255)，可空 | |
+| PasswordProtected | string（text），可空 | Data Protection 加密後的字串（purpose `ops-alert-smtp`） |
+| FromAddress | string(255)，可空 | |
+| FromName | string(100)，可空 | |
+| ModifiedUserId、ModifiedUtc | | |
+
+**`Dynamic_AlertChannel`**（o2e 起連線欄位移到 `Dynamic_MailSettings`）
 
 | 欄位 | 型別 | 說明 |
 |---|---|---|
 | Kind | string(20)，主鍵 | O2 只有 `smtp` |
 | Enabled | bool | |
-| Host | string(255)，可空 | |
-| Port | int | 出廠 587 |
-| Security | string(20) | `none`、`startTls`、`sslOnConnect` |
-| UserName | string(255)，可空 | |
-| PasswordProtected | string（text），可空 | Data Protection 加密後的字串 |
-| FromAddress | string(255)，可空 | |
-| FromName | string(100)，可空 | |
 | ToAddresses | string(2000)，可空 | 逗號分隔、1–20 個、應用層驗格式 |
 | MailLocale | string(10)，可空 | 告警信、摘要信、測試信的語系：`zh-TW`、`en-US`、`th`、`vi`；null＝出廠（O2 是繁中，p3 後跟系統預設語系；O2-U14） |
 | LastClaimUtc | DateTime，可空 | 寄送佇列領取與摘要化交易的第一句更新它，取得通道列鎖（§17.2.6）；只當鎖用 |
@@ -1742,9 +1757,12 @@ O2 做六件事：
 | GET | `system/ops/incidents/{id}` | 管理員 | 事件詳細（含樣本） |
 | POST | `system/ops/incidents/{id}/acknowledge` | 管理員 | 確認 |
 | POST | `system/ops/incidents/{id}/resolve` | 管理員 | 手動結案 |
-| GET | `system/ops/channels/smtp` | 管理員 | 讀 SMTP 設定 |
-| PUT | `system/ops/channels/smtp` | 管理員（Demo 站 403） | 存 SMTP 設定 |
-| POST | `system/ops/channels/smtp/test` | 管理員（Demo 站 403） | 寄測試信 |
+| GET | `system/mail-settings` | 管理員 | 讀寄信設定（共用 SMTP 連線；使用者裁決 2026-11-19） |
+| PUT | `system/mail-settings` | 管理員（Demo 站 403） | 存寄信設定 |
+| POST | `system/mail-settings/test` | 管理員（Demo 站 403） | 寄測試信到寄件地址 |
+| GET | `system/ops/channels/smtp` | 管理員 | 讀告警通道（收件人、語系、最近狀態） |
+| PUT | `system/ops/channels/smtp` | 管理員（Demo 站 403） | 存告警通道 |
+| POST | `system/ops/channels/smtp/test` | 管理員（Demo 站 403） | 寄告警通道測試信 |
 | GET | `system/ops/audit` | 管理員 | 稽核清單 |
 | GET | `system/ops/audit/{id}` | 管理員 | 稽核詳細 |
 | GET | `system/ops/audit/actions` | 管理員 | 動作目錄（分組、標籤鍵、風險級別），給篩選用 |
@@ -1817,19 +1835,30 @@ IncidentDetail extends IncidentSummary {
 }
 // POST .../acknowledge  { expectedStatus: 'open' }              → IncidentSummary
 // POST .../resolve      { expectedStatus: 'open'|'acknowledged'; note?: string /* ≤500，進稽核摘要 */ } → IncidentSummary
+// 使用者裁決 2026-11-19：SMTP 連線移到核心寄信設定，告警通道只留通道欄位
+// GET system/mail-settings（還沒設定時回預設：port 587、startTls、configured false）
+MailSettings {
+  host?: string; port: number; security: 'none'|'startTls'|'sslOnConnect';
+  userName?: string; hasPassword: boolean; passwordUnreadable: boolean;
+  fromAddress?: string; fromName?: string;
+  configured: boolean;               // 主機與寄件地址都有
+  editable: boolean;                 // Demo 站為 false
+}
+// PUT system/mail-settings；password：省略或 null＝不變、""＝清除、其他＝新密碼
+//   （前端留空不送、清除鈕送空字串；使用者裁決 2026-11-19）；none 帶帳號或保留中的密碼回 400 smtpPlaintextAuth
+{ host: string; port: number; security: string; userName?: string; password?: string; fromAddress: string; fromName?: string }
+// POST system/mail-settings/test → { sentTo: [fromAddress] }；409 smtpNotConfigured／smtpTestTooSoon、422 smtpTestFailed
 // GET system/ops/channels/smtp
 SmtpChannel {
-  enabled: boolean; host?: string; port: number; security: 'none'|'startTls'|'sslOnConnect';
-  userName?: string; hasPassword: boolean; passwordUnreadable: boolean;
-  fromAddress?: string; fromName?: string; toAddresses: string[];
+  enabled: boolean; toAddresses: string[];
   mailLocale: Setting<string>;      // 'zh-TW'|'en-US'|'th'|'vi'；isFactory＝沒設（O2-U14）
   lastSuccessUtc?: string; lastFailureUtc?: string; lastError?: string; consecutiveFailures: number;
   editable: boolean;                 // Demo 站為 false
+  mailConfigured: boolean;           // 寄信設定已設定好
 }
-// PUT system/ops/channels/smtp；password：省略或 null＝不變、""＝清除、其他＝新密碼
-{ enabled: boolean; host: string; port: number; security: string; userName?: string; password?: string;
-  fromAddress: string; fromName?: string; toAddresses: string[]; mailLocale?: string|null /* null＝出廠，省略＝不變 */ }
-// POST system/ops/channels/smtp/test → { sentTo: string[] }
+// PUT system/ops/channels/smtp（寄信設定沒設好也能存）
+{ enabled: boolean; toAddresses: string[]; mailLocale?: string|null /* null＝出廠，省略＝不變 */ }
+// POST system/ops/channels/smtp/test → { sentTo: string[] }；409 smtpNotConfigured（寄信設定不完整或沒有收件人）
 // GET system/ops/audit?fromUtc&toUtc&actorUserId&action&actionGroup&channel&result&targetKind&targetId&cursor&limit(≤100)
 { items: AuditSummary[]; nextCursor?: string }
 AuditSummary {
@@ -2158,14 +2187,14 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 選錯代價：要通知前端錯誤只改一個出廠嚴重度。前端無法可靠分辨哪個錯誤擋住了操作，純前端的錯誤（例如表單打不開）不會有對應的伺服器事件，只能靠監控頁的次數與影響頁面發現；要分辨「擋住操作」得另做前端埋點（💡）。
 - 題目：使用者瀏覽器裡發生的 JavaScript 錯誤，有的看不出影響，有的會擋住操作（例如按「存檔」沒反應、表單打不開）；系統分辨不出是哪一種，而且不少來自瀏覽器外掛或網路不穩。若同時有伺服器錯誤（例如存檔時伺服器出錯），那一件會照常通知。這類前端錯誤要不要通知管理員？(1) 不通知也不寄信，只記在維運監控的事件清單，同一個錯誤反覆出現會累加次數與影響的頁面（推薦）(2) 每個新出現的前端錯誤都發站內通知並寄信。
 
-**O2-U6 能編輯規則的人就能按「恢復」**
+**O2-U6 能編輯規則的人就能按「恢復」**（使用者確認 2026-11-19）
 
 - 決定：恢復權限＝改那條任務規則的權限（該模組的設計器編輯權；規則掛在共用主檔上時，還要有共用主檔的設計權，與 `UpdateTaskRuleRequest` 相同）；系統管理員本來就有。
 - 理由：修規則的人就是要恢復的人；只給管理員會讓設計者修好後還要找人。
 - 選錯代價：改成只限管理員只換一個權限宣告。
 - 題目：設計者小王修好了被暫停的規則，誰可以按「恢復」？(1) 能修改這條規則的人，例如小王自己（他有這個模組的設計編輯權；規則若掛在「客戶」這類共用主檔上，還要有共用主檔的設計權，跟修改規則的權限一樣）（推薦）(2) 只有系統管理員。
 
-**O2-U7 暫停期間不補產任務；存檔的人看不到提示（兩個小題 U7a、U7b）**
+**O2-U7 暫停期間不補產任務；存檔的人看不到提示（兩個小題 U7a、U7b）**（U7a、U7b 都是使用者確認 2026-11-19：存檔不提示、恢復不補產；確認框寫明「暫停期間略過的 N 次存檔不會補產任務」與該觸發方式的補救）
 
 - 決定：暫停期間存檔照常成功、不產生任務、存檔的人看不到任何提示；規則頁顯示暫停起訖與「暫停期間略過 N 次存檔」，恢復時不自動補產。要補時由設計者照觸發方式手動補（§17.2.7 的表）：新增時觸發的規則，用建立時間篩出那段期間的記錄，在記錄的任務區手動新增任務；「條件成立時」與「欄位變成某值」的規則，恢復後那些記錄不會自己再觸發，要手動新增任務、或讓條件先變回不成立再成立；手動套用的規則恢復後直接套用即可。
 - 理由：補產要重算每筆記錄在當時的條件，`once` 規則還要判斷是否已觸發過，複雜而且可能產出過時的任務；存檔的一般使用者不擁有規則、也修不了，提示只會造成困擾。
@@ -2413,7 +2442,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - `DriveInfo(目錄)`（macOS）：回報目錄所在的那顆磁碟（以 `hdiutil` 掛一個磁碟映像、目錄放在裡面，數字與 `df` 一致）；路徑必須存在，否則丟 `DriveNotFoundException`（`DriveInfoDiskSpace` 對不存在的目錄回 null、該目錄不列入）。Linux loop device 與 Docker overlay 沒有實測（⚠️ 未驗證）。
 - 提交後丟例外的注入（`DbTransactionInterceptor.TransactionCommitted(Async)` 拋例外）：兩個 provider 都讓呼叫端收到原例外、資料已提交；之後 Dispose 與重用 DbContext 都正常。C14 用這個寫法。
 
-**偏離設計之處**
+**偏離設計之處**（使用者確認 2026-11-19（全部照現做））
 
 - **偏離 1：自動測試的唯讀不用「DI 換 `Mode=ReadOnly` 連線」**，改用測試專用的連線攔截器（`ReadOnlySwitch`）：每次開連線時下 SQLite `PRAGMA query_only = 1／0`、PostgreSQL `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY／READ WRITE`。理由：換連線字串只影響寫入探測，業務請求、補寫交易仍寫得進去，測不到「整個資料庫唯讀」；攔截器在連線池下每次開啟都切換，不殘留狀態，錯誤碼也是真的（8、`25006`）。C01 前置已改主控文字。手動驗收照上面 chmod（SQLite，需 `Pooling=False` 或重啟站台）與 `ALTER DATABASE`＋清池（PostgreSQL）。
 - **偏離 2：`scheduler.jobs` 的工作清單在執行時從 scope 取**，不在建構時注入：`ops.monitor` 本身是工作、又依賴健康檢查執行器，建構注入會形成 DI 循環。
@@ -2427,6 +2456,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - **偏離 10：`ops.upkeep` 的順序**是自動結案 → 嚴重事件重複提醒 → 稽核、健康紀錄、樣本、已結事件清理；每輪重複提醒最多處理一批（5000 件）。清理摘要的鍵是 `auditLog`、`healthResult`、`incidentSample`、`incident`，o2a 的 `{"deleted":{"auditLog":n}}` 不變。
 - **偏離 11：部署設定 `Ops:Watchdog:Enabled`**（預設 true）只停看門狗，收件匣的 flush 不受影響（審查修正 3）；測試主機關掉看門狗、並拿掉收件匣的 hosted service（`TestApp`），測試直接呼叫 `OpsWatchdog.TickAsync`、`IncidentInboxDrain.FlushAsync`。看門狗每 60 秒一輪，收件匣每 5 秒 flush、關機時最後 flush 一次（技術限制）。
 - **偏離 12：客戶設定類事件的收件人**在 o2d 前用 `ops.alertRecipients`（`ops.configIssueRecipients` 與 `ruleEditor` 隨 o2d）；總覽的告警通道區塊在 o2c 前一律「未設定」。
+- **已知限制（o2e 補，使用者裁決 2026-11-19）：overlay 檔案系統量不準磁碟**。`storage.diskFree` 量的是資料庫所在路徑的檔案系統；Render 這類容器平台用 overlay，量到的是容器層、不是持久磁碟，Demo 站上的數字不可靠。o2e 起 Demo 站這項檢查一律不適用（`demoSite`，§17.2.4）；地端與雲端正式環境照常檢查，部署在 overlay 上的正式環境要把資料庫放在掛載的持久磁碟。
 - o2c 的部分沒有做：C01、C09 的直送與佇列狀態、C13 整條、B08 的寄送佇列列、B09 的信件主旨與內文。對應測試只驗站內通知與事件那一半。
 
 **已知限制**
@@ -2463,7 +2493,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - MailKit 版本與授權：鎖 4.18.2（MIT），有 `net8.0` 目標；相依 MimeKit 4.18.2（MIT）、BouncyCastle.Cryptography 2.7.0（MIT）、System.Formats.Asn1 與 System.Security.Cryptography.Pkcs 10.0.13（MIT，`net8.0` 可用）。5.0.0 太新沒有採用。
 - 連線被拒（本機沒人聽的埠）：`ConnectAsync` 丟 `SocketException`，歸 `connect`；422 回應只有 `code`、`message`、`params.stage`／`serverCode`，不含例外訊息與主機位址（D07，真的 MailKit）。
 
-**偏離設計之處**
+**偏離設計之處**（使用者確認 2026-11-19（全部照現做））
 
 - **偏離 1：摘要信的時機**：每個整點後的第一輪，若這個整點之後還沒有摘要信、而有「整點前被摘要化且還沒掛上摘要信」的 `digested` 列，就新增一封摘要信並把那些列掛上（同一把通道列鎖、同一交易）。整點後才被摘要化的列（不論何時建立）等下一個整點。摘要化時間記在 `NextAttemptUtc`（`digested` 不再領取，這個欄位不再有其他用途；不加欄位，審查修正）。摘要信不佔每小時額度；額度滿時只領摘要信。
 - **偏離 2：寫入後才停用或清掉通道設定**：領取時發現通道不能寄，把還沒寄的 `pending` 全部改成 `skipped`（§17.2.6 只寫了寫入時標 `skipped`）。
@@ -2593,3 +2623,51 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 
 - `Ops.RulePause*` 三個類別：SQLite 84 過 1 略過（`PostgresFact`）、PostgreSQL 85 過。受影響範圍（`Ops.RulePause*`、任務規則、刪除、共用主檔、應用程式任務開關、格式 8）WebAPITests SQLite 293 過 1 略過、PostgreSQL 294 過；ApplicationTests 全套 SQLite 3632 過 14 略過 1 失敗（`ReportBenchmarkTests` 的 1 秒門檻，跟著全套跑時逾時、單獨重跑通過，與本修正無關）、PostgreSQL（排除 `SqliteOnly`、`Benchmark`）3610 過。完整套件交 CI。
 - 第二輪（修正 4、5）：`Ops.RulePause*` 三個類別 SQLite 85 過 1 略過（`PostgresFact`）、PostgreSQL 86 過。受影響範圍 WebAPITests（`Ops.RulePause*`、任務規則、任務開關、格式 7、CRM 銷售、刪除、共用主檔）SQLite 295 過 1 略過、PostgreSQL 296 過；ApplicationTests（`Dynamic.Tasks`、規則失敗、應用程式任務規則、刪除）SQLite 693 過、PostgreSQL（排除 `SqliteOnly`、`Benchmark`）691 過。完整套件交 CI。
+
+### 17.15 o2e 實作補記（2026-11-19）
+
+範圍照 §17.1 o2e：監控頁四個分頁、稽核頁、任務規則分頁的暫停與恢復、通知鈴鐺的維運種類、政策收件人的「該規則的最後修改者」、四語文案；加上使用者 2026-11-19 的兩個裁決：共用寄信設定（§17.2.6、§17.4、§17.5 已改寫）與 Demo 站關掉 `storage.diskFree`（§17.2.4）。唯一的 migration 是 `SharedMailSettings`（SQLite `20261119140352`、PostgreSQL `20261119140356`），沒有其他表的改動。
+
+**偏離設計之處**
+
+行為類：
+
+- **偏離 1：寄信設定的測試信寄到寄件地址本身**，語系用這次請求的語系（沒帶時繁中）。帳號沒有 Email 欄位、也不讓人臨時填地址（O2-U1 的精神）。
+- **偏離 2：兩種測試信共用一個節流**：同一管理員合計 30 秒一封。兩者打同一台 SMTP，分開節流就能輪流打兩支 API 繞過。
+- **偏離 3：Demo 站的 `storage.diskFree` 一律顯示停用**（`enabled.value`、`factory` 都是 false）；PUT 照「不適用的檢查」存得進去但不會跑，畫面上沒有設定區與立即檢查。
+- **偏離 4：寄信設定未完成的 409 沿用代碼 `smtpNotConfigured`**，訊息換成「寄信設定還沒設定好（主機或寄件地址沒填，或密碼需要重填）」。通道 PUT 不再收連線欄位，多送的會被忽略。
+- **偏離 5：通知鈴鐺沒有逐種圖示**：鈴鐺清單本來就沒有每種通知的圖示（簽核也沒有），只加四語標籤；`opsRulePaused` 的標籤也用「維運事件：」，因為標題本身已經寫「…已自動暫停」，再加「規則已自動暫停：」會重複。
+- **偏離 6：稽核詳細**：1920（`xl`）與清單並排；其他寬度用對話框（手機全螢幕、平板與筆電從右側滑出）。來源管道欄在平板與並排時隱藏。事件清單用「載入更多」按鈕，稽核清單捲到底自動載入（§17.3 只寫了稽核無限捲動）。
+- **偏離 7：文案不寫伺服器的天數與筆數上限**：稽核篩選說明寫「沒填日期時只查最近幾天的紀錄」、狀態歷程截斷寫「只列最近的一部分」，不在前端重複後端的 7 天、366 天、100 筆（鐵則 2）；健康檢查的範圍與出廠值都從 API 取。趨勢圖的「最近 24 小時／7 天」是畫面的兩個檢視，不是政策。
+- **偏離 8：恢復確認框多一句**「手動新增的任務不掛規則；之後那筆記錄若又觸發這條規則，會再產生一份規則任務」（非手動規則才顯示），避免設計者以為手動補的任務會被規則認得。暫停資訊的最近錯誤代碼以 `ops.ruleError.*` 顯示白話，沒登記的代碼顯示原碼。
+- **偏離 9：健康檢查設定的「啟用」與出廠值相同時送 null**（回到出廠），和數字欄留空送 null 一致，日後出廠值改了跟著變。
+
+技術類：
+
+- **偏離 10：通知 API 多回 `titleKey`、`titleParams`**（只有 `opsIncident`、`opsRulePaused` 兩種，從 `DataJson` 解析；其他種類不變），鈴鐺才能依目前語系組標題，沒有時用存檔時的 `title`。
+- **偏離 11：migration 手動調整順序**：EF 把通道表的 DropColumn 排在 CreateTable 前面，改成建表 → `migrationBuilder.Sql` 搬資料（`INSERT … SELECT … WHERE "Kind" = 'smtp'`，兩種資料庫同一句）→ 拿掉通道欄位；Down 只還原 schema，不把資料搬回通道表。寄信設定主鍵是字串 `Kind`（固定 `default`），沿用通道以種類當主鍵的寫法。
+- **偏離 12：直送佇列的設定快取**仍是一份合成的 `SmtpSettings`：寄信設定、通道、寄信政策同一輪都讀到才整份替換，任一讀不到沿用上一份。
+- **偏離 13：`OpsMonitorReader.Applicable` 拆成兩個判斷**：資料庫種類不支援的檢查照舊不列；Demo 站排除的檢查照列、`applicable: false`。
+- **偏離 14：前端細節**：監控查詢沿用全域「不重試」，503 立刻顯示整頁提示；排程器回的狀態是 PascalCase（`Succeeded`），前端轉成小寫開頭再查標籤。
+
+**已知限制**
+
+- Demo 站資料庫若在部署前已開了 `storage.diskFree` 的事件，上線後看門狗不再跑它，那件事件不會自動結案。Demo 站每次部署重建資料庫，實際碰不到；沒有寫自動結案。
+
+**四種寬度走查**（本機 Demo，系統管理員按 Demo 按鈕登入；`rwd-check.js` 量 `/system/ops` 四個分頁、`/system/audit`、`/system/mail`、模組設計的任務規則分頁）
+
+| 寬度 | 整頁 `overflow` | `innerOverflow` | 另外看的 |
+|---|---|---|---|
+| 390 | 全部 false | 只有模組設計頁的分頁列（`q-tabs__content`，刻意左右滑） | 健康卡展開趨勢圖不溢出；稽核詳細全螢幕 388/388；恢復確認框 372/372 |
+| 820 | 全部 false | 同上 | 事件詳細從右側滑出 558/558，樣本 stack 在框內橫捲（刻意） |
+| 1366 | 全部 false | 無 | 總覽狀態卡三欄；任務規則暫停標籤、暫停資訊、上次暫停、連續失敗都顯示 |
+| 1920 | 全部 false | 無 | 總覽六張一列；稽核詳細與清單並排、來源管道欄隱藏 |
+
+截圖在 `.tmp/plans/20261119-o2e/`（主 repo）。為了看到暫停畫面與事件，在本機走查用的資料庫（`local-e2e.db`，每次啟動重建）直接寫了兩列 `Dynamic_RuleHealth`，並從頁面送一則前端錯誤回報產生事件；沒有動 Demo 站。
+
+走查時修掉的問題（已併入 commit）：排程器狀態與工作名稱顯示原碼、稽核篩選列在桌機預設收起、趨勢圖只有一筆資料時看不到點、「請求代碼」標籤寫錯。
+
+**驗證**
+
+- 前端：vitest 228 檔 3466 例全過（含 `src/css/themes/` 寫死顏色、四語鍵與佔位符、`policy-i18n` 守門）；`vue-tsc` 無錯；`quasar build` 成功。
+- 後端：通知 API 測試 SQLite、PostgreSQL 各 2 例過；寄信設定與 Demo `diskFree` 相關（ApplicationTests 11 例、WebAPITests `Ops` 加 `EndpointRoutesTests` 288 例）SQLite 286 過 2 略過、PostgreSQL 288 過。完整後端套件交 CI。
