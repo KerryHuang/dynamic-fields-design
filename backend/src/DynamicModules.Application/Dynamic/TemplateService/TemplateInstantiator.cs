@@ -36,7 +36,7 @@ namespace DynamicModules.Application.Dynamic.TemplateService;
 public sealed class TemplateInstantiator(
     ISender sender, IModuleRepository modules, IPermissionRepository permissions, IListViewRepository views,
     IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
-    Common.Security.PermissionAdminGate permissionAdmin, Common.Audit.AuditContext audit)
+    Common.Security.PermissionAdminGate permissionAdmin, Common.Audit.AuditContext audit, FieldService.BlockColumns blockColumns)
 {
     /// <summary>從範本建立而沒有權限設定時的提示（權限軸設計 M3）；照其他 warnings 寫繁中字面值，四語化不在這段。</summary>
     internal const string PermissionsSkippedWarning = "你沒有「權限設定」權限，已略過範本的權限建議；請洽權限設定者到權限分頁授權";
@@ -64,6 +64,7 @@ public sealed class TemplateInstantiator(
         ServiceResult? failed;
 
         // 1. 建模組（不建預設標題欄位）
+        var firstBlockColumns = new Dictionary<string, int>();
         foreach (var m in p.Modules)
         {
             var o = overrides.GetValueOrDefault(m.Code);
@@ -75,21 +76,27 @@ public sealed class TemplateInstantiator(
             map.Modules[m.Code] = (created.Id, created.Key);
             var block = (await modules.GetByKeyAsync(created.Key, includeChildren: true, ct))!.Blocks.Single();
             map.Blocks[$"{m.Code}.{m.Blocks[0].Code}"] = block.Id;
+            firstBlockColumns[m.Code] = block.Columns;
         }
 
-        // 2. 區塊：預設區塊改成第一個，其餘新增
+        // 2. 區塊：預設區塊改成第一個，其餘新增。欄數：套件沒寫用新區塊的欄數，超過上限（form.maxColumns）夾到上限、不報錯
+        var maxColumns = await blockColumns.MaxAsync(ct);
         foreach (var m in p.Modules)
             for (var i = 0; i < m.Blocks.Count; i++)
             {
                 var b = m.Blocks[i];
+                var createdColumns = firstBlockColumns[m.Code];
                 if (i > 0)
                 {
                     var added = await sender.Send(new AddBlockRequest(map.Key(m.Code), b.Label), ct);
                     if ((failed = Fail(added, m.Code, $"{m.Code}.")) is not null) return failed;
-                    map.Blocks[$"{m.Code}.{b.Code}"] = ((BlockResponse)added.Data!).Id;
+                    var addedBlock = (BlockResponse)added.Data!;
+                    map.Blocks[$"{m.Code}.{b.Code}"] = addedBlock.Id;
+                    createdColumns = addedBlock.Columns;
                 }
-                if (i > 0 && !b.Collapsed && b.Columns == Block.DefaultColumns) continue;
-                var r = await sender.Send(new UpdateBlockRequest(map.Blocks[$"{m.Code}.{b.Code}"], b.Label, b.Collapsed, b.Columns), ct);
+                var columns = Math.Min(b.Columns ?? createdColumns, maxColumns);
+                if (i > 0 && !b.Collapsed && columns == createdColumns) continue;
+                var r = await sender.Send(new UpdateBlockRequest(map.Blocks[$"{m.Code}.{b.Code}"], b.Label, b.Collapsed, columns), ct);
                 if ((failed = Fail(r, m.Code, $"{m.Code}.")) is not null) return failed;
             }
 

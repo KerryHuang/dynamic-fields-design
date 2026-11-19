@@ -26,6 +26,12 @@ describe('fieldColClass', () => {
     expect(fieldColClass(4, false)).toBe('col-12 col-sm-6 col-md-4 col-lg-3');
   });
 
+  // form.maxColumns 的技術上限 4（PolicyCatalog.FormMaxColumns.Max）要每一種欄數都排得出不同的版面
+  it('supports every column count up to the policy hard cap', () => {
+    const classes = [1, 2, 3, 4].map((n) => fieldColClass(n, false));
+    expect(new Set(classes).size).toBe(4);
+  });
+
   it('a full-width field takes the whole row whatever the columns', () => {
     for (const columns of [1, 2, 3, 4]) expect(fieldColClass(columns, true)).toBe('col-12');
   });

@@ -7,6 +7,7 @@ export const isFullWidth = (f: Pick<SchemaField, 'type' | 'config'>): boolean =>
  * 區塊內一個欄位格的 Quasar grid class。欄數依寬度遞減：xs（< 600px）1 欄；sm 最多 2 欄；md 最多 3 欄；
  * lg（>= 1440px）最多 4 欄；實際欄數是區塊設定與該寬度上限的較小值。
  * 佔滿整列的欄位用 col-12，自然換到新的一列。
+ * 斷點只排到 4 欄，對應 PolicyCatalog.FormMaxColumns 的技術上限（form.maxColumns 最多 4）；要放寬兩邊一起改。
  */
 export function fieldColClass(columns: number, fullWidth: boolean): string {
   if (fullWidth || columns <= 1) return 'col-12';

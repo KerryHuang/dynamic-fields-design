@@ -17,7 +17,7 @@ import TaskRulesTab from 'src/presentation/dynamic/tasks/TaskRulesTab.vue';
 import ModuleEditorPage from './ModuleEditorPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn(), deleteCheck: vi.fn(), deleteTarget: vi.fn(), getMe: vi.fn(),
-  getEvents: vi.fn(), getChecks: vi.fn(), getLedger: vi.fn(), getWorkflow: vi.fn(), getApprovalFlows: vi.fn(), getModules: vi.fn(), getModulePolicies: vi.fn(), saveModulePolicy: vi.fn(), getTaskRules: vi.fn(), getEffectivePolicies: vi.fn() } }));
+  getEvents: vi.fn(), getChecks: vi.fn(), getLedger: vi.fn(), getWorkflow: vi.fn(), getApprovalFlows: vi.fn(), getModules: vi.fn(), getModulePolicies: vi.fn(), saveModulePolicy: vi.fn(), getTaskRules: vi.fn(), getEffectivePolicies: vi.fn(), addBlock: vi.fn(), updateBlock: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
 const detail: ModuleDetail = {
@@ -397,6 +397,57 @@ describe('ModuleEditorPage', () => {
       await flushPromises();
       expect(api.deleteCheck).toHaveBeenCalledWith({ kind: 'module', key: 'm' });
       w2.unmount();
+    });
+  });
+
+  describe('區塊欄數依政策（A25）', () => {
+    const withColumns = (columns: number): ModuleDetail => ({
+      ...detail, status: 'Draft', blocks: [{ id: 9, label: { 'zh-TW': '區塊' }, sequence: 1, collapsed: false, columns, fields: [] }],
+    });
+    const policies = (maxColumns: number) => api.getEffectivePolicies.mockResolvedValue({ moduleKey: 'm', values: { 'form.maxColumns': maxColumns } });
+    const columnButtons = () => Array.from(document.body.querySelectorAll('[data-testid="block-columns"] .q-btn')) as HTMLElement[];
+    async function openEdit(w: Awaited<ReturnType<typeof mountPage>>) {
+      await w.get(`[title="${zhTW.designer.editBlock}"]`).trigger('click');
+      await flushPromises();
+    }
+
+    it('欄數選項依上限', async () => {
+      policies(3);
+      const w = await mountPage(withColumns(2));
+      await openEdit(w);
+      expect(columnButtons().map((b) => b.textContent?.trim())).toEqual(['1', '2', '3']);
+      w.unmount();
+    });
+
+    it('既有欄數超過上限時仍顯示現值', async () => {
+      policies(2);
+      const w = await mountPage(withColumns(4));
+      await openEdit(w);
+      const buttons = columnButtons();
+      expect(buttons.map((b) => b.textContent?.trim())).toEqual(['1', '2', '3', '4']);
+      expect(buttons[3]!.getAttribute('aria-pressed')).toBe('true');
+      w.unmount();
+    });
+
+    it('新增區塊不送欄數；生效值還沒回來時新增區塊鈕仍可按', async () => {
+      api.getEffectivePolicies.mockReturnValue(new Promise(() => {}));
+      api.addBlock.mockResolvedValue({} as never);
+      const w = await mountPage(withColumns(2));
+      const add = w.get('[data-testid="add-block"]');
+      expect(add.attributes('disabled')).toBeUndefined();
+      await add.trigger('click');
+      await flushPromises();
+      expect(document.body.querySelector('[data-testid="block-columns"]')).toBeNull();
+      const input = document.body.querySelector('.q-dialog input') as HTMLInputElement;
+      input.value = '新區塊';
+      input.dispatchEvent(new Event('input'));
+      await flushPromises();
+      const save = Array.from(document.body.querySelectorAll('.q-dialog .q-btn')).find((b) => b.textContent?.includes(zhTW.designer.save)) as HTMLElement;
+      save.click();
+      await flushPromises();
+      expect(api.addBlock).toHaveBeenCalledWith('m', expect.objectContaining({ 'zh-TW': '新區塊' }));
+      expect(api.addBlock.mock.calls[0]).toHaveLength(2);
+      w.unmount();
     });
   });
 });

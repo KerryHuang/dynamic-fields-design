@@ -36,8 +36,8 @@ public record TemplateModule(
     public List<TemplatePermission> Permissions { get; init; } = Permissions ?? [];
 }
 
-/// <summary>Columns 在 JSON 缺漏時用 <see cref="Block.DefaultColumns"/>。</summary>
-public record TemplateBlock(string Code, I18nText Label, bool Collapsed, List<TemplateField> Fields, int Columns = Block.DefaultColumns)
+/// <summary>Columns 在 JSON 缺漏時為 null：開啟時用新區塊的欄數（政策 form.defaultColumns）；超過 form.maxColumns 時夾到上限。</summary>
+public record TemplateBlock(string Code, I18nText Label, bool Collapsed, List<TemplateField> Fields, int? Columns = null)
 {
     public List<TemplateField> Fields { get; init; } = Fields ?? [];
 }

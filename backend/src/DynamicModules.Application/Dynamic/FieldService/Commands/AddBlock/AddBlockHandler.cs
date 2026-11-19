@@ -10,7 +10,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.AddBlock;
 
 public class AddBlockHandler(
     IModuleRepository modules, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
-    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
+    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner, BlockColumns blockColumns)
     : IRequestHandler<AddBlockRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(AddBlockRequest request, CancellationToken ct)
@@ -23,7 +23,7 @@ public class AddBlockHandler(
         {
             LabelI18n = request.Label,
             Sequence = module.Blocks.Select(b => b.Sequence).DefaultIfEmpty(0).Max() + 1,
-            Columns = Block.DefaultColumns
+            Columns = await blockColumns.ForNewBlockAsync(module.Id, ct)
         };
         block.StampCreated(user.UserId, now);
         module.Blocks.Add(block);

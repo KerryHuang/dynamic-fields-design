@@ -15,6 +15,7 @@ using DynamicModules.Application.Dynamic.ModuleService.Commands.CreateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.UpdateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.ModuleService.Queries.GetModule;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.ApplicationTests.Persistence;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
@@ -471,6 +472,66 @@ public class FieldServiceTests : IAsyncLifetime
 
         (await Send(new UpdateBlockRequest(blockId, Text("基本二"), false))).IsSuccess.Should().BeTrue();
         (await Detail()).Blocks[0].Columns.Should().Be(3);
+    }
+
+    // ---- 區塊欄數政策（A25）----
+
+    private async Task SetSystem(string code, int? value) =>
+        (await Send(new UpdateSystemPolicyRequest(code, value is { } v ? JsonSerializer.SerializeToElement(v) : null))).IsSuccess.Should().BeTrue();
+
+    private async Task SetModule(string key, string code, int value) =>
+        (await Send(new UpdateModulePolicyRequest(key, code, JsonSerializer.SerializeToElement(value)))).IsSuccess.Should().BeTrue();
+
+    private async Task<int> AddBlockColumns(string key) =>
+        ((BlockResponse)(await Send(new AddBlockRequest(key, Text("明細")))).Data!).Columns;
+
+    [Fact]
+    public async Task AddBlock_UsesModuleDefaultColumns()
+    {
+        await CreateModule();
+        await Send(new CreateModuleRequest("other", Text("其他"), null, null));
+        await SetModule("order", "form.defaultColumns", 2);
+
+        (await AddBlockColumns("order")).Should().Be(2);
+        (await AddBlockColumns("other")).Should().Be(4);
+    }
+
+    [Fact]
+    public async Task AddBlock_DefaultAboveMax_UsesMax()
+    {
+        await CreateModule();
+        await SetModule("order", "form.defaultColumns", 4);
+        await SetSystem("form.maxColumns", 2);
+
+        (await AddBlockColumns("order")).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task UpdateBlock_ExistingAboveMax_RenameAllowed_IncreaseRejected()
+    {
+        var m = await CreateModule();
+        var four = m.Blocks[0].Id;
+        m.Blocks[0].Columns.Should().Be(4);
+        await SetSystem("form.maxColumns", 2);
+
+        (await Send(new UpdateBlockRequest(four, Text("改名"), false, 4))).IsSuccess.Should().BeTrue();
+        (await Send(new UpdateBlockRequest(four, Text("改名"), false, 3))).IsSuccess.Should().BeTrue();
+        (await Detail()).Blocks[0].Columns.Should().Be(3);
+
+        var two = (BlockResponse)(await Send(new AddBlockRequest("order", Text("明細")))).Data!;
+        two.Columns.Should().Be(2);
+        var r = await Send(new UpdateBlockRequest(two.Id, Text("明細"), false, 3));
+        r.IsInvalid.Should().BeTrue();
+        r.Errors["Columns"][0].Should().Be("每列欄數最多 2");
+        (await Send(new UpdateBlockRequest(two.Id, Text("明細"), false, 1))).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CreateModule_FirstBlockUsesPolicy()
+    {
+        await SetSystem("form.defaultColumns", 3);
+        var m = await CreateModule();
+        m.Blocks.Should().ContainSingle().Which.Columns.Should().Be(3);
     }
 
     [Fact]
