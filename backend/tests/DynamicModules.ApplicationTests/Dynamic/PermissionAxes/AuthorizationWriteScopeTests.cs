@@ -59,7 +59,7 @@ public sealed class AuthorizationWriteScopeTests : AuthorizationBoundaryTestBase
             () => Svc<ISharedMasterRepository>().ReplaceActionScopesAsync(ModuleId, [], CancellationToken.None));
         await batch.Should().ThrowAsync<InvalidOperationException>().WithMessage("*批次寫入被拒（ReplaceActionScopes）*Derived*");
         var purge = () => AuthorizationWriteScope.RunAsync(permit(), Pending,
-            () => Svc<IDeletionRepository>().PurgeFieldsAsync([new Field { Id = Target }], CancellationToken.None));
+            () => Svc<IDeletionRepository>().PurgeFieldsAsync([Target], CancellationToken.None));
         await purge.Should().ThrowAsync<InvalidOperationException>().WithMessage("*批次寫入被拒（PurgeFields）*Derived*");
 
         Db.Context.ChangeTracker.Clear();

@@ -24,7 +24,7 @@ public class ModuleRemover(
         var taskFiles = await tasks.ListAttachmentKeysByModuleAsync(moduleId, ct);
         // 規則的健康列沒有外鍵，在規則隨模組清除之前一起刪，暫停事件結案（維運設計 §17.2.7）
         await rulePause.RulesDeletedAsync((await taskRules.ListByModuleAsync(moduleId, ct)).Select(r => r.Id).ToList(), ct);
-        await deletion.PurgeModuleAsync(module, ct);
+        await deletion.PurgeModuleAsync(moduleId, ct);
         // 轉換定義對來源、目標模組的外鍵是 Restrict；走到這裡代表盤點已確認沒有應用程式外的引用，定義一起移除
         foreach (var c in await conversions.ListTouchingAsync(moduleId, ct))
             conversions.Remove(c);

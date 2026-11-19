@@ -30,6 +30,7 @@ public abstract class AuthorizationBoundaryTestBase : DesignerTestBase
     {
         services.AddTransient<IRequestHandler<ForgotToDeclareRequest, ServiceResult>, ForgotToDeclareHandler>();
         services.AddTransient<IRequestHandler<CleanupProbeRequest, ServiceResult>, CleanupProbeHandler>();
+        services.AddTransient<IRequestHandler<ForgedPurgeRequest, ServiceResult>, ForgedPurgeHandler>();
         services.AddTransient<IRequestHandler<PermissionAdminProbeRequest, ServiceResult>, PermissionAdminProbeHandler>();
         services.AddTransient<IRequestHandler<SystemAdminProbeRequest, ServiceResult>, SystemAdminProbeHandler>();
         services.AddTransient<IRequestHandler<ConditionalRelaxRequest, ServiceResult>, ConditionalRelaxHandler>();
@@ -147,12 +148,43 @@ public abstract class AuthorizationBoundaryTestBase : DesignerTestBase
                         db.Remove(await db.Set<FieldPermission>().SingleAsync(p => p.FieldId == r.OtherFieldId && p.GroupId == r.GroupId, ct));
                         break;
                     case CleanupMode.PurgeWithoutDeletingField:
-                        var field = await db.Set<Field>().AsNoTracking().Include(f => f.Options).SingleAsync(f => f.Id == r.TargetFieldId, ct);
-                        await deletion.PurgeFieldsAsync([field], ct);
+                        await deletion.PurgeFieldsAsync([r.TargetFieldId], ct);
                         break;
                 }
                 await db.SaveChangesAsync(ct);
             }, ct);
+            return ServiceResult.Success();
+        }
+    }
+
+    public enum ForgedPurgeMode { ModuleWithSystemCode, FieldWithOtherOptions }
+
+    /// <summary>
+    /// §25 審查修正：Cleanup 目標合法、回呼最後真的刪掉目標（結束檢查會通過）。修正前批次入口吃呼叫端的物件，
+    /// 夾帶 <c>SYS00001</c> 或旁邊欄位的選項就能越界刪；現在入口只收 ID、program 代碼與選項由資料庫推導，沒有可夾帶的參數。
+    /// </summary>
+    public sealed record ForgedPurgeRequest(long ModuleId, long TargetFieldId, long OtherFieldId, ForgedPurgeMode Mode) : IRequest<ServiceResult>, ITransactionalRequest;
+
+    public sealed class ForgedPurgeHandler(DynamicDbContext db, IDeletionRepository deletion) : IRequestHandler<ForgedPurgeRequest, ServiceResult>
+    {
+        public async Task<ServiceResult> Handle(ForgedPurgeRequest r, CancellationToken ct)
+        {
+            if (r.Mode == ForgedPurgeMode.ModuleWithSystemCode)
+                await deletion.RunCleanupAsync(CleanupTarget.Module(r.ModuleId), async () =>
+                {
+                    var module = await db.Set<Module>().Include(m => m.Blocks).ThenInclude(b => b.Fields).ThenInclude(f => f.Options)
+                        .SingleAsync(m => m.Id == r.ModuleId, ct);
+                    await deletion.PurgeModuleAsync(module.Id, ct);
+                    db.Remove(module);
+                    await db.SaveChangesAsync(ct);
+                }, ct);
+            else
+                await deletion.RunCleanupAsync(CleanupTarget.Fields([r.TargetFieldId]), async () =>
+                {
+                    await deletion.PurgeFieldsAsync([r.TargetFieldId], ct);
+                    db.Remove(await db.Set<Field>().Include(f => f.Options).SingleAsync(f => f.Id == r.TargetFieldId, ct));
+                    await db.SaveChangesAsync(ct);
+                }, ct);
             return ServiceResult.Success();
         }
     }

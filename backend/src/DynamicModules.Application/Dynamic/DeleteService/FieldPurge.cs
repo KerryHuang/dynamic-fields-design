@@ -34,7 +34,7 @@ internal static class FieldPurge
         }
         await uow.CommitAsync(ct);
 
-        await deletion.PurgeFieldsAsync(fields, ct);
+        await deletion.PurgeFieldsAsync(fields.Select(f => f.Id).ToList(), ct);
         foreach (var block in module.Blocks.Where(b => blockIds.Contains(b.Id)).ToList()) module.Blocks.Remove(block);
         foreach (var block in module.Blocks)
             foreach (var field in block.Fields.Where(f => fieldIds.Contains(f.Id)).ToList()) block.Fields.Remove(field);

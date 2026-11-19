@@ -98,9 +98,12 @@ public static class AuthorizationWriteScope
 
     /// <summary>
     /// 批次入口第一個寫入前呼叫：目前的許可准許這個入口與目標才放行，否則丟例外。
-    /// <paramref name="moduleIds"/>、<paramref name="fieldIds"/> 是這次要清的目標（Cleanup 檢查都在許可參數內）。
+    /// <paramref name="moduleIds"/>、<paramref name="fieldIds"/> 是這次要清的目標；<paramref name="programCodes"/>、<paramref name="optionIds"/> 是批次入口依目標 ID 從資料庫推導、實際要刪的值。
+    /// Cleanup 檢查四者都在許可參數內。
     /// </summary>
-    public static void Demand(AuthorizationBatchEntry entry, IReadOnlyCollection<long>? moduleIds = null, IReadOnlyCollection<long>? fieldIds = null)
+    public static void Demand(
+        AuthorizationBatchEntry entry, IReadOnlyCollection<long>? moduleIds = null, IReadOnlyCollection<long>? fieldIds = null,
+        IReadOnlyCollection<string>? programCodes = null, IReadOnlyCollection<long>? optionIds = null)
     {
         var permit = Current ?? throw Denied(entry, "沒有寫入許可");
         var ok = permit.Kind switch
@@ -109,8 +112,10 @@ public static class AuthorizationWriteScope
             AuthorizationPermitKind.Authorized => entry is AuthorizationBatchEntry.ReplaceModuleRows or AuthorizationBatchEntry.ReplaceActionScopes,
             AuthorizationPermitKind.Cleanup => entry switch
             {
-                AuthorizationBatchEntry.PurgeModule => moduleIds is not null && moduleIds.All(permit.ModuleIds.Contains),
-                AuthorizationBatchEntry.PurgeFields => fieldIds is not null && fieldIds.All(permit.FieldIds.Contains),
+                AuthorizationBatchEntry.PurgeModule => moduleIds is not null && moduleIds.All(permit.ModuleIds.Contains)
+                    && (programCodes ?? []).All(permit.ProgramCodes.Contains),
+                AuthorizationBatchEntry.PurgeFields => fieldIds is not null && fieldIds.All(permit.FieldIds.Contains)
+                    && (optionIds ?? []).All(permit.OptionIds.Contains),
                 _ => false,
             },
             _ => false,
