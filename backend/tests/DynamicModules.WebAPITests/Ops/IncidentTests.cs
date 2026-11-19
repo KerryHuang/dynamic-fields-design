@@ -225,12 +225,16 @@ public class IncidentTests
         samples.Select(s => s.AuditLogId).Should().Equal(audits.Select(a => (long?)a.Id));
         audits.Select(a => a.TargetId).Should().Equal("sales01", "sales02");
         samples.Should().OnlyContain(s => s.RawMessage == null && s.UserId == "admin");
+        (await AlertKit.Outbox(app)).Select(r => (r.IncidentId, r.Transition)).Should().Equal(
+            (incident.Id, AlertTransition.Opened), (incident.Id, AlertTransition.Occurred));
     }
 
     [Fact]
     public async Task B09_SensitiveText_KeptInSampleOnly_NotInIncidentOrNotification()
     {
-        using var app = new OpsTestApp();
+        var mail = new FakeMailSender();
+        using var app = new OpsTestApp { ExtraServices = s => AlertKit.UseFakeMail(s, mail) };
+        await AlertKit.Configure(app);
         const string message = "客戶 王小明 token=abc123 fwp_0123456789abcdef 無法出貨";
         (await app.AsUser().GetAsync($"/api/v3/dynamic/test-ops/throw?message={Uri.EscapeDataString(message)}")).StatusCode
             .Should().Be(HttpStatusCode.InternalServerError);
@@ -241,10 +245,12 @@ public class IncidentTests
         incident.NormalizedMessage.Should().NotContain("abc123").And.NotContain("fwp_0123");
         var notes = await Notifications(app);
         notes.Should().NotBeEmpty();
-        foreach (var n in notes)
-            foreach (var text in new[] { n.TitleSnapshot, n.DataJson ?? "" })
-                foreach (var secret in new[] { "王小明", "abc123", "fwp_", "無法出貨" })
-                    text.Should().NotContain(secret);
+        var row = (await AlertKit.Outbox(app)).Should().ContainSingle().Subject;
+        await AlertKit.Dispatch(app);
+        mail.Sent.Should().ContainSingle();
+        foreach (var text in notes.SelectMany(n => new[] { n.TitleSnapshot, n.DataJson ?? "" }).Concat([row.Subject, row.Body, mail.Sent[0].Body]))
+            foreach (var secret in new[] { "王小明", "abc123", "fwp_", "無法出貨" })
+                text.Should().NotContain(secret);
     }
 
     [Fact]

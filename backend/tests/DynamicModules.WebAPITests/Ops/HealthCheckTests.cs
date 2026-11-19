@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Application.Dynamic.OpsService.Health;
 using DynamicModules.Application.Dynamic.OpsService.Incidents;
 using DynamicModules.Application.Dynamic.OpsService.Scheduling;
@@ -22,9 +23,18 @@ public class HealthCheckTests
 {
     private const string Disk = HealthCheckCatalog.StorageDiskFree, Writable = HealthCheckCatalog.DatabaseWritable;
 
-    private static TestApp App(FakeDiskSpace disk, ReadOnlySwitch? readOnly = null, bool noLock = false, bool fileDatabase = false)
+    private static TestApp App(FakeDiskSpace disk, ReadOnlySwitch? readOnly = null, bool noLock = false, bool fileDatabase = false,
+        FakeMailSender? mail = null)
     {
-        var app = new TestApp(fileDatabase: fileDatabase) { WithoutWriteSerialization = noLock, ExtraServices = s => FakeDisk(s, disk) };
+        var app = new TestApp(fileDatabase: fileDatabase)
+        {
+            WithoutWriteSerialization = noLock,
+            ExtraServices = s =>
+            {
+                FakeDisk(s, disk);
+                if (mail is not null) AlertKit.UseFakeMail(s, mail);
+            },
+        };
         if (readOnly is not null) app.Interceptors.Add(readOnly);
         return app;
     }
@@ -64,6 +74,7 @@ public class HealthCheckTests
         board.MessageCode.Should().Be("readOnly");
         Engine(app).PendingCount.Should().BeGreaterThan(0);
         (await HealthIncident(app, Writable)).Should().BeNull("資料庫寫不進去，事件留在待補寫");
+        app.Services.GetRequiredService<DirectAlertQueue>().PendingTransitionIds().Should().ContainSingle("資料庫可寫的開啟改由直送");
         var overview = await app.AsUser().GetFromJsonAsync<JsonElement>($"{Base}/overview");
         overview.GetProperty("memoryOnly").GetBoolean().Should().BeTrue();
         overview.GetProperty("checks").EnumerateArray().Single(c => c.GetProperty("code").GetString() == Writable)
@@ -232,14 +243,19 @@ public class HealthCheckTests
     {
         var readOnly = new ReadOnlySwitch();
         var disk = new FakeDiskSpace();
-        using var app = App(disk, readOnly);
+        var mail = new FakeMailSender();
+        using var app = App(disk, readOnly, mail: mail);
+        await AlertKit.Configure(app);
         await Tick(app);
         readOnly.On = true;
         foreach (var free in new[] { 15, 5, 30 })
         {
             disk.FreePercent = free;
             await Tick(app);
+            // 第一輪（警告）之後直送一次：磁碟開啟、資料庫可寫開啟寄出；升級信還沒寄就回到正常（過時）
+            if (free == 15) await Watchdog(app).SendDirectAsync(CancellationToken.None);
         }
+        mail.Sent.Should().HaveCount(2);
         Engine(app).PendingSnapshot().Where(o => o.Code == Disk).Select(o => o.Status)
             .Should().Equal(HealthStatus.Warning, HealthStatus.Critical, HealthStatus.Ok);
 
@@ -255,6 +271,12 @@ public class HealthCheckTests
         incident.OccurrenceCount.Should().Be(2);
         // 磁碟：開啟、升級各一組；資料庫可寫：開啟一組
         (await Notifications(app)).Should().HaveCount(3 * await AdminCount(app));
+        var outbox = await AlertKit.Outbox(app);
+        outbox.Where(r => r.IncidentId == incident.Id).Select(r => (r.Transition, r.Status)).Should().Equal(
+            (AlertTransition.Opened, AlertOutboxStatus.SentDirect), (AlertTransition.Escalated, AlertOutboxStatus.Skipped));
+        outbox.Where(r => r.IncidentId != incident.Id).Select(r => (r.Transition, r.Status)).Should().Equal((AlertTransition.Opened, AlertOutboxStatus.SentDirect));
+        await AlertKit.Dispatch(app);
+        mail.Sent.Should().HaveCount(2, "直送過的與過時的都不再寄");
     }
 
     [Theory]
