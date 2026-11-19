@@ -75,8 +75,20 @@ describe('OpsPage', () => {
   it('審查修正 3：overview 成功、事件查詢失敗（500）顯示載入失敗，不顯示「沒有符合的事件」', async () => {
     const { w } = await mountPage('/system/ops?tab=incidents', { incidentsFail: new HttpFail(500, { message: 'boom' }) });
     expect(q('ops-tabs')).not.toBeNull();
-    expect(q('incident-load-failed')).not.toBeNull();
+    expect(q('incident-table')!.textContent).toContain('載入失敗');
     expect(q('incident-table')!.textContent).not.toContain('沒有符合的事件');
+    expect(q('incident-load-failed')).toBeNull();
+    w.unmount();
+  });
+
+  it('審查修正 3：已有事件時「載入更多」失敗，清單保留並另出載入失敗橫幅', async () => {
+    const opts: Opts = { pages: [{ items: [incident()], nextCursor: '1' }] };
+    const { w } = await mountPage('/system/ops?tab=incidents', opts);
+    opts.incidentsFail = new HttpFail(500, { message: 'boom' });
+    q('incident-more')!.click();
+    await flushPromises();
+    expect(q('incident-row-7')).not.toBeNull();
+    expect(q('incident-load-failed')).not.toBeNull();
     w.unmount();
   });
 
