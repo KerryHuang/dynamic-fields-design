@@ -6,6 +6,9 @@ namespace DynamicModules.Domain.Policies;
 /// <summary>政策範圍：只限全系統，或全系統預設＋可模組覆寫。</summary>
 public enum PolicyScope { System, Module }
 
+/// <summary>模組覆寫適用哪種模組：一般模組、明細模組或兩者（System 範圍的政策用不到）。</summary>
+public enum PolicyModuleTarget { Main, Detail, Any }
+
 /// <summary>政策值的型別；值一律以標準字串存放，由型別解析。</summary>
 public enum PolicyKind { Integer, Boolean, Choice, RoleSet, CodeList, Recipients }
 
@@ -17,6 +20,7 @@ public enum PolicyKind { Integer, Boolean, Choice, RoleSet, CodeList, Recipients
 /// <see cref="Forbidden"/> 是 CodeList 的寫死黑名單（安全檢查）：含黑名單項目的值一律不合法。
 /// <see cref="DynamicRecipients"/> 是 Recipients 另外允許的動態項目（維運設計 §17.2.5、O2-T15；例如 <c>ruleEditor</c>＝該規則的最後修改者），
 /// 沒列的政策收到這些項目一律不合法。
+/// <see cref="Target"/> 是模組覆寫適用的模組種類：模組政策清單只列適用的項目，不適用的不能覆寫。
 /// </summary>
 public sealed partial record PolicyDefinition(
     string Code,
@@ -29,12 +33,17 @@ public sealed partial record PolicyDefinition(
     IReadOnlyList<string>? Options = null,
     string? Unit = null,
     IReadOnlyList<string>? Forbidden = null,
-    IReadOnlyList<string>? DynamicRecipients = null)
+    IReadOnlyList<string>? DynamicRecipients = null,
+    PolicyModuleTarget Target = PolicyModuleTarget.Main)
 {
     /// <summary>收件人政策的動態項目：該規則的最後修改者（沒有就建立者；停用的略過）。</summary>
     public const string RuleEditor = "ruleEditor";
 
     public string SettingKey => $"policy.{Code}";
+
+    /// <summary>這個政策的模組覆寫是否適用於這種模組（明細模組或一般模組）。</summary>
+    public bool AppliesTo(bool isDetailModule) =>
+        Target == PolicyModuleTarget.Any || (Target == PolicyModuleTarget.Detail) == isDetailModule;
 
     /// <summary>合法就回標準字串，否則 null。</summary>
     public string? Normalize(string? raw)
