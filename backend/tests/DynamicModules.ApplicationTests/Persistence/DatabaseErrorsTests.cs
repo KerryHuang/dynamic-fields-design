@@ -152,6 +152,13 @@ public class DatabaseErrorsTests
         Classify(new Npgsql.NpgsqlException("連不到主機", new SocketException((int)SocketError.ConnectionRefused))).Should().Be(Kind.Unavailable);
         Classify(new Npgsql.NpgsqlException("讀取中斷", new IOException("x", new SocketException()))).Should().Be(Kind.Unavailable);
         Classify(Wrapped(new Npgsql.NpgsqlException("x", new SocketException()))).Should().Be(Kind.Unavailable);
+        // o2b 實測的真斷線形狀（設計 §17.12）：硬殺伺服器時內層是 EndOfStreamException；EF 把拒絕連線再包一層 InvalidOperationException
+        Classify(new Npgsql.NpgsqlException("讀取中斷", new EndOfStreamException())).Should().Be(Kind.Unavailable);
+        Classify(new InvalidOperationException("transient", new Npgsql.NpgsqlException(null, new SocketException((int)SocketError.ConnectionRefused))))
+            .Should().Be(Kind.Unavailable);
+        // 主機名解析失敗：Npgsql 直接丟裸的 SocketException；其他 socket 錯誤（不是連資料庫）不歸資料庫
+        Classify(new SocketException((int)SocketError.HostNotFound)).Should().Be(Kind.Unavailable);
+        Classify(new SocketException((int)SocketError.ConnectionReset)).Should().Be(Kind.None);
         // 連線池耗盡：不帶 SQLSTATE、內層 TimeoutException，仍是忙碌、不是連不上
         Classify(new Npgsql.NpgsqlException("池滿", new TimeoutException())).Should().Be(Kind.Busy);
         Classify(new FakePgException(null)).Should().Be(Kind.None);

@@ -153,6 +153,9 @@ public class TestApp : WebApplicationFactory<Program>
     /// </summary>
     internal bool WithoutWriteSerialization { get; init; }
 
+    /// <summary>額外的 EF 攔截器（例如模擬資料庫唯讀、提交後丟例外）；須在 host 啟動前加入。</summary>
+    internal List<Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor> Interceptors { get; } = [];
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Dynamic", _connectionString);
@@ -201,7 +204,7 @@ public class TestApp : WebApplicationFactory<Program>
                 s.RemoveAll<PostgresWriteSettings>();
                 s.AddSingleton(PostgresWriteSettings.Unserialized());
             }
-            AddWriteGuard(s);
+            AddWriteGuard(s, Interceptors);
             ExtraServices?.Invoke(s);
         });
     }
@@ -210,13 +213,13 @@ public class TestApp : WebApplicationFactory<Program>
     /// 在 Program 註冊的 DbContext 選項上疊加測試期寫入守衛（PostgreSQL provider 設計 §5.4）。
     /// EF Core 8 沒有事後追加選項的 API，只能把既有的選項註冊包一層，原本的設定（連線字串、mmap 攔截器）照舊。
     /// </summary>
-    private static void AddWriteGuard(IServiceCollection services)
+    private static void AddWriteGuard(IServiceCollection services, IReadOnlyList<Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor> extra)
     {
         var original = services.Single(d => d.ServiceType == typeof(DbContextOptions<DynamicDbContext>));
         services.Remove(original);
         services.Add(new ServiceDescriptor(typeof(DbContextOptions<DynamicDbContext>), sp =>
             new DbContextOptionsBuilder<DynamicDbContext>((DbContextOptions<DynamicDbContext>)original.ImplementationFactory!(sp))
-                .AddInterceptors(WriteGuardInterceptor.Instance)
+                .AddInterceptors([WriteGuardInterceptor.Instance, .. extra])
                 .Options, original.Lifetime));
     }
 

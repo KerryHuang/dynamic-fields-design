@@ -22,6 +22,10 @@ public class OpsTestController(ILogger<OpsTestController> logger) : ControllerBa
         return Ok();
     }
 
+    /// <summary>丟一個未處理例外，訊息由呼叫端給（o2b 事件測試）。</summary>
+    [HttpGet("throw")]
+    public IActionResult Throw([FromQuery] string message) => throw new InvalidOperationException(message);
+
     [HttpGet("bad-request")]
     public IActionResult Bad() => throw new Microsoft.AspNetCore.Http.BadHttpRequestException("x", 413);
 }

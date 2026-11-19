@@ -110,11 +110,13 @@ public sealed class IncidentInboxDrain(IncidentInbox inbox, IServiceScopeFactory
 /// <summary>寫一個事件訊號（交易內呼叫 <see cref="IncidentRecorder"/>）。</summary>
 public sealed record RecordIncidentSignalRequest(IncidentSignal Signal) : IRequest<ServiceResult>, ITransactionalRequest;
 
+public sealed record IncidentRecordResult(IncidentTransition Transition, long? IncidentId);
+
 public sealed class RecordIncidentSignalHandler(IncidentRecorder recorder) : IRequestHandler<RecordIncidentSignalRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(RecordIncidentSignalRequest request, CancellationToken ct)
     {
         var (transition, id) = await recorder.RecordAsync(request.Signal, ct);
-        return ServiceResult.Success(new { transition, id });
+        return ServiceResult.Success(new IncidentRecordResult(transition, id));
     }
 }
