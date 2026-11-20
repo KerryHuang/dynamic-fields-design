@@ -86,19 +86,21 @@ const addSwap = () => patch({ swap: [...draft.value.swap, [null, null]] });
 const removeSwap = (i: number) => patch({ swap: draft.value.swap.filter((_, j) => j !== i) });
 
 // ---- create the reversal field ----
+// 目標模組與區塊在點擊時快照：等語系文字期間元件可能被重用到另一個模組，API、快取失效與草稿都只認點擊時的模組
 const addField = useDesignerMutation(
-  async () => {
+  async (target: { moduleKey: string; blockId: number }) => {
     // 標籤帶每個已安裝語系（含未啟用，M3），不論使用者用哪個語言都讀得懂。先載入各語系的文字（最多等 STARTUP_BUDGET_MS）；
     // 取不到的語系 t() 會拿到繁中，寧可空著（i4b 計畫判斷 16）
     const locales = await ensureLocaleMessages({ global: composer }, installedLocales());
     const label = Object.fromEntries(locales.map((l) => [l, t('ledger.reversalFieldLabel', {}, { locale: l })])) as I18nText;
-    return dynamicApi.addField(key.value, newReversalField(props.module.blocks[0]!.id, key.value, label));
+    return dynamicApi.addField(target.moduleKey, newReversalField(target.blockId, target.moduleKey, label));
   },
-  () => key.value,
+  (target) => target.moduleKey,
 );
 function createReversalField() {
-  addField.mutate(undefined, {
-    onSuccess: (f) => patch({ reversalFieldId: f.id }),
+  const target = { moduleKey: key.value, blockId: props.module.blocks[0]!.id };
+  addField.mutate(target, {
+    onSuccess: (f) => { if (key.value === target.moduleKey) patch({ reversalFieldId: f.id }); },
     onError: (e) => $q.notify({ type: 'negative', message: (e as unknown as ApiError).message ?? t('designer.saveFailed') }),
   });
 }

@@ -178,6 +178,28 @@ describe('LedgerTab', () => {
     });
   });
 
+  it('等語系文字期間換到另一個模組：欄位仍建在點擊時的模組，不改新模組的草稿（i4b 修正輪 1）', async () => {
+    api.addField.mockResolvedValue(field(9, 'reference', self));
+    const pending: (() => void)[] = [];
+    api.getUiMessages.mockImplementation((code) => new Promise((r) => { pending.push(() => r({ hash: code, messages: {} })); }));
+    const release = () => pending.forEach((f) => f());
+    const w = await mountTab(mod({}, [field(1, 'text'), field(2, 'decimal')]), null);
+    await pick(w, 'ledger-enable', true);
+    await w.find('[data-testid="ledger-create-reversal"]').trigger('click');
+    await flushPromises();
+    const other = mod({ id: 2, key: 'other', blocks: [{ id: 70, label: { 'zh-TW': 'b' }, sequence: 1, collapsed: false, columns: 2, fields: [field(1, 'text'), field(2, 'decimal')] }] });
+    await w.setProps({ module: other });
+    await flushPromises();
+    release();
+    await flushPromises();
+    expect(api.addField).toHaveBeenCalledTimes(1);
+    expect(api.addField.mock.calls[0]![0]).toBe('journal');
+    expect(api.addField.mock.calls[0]![1]).toMatchObject({ blockId: 7, config: expect.objectContaining({ refTarget: { kind: 'module', key: 'journal' } }) });
+    // 新模組的草稿沒被填上 A 的欄位
+    await pick(w, 'ledger-enable', true);
+    expect(comp(w, 'ledger-reversal-field').props('modelValue')).toBeNull();
+  });
+
   it('pairs swap fields of the same type only', async () => {
     api.putLedger.mockResolvedValue(saved());
     const w = await mountTab(mod({}, [field(2, 'decimal'), field(3, 'decimal'), field(5, 'integer'), field(4, 'reference', self)]), null);
