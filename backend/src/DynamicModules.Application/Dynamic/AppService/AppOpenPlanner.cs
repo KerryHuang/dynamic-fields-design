@@ -18,7 +18,7 @@ public sealed partial class AppOpenPlanner(
     AppPackageSource packages, IAppRepository apps, IModuleRepository modules, IPermissionRepository permissions,
     IAccountRepository accounts, AppDependencyChecker dependencies, IConversionRepository conversions,
     IEventRepository events, ICheckRepository checks, SharedMasters.MasterSymbols symbols, SharedMasters.ContributionOrphans orphans,
-    IApprovalFlowRepository approvalFlows, PackageLimitReader limits)
+    IApprovalFlowRepository approvalFlows, PackageLimitReader limits, Common.RequestLocale requestLocale)
 {
     [GeneratedRegex(ModuleRules.ModuleKeyPattern)]
     private static partial Regex ModuleKey();
@@ -118,8 +118,9 @@ public sealed partial class AppOpenPlanner(
                     else errors.Add($"groupMap.{code}: 對應的群組不存在");
                     break;
                 case "create":
-                    if (await accounts.GroupNameExistsAsync(body.Locale, group.Name.Resolve(body.Locale).Trim(), null, ct))
-                        errors.Add($"groupMap.{code}: 已有同名的群組「{group.Name.Resolve(body.Locale)}」");
+                    var locale = requestLocale.For(body.Locale).Locale;
+                    if (await accounts.GroupNameExistsAsync(locale, group.Name.Resolve(locale).Trim(), null, ct))
+                        errors.Add($"groupMap.{code}: 已有同名的群組「{group.Name.Resolve(locale)}」");
                     break;
                 case "skip":
                     break;

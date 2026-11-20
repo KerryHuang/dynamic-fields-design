@@ -51,20 +51,20 @@ public class ReportsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> ShareTargets() => (await mediator.Send(new GetReportShareTargetsRequest())).ToActionResult(this);
 
     [HttpGet("catalog")]
-    public async Task<IActionResult> Catalog([FromQuery] string locale = "zh-TW") =>
+    public async Task<IActionResult> Catalog([FromQuery] string? locale = null) =>
         (await mediator.Send(new GetReportMainModulesRequest(locale))).ToActionResult(this);
 
     [HttpGet("catalog/{moduleKey}")]
-    public async Task<IActionResult> ModuleCatalog(string moduleKey, [FromQuery] string locale = "zh-TW") =>
+    public async Task<IActionResult> ModuleCatalog(string moduleKey, [FromQuery] string? locale = null) =>
         (await mediator.Send(new GetReportCatalogRequest(moduleKey, locale))).ToActionResult(this);
 
     /// <summary>系統資料來源（任務、任務事件）；不併進 catalog，現在的設計器拿 catalog 當主模組選單（J11）。</summary>
     [HttpGet("datasets")]
-    public async Task<IActionResult> Datasets([FromQuery] string locale = "zh-TW") =>
+    public async Task<IActionResult> Datasets([FromQuery] string? locale = null) =>
         (await mediator.Send(new GetReportDatasetsRequest(locale))).ToActionResult(this);
 
     [HttpGet("datasets/{dataset}/catalog")]
-    public async Task<IActionResult> DatasetCatalog(string dataset, [FromQuery] string locale = "zh-TW") =>
+    public async Task<IActionResult> DatasetCatalog(string dataset, [FromQuery] string? locale = null) =>
         (await mediator.Send(new GetReportDatasetCatalogRequest(dataset, locale))).ToActionResult(this);
 
     [HttpGet("{id:long}")]
@@ -95,24 +95,24 @@ public class ReportsController(IMediator mediator) : ControllerBase
             : (await mediator.Send(new SetReportSharesRequest(id, body.GroupIds))).ToActionResult(this);
 
     [HttpPost("{id:long}/run")]
-    public async Task<IActionResult> Run(long id, RunBody body, [FromQuery] string locale = "zh-TW") =>
+    public async Task<IActionResult> Run(long id, RunBody body, [FromQuery] string? locale = null) =>
         (await mediator.Send(new RunReportRequest(id, body.Range, locale, body.DepartmentIds, body.IncludeSubDepartments ?? true))).ToActionResult(this);
 
     [HttpPost("preview")]
-    public async Task<IActionResult> Preview(JsonElement? body, [FromQuery] string locale = "zh-TW") =>
+    public async Task<IActionResult> Preview(JsonElement? body, [FromQuery] string? locale = null) =>
         ParseDefinition(body) is not { } d
             ? Bad("definition", "報表定義格式錯誤")
             : (await mediator.Send(new PreviewReportRequest(d, locale))).ToActionResult(this);
 
     [HttpPost("{id:long}/drill")]
-    public async Task<IActionResult> Drill(long id, DrillBody body, [FromQuery] string locale = "zh-TW") =>
+    public async Task<IActionResult> Drill(long id, DrillBody body, [FromQuery] string? locale = null) =>
         body.GroupKeys is null
             ? Bad("groupKeys", "必填")
             : (await mediator.Send(new DrillReportRequest(id, body.GroupKeys, body.Range, locale, body.DepartmentIds, body.IncludeSubDepartments ?? true))).ToActionResult(this);
 
     /// <summary>匯出帶報表頁目前的暫時篩選：rangeKind／rangeN、departmentIds（可重複）、includeSubDepartments（預設 true）。</summary>
     [HttpGet("{id:long}/export")]
-    public async Task<IActionResult> Export(long id, [FromQuery] string locale = "zh-TW", [FromQuery] string? rangeKind = null,
+    public async Task<IActionResult> Export(long id, [FromQuery] string? locale = null, [FromQuery] string? rangeKind = null,
         [FromQuery] int? rangeN = null, [FromQuery] List<long>? departmentIds = null, [FromQuery] bool includeSubDepartments = true)
     {
         // 只給 rangeN 不給 rangeKind 是呼叫端的錯，明確回 400，不靜默忽略

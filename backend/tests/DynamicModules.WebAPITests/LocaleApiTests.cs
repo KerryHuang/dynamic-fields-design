@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.WebAPI.Security;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -12,7 +13,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests;
 
-/// <summary>X-Locale 標頭決定後端訊息的語系（缺值或不認得退回繁中）；併發衝突與分錄凍結確認另帶 code 讓前端判斷。</summary>
+/// <summary>X-Locale 標頭決定後端訊息的語系（缺值、不認得或停用時退回預設語系，出廠繁中）；併發衝突與分錄凍結確認另帶 code 讓前端判斷。</summary>
 public class LocaleApiTests
 {
     private const string Auth = "/api/v3/dynamic/auth";
@@ -29,12 +30,33 @@ public class LocaleApiTests
     {
         var ctx = new DefaultHttpContext();
         if (header is not null) ctx.Request.Headers["X-Locale"] = header;
-        new HeaderCurrentLocale(new HttpContextAccessor { HttpContext = ctx }).Locale.Should().Be(expected);
+        new HeaderCurrentLocale(new HttpContextAccessor { HttpContext = ctx }, FactoryPolicy()).Locale.Should().Be(expected);
     }
 
     [Fact]
     public void Without_a_request_the_locale_is_zh_TW() =>
-        new HeaderCurrentLocale(new HttpContextAccessor()).Locale.Should().Be("zh-TW");
+        new HeaderCurrentLocale(new HttpContextAccessor(), FactoryPolicy()).Locale.Should().Be("zh-TW");
+
+    /// <summary>沒載入過的快照＝出廠值（預設繁中、四語啟用）。</summary>
+    private static CachedSystemPolicy FactoryPolicy() =>
+        new(new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), TimeProvider.System,
+            PolicyEnvironmentDefaults.Empty, Microsoft.Extensions.Logging.Abstractions.NullLogger<CachedSystemPolicy>.Instance);
+
+    [Fact]
+    public async Task DisabledLocaleHeader_FallsBackToDefault()
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        (await admin.PutAsJsonAsync($"{Base}/system/policies/locale.default", new { value = "en-US" })).EnsureSuccessStatusCode();
+        (await admin.PutAsJsonAsync($"{Base}/system/policies/locale.enabled", new { value = new[] { "zh-TW", "en-US" } })).EnsureSuccessStatusCode();
+        async Task<string> NotFound(string? locale) =>
+            (await JsonOf(await admin.SendAsync(Req(HttpMethod.Get, $"{Base}/modules/nope-{Guid.NewGuid():N}"[..40], null, locale))))
+                .GetProperty("message").GetString()!;
+        var english = await NotFound("en-US");
+        english.Should().NotBe(await NotFound("zh-TW"));
+        (await NotFound("th")).Should().Be(english);
+        (await NotFound(null)).Should().Be(english);
+    }
 
     private static HttpRequestMessage Req(HttpMethod method, string url, object? body, string? locale)
     {

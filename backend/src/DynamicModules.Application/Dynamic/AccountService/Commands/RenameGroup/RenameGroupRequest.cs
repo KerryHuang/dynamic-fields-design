@@ -5,7 +5,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.RenameGroup;
 
-public record RenameGroupRequest(long GroupId, string Name, string Locale) : IRequest<ServiceResult>, ITransactionalRequest, ISystemAdminRequest, IAuditedRequest
+public record RenameGroupRequest(long GroupId, string Name, string? Locale) : IRequest<ServiceResult>, ITransactionalRequest, ISystemAdminRequest, IAuditedRequest
 {
     public AuditAction Audit => AuditAction.For("group.rename", AuditTargets.Group, GroupId, Name);
 }

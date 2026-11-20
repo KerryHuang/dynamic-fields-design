@@ -71,7 +71,7 @@ public record MasterPreview(string Id, I18nText Name, string Action, IReadOnlyLi
 
 /// <summary>
 /// 開啟請求的內容。ModuleKeys：模組代號 → 新的 Module.Key；GroupMap：群組代號 → 對應方式；
-/// Locale：建立群組時用的語系，預設 zh-TW；Masters：要自動開啟的共用主檔 id → 它的群組對應（沒列的群組略過，同 GroupMap）。
+/// Locale：建立群組時用的語系，沒給時用請求語系（RequestLocale.For；D4）；Masters：要自動開啟的共用主檔 id → 它的群組對應（沒列的群組略過，同 GroupMap）。
 /// </summary>
 public record OpenAppBody(
     Dictionary<string, string>? ModuleKeys, List<string>? ExcludeFields, Dictionary<string, GroupMapEntry>? GroupMap, string? Locale,
@@ -81,7 +81,6 @@ public record OpenAppBody(
     public Dictionary<string, string> ModuleKeys { get; init; } = ModuleKeys ?? [];
     public List<string> ExcludeFields { get; init; } = ExcludeFields ?? [];
     public Dictionary<string, GroupMapEntry> GroupMap { get; init; } = GroupMap ?? [];
-    public string Locale { get; init; } = Locale ?? I18nText.FallbackLocale;
 }
 
 /// <summary>Mode：map（GroupId 必填）、create、skip。</summary>

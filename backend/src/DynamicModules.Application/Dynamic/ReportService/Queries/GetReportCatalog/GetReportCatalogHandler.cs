@@ -28,7 +28,7 @@ public record ModuleCatalog(List<CatalogField> Fields, List<CatalogVia> Via, Lis
 /// 設計器的欄位目錄：只列觀看者看得到、存檔也不會被 <see cref="Data.ReportRules"/> 拒絕的欄位
 /// （非彙總類、帶出欄位不再是參照、參照目標可讀）。
 /// </summary>
-public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGuard guard)
+public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGuard guard, RequestLocale requestLocale)
     : IRequestHandler<GetReportCatalogRequest, ServiceResult>
 {
     private sealed record Side(Module Module, EffectivePermissions Perms);
@@ -41,7 +41,8 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
         var access = await guard.AuthorizeAsync(main, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms) return access.Denied!;
 
-        var locale = request.Locale;
+        var lc = requestLocale.For(request.Locale);
+        var locale = lc.Locale;
         var targets = new Dictionary<string, Side?>();
         async Task<Side?> TargetAsync(string key)
         {

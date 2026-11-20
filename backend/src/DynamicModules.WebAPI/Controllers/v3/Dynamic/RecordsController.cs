@@ -54,7 +54,7 @@ public class RecordsController(IMediator mediator) : ControllerBase
 
     [HttpGet("records/{id:long}/history")]
     public async Task<IActionResult> History(
-        long id, [FromQuery] int currentPage = 1, [FromQuery] int pagesSize = 20, [FromQuery] string locale = "zh-TW") =>
+        long id, [FromQuery] int currentPage = 1, [FromQuery] int pagesSize = 20, [FromQuery] string? locale = null) =>
         (await mediator.Send(new GetRecordHistoryRequest(id, currentPage, pagesSize, locale))).ToActionResult(this);
 
     [HttpPut("records/{id:long}")]

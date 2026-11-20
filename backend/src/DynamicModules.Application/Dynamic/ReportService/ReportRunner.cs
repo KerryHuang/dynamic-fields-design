@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common;
 using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Common.Security;
@@ -27,7 +28,7 @@ public partial class ReportRunner(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IDynamicAccessGuard guard,
     ReferenceResolver resolver, FieldTypeRegistry registry, IBusinessTime time, ReportOptions options,
     AuthSettings auth, ISystemSettingRepository settings, IReportQueryRepository queries, IPolicyReader policies,
-    TaskReportSource taskReports, CachedSystemPolicy systemPolicy)
+    TaskReportSource taskReports, CachedSystemPolicy systemPolicy, RequestLocale requestLocale)
 {
     public const long EntityTitleFieldId = 0;
 
@@ -100,7 +101,9 @@ public partial class ReportRunner(
         if (o.SortKey is not null) d = d with { Sort = [new ReportSort(o.SortKey, o.SortDesc)] };
         var basis = await BasisDateAsync(ct);
         var frozen = basis != time.Today;
-        var locale = string.IsNullOrEmpty(o.Locale) ? I18nText.FallbackLocale : o.Locale;
+        // 沒指定語系用請求語系、指定了停用或不認得的用預設語系（D4）
+        var lc = requestLocale.For(o.Locale);
+        var locale = lc.Locale;
         // 同一次執行只取一次營運時區偏移
         var offset = systemPolicy.BusinessOffset;
 

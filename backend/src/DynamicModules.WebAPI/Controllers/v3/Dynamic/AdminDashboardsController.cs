@@ -66,7 +66,7 @@ public class AdminDashboardsController(IMediator mediator) : ControllerBase
 
     /// <summary>編輯版面時預覽卡片：卡片可能還沒存檔，用管理員自己的權限算，所以放在管理端而不是一般的卡片查詢。</summary>
     [HttpPost("preview-card")]
-    public async Task<IActionResult> PreviewCard(PreviewBody body, [FromQuery] string locale = "zh-TW") =>
+    public async Task<IActionResult> PreviewCard(PreviewBody body, [FromQuery] string? locale = null) =>
         body.Card is null || (object?)body.Card.Options is null
             ? DashboardsController.Bad(this, "card", "必填")
             : (await mediator.Send(new AdminPreviewCardRequest(body.Card, body.FilterRange, locale))).ToActionResult(this);

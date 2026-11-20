@@ -49,6 +49,13 @@ public class I18nTextTests
     }
 
     [Fact]
+    public void Resolve_LocaleContext_SameAsTwoArgs()
+    {
+        var t = Make(("zh-TW", "訂單"), ("en-US", "Order"));
+        t.Resolve(new LocaleContext("th", ["en-US", "zh-TW"])).Should().Be(t.Resolve("th", ["en-US", "zh-TW"])).And.Be("Order");
+    }
+
+    [Fact]
     public void HasText_MissingLocales_SameAs()
     {
         var t = Make(("zh-TW", "訂單"), ("en-US", " "));

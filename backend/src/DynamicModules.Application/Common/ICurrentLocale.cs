@@ -1,15 +1,15 @@
-using DynamicModules.Domain.ValueObjects;
+using DynamicModules.Application.Dynamic.PolicyService;
 
 namespace DynamicModules.Application.Common;
 
-/// <summary>這個請求的介面語系（WebAPI 讀 X-Locale 標頭）；一定是 <see cref="I18nText.SupportedLocales"/> 之一，缺值或不認得時是繁中。</summary>
+/// <summary>這個請求的介面語系（WebAPI 讀 X-Locale 標頭）；一定是啟用中的語系，缺值、不認得或已停用時用預設語系（政策 locale.default）。</summary>
 public interface ICurrentLocale
 {
     string Locale { get; }
 }
 
-/// <summary>沒有請求可讀的環境（背景流程、Application 測試）用的預設：固定繁中。</summary>
-public sealed class FallbackCurrentLocale : ICurrentLocale
+/// <summary>沒有請求可讀的環境（背景流程、Application 測試）用的預設：系統預設語系（政策 locale.default，出廠繁中）。</summary>
+public sealed class FallbackCurrentLocale(CachedSystemPolicy cache) : ICurrentLocale
 {
-    public string Locale => I18nText.FallbackLocale;
+    public string Locale => cache.DefaultLocale;
 }

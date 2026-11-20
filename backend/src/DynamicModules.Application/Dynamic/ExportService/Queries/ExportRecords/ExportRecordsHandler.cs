@@ -16,7 +16,8 @@ namespace DynamicModules.Application.Dynamic.ExportService.Queries.ExportRecords
 /// <summary>匯出 CSV／xlsx（決策 5）：權限 PrintExport，篩選／排序／資料範圍同列表，不分頁。</summary>
 public class ExportRecordsHandler(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, FieldTypeRegistry registry,
-    IBusinessTime time, IDynamicAccessGuard guard, ReferenceResolver resolver, ExportOptions options, PolicyService.CachedSystemPolicy policy)
+    IBusinessTime time, IDynamicAccessGuard guard, ReferenceResolver resolver, ExportOptions options, PolicyService.CachedSystemPolicy policy,
+    RequestLocale requestLocale)
     : IRequestHandler<ExportRecordsRequest, ServiceResult>
 {
     private const string CsvType = "text/csv; charset=utf-8";
@@ -48,7 +49,9 @@ public class ExportRecordsHandler(
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["filter"] = [$"匯出最多 {options.MaxRecords} 筆，請加篩選條件"] });
         var (items, _) = await records.QueryAsync(query with { Size = Math.Max(total, 1) }, ct);
 
-        var locale = string.IsNullOrEmpty(request.Locale) ? "zh-TW" : request.Locale;
+        // 沒指定語系用請求語系、指定了停用或不認得的用預設語系（D4）
+        var lc = requestLocale.For(request.Locale);
+        var locale = lc.Locale;
         var display = policy.Display(locale);
         var fields = module.Blocks.OrderBy(b => b.Sequence).ThenBy(b => b.Id)
             .SelectMany(b => b.Fields.OrderBy(f => f.Sequence).ThenBy(f => f.Id))

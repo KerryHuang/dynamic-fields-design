@@ -25,11 +25,11 @@ public class AdminGroupsController(IMediator mediator) : ControllerBase
 
     [HttpPost]
     public async Task<IActionResult> Create(NameBody body) =>
-        (await mediator.Send(new CreateGroupRequest(body.Name ?? "", body.Locale ?? "zh-TW"))).ToActionResult(this);
+        (await mediator.Send(new CreateGroupRequest(body.Name ?? "", body.Locale))).ToActionResult(this);
 
     [HttpPut("{id:long}")]
     public async Task<IActionResult> Rename(long id, NameBody body) =>
-        (await mediator.Send(new RenameGroupRequest(id, body.Name ?? "", body.Locale ?? "zh-TW"))).ToActionResult(this);
+        (await mediator.Send(new RenameGroupRequest(id, body.Name ?? "", body.Locale))).ToActionResult(this);
 
     [HttpPut("{id:long}/members")]
     public async Task<IActionResult> SetMembers(long id, MembersBody body) =>

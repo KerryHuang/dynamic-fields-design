@@ -13,7 +13,7 @@ public class ImportExportController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Export(
         string key, [FromQuery] string format = "csv", [FromQuery] string? filter = null,
         [FromQuery(Name = "sortBy")] string[]? sortBy = null, [FromQuery(Name = "sortOrder")] string[]? sortOrder = null,
-        [FromQuery] string? q = null, [FromQuery] string locale = "zh-TW")
+        [FromQuery] string? q = null, [FromQuery] string? locale = null)
     {
         // approval 取原始查詢值：預設 binder 會把純空白轉成 null 而繞過驗證（簽核設計 §13.4.1）
         var approval = Request.Query.TryGetValue("approval", out var raw) ? raw.ToString() : null;

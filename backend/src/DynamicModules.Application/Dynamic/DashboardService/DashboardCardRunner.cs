@@ -11,13 +11,16 @@ namespace DynamicModules.Application.Dynamic.DashboardService;
 /// 卡片查詢的共同流程：先驗觀看者看得到儀表板、卡片在他生效的版面內，再交給 <see cref="ReportRunner"/> 以觀看者的權限計算。
 /// 不讓人拿任意報表 id 來跑；報表定義的可見性規則見 spec §7（指派版的卡片不需要另外分享，自己的儀表板要看得到定義）。
 /// </summary>
-public class DashboardCardRunner(DashboardAccess access, ReportAccess reportAccess, IReportRepository reports, ReportRunner runner, ReportLimitReader limitReader)
+public class DashboardCardRunner(
+    DashboardAccess access, ReportAccess reportAccess, IReportRepository reports, ReportRunner runner, ReportLimitReader limitReader,
+    Common.RequestLocale requestLocale)
 {
     private const string UnsharedState = "unshared", ReportGoneState = "reportGone";
 
     public async Task<ServiceResult> RunAsync(
-        long dashboardId, string cardId, ReportDateRange? filter, IReadOnlyList<string>? drill, string locale, CancellationToken ct)
+        long dashboardId, string cardId, ReportDateRange? filter, IReadOnlyList<string>? drill, string? requestedLocale, CancellationToken ct)
     {
+        var locale = requestLocale.For(requestedLocale).Locale;
         var limits = await limitReader.GetAsync(ct);
         if (ReportRules.CheckRange(filter, limits.MaxRangeDays) is { } rangeError) return ServiceResult.Invalid(ReportRules.ToErrors("filterRange", [rangeError]));
         var viewer = await reportAccess.ViewerAsync(ct);
@@ -41,8 +44,9 @@ public class DashboardCardRunner(DashboardAccess access, ReportAccess reportAcce
     /// 指派版編輯時的卡片預覽：卡片可能還沒存檔，所以不查儀表板；報表可見性與資料權限都用管理員自己的視角
     /// （和他自己開報表一樣，看不到定義回 unshared、沒有資料權限回 restricted），不因為是管理員就放行。
     /// </summary>
-    public async Task<ServiceResult> PreviewAsync(DashboardCard card, ReportDateRange? filter, string locale, CancellationToken ct)
+    public async Task<ServiceResult> PreviewAsync(DashboardCard card, ReportDateRange? filter, string? requestedLocale, CancellationToken ct)
     {
+        var locale = requestLocale.For(requestedLocale).Locale;
         var limits = await limitReader.GetAsync(ct);
         if (ReportRules.CheckRange(filter, limits.MaxRangeDays) is { } rangeError) return ServiceResult.Invalid(ReportRules.ToErrors("filterRange", [rangeError]));
         var viewer = await reportAccess.ViewerAsync(ct);

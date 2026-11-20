@@ -14,7 +14,8 @@ namespace DynamicModules.Application.Dynamic.RecordService.Queries.GetRecordHist
 /// <summary>記錄自己與所有明細列（含已刪除）的歷程（已定決策 3、4）；讀者看不到的欄位整列不回。</summary>
 public class GetRecordHistoryHandler(
     IModuleRepository modules, IRecordRepository records, IRecordHistoryRepository histories,
-    IPermissionRepository permissions, IDynamicAccessGuard guard, ReferenceResolver resolver, PolicyService.CachedSystemPolicy policy)
+    IPermissionRepository permissions, IDynamicAccessGuard guard, ReferenceResolver resolver, PolicyService.CachedSystemPolicy policy,
+    RequestLocale requestLocale)
     : IRequestHandler<GetRecordHistoryRequest, ServiceResult>
 {
     private const int DefaultPagesSize = 20;
@@ -54,7 +55,8 @@ public class GetRecordHistoryHandler(
         var size = request.PagesSize <= 0 ? DefaultPagesSize : Math.Min(request.PagesSize, PagedRequest.MaxPagesSize);
         var (items, total) = await histories.QueryAsync(sourceOf.Keys, hidden, page, size, ct);
 
-        var locale = string.IsNullOrEmpty(request.Locale) ? "zh-TW" : request.Locale;
+        var lc = requestLocale.For(request.Locale);
+        var locale = lc.Locale;
         var display = policy.Display(locale);
         var userNames = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => u.DisplayName);
         var fieldsById = sources.SelectMany(s => s.Module.Blocks.SelectMany(b => b.Fields)).ToDictionary(f => f.Id);

@@ -45,7 +45,7 @@ public class AppOpener(
     AppOpenPlanner planner, TemplateInstantiator instantiator, ISender sender, IAppRepository apps,
     AppResponseBuilder builder, AppFlowInstaller flows, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
     IntegrationReconciler integrations, ISharedMasterRepository shared, IModuleRepository modules, IPermissionRepository permissions,
-    MasterSymbols symbols, MasterGrants grants, MasterLifecycle lifecycle, ContributionOrphans orphans)
+    MasterSymbols symbols, MasterGrants grants, MasterLifecycle lifecycle, ContributionOrphans orphans, RequestLocale requestLocale)
 {
     public async Task<AppOpenOutcome> OpenAsync(string packageId, OpenAppBody body, CancellationToken ct)
     {
@@ -58,6 +58,8 @@ public class AppOpener(
     {
         // 套件內容只要求繁中，不跟政策 locale.requiredText（判斷 12）
         using var packageText = PackageTextScope.Begin();
+        // 建立群組與流程用的語系：沒給用請求語系、給了停用或不認得的用預設語系（D4）
+        var locale = requestLocale.For(body.Locale).Locale;
         var plan = await planner.PlanAsync(packageId, body, ct, asMaster);
         if (plan.Failure is { } failure) return failure;
         var preview = plan.Preview;
@@ -100,8 +102,8 @@ public class AppOpener(
         var groupIds = new Dictionary<string, long>(plan.MappedGroups);
         foreach (var (code, entry) in body.GroupMap.Where(kv => kv.Value.Mode == "create"))
         {
-            var name = package.Groups.First(g => g.Code == code).Name.Resolve(body.Locale);
-            var created = await sender.Send(new CreateGroupRequest(name, body.Locale), ct);
+            var name = package.Groups.First(g => g.Code == code).Name.Resolve(locale);
+            var created = await sender.Send(new CreateGroupRequest(name, locale), ct);
             if (!created.IsSuccess) return created;
             groupIds[code] = ((AdminGroupResponse)created.Data!).Id;
         }
@@ -128,7 +130,7 @@ public class AppOpener(
         }
 
         // 單據能力：狀態機、轉換、報表（群組代號用上面解析好的 id）
-        var installed = await flows.InstallAsync(package, result.Ids!, groupIds, body.Locale, ct);
+        var installed = await flows.InstallAsync(package, result.Ids!, groupIds, locale, ct);
         if (installed.Failure is { } flowFailure) return flowFailure;
         warnings.AddRange(installed.Warnings);
 

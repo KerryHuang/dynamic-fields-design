@@ -63,11 +63,11 @@ public class DashboardsController(IMediator mediator) : ControllerBase
 
     /// <summary>卡片查詢：先驗儀表板與卡片，再以觀看者的權限計算；不接受任意報表 id。</summary>
     [HttpPost("{id:long}/cards/{cardId}/run")]
-    public async Task<IActionResult> RunCard(long id, string cardId, RunBody body, [FromQuery] string locale = "zh-TW") =>
+    public async Task<IActionResult> RunCard(long id, string cardId, RunBody body, [FromQuery] string? locale = null) =>
         (await mediator.Send(new RunCardRequest(id, cardId, body.FilterRange, locale))).ToActionResult(this);
 
     [HttpPost("{id:long}/cards/{cardId}/drill")]
-    public async Task<IActionResult> DrillCard(long id, string cardId, DrillBody body, [FromQuery] string locale = "zh-TW") =>
+    public async Task<IActionResult> DrillCard(long id, string cardId, DrillBody body, [FromQuery] string? locale = null) =>
         body.GroupKeys is null
             ? Bad(this, "groupKeys", "必填")
             : (await mediator.Send(new DrillCardRequest(id, cardId, body.GroupKeys, body.FilterRange, locale))).ToActionResult(this);

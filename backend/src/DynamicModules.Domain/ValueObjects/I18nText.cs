@@ -38,6 +38,9 @@ public class I18nText
     /// <summary>退回鏈只有繁中（中文訊息與套件格式用；請求的輸出用帶退回鏈的版本）。獨立多載而非選擇性參數：運算式樹不能用選擇性參數。</summary>
     public string Resolve(string locale) => Resolve(locale, null);
 
+    /// <summary>依 <see cref="LocaleContext"/>（要求的語系＋退回鏈）取文字，同 <see cref="Resolve(string, IReadOnlyList{string})"/>。</summary>
+    public string Resolve(LocaleContext lc) => Resolve(lc.Locale, lc.Fallbacks);
+
     private string? Text(string locale) => _values.TryGetValue(locale, out var text) && !string.IsNullOrEmpty(text) ? text : null;
 
     /// <summary>格式正確：沒有不支援的語系鍵，且至少一個語系有非空白文字。必填哪些語系由 Application 依政策 locale.requiredText 檢查。</summary>
