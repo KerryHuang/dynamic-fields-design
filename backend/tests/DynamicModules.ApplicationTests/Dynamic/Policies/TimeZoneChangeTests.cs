@@ -5,6 +5,8 @@ using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetPagedRecords;
+using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecordHistory;
+using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -201,5 +203,21 @@ public class TimeZoneChangeTests : DesignerTestBase
         var at = await IndexOf(id, _at.Id);
         at.Should().Be(new DateTime(9999, 12, 31, 23, 30, 0));
         at!.Value.Kind.Should().Be(DateTimeKind.Unspecified);
+    }
+
+    /// <summary>極值只留在歷程（記錄現值已改成一般時間）：改時區後索引可以平移，歷程的舊值換算會超出範圍，顯示要退回原本的偏移、不能讓整頁失敗。</summary>
+    [Fact]
+    public async Task ExtremeValueOnlyInHistory_HistoryStillLoads()
+    {
+        var id = await Create("9999-12-31T23:30:00+08:00");
+        var rowVersion = (await Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().AsNoTracking().SingleAsync(r => r.Id == id)).RowVersion;
+        var upd = await Send(new UpdateRecordRequest(id, new Dictionary<string, JsonElement?> { [_at.Key] = J("\"2026-11-11T10:00:00+08:00\"") }, rowVersion));
+        upd.IsSuccess.Should().BeTrue(upd.Message);
+
+        (await Put("+09:00")).IsSuccess.Should().BeTrue();
+        var r = await Send(new GetRecordHistoryRequest(id, 1, 50, "zh-TW"));
+        r.IsSuccess.Should().BeTrue(r.Message);
+        var items = ((PagedResponse<RecordHistoryResponse>)r.Data!).Items.Where(h => h.FieldKey == _at.Key).ToList();
+        items.Should().Contain(h => h.OldText == "9999-12-31 23:30 +08:00" && h.NewText == "2026-11-11 11:00");
     }
 }

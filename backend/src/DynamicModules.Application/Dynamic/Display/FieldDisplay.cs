@@ -51,9 +51,18 @@ public static class FieldDisplay
     private static string Number(JsonElement v, int scale) =>
         v.GetDecimal().ToString("F" + scale, CultureInfo.InvariantCulture);
 
-    private static string DateTimeText(JsonElement v, TimeSpan offset) =>
-        BusinessClock.ParseWallClock(v.GetString()!, offset)
-            .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+    /// <summary>
+    /// 換成營運時區的牆上時間。顯示用的解析不拋例外：換算後超出 DateTime 範圍（例如只留在歷程裡的 9999 年底舊值，改成更東的時區之後）
+    /// 就照原本的偏移顯示並標出偏移；解析不了照原文。
+    /// </summary>
+    private static string DateTimeText(JsonElement v, TimeSpan offset)
+    {
+        var s = v.GetString()!;
+        if (BusinessClock.TryParseWallClock(s, offset, out var at)) return at.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+        return DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dto)
+            ? dto.DateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " " + Domain.Policies.PolicyCatalog.FormatUtcOffset(dto.Offset)
+            : s;
+    }
 
     private static string Boolean(JsonElement v, string locale)
     {

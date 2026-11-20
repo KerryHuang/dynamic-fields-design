@@ -75,6 +75,13 @@ public class FieldDisplayTests
         Fmt(F(FieldType.DateTime), "2026-11-11T10:00:00+08:00", offset: TimeSpan.FromHours(7)).Should().Be("2026-11-11 09:00");
 
     [Fact]
+    public void DateTime_ShiftOverflow_KeepsOriginalOffset()
+    {
+        Fmt(F(FieldType.DateTime), "9999-12-31T23:30:00+08:00", offset: TimeSpan.FromHours(9)).Should().Be("9999-12-31 23:30 +08:00");
+        Fmt(F(FieldType.DateTime), "0001-01-01T08:30:00+08:00", offset: TimeSpan.FromHours(-12)).Should().Be("0001-01-01 08:30 +08:00");
+    }
+
+    [Fact]
     public void DateTime_StoredFormat() =>
         Fmt(F(FieldType.DateTime), "2026-11-04T09:30:00+08:00").Should().Be("2026-11-04 09:30");
 
