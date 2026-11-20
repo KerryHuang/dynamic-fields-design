@@ -30,6 +30,7 @@ function warningText(w: { code: string; args: string[] }): string {
 }
 
 const rejectedSections = computed(() => SECTIONS.filter((s) => props.report[s].rejected > 0));
+const extraSections = computed(() => SECTIONS.filter((s) => props.report[s].extra > 0));
 </script>
 
 <template>
@@ -81,6 +82,21 @@ const rejectedSections = computed(() => SECTIONS.filter((s) => props.report[s].r
           <li v-for="item in report[s].rejectedItems" :key="item.key">
             <code>{{ item.key }}</code>：{{ reasonText(item) }}
           </li>
+        </ul>
+      </template>
+    </div>
+
+    <div v-if="extraSections.length" class="q-mt-md" data-testid="report-extra">
+      <div class="text-weight-medium">{{ t('localePacks.report.extraTitle') }}</div>
+      <template v-for="s in extraSections" :key="s">
+        <div class="text-caption text-muted">
+          {{ t(`localePacks.report.sections.${s}`) }}
+          <template v-if="report[s].extra > report[s].extraKeys.length">
+            ・{{ t('localePacks.report.rejectedMore', { shown: report[s].extraKeys.length, total: report[s].extra }) }}
+          </template>
+        </div>
+        <ul class="report-rejected">
+          <li v-for="key in report[s].extraKeys" :key="key"><code>{{ key }}</code></li>
         </ul>
       </template>
     </div>

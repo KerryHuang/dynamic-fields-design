@@ -118,6 +118,25 @@ describe('LocalePackImportDialog 預覽', () => {
     w.unmount();
   });
 
+  it('多餘的鍵列出回傳的鍵名，超過回傳筆數時註明總數', async () => {
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/preview'
+      ? report({ ui: section({ extra: 120, extraKeys: ['old.key', 'typo.kye'] }), server: section({ extra: 1, extraKeys: ['srv.gone'] }) }) : undefined));
+    await pick();
+    const text = q('report-extra')!.textContent!;
+    expect(text).toContain('old.key');
+    expect(text).toContain('typo.kye');
+    expect(text).toContain('srv.gone');
+    expect(text).toContain('120');
+    w.unmount();
+  });
+
+  it('沒有多餘的鍵時不顯示清單', async () => {
+    const w = await mountDialog();
+    await pick();
+    expect(q('report-extra')).toBeNull();
+    w.unmount();
+  });
+
   it('previewId 為 null（這個環境不暫存）：套用停用並顯示說明', async () => {
     const w = await mountDialog((c) => (c.url === '/i18n/packs/preview' ? report({ previewId: null, expiresUtc: null, importEnabled: false }) : undefined),
       { importEnabled: false });
