@@ -16,8 +16,9 @@ public class RequestLocaleTests
     private static RequestLocale Create()
     {
         // 快照：預設 en-US、啟用 zh-TW 與 en-US；請求標頭是 zh-TW
-        var cache = new CachedSystemPolicy(new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            TimeProvider.System, PolicyEnvironmentDefaults.Empty, NullLogger<CachedSystemPolicy>.Instance);
+        var scopes = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        var cache = new CachedSystemPolicy(scopes, TimeProvider.System, PolicyEnvironmentDefaults.Empty,
+            new LocaleRegistry(scopes, TimeProvider.System, NullLogger<LocaleRegistry>.Instance), NullLogger<CachedSystemPolicy>.Instance);
         cache.Apply(PolicyCatalog.LocaleDefault, "en-US", cache.NextSequence());
         cache.Apply(PolicyCatalog.LocaleEnabled, "zh-TW,en-US", cache.NextSequence());
         return new RequestLocale(new Header("zh-TW"), cache);

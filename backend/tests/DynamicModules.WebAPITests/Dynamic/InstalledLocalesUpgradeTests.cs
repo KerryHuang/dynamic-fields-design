@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using DynamicModules.Application.Common;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
@@ -17,7 +18,7 @@ namespace DynamicModules.WebAPITests.Dynamic;
 
 /// <summary>
 /// 從前一版升級（migration InstalledLocales，語系包 i4a）：資料庫只套到前一版最後一個 migration、已有語系政策，再照 Program.cs 啟動
-/// （套 InstalledLocales → 同步內建語系 → 政策快照）。<c>MigrationConsistencyTests</c> 只證明模型與 snapshot 一致，這裡證明升級路徑。雙跑。
+/// （套 InstalledLocales → 同步內建語系 → 語系快照 → 政策快照）。<c>MigrationConsistencyTests</c> 只證明模型與 snapshot 一致，這裡證明升級路徑。雙跑。
 /// </summary>
 [Trait("Category", "Postgres")]
 public sealed class InstalledLocalesUpgradeTests
@@ -63,6 +64,7 @@ public sealed class InstalledLocalesUpgradeTests
                 rows.Select(r => r.Code).Should().BeEquivalentTo("zh-TW", "en-US", "th", "vi");
                 rows.Should().OnlyContain(r => r.Origin == LocaleOrigin.Builtin);
             }
+            app.Services.GetRequiredService<LocaleRegistry>().Codes.Should().Equal("zh-TW", "en-US", "th", "vi");
             var options = await (await app.AsUser(null).GetAsync($"{Base}/auth/options")).Content.ReadFromJsonAsync<JsonElement>();
             options.GetProperty("defaultLocale").GetString().Should().Be("en-US");
             options.GetProperty("enabledLocales").EnumerateArray().Select(e => e.GetString()).Should().Equal("zh-TW", "en-US", "th", "vi");

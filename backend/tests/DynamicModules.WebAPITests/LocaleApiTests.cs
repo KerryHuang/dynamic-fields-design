@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.WebAPI.Security;
 using FluentAssertions;
@@ -38,9 +39,13 @@ public class LocaleApiTests
         new HeaderCurrentLocale(new HttpContextAccessor(), FactoryPolicy()).Locale.Should().Be("zh-TW");
 
     /// <summary>沒載入過的快照＝出廠值（預設繁中、四語啟用）。</summary>
-    private static CachedSystemPolicy FactoryPolicy() =>
-        new(new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), TimeProvider.System,
-            PolicyEnvironmentDefaults.Empty, Microsoft.Extensions.Logging.Abstractions.NullLogger<CachedSystemPolicy>.Instance);
+    private static CachedSystemPolicy FactoryPolicy()
+    {
+        var scopes = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        return new(scopes, TimeProvider.System, PolicyEnvironmentDefaults.Empty,
+            new LocaleRegistry(scopes, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<LocaleRegistry>.Instance),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<CachedSystemPolicy>.Instance);
+    }
 
     [Fact]
     public async Task DisabledLocaleHeader_FallsBackToDefault()

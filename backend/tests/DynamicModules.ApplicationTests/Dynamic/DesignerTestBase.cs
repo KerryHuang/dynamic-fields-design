@@ -95,6 +95,9 @@ public abstract class DesignerTestBase : IAsyncLifetime
 
     protected T Svc<T>() where T : notnull => _sp.GetRequiredService<T>();
 
+    /// <summary>根容器（給要自己開 scope 的測試工具用，例如 <c>LocaleTestKit</c>）。</summary>
+    protected IServiceProvider Services => _sp;
+
     /// <summary>每個請求自己一個 DI scope（寫入日誌、操作識別碼都是每個請求一份，與正式環境一致）；預設共用根 scope。</summary>
     protected virtual bool ScopePerRequest => false;
 

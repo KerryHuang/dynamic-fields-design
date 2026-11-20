@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Policies;
 using FluentAssertions;
@@ -22,17 +23,22 @@ public class CachedSystemPolicyTests
         public bool Hang;
         public TaskCompletionSource? Gate;
         public int Calls;
+        /// <summary>給了就模擬正規化：每輪開始（卡住之前）記下當下的已安裝語系，啟用語系只留在裡面的項目。</summary>
+        public Func<IReadOnlyList<string>>? InstalledCodes;
+        private IReadOnlyList<string>? _codes;
 
         public async Task<PolicyResolution> ResolveAsync(PolicyDefinition def, long? moduleId, CancellationToken ct)
         {
             if (ReferenceEquals(def, First))
             {
                 Interlocked.Increment(ref Calls);
+                _codes = InstalledCodes?.Invoke();
                 if (Interlocked.Exchange(ref Gate, null) is { } gate) await gate.Task;
             }
             if (Hang) await Task.Delay(Timeout.Infinite, ct);
             if (Throw is not null) throw Throw;
             var v = ByCode.TryGetValue(def.Code, out var x) ? x : def == PolicyCatalog.OpsSlowRequestMs ? Value : def.Factory;
+            if (_codes is { } codes && def == PolicyCatalog.LocaleEnabled) v = string.Join(",", v.Split(',').Where(codes.Contains));
             return new PolicyResolution(def.Factory, null, null, v);
         }
         public Task<int> IntAsync(PolicyDefinition def, long? moduleId, CancellationToken ct) => throw new NotSupportedException();
@@ -54,12 +60,144 @@ public class CachedSystemPolicyTests
     private static (CachedSystemPolicy Policy, FakeReader Reader, ManualTimeProvider Time, WarningCounter Log) Create(
         Dictionary<string, string>? deployment = null)
     {
+        var (p, reader, time, log, _, _) = CreateWithLocales(deployment);
+        return (p, reader, time, log);
+    }
+
+    /// <summary>同 <see cref="Create"/>，另回語系快照與它讀的假語系表（同一個時鐘）。</summary>
+    private static (CachedSystemPolicy Policy, FakeReader Reader, ManualTimeProvider Time, WarningCounter Log, LocaleRegistry Registry, FakeLocaleRepository Locales)
+        CreateWithLocales(Dictionary<string, string>? deployment = null)
+    {
         var reader = new FakeReader();
         var services = new ServiceCollection();
         services.AddScoped<IPolicyReader>(_ => reader);
         var time = new ManualTimeProvider(new DateTimeOffset(2026, 11, 12, 0, 0, 0, TimeSpan.Zero));
         var log = new WarningCounter();
-        return (new CachedSystemPolicy(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), time, new PolicyEnvironmentDefaults(deployment ?? []), log), reader, time, log);
+        var locales = new FakeLocaleRepository().WithBuiltin();
+        var registry = locales.Registry(time);
+        var policy = new CachedSystemPolicy(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), time,
+            new PolicyEnvironmentDefaults(deployment ?? []), registry, log);
+        reader.InstalledCodes = () => registry.Codes;
+        return (policy, reader, time, log, registry, locales);
+    }
+
+    private static async Task ReloadLocales(LocaleRegistry registry)
+    {
+        registry.Invalidate();
+        await registry.EnsureFreshAsync(default);
+    }
+
+    [Fact]
+    public async Task RegistryGenerationChanged_ReloadsBeforeTtl()
+    {
+        var (p, reader, _, _, registry, locales) = CreateWithLocales();
+        await registry.EnsureFreshAsync(default);
+        await p.EnsureFreshAsync(default);
+        await p.EnsureFreshAsync(default);
+        reader.Calls.Should().Be(1);
+
+        locales.Add("ja", "日本語");
+        await ReloadLocales(registry);
+        await p.EnsureFreshAsync(default);
+        reader.Calls.Should().Be(2, "語系快照換了內容，不等 60 秒");
+    }
+
+    [Fact]
+    public async Task RegistryChangedDuringPolicyReload_ReloadsAgain()
+    {
+        var (p, reader, _, _, registry, locales) = CreateWithLocales();
+        reader.ByCode[PolicyCatalog.LocaleEnabled.Code] = "zh-TW,ja";
+        await registry.EnsureFreshAsync(default);
+        var gate = NewGate();
+        reader.Gate = gate;
+        await Background(async () =>
+        {
+            var reload = p.EnsureFreshAsync(default);
+            await WaitUntil(() => reader.Calls == 1);
+            locales.Add("ja", "日本語");
+            await ReloadLocales(registry);
+            gate.SetResult();
+            await reload;
+        });
+        p.EnabledLocales.Should().Equal(["zh-TW"], "這輪用的是舊的已安裝語系");
+
+        await p.EnsureFreshAsync(default);
+        reader.Calls.Should().Be(2);
+        p.EnabledLocales.Should().Equal("zh-TW", "ja");
+    }
+
+    [Fact]
+    public async Task RemovedLocale_Interleaved()
+    {
+        var (p, reader, _, _, registry, locales) = CreateWithLocales();
+        locales.Add("ja", "日本語");
+        reader.ByCode[PolicyCatalog.LocaleEnabled.Code] = "zh-TW,ja";
+        await registry.EnsureFreshAsync(default);
+        await p.EnsureFreshAsync(default);
+        p.EnabledLocales.Should().Equal("zh-TW", "ja");
+
+        locales.Remove("ja");
+        await ReloadLocales(registry);
+        await p.EnsureFreshAsync(default);
+        p.EnabledLocales.Should().Equal(["zh-TW"], "不等 60 秒");
+    }
+
+    [Fact]
+    public async Task GenerationMismatch_ReadFails_BacksOff10s()
+    {
+        var (p, reader, time, _, registry, locales) = CreateWithLocales();
+        locales.Add("ja", "日本語");
+        await registry.EnsureFreshAsync(default);
+        await p.EnsureFreshAsync(default);
+        var g1 = registry.Generation;
+        p.CurrentForTests.LocaleGeneration.Should().Be(g1);
+
+        locales.Add("ko", "한국어");
+        await ReloadLocales(registry);
+        var g2 = registry.Generation;
+        g2.Should().Be(g1 + 1);
+        reader.Throw = new InvalidOperationException("db down");
+        await p.EnsureFreshAsync(default);
+        reader.Calls.Should().Be(2);
+        p.CurrentForTests.Should().Match<CachedSystemPolicy.Published>(c => c.Failed && c.FailedGeneration == g2 && c.LocaleGeneration == g1);
+
+        time.Advance(TimeSpan.FromSeconds(9));
+        for (var i = 0; i < 5; i++) await p.EnsureFreshAsync(default);
+        reader.Calls.Should().Be(2, "失敗退避優先於 generation 不一致");
+
+        reader.Throw = null;
+        time.Advance(TimeSpan.FromSeconds(1));
+        await p.EnsureFreshAsync(default);
+        reader.Calls.Should().Be(3);
+        p.CurrentForTests.Should().Match<CachedSystemPolicy.Published>(c => !c.Failed && c.FailedGeneration == null && c.LocaleGeneration == g2);
+    }
+
+    [Fact]
+    public async Task GenerationChangedAgainDuringBackoff_StillWaits()
+    {
+        var (p, reader, time, _, registry, locales) = CreateWithLocales();
+        await registry.EnsureFreshAsync(default);
+        await p.EnsureFreshAsync(default);
+        locales.Add("ja", "日本語");
+        await ReloadLocales(registry);
+        reader.Throw = new InvalidOperationException("db down");
+        await p.EnsureFreshAsync(default);
+        reader.Calls.Should().Be(2);
+
+        time.Advance(TimeSpan.FromSeconds(5));
+        locales.Add("ko", "한국어");
+        await ReloadLocales(registry);
+        var g3 = registry.Generation;
+        await p.EnsureFreshAsync(default);
+        time.Advance(TimeSpan.FromSeconds(4));
+        await p.EnsureFreshAsync(default);
+        reader.Calls.Should().Be(2);
+
+        reader.Throw = null;
+        time.Advance(TimeSpan.FromSeconds(1));
+        await p.EnsureFreshAsync(default);
+        reader.Calls.Should().Be(3);
+        p.CurrentForTests.LocaleGeneration.Should().Be(g3);
     }
 
     [Fact]

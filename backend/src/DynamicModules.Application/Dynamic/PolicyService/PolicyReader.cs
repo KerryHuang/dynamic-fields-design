@@ -85,10 +85,25 @@ public sealed class PolicyReader(
         _overrides.Clear();
     }
 
-    /// <summary>存在但無法使用的值記 Warning 並當成沒設。</summary>
+    /// <summary>
+    /// 存在但無法使用的值記 Warning 並當成沒設。語系類的 RoleSet 先濾掉沒安裝的語系（語系包設計 §4.3「被移除的語系當成沒啟用」，
+    /// i4a 計畫判斷 11），濾完為空就當成沒設；寫入時照舊嚴格檢查。
+    /// </summary>
     private string? Usable(PolicyDefinition def, string? stored, string layer)
     {
         if (stored is null) return null;
+        if (def.Kind == PolicyKind.RoleSet && PolicyCatalog.IsLocaleOptions(def) && stored.Length > 0)
+        {
+            var installed = options.Of(def) ?? [];
+            var items = stored.Split(',');
+            var removed = items.Where(i => !installed.Contains(i, StringComparer.Ordinal)).ToList();
+            if (removed.Count > 0)
+            {
+                logger.LogWarning("政策 {Code} 的{Layer}值含沒安裝的語系 {Removed}，當成沒啟用", def.Code, layer, string.Join(",", removed));
+                stored = string.Join(",", items.Except(removed, StringComparer.Ordinal));
+                if (stored.Length == 0) return null;
+            }
+        }
         var normal = options.Normalize(def, stored);
         if (normal is null)
             logger.LogWarning("政策 {Code} 的{Layer}值「{Value}」無法使用，改用上一層", def.Code, layer, stored);

@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.WebAPI.Time;
 using FluentAssertions;
@@ -9,9 +10,12 @@ namespace DynamicModules.WebAPITests;
 public class ZoneBusinessTimeTests
 {
     // 沒載入過資料庫時快照用部署出廠值，借它設定偏移，不必假造 reader
-    private static ZoneBusinessTime Create(Dictionary<string, string> deployment) =>
-        new(new CachedSystemPolicy(new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            TimeProvider.System, new PolicyEnvironmentDefaults(deployment), NullLogger<CachedSystemPolicy>.Instance));
+    private static ZoneBusinessTime Create(Dictionary<string, string> deployment)
+    {
+        var scopes = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        return new(new CachedSystemPolicy(scopes, TimeProvider.System, new PolicyEnvironmentDefaults(deployment),
+            new LocaleRegistry(scopes, TimeProvider.System, NullLogger<LocaleRegistry>.Instance), NullLogger<CachedSystemPolicy>.Instance));
+    }
 
     [Fact]
     public void FollowsPolicyOffset_KindUnspecified()
