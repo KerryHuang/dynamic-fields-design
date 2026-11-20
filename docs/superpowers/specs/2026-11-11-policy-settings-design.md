@@ -273,6 +273,9 @@
 - 新模組的「基本資料」區塊一律建立（模組至少要有一個區塊）；`module.createTitleField`（A19）只控制「名稱」欄位。區塊與欄位的預設文字「基本資料／General」「名稱／Name」寫死。
 - 事件每個效果的 set 對應數 50（`EventValidator.MaxSets`）；事件定義存檔時逐一檢查效果的迴圈截在「效果數上限與既有效果數較大者」（兩者都不超過技術上限 50），上萬個效果的請求只報數量錯。
 - 匯入端點的請求上限＝兩倍檔案大小上限＋multipart 開銷 64KB（`ImportBodyLimitFilter`、`UploadGuard.MultipartOverhead`），跟著 A21 走、不另設。
+- 部門層數（A5，`organization.maxDepth`）的技術範圍 1–30，出廠 10（p3a）。
+- 營運時區（A17，`locale.timeZone`）只收固定 UTC 偏移，選項清單寫死在 `PolicyCatalog.UtcOffsets`：−12:00、−11:00、−10:00、−09:30、−09:00 到 −01:00 每小時、−03:30、+00:00 到 +14:00 每小時，以及 +03:30、+04:30、+05:30、+05:45、+06:30、+08:45、+09:30、+10:30、+12:45（共 38 個）；不支援日光節約時間（p3a）。
+- 全系統政策快照（`CachedSystemPolicy`）的存活時間 60 秒、讀取失敗後的重試間隔 10 秒、讀資料庫逾時 2 秒；與 O1 的維運政策快取是同一份（O1 判斷 B2），p3a 擴成一次讀齊全部全系統政策。
 - 報表日期區間 N 的格式上限 3650（`ReportDateRange.MaxN`，任務看板的到期日區間共用）與 Domain `ConditionParser.MaxDays` 3650；A24 的查詢天數只能在這之下調低。報表條件的清單項目 50、文字 440（`ReportRules`），儀表板格子 12 欄、卡片高度 40、卡片標題 100 字（`DashboardRules`）。
 - 帳號格式、名稱長度（B20）。
 - 提及候選 20 人、`@{id}` 語法（B23）。
@@ -401,6 +404,15 @@
 - 實作判斷：報表的天數上限也套在存檔時的結構檢查（報表定義自己的日期區間）與匯出的區間覆寫，不只執行與下鑽；`ReportRules.CheckShape` 因此多一個天數參數。既有報表的定義區間超過調低後的上限時照常執行，只有重新存檔才擋（§3.5）。
 - 實作判斷：儀表板卡片數上限與報表上限共用一個讀值服務（`ReportLimitReader`：`GetAsync` 回下鑽、明細、天數；`MaxCardsAsync` 回卡片數）。更新個人版面時「原本的卡片數」取目前生效的版面（第一次另存個人版時是指派版的卡片數）。
 - 實作判斷：事件編輯對話框的效果數上限讀全系統生效值；生效值還沒回來時「新增效果」停用、不顯示「最多 N 個」提示。
+
+### 實作期間的判斷（p3 計畫，可推翻）
+
+- 計畫判斷 3：全系統政策的單一快照就是演進後的 `CachedSystemPolicy`，不另做第二份快取；一次讀齊全部 System 範圍政策（逐項經 `IPolicyReader.ResolveAsync`，reader 在同一個 scope 內只查一次資料庫），保留 O1 的 60／10／2 秒與「讀不到不讓請求失敗」；只讓一個請求重載，其他請求沿用舊值、不等待。同步呼叫端（`IBusinessTime.Now`、singleton 的 `FieldTypeRegistry`）不能 await，所以要有跨請求的快照。
+- 計畫判斷 19：營運時區偏移只有一個來源 `CachedSystemPolicy.BusinessOffset`；`IBusinessTime` 不加偏移，`ActingBusinessTime` 與測試替身不用改。需要偏移的地方注入快照，或用 DI 的 `FieldTypeRegistry`（日期時間處理器每次呼叫取當下的偏移）。
+- 計畫判斷 20：系統 PUT 提交後由 `AfterCommitActions` 把新值寫進快照（回滾時丟棄）；快照是不可變物件，以 CAS 發布，成敗用參考比較（record 的值相等會誤判）；每項帶更新序號，過期重載把序號標成「已提交的最大序號」，擋掉逆序或被重載涵蓋過的 callback。代價：提交到寫進快照之間有毫秒級窗口。
+- 實作判斷：彙總欄位（`RollupCalculator`）的條件解析改由呼叫端傳入 DI 的 `FieldTypeRegistry`，日期時間條件照營運時區；原本用自己的靜態 registry，固定是出廠 +08:00。
+- 實作判斷：改營運時區的索引平移只動日期時間欄位（日期欄位、公式與彙總的日期結果不動），在同一個交易裡先檢查邊界再平移；EF `ExecuteUpdate`＋`AddMinutes`，SQLite 與 PostgreSQL 都已由 `TimeZoneChangeTests` 驗證（含上下限）。
+- 實作判斷：列表篩選的日期時間值仍必須帶偏移（處理器不收無偏移的值），解析時換成營運時區的牆上時間再跟索引比。
 
 ### 實作期間的判斷（p2c 計畫，可推翻）
 
