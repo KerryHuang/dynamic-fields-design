@@ -2055,6 +2055,152 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                     b.ToTable("Dynamic_ListView", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.LocalePack", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BaseHashesJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("BaseLocale")
+                        .HasMaxLength(35)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("BuiltFor")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(35)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("FileHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(200)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ImportedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime>("ImportedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsCurrent")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("ModifiedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("PackVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ReportJson")
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ServerJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("UiJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code");
+
+                    b.ToTable("Dynamic_LocalePack", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.LocalePackPreview", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(32)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(35)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("CurrentPackId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("ExpiresUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("LocaleFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("PlanJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ReportJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresUtc");
+
+                    b.ToTable("Dynamic_LocalePackPreview", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.MailSettings", b =>
                 {
                     b.Property<string>("Kind")

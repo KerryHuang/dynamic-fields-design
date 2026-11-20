@@ -40,7 +40,7 @@ public class LocaleRepositoryTests
         await using var db = await TestDb.CreateAsync();
         var repo = new LocaleRepository(db.Context);
 
-        (await repo.StampAsync(CancellationToken.None)).Should().Be(new LocaleVersionStamp(0, null));
+        (await repo.StampAsync(CancellationToken.None)).Should().Be(new LocaleVersionStamp(0, null, 0, null));
 
         await BuiltinLocaleSync.EnsureAsync(db.Context, new ManualTimeProvider(T0), CancellationToken.None);
         var before = await repo.StampAsync(CancellationToken.None);
@@ -53,5 +53,29 @@ public class LocaleRepositoryTests
         after.Count.Should().Be(5);
         after.MaxModifiedUtc.Should().Be(T0.AddMinutes(5));
         after.MaxModifiedUtc!.Value.Kind.Should().Be(DateTimeKind.Utc);
+    }
+
+    [Fact]
+    public async Task FindAddRemove()
+    {
+        await using var db = await TestDb.CreateAsync();
+        await BuiltinLocaleSync.EnsureAsync(db.Context, new ManualTimeProvider(T0), CancellationToken.None);
+        var repo = new LocaleRepository(db.Context);
+        var before = await repo.StampAsync(CancellationToken.None);
+
+        repo.Add(Installed("ja", T0.AddMinutes(1)));
+        await db.Context.SaveChangesAsync();
+        db.Context.ChangeTracker.Clear();
+
+        var found = await repo.FindAsync("ja", CancellationToken.None);
+        found.Should().NotBeNull();
+        db.Context.Entry(found!).State.Should().Be(Microsoft.EntityFrameworkCore.EntityState.Unchanged, "追蹤");
+        (await repo.StampAsync(CancellationToken.None)).Count.Should().Be(before.Count + 1);
+
+        repo.Remove(found!);
+        await db.Context.SaveChangesAsync();
+
+        (await repo.FindAsync("ja", CancellationToken.None)).Should().BeNull();
+        (await repo.StampAsync(CancellationToken.None)).Count.Should().Be(before.Count);
     }
 }
