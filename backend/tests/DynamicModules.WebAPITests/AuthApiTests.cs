@@ -121,6 +121,36 @@ public class AuthApiTests
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Options_LocaleInfos_HaveUiHash()
+    {
+        using var app = new TestApp();
+        var locales = (await Json(await app.AsUser(null).GetAsync($"{Auth}/options"))).GetProperty("locales").EnumerateArray().ToList();
+
+        locales.Should().HaveCount(4);
+        locales.Should().OnlyContain(l => Regex.IsMatch(l.GetProperty("uiHash").GetString()!, "^[0-9a-f]{16}$"));
+        locales.Select(l => l.GetProperty("uiHash").GetString()).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Options_UiHash_ChangesWithDefaultLocale()
+    {
+        using var app = new TestApp();
+        await LocaleTestKit.InstallAsync(app, "ja", "日本語");
+        (await app.AsUser().PutAsJsonAsync($"{Base}/system/policies/locale.enabled", new { value = new[] { "zh-TW", "th", "ja" } }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        async Task<string> JaHash() => (await Json(await app.AsUser(null).GetAsync($"{Auth}/options"))).GetProperty("locales")
+            .EnumerateArray().Single(l => l.GetProperty("code").GetString() == "ja").GetProperty("uiHash").GetString()!;
+        var underZh = await JaHash();
+
+        (await app.AsUser().PutAsJsonAsync($"{Base}/system/policies/locale.default", new { value = "th" }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await JaHash()).Should().NotBe(underZh, "沒有上層的 ja 缺的句子改用新的預設語系補");
+    }
+
+    [Fact]
     public async Task XUserHeader_WithoutCookie_Returns401()
     {
         using var app = NewApp();

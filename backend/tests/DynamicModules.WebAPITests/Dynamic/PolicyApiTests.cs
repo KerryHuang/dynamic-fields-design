@@ -391,4 +391,32 @@ public class PolicyApiTests : IDisposable
             body.GetProperty("values").GetProperty("locale.enabled").EnumerateArray().Select(e => e.GetString()).Should().NotContain("ja");
         }
     }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Effective_LocalesHaveUiHash()
+    {
+        await LocaleTestKit.InstallAsync(_app, "ja", "日本語");
+        var sales = _app.AsUser("sales01");
+        async Task<(string Default, string Ja)> Effective()
+        {
+            var body = await JsonOf(await sales.GetAsync($"{Base}/policies/effective"));
+            var locales = body.GetProperty("locales").EnumerateArray().ToList();
+            locales.Should().OnlyContain(l => l.GetProperty("uiHash").GetString()!.Length == 16, "含未啟用的 ja 都帶 uiHash");
+            return (body.GetProperty("values").GetProperty("locale.default").GetString()!,
+                locales.Single(l => l.GetProperty("code").GetString() == "ja").GetProperty("uiHash").GetString()!);
+        }
+        var (_, before) = await Effective();
+
+        (await PutSystem(_app.AsUser(), "locale.default", new { value = "th" })).StatusCode.Should().Be(HttpStatusCode.OK);
+        var (def, after) = await Effective();
+
+        def.Should().Be("th");
+        after.Should().NotBe(before);
+        // auth/options 只列啟用語系：啟用 ja 後比對同一時刻的值
+        (await PutSystem(_app.AsUser(), "locale.enabled", new { value = new[] { "zh-TW", "th", "ja" } })).StatusCode.Should().Be(HttpStatusCode.OK);
+        var options = await JsonOf(await _app.AsUser(null).GetAsync($"{Base}/auth/options"));
+        options.GetProperty("locales").EnumerateArray().Single(l => l.GetProperty("code").GetString() == "ja")
+            .GetProperty("uiHash").GetString().Should().Be(after);
+    }
 }

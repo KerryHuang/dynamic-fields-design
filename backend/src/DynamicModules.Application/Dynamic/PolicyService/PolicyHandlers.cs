@@ -7,6 +7,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.PolicyService;
@@ -171,7 +172,11 @@ public class GetEffectivePoliciesHandler(IModuleRepository modules, IPolicyReade
         // 收件人類政策不出現：前端執行畫面用不到，回應還會帶出使用者帳號
         foreach (var def in PolicyCatalog.All.Where(d => d.Kind != PolicyKind.Recipients))
             values[def.Code] = PolicyJson.ToJson(def, (await reader.ResolveAsync(def, moduleId, ct)).Effective);
-        return ServiceResult.Success(new EffectivePoliciesResponse(request.ModuleKey, values, registry.Locales.Select(LocaleInfoResponse.Of).ToList()));
+        // uiHash 用這份回應自己的預設語系，同一份回應裡兩者一致（i4b 計畫判斷 10）
+        var defaultLocale = values.TryGetValue("locale.default", out var d) && d.ValueKind == JsonValueKind.String && d.GetString() is { Length: > 0 } s
+            ? s : I18nText.FallbackLocale;
+        return ServiceResult.Success(new EffectivePoliciesResponse(request.ModuleKey, values,
+            registry.Locales.Select(l => LocaleInfoResponse.Of(l, registry.UiHash(l.Code, defaultLocale))).ToList()));
     }
 }
 

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Localization;
@@ -11,6 +13,9 @@ namespace DynamicModules.Application.Common;
 /// <summary>一個已安裝的語系（快照裡的一筆）。</summary>
 public sealed record InstalledLocaleInfo(string Code, string NativeName, string? QuasarLang, string? FallbackCode, bool Builtin);
 
+/// <summary>一個語系補齊後的介面文字：內容雜湊（<c>uiHash</c>）、扁平 JSON（UTF-8）、鍵數。</summary>
+public sealed record UiBundle(string Hash, byte[] Json, int KeyCount);
+
 /// <summary>
 /// 已安裝語系的快照（singleton；語系包設計 §4.2，i4a 計畫判斷 2–5）。i4b 的介面文字合併表與雜湊也放這裡。
 /// <list type="bullet">
@@ -22,6 +27,10 @@ public sealed record InstalledLocaleInfo(string Code, string NativeName, string?
 /// <item><see cref="Generation"/> 只在清單內容改變時遞增；政策快照記下正規化時用的 generation，不一致就重載（判斷 5）。</item>
 /// <item><see cref="Invalidate"/> 遞增失效計數；刷新開始時記下、發布時已變就把新快照標成過期，刷新途中的失效通知不會被蓋掉（判斷 4）。</item>
 /// </list>
+/// <item>介面文字（i4b 計畫判斷 5–7）：<see cref="Ui"/> 沿「要求的語系 → 上層語系 → 系統預設 → 繁中」逐鍵補齊內建層
+/// （<see cref="BuiltinLocaleResources"/>；i4d1 在每個語系前面插覆寫層），<c>uiHash</c> 是補齊結果的內容雜湊。合併結果依（語系、預設語系）
+/// 快取在快照上；清單改變（generation 遞增）時新快照帶空的快取，內建層整個行程不變，所以不必另外失效。</item>
+/// </list>
 /// 整份狀態是不可變的 <see cref="Published"/>，所有寫入都經 <see cref="Publish"/> 的 CAS 迴圈，成敗用 <see cref="object.ReferenceEquals"/> 判斷。
 /// </summary>
 public sealed class LocaleRegistry(IServiceScopeFactory scopes, TimeProvider time, ILogger<LocaleRegistry> logger) : IInstalledLocales
@@ -29,12 +38,17 @@ public sealed class LocaleRegistry(IServiceScopeFactory scopes, TimeProvider tim
     private static readonly IReadOnlyList<InstalledLocaleInfo> Builtin =
         BuiltinLocales.All.Select(b => new InstalledLocaleInfo(b.Code, b.NativeName, b.QuasarLang, null, true)).ToArray();
 
-    /// <summary>一次發布的狀態。<c>Stamp</c> 是上次成功讀到的版本戳記（從沒讀過是 null），<c>Loaded</c> 是否曾成功讀過資料庫。</summary>
+    /// <summary>
+    /// 一次發布的狀態。<c>Stamp</c> 是上次成功讀到的版本戳記（從沒讀過是 null），<c>Loaded</c> 是否曾成功讀過資料庫。
+    /// <c>Ui</c> 是這份清單的介面文字合併快取（語系、預設語系）；只延長有效期的 <c>with</c> 沿用同一份，清單改變時換新的空字典。
+    /// </summary>
     private sealed record Published(
         IReadOnlyList<InstalledLocaleInfo> Infos, IReadOnlyList<string> Codes, LocaleVersionStamp? Stamp, long Generation,
-        DateTimeOffset LoadedAt, bool Failed, bool Loaded);
+        DateTimeOffset LoadedAt, bool Failed, bool Loaded, ConcurrentDictionary<(string Code, string Default), UiBundle> Ui);
 
-    private Published _current = new(Builtin, Builtin.Select(l => l.Code).ToArray(), null, 0, DateTimeOffset.MinValue, Failed: false, Loaded: false);
+    private Published _current = new(Builtin, Builtin.Select(l => l.Code).ToArray(), null, 0, DateTimeOffset.MinValue, Failed: false, Loaded: false, NewUiCache());
+
+    private static ConcurrentDictionary<(string Code, string Default), UiBundle> NewUiCache() => new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private long _invalidations;
 
@@ -52,8 +66,36 @@ public sealed class LocaleRegistry(IServiceScopeFactory scopes, TimeProvider tim
     public InstalledLocaleInfo? Find(string code) => Locales.FirstOrDefault(l => l.Code == code);
 
     /// <summary>多語文字的退回鏈（要求的語系之後依序試，<see cref="LocaleChain"/>）。</summary>
-    public IReadOnlyList<string> FallbacksFor(string locale, string defaultLocale) =>
-        LocaleChain.Fallbacks(locale, defaultLocale, Locales.Select(l => (l.Code, l.FallbackCode)).ToList());
+    public IReadOnlyList<string> FallbacksFor(string locale, string defaultLocale) => Fallbacks(Locales, locale, defaultLocale);
+
+    private static IReadOnlyList<string> Fallbacks(IReadOnlyList<InstalledLocaleInfo> infos, string locale, string defaultLocale) =>
+        LocaleChain.Fallbacks(locale, defaultLocale, infos.Select(l => (l.Code, l.FallbackCode)).ToList());
+
+    /// <summary>
+    /// 語系補齊後的介面文字（<c>GET i18n/ui/{code}</c>）；沒安裝回 null。鏈是要求的語系加 <see cref="FallbacksFor"/>，截到繁中為止
+    /// （繁中內建層完整，到它一定補齊；鏈尾的「其餘已安裝語系」對介面文字沒有意義）。清單與快取字典都取自開頭讀的同一份快照。
+    /// </summary>
+    public UiBundle? Ui(string code, string defaultLocale)
+    {
+        var p = Volatile.Read(ref _current);
+        if (!p.Codes.Contains(code)) return null;
+        return p.Ui.GetOrAdd((code, defaultLocale), key =>
+        {
+            var chain = new List<string>();
+            foreach (var c in Fallbacks(p.Infos, key.Code, key.Default).Prepend(key.Code).Distinct(StringComparer.Ordinal))
+            {
+                chain.Add(c);
+                if (c == I18nText.FallbackLocale) break;
+            }
+            var layers = chain.Select(c => BuiltinLocaleResources.Ui.GetValueOrDefault(c)).OfType<IReadOnlyDictionary<string, string>>();
+            var merged = UiTextMerge.Merge(BuiltinLocaleResources.BaseKeys, layers);
+            var (hash, json) = UiTextMerge.Serialize(merged);
+            return new UiBundle(hash, json, merged.Count);
+        });
+    }
+
+    /// <summary>（語系、預設語系）的 <c>uiHash</c>；沒安裝回空字串。</summary>
+    public string UiHash(string code, string defaultLocale) => Ui(code, defaultLocale)?.Hash ?? "";
 
     /// <summary>
     /// 語系與它的退回鏈（寄信、通知等不經請求快取的寫入端用；i4a 計畫判斷 23）：呼叫端自己讀的預設語系（例如交易內經 <c>IPolicyReader</c> 讀的）
@@ -90,7 +132,7 @@ public sealed class LocaleRegistry(IServiceScopeFactory scopes, TimeProvider tim
                     if (infos is null) return cur with { Stamp = stamp, LoadedAt = loadedAt, Failed = false };
                     var changed = !infos.SequenceEqual(cur.Infos);
                     return new Published(changed ? infos : cur.Infos, changed ? infos.Select(l => l.Code).ToArray() : cur.Codes, stamp,
-                        changed ? cur.Generation + 1 : cur.Generation, loadedAt, Failed: false, Loaded: true);
+                        changed ? cur.Generation + 1 : cur.Generation, loadedAt, Failed: false, Loaded: true, changed ? NewUiCache() : cur.Ui);
                 }, BeforePublishForTests);
             }
             catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
@@ -117,10 +159,18 @@ public sealed class LocaleRegistry(IServiceScopeFactory scopes, TimeProvider tim
         Publish(cur => cur with { LoadedAt = DateTimeOffset.MinValue });
     }
 
-    private static IReadOnlyList<InstalledLocaleInfo> Build(IEnumerable<InstalledLocale> rows) =>
+    /// <summary>內建四列加資料表的 installed 列；Quasar 語言包不在清單內的 <c>QuasarLang</c>（只可能來自資料修補）當成 null 並記 Warning。</summary>
+    private IReadOnlyList<InstalledLocaleInfo> Build(IEnumerable<InstalledLocale> rows) =>
         Builtin.Concat(rows.Where(r => r.Origin == LocaleOrigin.Installed && !BuiltinLocales.Contains(r.Code))
-                .Select(r => new InstalledLocaleInfo(r.Code, r.NativeName, r.QuasarLang, r.FallbackCode, false)))
+                .Select(r => new InstalledLocaleInfo(r.Code, r.NativeName, KnownQuasarLang(r), r.FallbackCode, false)))
             .ToArray();
+
+    private string? KnownQuasarLang(InstalledLocale r)
+    {
+        if (r.QuasarLang is null || BuiltinLocaleResources.QuasarLangs.Contains(r.QuasarLang)) return r.QuasarLang;
+        logger.LogWarning("語系 {Code} 的 Quasar 語言包 {QuasarLang} 不存在，改用預設語言包", r.Code, r.QuasarLang);
+        return null;
+    }
 
     /// <summary>CAS 迴圈：以發布當下的最新物件算出下一份；交換成敗用參考比較，不用 record 的值相等。</summary>
     private void Publish(Func<Published, Published> next, Action? beforeFirstCas = null)
