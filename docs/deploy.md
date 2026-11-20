@@ -28,6 +28,20 @@ Formwright 的 Demo 站與容器部署做法。本機開發與測試見 [CONTRIB
 
 急著上線：`gh workflow run demo-refresh.yml`（或 GitHub → Actions → demo-refresh → Run workflow），不必等到隔天 02:00。
 
+### Azure Container Apps 備案
+
+同一個映像另外部署一份到 Azure Container Apps 當備案（使用者 2026-11-20 裁決），由 `demo-refresh.yml` 的 `deploy-azure` job 和 `deploy` 並列執行，每天跟著排程更新。
+
+- 資源：資源群組 `formwright-demo-rg`、Container App `formwright-demo`，區域 `eastasia`，0.25 vCPU／0.5Gi，最少 0、最多 1 個副本，不接 Log Analytics。縮到 0 後第一個請求冷啟動約 27 秒。
+- 費用：用 Container Apps 的每月免費額度，以這個規格約可運作 200 小時；閒置時縮到 0 不計費。
+- 身分：GitHub OIDC（不存 client secret），聯合憑證只允許本 repo 的 `main` 分支，角色只授予這個 Container App。
+- job 步驟：`azure/login` 登入 → `az containerapp update` 把映像換成 `ghcr.io/kerryhuang/formwright-demo:<sha>` → 每 20 秒讀一次 `<DEMO_AZURE_URL>/api/version`，`commit` 等於這次的 sha 才算成功，最多 10 分鐘，逾時讓 job 失敗。
+
+設定（GitHub repo → Settings → Secrets and variables → Actions）：
+
+- secrets `AZURE_CLIENT_ID`、`AZURE_TENANT_ID`、`AZURE_SUBSCRIPTION_ID`：OIDC 身分的識別碼。`AZURE_CLIENT_ID` 沒設定時 job 印警告、略過部署、照樣成功結束。
+- variable `DEMO_AZURE_URL`：備案站網址（不含結尾斜線）。
+
 ## 環境變數
 
 | 變數 | 用途 |

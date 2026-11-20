@@ -74,3 +74,59 @@ jobs:
           echo "::error::15 分鐘內 $DEMO_URL/api/version 的 commit 沒有變成 $EXPECTED（最後讀到：${got:-無回應}）"
           echo "15 分鐘內新版沒有上線（最後讀到：${got:-無回應}），到託管平台看部署 log。" >> "$GITHUB_STEP_SUMMARY"
           exit 1
+
+  # Azure Container Apps 備案（使用者 2026-11-20 裁決）；設定見 docs/deploy.md「Azure Container Apps 備案」
+  deploy-azure:
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: 檢查設定
+        id: cfg
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        run: |
+          if [ -z "$AZURE_CLIENT_ID" ]; then
+            echo "::warning::沒有設定 secret AZURE_CLIENT_ID，略過 Azure 備案部署（設定方式見 docs/deploy.md）"
+            echo "沒有設定 AZURE_CLIENT_ID，略過 Azure 備案部署。" >> "$GITHUB_STEP_SUMMARY"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.cfg.outputs.enabled == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: 更新映像
+        if: steps.cfg.outputs.enabled == 'true'
+        run: |
+          az extension add -n containerapp -y --only-show-errors
+          az containerapp update -n formwright-demo -g formwright-demo-rg \
+            --image ghcr.io/kerryhuang/formwright-demo:${{ github.sha }} -o none
+      - name: 等新版上線
+        if: steps.cfg.outputs.enabled == 'true'
+        env:
+          DEMO_AZURE_URL: ${{ vars.DEMO_AZURE_URL }}
+          EXPECTED: ${{ github.sha }}
+        run: |
+          if [ -z "$DEMO_AZURE_URL" ]; then
+            echo "::error::沒有設定變數 DEMO_AZURE_URL，無法確認新版上線"
+            exit 1
+          fi
+          # 縮到 0 時冷啟動約 27 秒，curl 給 60 秒
+          deadline=$(( $(date +%s) + 10 * 60 ))
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            got=$(curl -fsS --max-time 60 "$DEMO_AZURE_URL/api/version" 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin).get("commit",""))' 2>/dev/null || true)
+            if [ "$got" = "$EXPECTED" ]; then
+              echo "Azure 備案新版已上線（commit $got）。" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::10 分鐘內 $DEMO_AZURE_URL/api/version 的 commit 沒有變成 $EXPECTED（最後讀到：${got:-無回應}）"
+          exit 1
