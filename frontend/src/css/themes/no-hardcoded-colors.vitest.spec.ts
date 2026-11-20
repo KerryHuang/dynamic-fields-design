@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const PALETTE =
   'red|pink|purple|deep-purple|indigo|blue-grey|light-blue|blue|cyan|teal|light-green|green|lime|yellow|amber|deep-orange|orange|brown|grey|white|black';
 const SEMANTIC = new Set(['primary', 'secondary', 'accent', 'dark', 'positive', 'negative', 'info', 'warning', 'muted']);
-const COLOR_ATTRS = 'color|text-color|bg-color|label-color|active-color|indicator-color|toggle-color|toggle-text-color';
+const COLOR_ATTRS = 'color|text-color|bg-color|label-color|active-color|indicator-color|toggle-color|toggle-text-color|track-color';
 const COLOR_FN = /#[0-9a-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\(/gi;
 
 /**
@@ -45,6 +45,7 @@ describe('findHardcodedColors', () => {
     'class="text-grey-7"',
     ':class="{ \'bg-red-1\': bad }"',
     'color="grey-6"',
+    'track-color="grey-4"',
     ':color="a ? \'grey\' : \'primary\'"',
     'style="color: red"',
     'style="background:#fff"',
@@ -60,6 +61,7 @@ describe('findHardcodedColors', () => {
     'class="bg-negative"',
     'color="primary"',
     'color="muted"',
+    'track-color="muted"',
     ':color="a ? \'negative\' : undefined"',
     'style="height: 360px"',
     'style="color: var(--t-muted)"',

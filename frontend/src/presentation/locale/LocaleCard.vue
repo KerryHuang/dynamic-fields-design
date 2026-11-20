@@ -64,7 +64,7 @@ const topMissing = computed(() => props.locale.completeness.topMissing.map((m) =
             pct: percent(locale.completeness[s].have, locale.completeness[s].total),
           }) }}
         </div>
-        <q-linear-progress rounded size="6px" color="primary" track-color="grey-4" aria-hidden="true"
+        <q-linear-progress rounded size="6px" color="primary" track-color="muted" aria-hidden="true"
           :value="locale.completeness[s].total > 0 ? locale.completeness[s].have / locale.completeness[s].total : 0" />
       </div>
 
