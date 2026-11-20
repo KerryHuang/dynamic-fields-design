@@ -176,9 +176,10 @@ public class I18nUiApiTests
 
     private static async Task ShouldBeAnonymous(HttpClient c)
     {
-        (await c.GetAsync("/api/v3/dynamic/me")).StatusCode.Should().Be(HttpStatusCode.Unauthorized, "前提：這個 cookie 已失效");
+        // 先打語系端點：SessionMiddleware 驗到 SecurityStamp 不符會登出並清 cookie，先打 /me 的話後面只是一般匿名
+        (await c.GetAsync($"{Ui}/ja")).StatusCode.Should().Be(HttpStatusCode.NotFound, "失效的 cookie 當匿名，取不到未啟用語系");
         (await c.GetAsync($"{Ui}/th")).StatusCode.Should().Be(HttpStatusCode.OK, "失效的 cookie 當匿名，不回 401");
-        (await c.GetAsync($"{Ui}/ja")).StatusCode.Should().Be(HttpStatusCode.NotFound, "匿名取不到未啟用語系");
+        (await c.GetAsync("/api/v3/dynamic/me")).StatusCode.Should().Be(HttpStatusCode.Unauthorized, "這個 cookie 確實已失效");
     }
 
     [Fact]
