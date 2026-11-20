@@ -145,4 +145,43 @@ public class LocaleTemplateApiTests : IDisposable
         root.GetProperty("ui").GetProperty("menu.home").GetString().Should().Be(script);
         root.TryGetProperty("server", out _).Should().BeFalse();
     }
+
+    // ── controller 層查詢參數契約（i4d2 後端審查建議 2） ──
+
+    [Fact]
+    public async Task Query_NoScopes_400_NotDefaultedToBoth()
+    {
+        (await FileError(await Export(_app.AsUser(), "th", "onlyMissing=false"))).Should().Be("匯出範圍只能是 ui、server，至少要選一個");
+    }
+
+    [Fact]
+    public async Task Query_EmptyReference_OmitsReferenceSection_UnsetKeepsDefault()
+    {
+        var admin = _app.AsUser();
+        var none = JsonDocument.Parse(await ExportOk(admin, "th", Both + "&reference=")).RootElement;
+        none.TryGetProperty("reference", out _).Should().BeFalse("reference=（空字串）代表不附參考段，不能被 binder 當成未帶");
+        none.GetProperty("source").GetProperty("locale").GetString().Should().Be("zh-TW");
+
+        var unset = JsonDocument.Parse(await ExportOk(admin, "th")).RootElement;
+        unset.GetProperty("reference").GetProperty("locale").GetString().Should().Be("en-US");
+    }
+
+    [Fact]
+    public async Task Query_SourceAndReference_NotNormalized_400()
+    {
+        var admin = _app.AsUser();
+        (await FileError(await Export(admin, "th", Both + "&reference=en-us"))).Should().Be("語系 en-us 沒有安裝");
+        (await FileError(await Export(admin, "th", Both + "&source=ZH-tw"))).Should().Be("語系 ZH-tw 沒有安裝");
+    }
+
+    [Fact]
+    public async Task Query_InstalledTarget_IgnoresFallbackAndQuasarLang()
+    {
+        var root = JsonDocument.Parse(await ExportOk(_app.AsUser(), "th", Both + "&fallback=nope&quasarLang=zz&nativeName=Ignored")).RootElement;
+        var locale = root.GetProperty("locale");
+        locale.GetProperty("code").GetString().Should().Be("th");
+        locale.GetProperty("nativeName").GetString().Should().NotBe("Ignored");
+        locale.GetProperty("quasarLang").GetString().Should().NotBe("zz");
+        (locale.TryGetProperty("fallback", out var fb) ? fb.ValueKind : JsonValueKind.Null).Should().Be(JsonValueKind.Null);
+    }
 }
