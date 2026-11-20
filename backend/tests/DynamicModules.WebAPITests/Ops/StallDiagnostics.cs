@@ -24,7 +24,7 @@ internal static class StallDiagnostics
     }
 
     /// <summary>每 500 ms 往測試的同步內容與執行緒池各丟一個空工作，記排隊延遲：分辨「xUnit 的執行緒被占滿」與「執行緒池飢餓」。</summary>
-    private sealed class ContextProbe : IDisposable
+    internal sealed class ContextProbe : IDisposable
     {
         private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> _slow = new();

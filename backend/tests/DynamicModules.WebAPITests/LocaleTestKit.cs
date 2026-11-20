@@ -58,6 +58,7 @@ internal static class LocaleTestKit
         var started = DateTime.UtcNow;
         var deadline = started.AddSeconds(30);
         var attempts = 0;
+        using var probe = new Ops.StallDiagnostics.ContextProbe(SynchronizationContext.Current);
         while (true)
         {
             attempts++;
@@ -67,10 +68,18 @@ internal static class LocaleTestKit
             if (done(texts)) return;
             if (DateTime.UtcNow > deadline)
                 throw new TimeoutException($"語系快照 30 秒內沒有反映寫入；{(describe is null ? "" : describe(texts) + "；")}"
-                    + $"generation={registry.Generation}、嘗試 {attempts} 次、耗時 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
+                    + $"generation={registry.Generation}、嘗試 {attempts} 次、耗時 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms\n"
+                    + $"  換新閘門可用數={GateCount(registry)}\n" + probe.Describe()
+                    + string.Concat(app.Logs.Records.Where(r => r.Level >= Microsoft.Extensions.Logging.LogLevel.Warning).TakeLast(10)
+                        .Select(r => $"  log {r.Level} {r.Category}：{r.Message}\n")));
             await Task.Delay(20);
         }
     }
+
+    /// <summary>票 #70 診斷：換新閘門（私有欄位）目前是否被占住；0 表示有一次換新還沒結束。</summary>
+    private static int GateCount(LocaleRegistry registry) =>
+        (typeof(LocaleRegistry).GetField("_gate", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(registry)
+            as SemaphoreSlim)?.CurrentCount ?? -1;
 
     private static string PackIdState(LocaleTexts t, string code, long? expected) =>
         $"預期 {code} 的 packId={expected?.ToString() ?? "null"}、實際 Overlay({code})?.PackId={t.Overlay(code)?.PackId.ToString() ?? "null"}、清單含 {code}={t.Infos.Any(i => i.Code == code)}";
