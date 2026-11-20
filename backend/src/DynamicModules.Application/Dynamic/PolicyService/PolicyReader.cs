@@ -25,7 +25,8 @@ public interface IPolicyReader
 }
 
 public sealed class PolicyReader(
-    ISystemSettingRepository settings, IModulePolicyRepository overrides, PolicyEnvironmentDefaults env, ILogger<PolicyReader> logger)
+    ISystemSettingRepository settings, IModulePolicyRepository overrides, PolicyEnvironmentDefaults env, PolicyOptionSource options,
+    ILogger<PolicyReader> logger)
     : IPolicyReader
 {
     private const string SystemPrefix = "policy.";
@@ -88,7 +89,7 @@ public sealed class PolicyReader(
     private string? Usable(PolicyDefinition def, string? stored, string layer)
     {
         if (stored is null) return null;
-        var normal = def.Normalize(stored);
+        var normal = options.Normalize(def, stored);
         if (normal is null)
             logger.LogWarning("政策 {Code} 的{Layer}值「{Value}」無法使用，改用上一層", def.Code, layer, stored);
         return normal;

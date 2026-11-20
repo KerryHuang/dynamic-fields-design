@@ -5,6 +5,7 @@ using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 using DynamicModules.TestSupport;
 
@@ -114,6 +115,75 @@ public class PolicyApiTests : IDisposable
 
         Item(await JsonOf(await admin.GetAsync($"{Base}/system/policies")), "organization.maxDepth")
             .GetProperty("factory").GetInt32().Should().Be(10);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task LocaleRules_DisableDefault_400()
+    {
+        var res = await PutSystem(_app.AsUser(), "locale.enabled", new { value = new[] { "en-US" } });
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await FirstError(res, "value")).Should().Be("預設語系必須是啟用中的語系；要停用它，請先改預設語系");
+        Db(db => db.Set<SystemSetting>().Any(s => s.Key == "policy.locale.enabled")).Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task LocaleRules_SwitchToEnglishInOrder()
+    {
+        var admin = _app.AsUser();
+        (await PutSystem(admin, "locale.default", new { value = "en-US" })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await PutSystem(admin, "locale.requiredText", new { value = new[] { "en-US" } })).StatusCode.Should().Be(HttpStatusCode.OK);
+        var enabled = await PutSystem(admin, "locale.enabled", new { value = new[] { "en-US" } });
+        enabled.StatusCode.Should().Be(HttpStatusCode.OK, await enabled.Content.ReadAsStringAsync());
+        // 預設語系回到出廠（繁中）時，繁中已不在啟用語系
+        var back = await PutSystem(admin, "locale.default", new { value = (string?)null });
+        back.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await FirstError(back, "value")).Should().Be("預設語系必須是啟用中的語系；要停用它，請先改預設語系");
+        var empty = await PutSystem(admin, "locale.requiredText", new { value = Array.Empty<string>() });
+        (await FirstError(empty, "value")).Should().Be("至少要有一種必填語系");
+        var notEnabled = await PutSystem(admin, "locale.requiredText", new { value = new[] { "en-US", "th" } });
+        (await FirstError(notEnabled, "value")).Should().Be("必填語系必須都是啟用中的語系；要停用它，請先從必填語系拿掉");
+        var none = await PutSystem(admin, "locale.enabled", new { value = Array.Empty<string>() });
+        (await FirstError(none, "value")).Should().Be("至少要啟用一種語系");
+    }
+
+    [Fact]
+    public async Task LocaleEnabled_UnsupportedLocale_SaysLocale()
+    {
+        var admin = _app.AsUser();
+        var res = await PutSystem(admin, "locale.enabled", new { value = new[] { "zh-TW", "ja" } });
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await FirstError(res, "value")).Should().Be("只能從以下語系挑選：zh-TW、en-US、th、vi");
+        var roles = await PutSystem(admin, "task.notify.commented", new { value = new[] { "owner" } });
+        (await FirstError(roles, "value")).Should().Be("只能從以下角色挑選：assignee、creator");
+        var item = Item(await JsonOf(await admin.GetAsync($"{Base}/system/policies")), "locale.default");
+        item.GetProperty("options").EnumerateArray().Select(e => e.GetString()).Should().Equal("zh-TW", "en-US", "th", "vi");
+    }
+
+    private sealed class ThreeLocales : DynamicModules.Application.Common.IInstalledLocales
+    {
+        public IReadOnlyList<string> Codes { get; } = ["zh-TW", "en-US", "ja"];
+    }
+
+    [Fact]
+    public async Task LocaleOptions_FromInstalledLocales()
+    {
+        // i4a 的接口：已安裝語系換掉後，語系類政策的選項跟著換
+        using var app = new TestApp
+        {
+            ExtraServices = s =>
+            {
+                s.RemoveAll<DynamicModules.Application.Common.IInstalledLocales>();
+                s.AddSingleton<DynamicModules.Application.Common.IInstalledLocales, ThreeLocales>();
+            }
+        };
+        var admin = app.AsUser();
+        var item = Item(await JsonOf(await admin.GetAsync($"{Base}/system/policies")), "locale.enabled");
+        item.GetProperty("options").EnumerateArray().Select(e => e.GetString()).Should().Contain("ja");
+        var res = await PutSystem(admin, "locale.enabled", new { value = new[] { "zh-TW", "ja" } });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        (await JsonOf(res)).GetProperty("value").EnumerateArray().Select(e => e.GetString()).Should().Equal("zh-TW", "ja");
     }
 
     [Fact]

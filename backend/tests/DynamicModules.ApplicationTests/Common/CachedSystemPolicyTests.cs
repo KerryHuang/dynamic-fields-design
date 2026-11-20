@@ -151,6 +151,32 @@ public class CachedSystemPolicyTests
     }
 
     [Fact]
+    public async Task LocaleFallbacks_DefaultFirst()
+    {
+        var (p, reader, _, _) = Create();
+        p.DefaultLocale.Should().Be("zh-TW");
+        p.EnabledLocales.Should().Equal("zh-TW", "en-US", "th", "vi");
+        p.RequiredTextLocales.Should().Equal("zh-TW");
+        p.LocaleFallbacks.Should().Equal("zh-TW");
+
+        reader.ByCode[PolicyCatalog.LocaleDefault.Code] = "en-US";
+        reader.ByCode[PolicyCatalog.LocaleEnabled.Code] = "zh-TW,en-US";
+        reader.ByCode[PolicyCatalog.LocaleRequiredText.Code] = "zh-TW,en-US";
+        await p.EnsureFreshAsync(default);
+        p.DefaultLocale.Should().Be("en-US");
+        p.EnabledLocales.Should().Equal("zh-TW", "en-US");
+        p.RequiredTextLocales.Should().Equal("zh-TW", "en-US");
+        p.LocaleFallbacks.Should().Equal("en-US", "zh-TW");
+
+        // 提交後的 Apply 一起換算
+        p.Apply(PolicyCatalog.LocaleDefault, "th", p.NextSequence());
+        p.DefaultLocale.Should().Be("th");
+        p.LocaleFallbacks.Should().Equal("th", "zh-TW");
+        p.Apply(PolicyCatalog.LocaleEnabled, "", p.NextSequence());
+        p.EnabledLocales.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task EnsureFresh_LoadsAllSystemPolicies()
     {
         var (p, reader, _, _) = Create();

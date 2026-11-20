@@ -148,6 +148,17 @@ public class PolicyCatalogFixtureTests
         PolicyCatalog.LocaleTimeZone.Factory.Should().Be("+08:00");
         PolicyCatalog.LocaleTimeZone.Kind.Should().Be(PolicyKind.UtcOffset);
         PolicyCatalog.LocaleTimeZone.Scope.Should().Be(PolicyScope.System);
+        // p3b：語系（A18）
+        PolicyCatalog.LocaleDefault.Factory.Should().Be("zh-TW");
+        PolicyCatalog.LocaleDefault.Kind.Should().Be(PolicyKind.Choice);
+        PolicyCatalog.LocaleEnabled.Factory.Should().Be("zh-TW,en-US,th,vi");
+        PolicyCatalog.LocaleEnabled.Kind.Should().Be(PolicyKind.RoleSet);
+        PolicyCatalog.LocaleRequiredText.Factory.Should().Be("zh-TW");
+        PolicyCatalog.LocaleRequiredText.Kind.Should().Be(PolicyKind.RoleSet);
+        new[] { PolicyCatalog.LocaleDefault, PolicyCatalog.LocaleEnabled, PolicyCatalog.LocaleRequiredText }
+            .Should().OnlyContain(d => d.Scope == PolicyScope.System && d.Category == "locale" && PolicyCatalog.IsLocaleOptions(d));
+        // 一週起始日也在 locale 分類，但選項不是語系
+        PolicyCatalog.IsLocaleOptions(PolicyCatalog.CalendarWeekStart).Should().BeFalse();
         PolicyCatalog.WeekStartOf("sunday").Should().Be(DayOfWeek.Sunday);
         PolicyCatalog.WeekStartOf("monday").Should().Be(DayOfWeek.Monday);
     }
@@ -159,8 +170,8 @@ public class PolicyCatalogFixtureTests
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
         fixture.Codes.Should().BeEquivalentTo(PolicyCatalog.All.Select(d => d.Code));
         fixture.Categories.Should().BeEquivalentTo(PolicyCatalog.All.Select(d => d.Category).Distinct());
-        // 時區偏移不必翻譯，不進 choices（計畫判斷 2）
-        fixture.Choices.Should().BeEquivalentTo(PolicyCatalog.All.Where(d => d.Kind is PolicyKind.Choice or PolicyKind.RoleSet)
+        // 時區偏移不必翻譯，不進 choices（計畫判斷 2）；語系選項以各語言自稱顯示，也不進（判斷 24）
+        fixture.Choices.Should().BeEquivalentTo(PolicyCatalog.All.Where(d => d.Kind is PolicyKind.Choice or PolicyKind.RoleSet && !PolicyCatalog.IsLocaleOptions(d))
             .SelectMany(d => d.Options ?? []).Distinct());
     }
 }

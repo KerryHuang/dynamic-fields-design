@@ -14,20 +14,21 @@ namespace DynamicModules.Application.Dynamic.PolicyService;
 // 政策設定 API（設計 docs/superpowers/specs/2026-11-11-policy-settings-design.md §7）。
 // 權限由 pipeline 負責：系統政策走 SystemAdminBehavior，模組政策走設計權（共用主檔另要系統管理員）。
 
-public class GetSystemPoliciesHandler(IPolicyReader reader) : IRequestHandler<GetSystemPoliciesRequest, ServiceResult>
+public class GetSystemPoliciesHandler(IPolicyReader reader, PolicyOptionSource options) : IRequestHandler<GetSystemPoliciesRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetSystemPoliciesRequest request, CancellationToken ct)
     {
         var items = new List<SystemPolicyResponse>();
         foreach (var def in PolicyCatalog.All)
-            items.Add(PolicyJson.System(def, await reader.ResolveAsync(def, null, ct)));
+            items.Add(PolicyJson.System(def, await reader.ResolveAsync(def, null, ct), options.Of(def)));
         return ServiceResult.Success(items);
     }
 }
 
 public class UpdateSystemPolicyHandler(
     ISystemSettingRepository settings, IPolicyReader reader, IUnitOfWork uow, IAccountRepository accounts, IPermissionRepository permissions,
-    AuditContext audit, IEnumerable<IPolicyChangeHook> hooks, CachedSystemPolicy cache, AfterCommitActions afterCommit)
+    AuditContext audit, IEnumerable<IPolicyChangeHook> hooks, CachedSystemPolicy cache, AfterCommitActions afterCommit,
+    PolicyOptionSource options, IInstalledLocales installed)
     : IRequestHandler<UpdateSystemPolicyRequest, ServiceResult>
 {
     /// <summary>
@@ -44,16 +45,15 @@ public class UpdateSystemPolicyHandler(
         string? canonicalValue = null;
         if (request.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } value)
         {
-            if (PolicyJson.FromJson(def, value) is not { } canonical) return PolicyValueInvalid(def, value);
+            if (PolicyJson.FromJson(def, value, options.Of(def)) is not { } canonical) return PolicyValueInvalid(def, value, options.Of(def));
             if (await RecipientCheck.MissingAsync(def, canonical, accounts, permissions, ct) is { Count: > 0 } missing)
                 return ServiceResult.Invalid(new Dictionary<string, string[]> { ["value"] = [PolicyMessages.RecipientsMissing(missing)] });
-            await settings.SetAsync(def.SettingKey, canonical, ct);
             canonicalValue = canonical;
         }
-        else
-        {
-            await settings.RemoveAsync(def.SettingKey, ct);
-        }
+        if (PolicyCatalog.IsLocaleOptions(def) && await LocaleRuleErrorAsync(def, canonicalValue, ct) is { } localeError)
+            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["value"] = [localeError] });
+        if (canonicalValue is not null) await settings.SetAsync(def.SettingKey, canonicalValue, ct);
+        else await settings.RemoveAsync(def.SettingKey, ct);
         await uow.CommitAsync(ct);
         reader.Invalidate();
         var resolution = await reader.ResolveAsync(def, null, ct);
@@ -68,17 +68,34 @@ public class UpdateSystemPolicyHandler(
             afterCommit.Add("policy-cache", () => cache.Apply(def, newEffective, seq));
         }
         audit.Describe(new { Value = old }, new { Value = canonicalValue });
-        return ServiceResult.Success(PolicyJson.System(def, resolution));
+        return ServiceResult.Success(PolicyJson.System(def, resolution, options.Of(def)));
     }
 
-    internal static ServiceResult PolicyValueInvalid(PolicyDefinition def, JsonElement value) =>
+    /// <summary>
+    /// 語系三政策互相約束（計畫判斷 10）：這次的新值（null 時是上一層值）＋另外兩個目前的生效值；在寫設定之前檢查。
+    /// </summary>
+    private async Task<string?> LocaleRuleErrorAsync(PolicyDefinition def, string? canonical, CancellationToken ct)
+    {
+        async Task<string> ValueOf(PolicyDefinition d)
+        {
+            var r = await reader.ResolveAsync(d, null, ct);
+            return ReferenceEquals(d, def) ? canonical ?? r.Factory : r.Effective;
+        }
+        static IReadOnlyList<string> List(string v) => v.Length == 0 ? [] : v.Split(',');
+        var code = LocalePolicyRules.Check(
+            await ValueOf(PolicyCatalog.LocaleDefault), List(await ValueOf(PolicyCatalog.LocaleEnabled)),
+            List(await ValueOf(PolicyCatalog.LocaleRequiredText)), installed.Codes.ToList());
+        return code is null ? null : PolicyMessages.LocaleRule(code, installed.Codes);
+    }
+
+    internal static ServiceResult PolicyValueInvalid(PolicyDefinition def, JsonElement value, IReadOnlyList<string>? options) =>
         ServiceResult.Invalid(new Dictionary<string, string[]>
         {
-            ["value"] = [PolicyJson.ForbiddenItems(def, value) is { Count: > 0 } rejected ? PolicyMessages.Forbidden(rejected) : PolicyMessages.Invalid(def)]
+            ["value"] = [PolicyJson.ForbiddenItems(def, value) is { Count: > 0 } rejected ? PolicyMessages.Forbidden(rejected) : PolicyMessages.Invalid(def, options)]
         });
 }
 
-public class GetModulePoliciesHandler(IModuleRepository modules, IPolicyReader reader)
+public class GetModulePoliciesHandler(IModuleRepository modules, IPolicyReader reader, PolicyOptionSource options)
     : IRequestHandler<GetModulePoliciesRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetModulePoliciesRequest request, CancellationToken ct)
@@ -89,14 +106,14 @@ public class GetModulePoliciesHandler(IModuleRepository modules, IPolicyReader r
         var isDetail = ModuleRelations.IsDetail(module);
         var items = new List<ModulePolicyResponse>();
         foreach (var def in PolicyCatalog.All.Where(d => d.Scope == PolicyScope.Module && d.AppliesTo(isDetail)))
-            items.Add(PolicyJson.Module(def, await reader.ResolveAsync(def, module.Id, ct)));
+            items.Add(PolicyJson.Module(def, await reader.ResolveAsync(def, module.Id, ct), options.Of(def)));
         return ServiceResult.Success(items);
     }
 }
 
 public class UpdateModulePolicyHandler(
     IModuleRepository modules, IModulePolicyRepository overrides, IPolicyReader reader, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
-    IAccountRepository accounts, IPermissionRepository permissions, AuditContext audit)
+    IAccountRepository accounts, IPermissionRepository permissions, AuditContext audit, PolicyOptionSource options)
     : IRequestHandler<UpdateModulePolicyRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateModulePolicyRequest request, CancellationToken ct)
@@ -114,7 +131,7 @@ public class UpdateModulePolicyHandler(
         var old = existing?.Value;
         if (request.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } value)
         {
-            if (PolicyJson.FromJson(def, value) is not { } canonical) return UpdateSystemPolicyHandler.PolicyValueInvalid(def, value);
+            if (PolicyJson.FromJson(def, value, options.Of(def)) is not { } canonical) return UpdateSystemPolicyHandler.PolicyValueInvalid(def, value, options.Of(def));
             if (await RecipientCheck.MissingAsync(def, canonical, accounts, permissions, ct) is { Count: > 0 } missing)
                 return ServiceResult.Invalid(new Dictionary<string, string[]> { ["value"] = [PolicyMessages.RecipientsMissing(missing)] });
             if (existing is null)
@@ -134,7 +151,7 @@ public class UpdateModulePolicyHandler(
         await uow.CommitAsync(ct);
         reader.Invalidate();
         audit.Describe(new { Value = old }, new { Value = existing?.Value });
-        return ServiceResult.Success(PolicyJson.Module(def, await reader.ResolveAsync(def, module.Id, ct)));
+        return ServiceResult.Success(PolicyJson.Module(def, await reader.ResolveAsync(def, module.Id, ct), options.Of(def)));
     }
 }
 

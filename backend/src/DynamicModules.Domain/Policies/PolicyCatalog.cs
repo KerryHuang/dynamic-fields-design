@@ -1,3 +1,5 @@
+using DynamicModules.Domain.ValueObjects;
+
 namespace DynamicModules.Domain.Policies;
 
 /// <summary>
@@ -87,6 +89,27 @@ public static class PolicyCatalog
     /// </summary>
     public static readonly PolicyDefinition LocaleTimeZone =
         new("locale.timeZone", "locale", PolicyKind.UtcOffset, PolicyScope.System, "+08:00", Options: UtcOffsets);
+
+    /// <summary>
+    /// 語系類政策的出廠選項：程式支援的語系（判斷 22、23）。政策登記只從這裡取用程式支援的語系清單；
+    /// 執行期的選項一律經 Application 的 <c>PolicyOptionSource</c>（i4a 換成已安裝語系）。
+    /// </summary>
+    public static IReadOnlyList<string> FactoryLocales { get; } = I18nText.SupportedLocales;
+
+    /// <summary>A18：預設語系。沒選過語言的人看到的語系，也是請求沒指定語系時的回應語系。</summary>
+    public static readonly PolicyDefinition LocaleDefault =
+        new("locale.default", "locale", PolicyKind.Choice, PolicyScope.System, "zh-TW", Options: FactoryLocales);
+
+    /// <summary>A18：啟用語系。語言選單與多語輸入框只列這些；停用不刪已輸入的文字。</summary>
+    public static readonly PolicyDefinition LocaleEnabled =
+        new("locale.enabled", "locale", PolicyKind.RoleSet, PolicyScope.System, "zh-TW,en-US,th,vi", Options: FactoryLocales);
+
+    /// <summary>A18：必填語系。所有必填的多語文字都要填這些語系；增加後只在新增或修改那段文字時檢查；應用程式套件仍要求繁中。</summary>
+    public static readonly PolicyDefinition LocaleRequiredText =
+        new("locale.requiredText", "locale", PolicyKind.RoleSet, PolicyScope.System, "zh-TW", Options: FactoryLocales);
+
+    /// <summary>選項是語系清單的政策（預設、啟用、必填語系）；一週起始日同在 locale 分類但不是。</summary>
+    public static bool IsLocaleOptions(PolicyDefinition def) => ReferenceEquals(def.Options, FactoryLocales);
 
     /// <summary>A5：部門層數上限；只在新增部門或改上級部門時檢查，已超過的部門照常可改其他欄位。</summary>
     public static readonly PolicyDefinition OrganizationMaxDepth =
@@ -403,7 +426,8 @@ public static class PolicyCatalog
         [TaskMaxRulesPerModule, TaskMaxTasksPerRule, TaskMaxRulesPerPackage,
          TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled, TaskNotifySubtasksDone,
          TaskSupervisorScope, TaskSupervisorScopeRecursive, TaskMaxSubtasksPerTask,
-         NotificationRetentionDays, NotificationReminderScanMinutes, CalendarWeekStart, LocaleTimeZone, OrganizationMaxDepth,
+         NotificationRetentionDays, NotificationReminderScanMinutes, CalendarWeekStart, LocaleTimeZone, LocaleDefault, LocaleEnabled, LocaleRequiredText,
+         OrganizationMaxDepth,
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection, OpsUpkeepMinutes, OpsAuditRetentionDays,
          OpsMonitorScanMinutes, OpsHealthResultRetentionDays, OpsIncidentRetentionDays, OpsIncidentSampleRetentionDays,

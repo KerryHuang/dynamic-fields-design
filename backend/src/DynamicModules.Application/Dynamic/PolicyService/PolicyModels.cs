@@ -32,8 +32,8 @@ public static class PolicyJson
         _ => JsonSerializer.SerializeToElement(canonical.Length == 0 ? [] : canonical.Split(',')),
     };
 
-    /// <summary>JSON 型別不對回 null，其餘交給 <see cref="PolicyDefinition.Normalize"/>。</summary>
-    public static string? FromJson(PolicyDefinition def, JsonElement value)
+    /// <summary>JSON 型別不對回 null，其餘交給 <see cref="PolicyDefinition.Normalize"/>（<paramref name="options"/> 來自 <see cref="PolicyOptionSource"/>）。</summary>
+    public static string? FromJson(PolicyDefinition def, JsonElement value, IReadOnlyList<string>? options)
     {
         string? raw = def.Kind switch
         {
@@ -45,7 +45,7 @@ public static class PolicyJson
             _ => value.ValueKind == JsonValueKind.Array && value.EnumerateArray().All(e => e.ValueKind == JsonValueKind.String)
                 ? string.Join(",", value.EnumerateArray().Select(e => e.GetString())) : null,
         };
-        return def.Normalize(raw);
+        return def.Normalize(raw, options);
     }
 
     /// <summary>CodeList 的值裡落在寫死黑名單的項目（正規化後）；沒有黑名單或型別不對回空清單。</summary>
@@ -58,13 +58,13 @@ public static class PolicyJson
 
     public static bool HasOptions(PolicyDefinition def) => def.Kind is PolicyKind.Choice or PolicyKind.RoleSet or PolicyKind.UtcOffset;
 
-    public static SystemPolicyResponse System(PolicyDefinition def, PolicyResolution r) => new(
+    public static SystemPolicyResponse System(PolicyDefinition def, PolicyResolution r, IReadOnlyList<string>? options) => new(
         def.Code, def.Category, def.Kind, def.Scope, def.Unit,
-        HasRange(def) ? def.Min : null, HasRange(def) ? def.Max : null, HasOptions(def) ? def.Options : null,
+        HasRange(def) ? def.Min : null, HasRange(def) ? def.Max : null, HasOptions(def) ? options : null,
         ToJson(def, r.Factory), r.System is null ? null : ToJson(def, r.System), ToJson(def, r.System ?? r.Factory), def.DynamicRecipients);
 
-    public static ModulePolicyResponse Module(PolicyDefinition def, PolicyResolution r) => new(
+    public static ModulePolicyResponse Module(PolicyDefinition def, PolicyResolution r, IReadOnlyList<string>? options) => new(
         def.Code, def.Category, def.Kind, def.Unit,
-        HasRange(def) ? def.Min : null, HasRange(def) ? def.Max : null, HasOptions(def) ? def.Options : null,
+        HasRange(def) ? def.Min : null, HasRange(def) ? def.Max : null, HasOptions(def) ? options : null,
         ToJson(def, r.System ?? r.Factory), r.Override is null ? null : ToJson(def, r.Override), ToJson(def, r.Effective));
 }

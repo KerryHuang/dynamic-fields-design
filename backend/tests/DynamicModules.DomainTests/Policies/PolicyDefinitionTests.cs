@@ -50,6 +50,16 @@ public class PolicyDefinitionTests
     [InlineData(null, null)]
     public void RoleSet_Normalize(string? raw, string? expected) => Roles().Normalize(raw).Should().Be(expected);
 
+    [Fact]
+    public void Normalize_UsesGivenOptions()
+    {
+        // 語系類政策的選項由 Application 的 PolicyOptionSource 提供（計畫判斷 22；i4a 換成已安裝語系）
+        PolicyCatalog.LocaleDefault.Normalize("ja", ["zh-TW", "ja"]).Should().Be("ja");
+        PolicyCatalog.LocaleDefault.Normalize("ja").Should().BeNull();
+        PolicyCatalog.LocaleEnabled.Normalize("ja,zh-TW", ["zh-TW", "ja"]).Should().Be("zh-TW,ja");
+        PolicyCatalog.LocaleEnabled.Normalize("ja,zh-TW").Should().BeNull();
+    }
+
     [Theory]
     [InlineData(".PDF, png,pdf", "pdf,png")]
     [InlineData("", null)]

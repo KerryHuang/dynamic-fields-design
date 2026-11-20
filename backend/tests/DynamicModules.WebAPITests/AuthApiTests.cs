@@ -55,6 +55,32 @@ public class AuthApiTests
         await res.Content.ReadFromJsonAsync<JsonElement>();
 
     [Fact]
+    public async Task Options_IncludesLocaleSettings()
+    {
+        // X-User 模式只為了讓 admin 能改政策；auth/options 本身是公開端點，未登入（不帶標頭）照樣取得
+        using var app = new TestApp();
+        var body = await Json(await app.AsUser(null).GetAsync($"{Auth}/options"));
+        body.GetProperty("defaultLocale").GetString().Should().Be("zh-TW");
+        body.GetProperty("enabledLocales").EnumerateArray().Select(e => e.GetString()).Should().Equal("zh-TW", "en-US", "th", "vi");
+
+        (await app.AsUser().PutAsJsonAsync($"{Base}/system/policies/locale.default", new { value = "en-US" }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        body = await Json(await app.AsUser(null).GetAsync($"{Auth}/options"));
+        body.GetProperty("defaultLocale").GetString().Should().Be("en-US");
+    }
+
+    [Fact]
+    public async Task Options_DemoLoginDisabled_StillIncludesLocales()
+    {
+        using var app = new TestApp();
+        app.Settings["Demo:LoginEnabled"] = "false";
+        var body = await Json(await app.AsUser(null).GetAsync($"{Auth}/options"));
+        body.GetProperty("demoLoginEnabled").GetBoolean().Should().BeFalse();
+        body.GetProperty("defaultLocale").GetString().Should().Be("zh-TW");
+        body.GetProperty("enabledLocales").GetArrayLength().Should().Be(4);
+    }
+
+    [Fact]
     public async Task XUserHeader_WithoutCookie_Returns401()
     {
         using var app = NewApp();

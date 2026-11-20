@@ -45,9 +45,10 @@ public sealed partial record PolicyDefinition(
     public bool AppliesTo(bool isDetailModule) =>
         Target == PolicyModuleTarget.Any || (Target == PolicyModuleTarget.Detail) == isDetailModule;
 
-    /// <summary>合法就回標準字串，否則 null。</summary>
-    public string? Normalize(string? raw)
+    /// <summary>合法就回標準字串，否則 null。<paramref name="options"/> 是執行期的選項（語系類政策由 Application 提供已安裝語系），null 用 <see cref="Options"/>。</summary>
+    public string? Normalize(string? raw, IReadOnlyList<string>? options = null)
     {
+        var allowed = options ?? Options;
         if (raw is null) return null;
         switch (Kind)
         {
@@ -59,13 +60,13 @@ public sealed partial record PolicyDefinition(
                 return bool.TryParse(raw, out var b) && raw.Trim() == raw ? (b ? "true" : "false") : null;
             case PolicyKind.Choice:
             case PolicyKind.UtcOffset:
-                return Options is not null && Options.Contains(raw, StringComparer.Ordinal) ? raw : null;
+                return allowed is not null && allowed.Contains(raw, StringComparer.Ordinal) ? raw : null;
             case PolicyKind.RoleSet:
             {
-                var options = Options ?? [];
+                var list = allowed ?? [];
                 var items = Split(raw);
-                if (items.Any(i => !options.Contains(i, StringComparer.Ordinal))) return null;
-                return string.Join(",", options.Where(o => items.Contains(o, StringComparer.Ordinal)));
+                if (items.Any(i => !list.Contains(i, StringComparer.Ordinal))) return null;
+                return string.Join(",", list.Where(o => items.Contains(o, StringComparer.Ordinal)));
             }
             case PolicyKind.CodeList:
             {

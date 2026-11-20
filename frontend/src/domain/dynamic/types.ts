@@ -330,6 +330,10 @@ export interface AuthOptions {
   demoLoginEnabled: boolean;
   demoGenerating: boolean;
   demoAccounts: User[];
+  /** 語系政策 locale.default 的生效值（登入前就能取） */
+  defaultLocale: string;
+  /** 語系政策 locale.enabled 的生效值 */
+  enabledLocales: string[];
 }
 
 export interface AdminUser {

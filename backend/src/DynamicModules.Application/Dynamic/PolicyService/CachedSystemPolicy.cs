@@ -35,7 +35,10 @@ public sealed class CachedSystemPolicy(IServiceScopeFactory scopes, TimeProvider
     /// </summary>
     public sealed record Published(
         FrozenDictionary<string, string> Values, FrozenDictionary<string, long> Seq, long ApplyCount, TimeSpan BusinessOffset,
-        DateTimeOffset LoadedAt, bool Failed, bool Loaded);
+        DateTimeOffset LoadedAt, bool Failed, bool Loaded, LocaleState Locales);
+
+    /// <summary>語系三政策換算好的值（換狀態時一起算，計畫 Task 8）；<c>Fallbacks</c> 是退回鏈「預設語系 → 繁中」（去重，判斷 13）。</summary>
+    public sealed record LocaleState(string Default, IReadOnlyList<string> Enabled, IReadOnlyList<string> Required, IReadOnlyList<string> Fallbacks);
 
     private Published _current = Initial(env);
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -55,7 +58,17 @@ public sealed class CachedSystemPolicy(IServiceScopeFactory scopes, TimeProvider
     private static Published Initial(PolicyEnvironmentDefaults env)
     {
         var values = SystemPolicies.ToFrozenDictionary(d => d.Code, env.FactoryOf, StringComparer.Ordinal);
-        return new Published(values, FrozenDictionary<string, long>.Empty, 0, OffsetOf(values, env), DateTimeOffset.MinValue, Failed: false, Loaded: false);
+        return new Published(values, FrozenDictionary<string, long>.Empty, 0, OffsetOf(values, env), DateTimeOffset.MinValue, Failed: false, Loaded: false,
+            LocalesOf(values, env));
+    }
+
+    private static LocaleState LocalesOf(IReadOnlyDictionary<string, string> values, PolicyEnvironmentDefaults env)
+    {
+        string Of(PolicyDefinition d) => values.GetValueOrDefault(d.Code) ?? env.FactoryOf(d);
+        static IReadOnlyList<string> List(string v) => v.Length == 0 ? [] : v.Split(',');
+        var def = Of(PolicyCatalog.LocaleDefault);
+        return new LocaleState(def, List(Of(PolicyCatalog.LocaleEnabled)), List(Of(PolicyCatalog.LocaleRequiredText)),
+            new[] { def, Domain.ValueObjects.I18nText.FallbackLocale }.Distinct(StringComparer.Ordinal).ToArray());
     }
 
     private static TimeSpan OffsetOf(IReadOnlyDictionary<string, string> values, PolicyEnvironmentDefaults env) =>
@@ -71,6 +84,18 @@ public sealed class CachedSystemPolicy(IServiceScopeFactory scopes, TimeProvider
 
     /// <summary>營運時區偏移（政策 locale.timeZone）；唯一來源，<c>IBusinessTime</c> 不帶偏移。</summary>
     public TimeSpan BusinessOffset => Volatile.Read(ref _current).BusinessOffset;
+
+    /// <summary>預設語系（政策 locale.default）：請求沒指定語系、或指定的語系停用時用它。</summary>
+    public string DefaultLocale => Volatile.Read(ref _current).Locales.Default;
+
+    /// <summary>啟用語系（政策 locale.enabled），依已安裝語系的順序。</summary>
+    public IReadOnlyList<string> EnabledLocales => Volatile.Read(ref _current).Locales.Enabled;
+
+    /// <summary>必填語系（政策 locale.requiredText）：必填的多語文字都要有這些語系。</summary>
+    public IReadOnlyList<string> RequiredTextLocales => Volatile.Read(ref _current).Locales.Required;
+
+    /// <summary>多語文字的退回鏈（要求的語系之後依序試）：預設語系 → 繁中，去重。</summary>
+    public IReadOnlyList<string> LocaleFallbacks => Volatile.Read(ref _current).Locales.Fallbacks;
 
     /// <summary>欄位值顯示用的環境（語系＋目前的營運時區偏移）。</summary>
     public Display.FieldDisplayContext Display(string locale) => new(locale, BusinessOffset);
@@ -123,10 +148,11 @@ public sealed class CachedSystemPolicy(IServiceScopeFactory scopes, TimeProvider
                     values[def.Code] = (await reader.ResolveAsync(def, null, cts.Token)).Effective;
                 var frozen = values.ToFrozenDictionary(StringComparer.Ordinal);
                 var offset = OffsetOf(frozen, env);
+                var locales = LocalesOf(frozen, env);
                 // 期間有 Apply 就整份丟掉（LoadedAt 不動，下一個請求再重載）
                 Publish(cur => cur.ApplyCount != start.ApplyCount
                     ? null
-                    : new Published(frozen, StampSeq(cur.Seq, committedAtStart), cur.ApplyCount, offset, now, Failed: false, Loaded: true),
+                    : new Published(frozen, StampSeq(cur.Seq, committedAtStart), cur.ApplyCount, offset, now, Failed: false, Loaded: true, locales),
                     BeforePublishForTests);
             }
             catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
@@ -173,6 +199,7 @@ public sealed class CachedSystemPolicy(IServiceScopeFactory scopes, TimeProvider
                 Seq = Replace(cur.Seq, def.Code, seq),
                 ApplyCount = cur.ApplyCount + 1,
                 BusinessOffset = def.Code == PolicyCatalog.LocaleTimeZone.Code ? OffsetOf(values, env) : cur.BusinessOffset,
+                Locales = PolicyCatalog.IsLocaleOptions(def) ? LocalesOf(values, env) : cur.Locales,
             };
         });
         if (!applied) Publish(cur => cur with { LoadedAt = DateTimeOffset.MinValue });

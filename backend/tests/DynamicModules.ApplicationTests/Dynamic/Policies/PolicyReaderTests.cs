@@ -195,9 +195,10 @@ public class PolicyReaderEnvironmentInvalidTests : DesignerTestBase
     {
         var env = new PolicyEnvironmentDefaults(new Dictionary<string, string> { [Def.Code] = "abc" });
         var reader = new PolicyReader(Svc<ISystemSettingRepository>(), Svc<IModulePolicyRepository>(), env,
+            new PolicyOptionSource(new DynamicModules.Application.Common.FactoryInstalledLocales()),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<PolicyReader>.Instance);
         (await reader.IntAsync(Def, null, default)).Should().Be(20);
-        PolicyJson.System(Def, await reader.ResolveAsync(Def, null, default)).Should().NotBeNull();
+        PolicyJson.System(Def, await reader.ResolveAsync(Def, null, default), Def.Options).Should().NotBeNull();
     }
 
     [Fact]
