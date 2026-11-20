@@ -2,7 +2,7 @@
 
 **不寫程式，自己設計進銷存、CRM 與生產管理的業務系統。**
 
-[線上 Demo](https://formwright-demo.onrender.com)｜[操作手冊](docs/manual.md)｜[Demo 腳本](docs/demo.md)｜[English](README.en.md)
+[線上 Demo](https://formwright-demo.onrender.com)｜[操作手冊](docs/manual.md)｜[Demo 腳本](docs/demo.md)｜[English](README.en.md)｜[開發紀錄](https://kerry-notes.kh-lab.workers.dev/posts/formwright-product-intro/)
 
 ![首頁儀表板：業務一登入後看到的訂單統計與前 5 大客戶](docs/images/readme/dashboard.png)
 
