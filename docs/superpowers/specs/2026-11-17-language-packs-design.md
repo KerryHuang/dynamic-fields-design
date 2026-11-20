@@ -158,7 +158,7 @@ Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單寫死�
 - **`locale`**：§4.1 的欄位。匯入既有語系時，這段可以只帶 `code`，其他欄位沿用；有帶就更新。`direction` 只用來拒收（`rtl` 整包拒收，U10），不存；缺省視為 `ltr`。
 - **`pack.version`**：匯入者自訂的版本字串，只顯示、不比大小（最長 50 字元）。`builtFor` 是產生樣板時的平台版本，只用來提示（§5.2；最長 20 字元）。`baseLocale` 是翻譯時參照的原文語系。`note` 最長 500 字元。
 - **`ui`**：前端介面文字，**扁平鍵**（`a.b.c`），鍵順序依字母排序，方便 diff。值是 vue-i18n 訊息，語法限制見 §13.2。
-- **`server`**：後端訊息，鍵是 `MessageText` 常數名；`ReportText` 的鍵加 `report.` 前綴當命名空間（目前兩張表沒有同名鍵，前綴是為了讓兩張表日後各自加鍵不會撞名，也讓語系包一眼分得出來源）。值是 `string.Format` 範本，參數 `{0}`、`{1}`。**鍵是語系包的公開契約**：`MessageText`、`ReportText` 的註解要寫明「鍵改名要留別名」，否則舊語系包的句子會默默失效。
+- **`server`**：後端訊息，鍵是 `MessageText` 常數名；`ReportText` 的鍵加 `report.` 前綴當命名空間（目前兩張表沒有同名鍵，前綴是為了讓兩張表日後各自加鍵不會撞名，也讓語系包一眼分得出來源）。`AlertMailText`（告警信與事件標題）的鍵加 `alert.` 前綴：主表 `alert.<常數名>`、代碼名稱 `alert.label.<代碼>`（例 `alert.label.severity.critical`）、健康檢查名稱 `alert.check.<代碼>`（i4c Q1，2026-11-21 使用者裁決）。值是 `string.Format` 範本，參數 `{0}`、`{1}`。**鍵是語系包的公開契約**：`MessageText`、`ReportText` 的註解要寫明「鍵改名要留別名」，否則舊語系包的句子會默默失效。
 - **`designData`**（選填）：設計資料翻譯，鍵是 §10.2 的路徑，`text` 是譯文，`source` 是翻譯當時的原文（用來偵測「原文已改」，§10.4）。官方或廠商可以用這段替內建應用程式出譯名。
 - 三段都可以缺；值是空字串代表「沒翻」，匯入時略過、不算錯（樣板就靠這個，§7）。
 
@@ -297,7 +297,8 @@ I18nText AsI18n(string key, params object[] args);              // 對每個已�
 - **內建層**第一步仍是現有的 C# 四語表（`MessageText.Table`、`ReportText.Table`），不搬；新語系與覆寫只來自資料庫的覆寫層。新語系不必改 C#。
 - **解析點**：`ServiceResultExtensions` 的 `MessageIn`／`ErrorsIn` 改從 DI 取 `IMessageCatalog`。20 個直接呼叫 `MessageText.Get`／`ReportText.Get` 的檔改成注入 `IMessageCatalog`；還沒改到的仍用靜態 `Get`（只認內建四語，其他語系退回繁中），所以可以分段改。
 - `AsI18n` 存進資料的多語標籤（「第 2 層主管」）改成對**當時已安裝**的語系各產生一句；之後才裝的語系看到的是退回值，列已知限制。**實作上**：4 個呼叫點（`ApprovalMessages.cs`）中 3 個是 `static readonly` 欄位，型別初始化時只算一次、接不了 DI、也做不到「當時已安裝」，i4c 要把它們改成方法並從 `IMessageCatalog` 取。
-- `TranslateLiteral`（繁中原文換成鍵）照舊。
+- `TranslateLiteral`（繁中原文換成鍵）照舊。（i4c 實作時已刪：沒有呼叫端，`MessageRef` 改用 `MessageText.KeyOfZh` 查鍵。）
+- **實作（i4c）**：`Get` 收 `LocaleContext`，不收語系字串（i4c 計畫判斷 1：鏈只由 `RequestLocale`／`CachedSystemPolicy.FallbacksFor` 組，與 `I18nText.Resolve` 同鏈）；`AsI18n` 的語系取已安裝清單，整批讀同一份 `LocaleRegistry` 快照（判斷 2）；`ApprovalViews.FallbackDefinition` 一併改方法，備援節點名稱先用實例的名稱快照（判斷 8）；告警信的 `AlertMailText` 也併進內建層（Q1）。
 
 ### 9.2 第二步（可選，T11）
 
@@ -424,6 +425,8 @@ Demo 站公開，任何人都能用 Demo 管理員登入。若開放匯入，一
 - zh-TW 是平台基準語系：退回鏈最後一步、套件必填（p3 判斷 12）。
 - 內建層必須完整（四份內建檔鍵一致）；匯入層可以不完整。
 - 每語系保留目前版與上一版兩份覆寫層。
+- 後端訊息鍵不存在丟 `KeyNotFoundException`（鍵寫錯是程式錯誤；內建繁中層完整，鏈一定在繁中結束；i4c）。
+- 匯入是否欄位：固定別名（是／true／yes／1、否／false／no／0）併入各已安裝語系的是／否之後，兩邊都有的字當無法判斷、拒絕匯入（不讓語系包錯譯悄悄把「否」判成「是」；i4c Q2）。固定別名本身是既有行為；告警代碼名稱、健康檢查名稱遇到未知代碼回代碼本身也是既有退路。
 
 **安全**
 
@@ -444,6 +447,7 @@ Demo 站公開，任何人都能用 Demo 管理員登入。若開放匯入，一
 - 介面文字（i4b 實作）：雜湊網址的快取 `max-age=31536000, immutable`（`immutable` 網址的慣用值）；`uiHash` 取 SHA-256 前 16 個十六進位字元；瀏覽器快取只存一份（目前實際採用的非試看語系）；文字請求逾時 15 秒；啟動自檢的 log 最多列 20 個缺鍵；介面文字的退回鏈截到繁中（繁中內建層完整，到它一定補齊）；試看存 `sessionStorage`；`quasar-langs.json` 由腳本產生（i4b 計畫判斷 5、6、8、14、15、17、21）。
 - `LocaleRegistry` 60 秒過期檢查（與 `SystemPolicySnapshot` 相同），先比版本戳記、有變才重讀（§4.2）。
 - Excel 樣板每張工作表最多 20000 列。
+- 後端訊息鍵的命名空間：`MessageText` 無前綴、`ReportText` 為 `report.`、`AlertMailText` 為 `alert.`（`alert.label.`、`alert.check.`），是語系包 `server` 段的公開契約；`AsI18n` 產生的語系＝已安裝語系（含已停用，M3）（i4c）。
 
 **新政策（不寫死；編號 A38、A39 暫定，以合併時 main 上下一個未用的編號為準，有 kb1／a3 撞號的前例；寫進政策設計時確認）**
 
@@ -460,13 +464,19 @@ Demo 站公開，任何人都能用 Demo 管理員登入。若開放匯入，一
 - 新語系的字型靠使用者的作業系統（緬甸文、高棉文等可能缺字型）。
 - 使用者語系偏好仍存在瀏覽器，換電腦要重選。
 - 管理員「試看」未啟用語系時，只有前端介面文字與設計資料名稱依該語系；後端訊息仍用預設語系（`X-Locale` 對未啟用語系照 p3 判斷 14 當預設語系，M2）。
-- `FieldImportParser` 匯入布林值時比對四語的「是／否」，新語系的「はい」認不得（改用 `IMessageCatalog` 比對是之後的事）。
-- 後端訊息第一步只有改過的呼叫點支援新語系；還沒改到 `IMessageCatalog` 的少數直接呼叫（§9.1），新語系的使用者看到繁中（i4c 收尾時列出剩餘清單）。
+- 匯入是否欄位接受各已安裝語系（含已停用）匯出的是／否文字；撞字（含撞到固定別名）時拒絕，回「請輸入「是」或「否」」（i4c Q2）。
+- **後端訊息剩餘清單**（i4c 完成後仍不走 `IMessageCatalog` 的地方，i4c 計畫「剩餘清單」）：
+  1. `MessageRuleExtensions.WithText` 的 `WithMessage(MessageText.Get(null, …))`：FluentValidation 內部的繁中訊息；回給使用者的文字走 state 的 `MessageRef`，已經過 catalog。刻意保留。
+  2. `DatabaseBusyException.DefaultMessage`：例外本身的訊息，只進 log；使用者看到的由例外處理經 catalog。刻意保留。
+  3. `WorkflowEnforcer.NotAllowedMessage`／`NotPermittedMessage`、`ApprovalMessages.ManagerLabel(int)`／`PickLabel`：只剩測試引用的繁中字串（既有，提出不動）。
+  4. `MessageRef.Resolve(string?)`、`ServiceResult.Message`／`Errors`／`MessageIn(string?)`／`ErrorsIn(string?)`：只認內建四語的路徑，給 log 與測試；正式回應已改走 catalog。
+  5. 管理類訊息（設計器驗證、套件與樣板的警告等，#19–#21）仍是繁中字面值；票 #66 的 11 行名稱解析隨它們一起做（i4c 計畫判斷 11）。
+  6. `FieldImportParser` 的其他錯誤訊息（「請輸入數字」「日期格式必須是 yyyy-MM-dd」「請輸入「是」或「否」」等）：既有的繁中字面值，不在 `MessageText`，新語系的使用者看到繁中。
 - 管理類訊息（#19–#21）本來就還是繁中字面值，語系包翻不到它們；它們搬進 `MessageText` 之後才翻得到。
 - **i4a 交付時的已知限制**（i4a 計畫「已知限制」）：
   - 直接改 `Dynamic_Locale` 又不動 `ModifiedUtc` 時，語系快照偵測不到，要重啟或 60 秒後再改一次 `ModifiedUtc`。
   - 新語系的使用者看到的後端訊息、介面文字仍是繁中或預設語系（i4b、i4c）。
-  - 警示信語言可以設成新語系，但信件文字只有內建四語，寄出的是退回鏈上第一個有翻譯的語系（i4c 再定）。
+  - 警示信語言可以設成新語系，但信件文字只有內建四語，寄出的是退回鏈上第一個有翻譯的語系。**i4c 起信件逐句沿退回鏈取**（Q1）：i4d1 匯入含 `alert.*` 的語系包後，信件語系的句子就會出現，沒翻到的句子顯示上層或預設語系。
   - 語系快照換新後，正在並行、拿不到政策刷新鎖的少數請求仍用舊的正規化結果，下一個請求就換新。
 - **i4b 交付時的已知限制**（i4b 計畫「已知限制」）：
   - 一次產生多語的地方（沖銷欄位標籤、簽核新節點）拿到的是補齊後的文字：`ja` 缺的句子會以上層或預設語系的譯文寫進 `ja`；日後補了日文翻譯，已建立的標籤不會跟著改（與 `AsI18n`「之後才裝的語系看到退回值」同性質）。
@@ -475,6 +485,11 @@ Demo 站公開，任何人都能用 Demo 管理員登入。若開放匯入，一
   - 斷線時選了這個瀏覽器沒存過的語言，會提示「無法載入〇〇，請稍後再試」並停在原語言。
   - 多台部署時，前端拿到新雜湊卻打到還沒換新的另一台，那次回應是舊內容且不快取（`no-store`），最多 60 秒後一致。
   - 有瀏覽器快取時文字不等網路就套上，但第一次導覽仍要等 `auth/options`（auth guard 要啟用語系清單與政策），伺服器慢時首屏最多等 3 秒；文字以外的首屏等待沒有因快取而縮短（i4b 審查建議 2，不採用）。
+- **i4c 交付時的已知限制**（i4c 計畫「已知限制」）：
+  - 本段之後仍只有內建層：新語系的後端訊息全部是退回鏈上的內建語系（上層或預設語系），要等 i4d1 匯入語系包才有自己的句子。
+  - `AsI18n` 寫進資料的名稱（簽核備援關卡、加簽關卡、主管第 N 層、發起人自選），新語系存的是當時沿鏈補齊的句子；之後補了翻譯，已存的不會跟著改。
+  - 剩餘清單第 3、4 項的繁中字串只給 log 與測試，使用者看不到；第 5、6 項（管理類訊息、#66、匯入的其他錯誤訊息）新語系的使用者仍看到繁中。
+  - 匯入是否欄位：語系包把是／否翻成和固定別名或其他已安裝語系相同的字時，那個字在所有使用者的匯入都被拒；同字不同義而沒撞到的擋不下。源頭的擋法在 i4d1 的語系包驗證器（backlog 票）。
 
 ### 15.1 部署回滾（降版）
 
@@ -601,9 +616,9 @@ Formwright 的取捨：
 6. **套件格式**：`app.schema.json` 的 `propertyNames enum` 四語、`TemplateValidator.HasZhTw`／`AppPackageValidator.CheckText` 的 C# 驗證、手冊「語系鍵不是繁中／English／ไทย／Tiếng Việt 會被拒絕」（手冊第 1123 行）要改；舊 `formatVersion`（2–8）仍只收四語鍵，新版才放寬（`.claude/rules/app-packages.md`）；i3 也要升版，兩者最好合成一次 `formatVersion` 升版，避免客戶看到連續兩次格式變更。
 7. **pkg1（套件更新入口，設計待寫）**：更新內建應用程式時多語文字必須依語系合併，否則會蓋掉客戶匯入的語系文字。這是 pkg1 的新前提。
 8. **`locales.vitest.spec.ts`**：「四份鍵完全相同」只對內建層成立；匯入的語系允許缺鍵。測試保留，但檔案位置改到 `shared/i18n/`。（i4b 完成）
-9. **`MessageText` 註解**「四語系，形式同 ReportText」：第一步內建層形狀不變，但多一層覆寫，註解與 `AsI18n` 的「展成四語」要改成「已安裝語系」。
+9. **`MessageText` 註解**「四語系，形式同 ReportText」：第一步內建層形狀不變，但多一層覆寫，註解與 `AsI18n` 的「展成四語」要改成「已安裝語系」。（i4c 完成）
 10. **手冊 §20 與第 39、62 行**「介面有四種語言」「名稱和其他顯示文字都有 4 個語系」要改成依已安裝、啟用語系。
-11. **專案規則與地圖要跟著改**（i4b、i4c 完成時同步）：`.claude/rules/frontend.md` 的 i18n 條目（四語 JSON 位置、「新增句子要給四語」）、`.claude/rules/backend.md` 的「四語字串表在 `MessageText.cs`」、`AGENTS.md` 架構地圖的「i18n（四語 JSON）」；`MessageText`、`ReportText` 註解加「鍵是語系包契約，改名要留別名」（§5.1）。
+11. **專案規則與地圖要跟著改**（i4b、i4c 完成時同步）：`.claude/rules/frontend.md` 的 i18n 條目（四語 JSON 位置、「新增句子要給四語」）、`.claude/rules/backend.md` 的「四語字串表在 `MessageText.cs`」、`AGENTS.md` 架構地圖的「i18n（四語 JSON）」；`MessageText`、`ReportText` 註解加「鍵是語系包契約，改名要留別名」（§5.1）。i4c 完成：`backend.md`、`AGENTS.md`、`MessageText`／`ReportText`／`AlertMailText` 註解。
 12. **p3 的測試**：`AuthApiTests.Options_IncludesLocaleSettings` 等不因 `auth/options` 加欄位而失敗（§4.4）；`policy-i18n.vitest.spec.ts` 的 choice 四語文案檢查要排除語系類政策（§1）。
 
 ## 19. 測試重點
@@ -640,7 +655,7 @@ Formwright 的取捨：
 
 - **i4a 實作完成**（2026-11-20）；`auth/options` 的 `uiHash` 移到 i4b（i4a 計畫判斷 12），i4b 再加這個欄位、不改形狀。
 - **i4b 已上線**（2026-11-21，7843faa9）。
-- **i4c 計畫**：[i4c 計畫](../plans/2026-11-17-language-packs-i4c.md)（切 i4c-1、i4c-2；2026-11-21 裁決：Q1 警示信文字併進 `IMessageCatalog`（`alert.` 命名空間）、Q2 匯入是否欄位接受所有已安裝語系的是／否文字，撞字（含固定別名）當無法判斷；第二輪審查後修正，見計畫開頭的對照表）。
+- **i4c 計畫**：[i4c 計畫](../plans/2026-11-17-language-packs-i4c.md)（i4c-1、i4c-2 已實作；2026-11-21 裁決：Q1 警示信文字併進 `IMessageCatalog`（`alert.` 命名空間）、Q2 匯入是否欄位接受所有已安裝語系的是／否文字，撞字（含固定別名）當無法判斷；第二輪審查後修正，見計畫開頭的對照表）。
 - i4a 是其他各段的基礎；i4b、i4c 可平行；i4d1 要等兩者；i4d2 接 i4d1。依賴本身：p3 → i4a → i4b／i4c → i4d1（加 O2）→ i4d2 → i4e（加 i3）；i4f 與 i3 一起升格式版本。
 - **migration**：每段一個符合 `.claude/rules/backend.md`：i4a 一個（`Dynamic_Locale`）、i4d1 一個（`Dynamic_LocalePack`；`previewId` 若存資料庫再加一個）。i4d1 不能和其他會加 migration 的段平行。
 - i3 與 i4 的關係：i4a–i4d2 不依賴 i3；i4e 依賴 i3（否則報表、儀表板名稱翻不到）；i4f 建議與 i3 的格式升版放同一段或緊接著合併。路線順序維持「p3 → i3、i4」，段內可排 i4a → i4b／i4c → i3 → i4d1 → i4d2 → i4e、i4f。

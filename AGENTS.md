@@ -28,7 +28,7 @@ ERP 是產品目標，也是核心的壓力測試：做不出來的地方，就�
 
 目錄、啟動、測試指令見 `CONTRIBUTING.md`。重點：
 
-- 後端 `backend/src`：`Domain`（欄位型別、公式、條件，純函式）→ `Application`（MediatR handler，依功能分在 `Dynamic/<功能>Service/`）→ `Persistence`（EF Core，SQLite 與 PostgreSQL 兩種 provider：共用的 repository、SQLite 專屬類別與 migration、種子；PostgreSQL 專屬的交易、鎖、模型調整與 migration 在 `Persistence.Postgres`，依 `Database:Provider` 二選一）→ `WebAPI`。
+- 後端 `backend/src`：`Domain`（欄位型別、公式、條件，純函式）→ `Application`（MediatR handler，依功能分在 `Dynamic/<功能>Service/`；後端訊息走 `Common/Localization/IMessageCatalog`）→ `Persistence`（EF Core，SQLite 與 PostgreSQL 兩種 provider：共用的 repository、SQLite 專屬類別與 migration、種子；PostgreSQL 專屬的交易、鎖、模型調整與 migration 在 `Persistence.Postgres`，依 `Database:Provider` 二選一）→ `WebAPI`。
 - 前端 `frontend/src`：`domain`（型別、規則引擎）、`application`（查詢）、`presentation`（動態表單、列表、設計器，依功能分資料夾）、`pages`、`i18n`（語系載入與設定；內建介面文字在 `shared/i18n/`）。
 - 內建應用程式套件：`backend/apps/*.app.json`。
 - 前後端共用的判斷案例：`shared/`（規則語意以 `rule-cases.json` 為準，兩邊測試都跑）；內建語系的介面文字與語系資訊在 `shared/i18n/<code>/{ui,locale}.json`（後端內嵌、前端只打包繁中）。
