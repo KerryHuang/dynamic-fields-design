@@ -153,6 +153,65 @@ public class ImportApiTests(TestApp app) : IClassFixture<TestApp>
         app.BodyBytesRead.Should().BeLessThan(2_162_688 + 64 * 1024, "出廠值的請求上限 2 MB＋64KB（2,162,688 位元組），讀到上限就停，不收完 10 MB");
     }
 
+    /// <summary>
+    /// 上一條在測試主機只驗得到 multipart 長度上限；真正的 Kestrel 主體上限由過濾器設在 IHttpMaxRequestBodySizeFeature。
+    /// 這裡不起 Kestrel，直接驗：沒有 Content-Length（chunked）時過濾器照樣把那個上限壓到「兩倍檔案上限＋multipart 開銷」，
+    /// 且不是靠 Content-Length 才設；Content-Length 超過時直接 413、不去動上限。
+    /// </summary>
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(1024L, false)]
+    [InlineData(10L * 1024 * 1024, true)]
+    public async Task ImportBodyLimitFilter_SetsKestrelBodyLimit_EvenWithoutContentLength(long? contentLength, bool rejected)
+    {
+        const int maxFileBytes = 1_000_000;
+        var feature = new FakeBodySizeFeature();
+        var http = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        http.Features.Set<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>(feature);
+        http.Request.ContentLength = contentLength;
+        var context = new Microsoft.AspNetCore.Mvc.Filters.ResourceExecutingContext(
+            new Microsoft.AspNetCore.Mvc.ActionContext(http, new Microsoft.AspNetCore.Routing.RouteData(),
+                new Microsoft.AspNetCore.Mvc.Abstractions.ActionDescriptor()), [], []);
+        var nextCalled = false;
+        var filter = new DynamicModules.WebAPI.Controllers.v3.Dynamic.ImportBodyLimitFilter(new FixedReader(maxFileBytes));
+
+        await filter.OnResourceExecutionAsync(context, () =>
+        {
+            nextCalled = true;
+            return Task.FromResult<Microsoft.AspNetCore.Mvc.Filters.ResourceExecutedContext>(null!);
+        });
+
+        if (rejected)
+        {
+            nextCalled.Should().BeFalse();
+            ((Microsoft.AspNetCore.Mvc.StatusCodeResult)context.Result!).StatusCode.Should().Be(413);
+            feature.MaxRequestBodySize.Should().Be(FakeBodySizeFeature.Initial, "413 時不用再去動主體上限");
+        }
+        else
+        {
+            nextCalled.Should().BeTrue();
+            context.Result.Should().BeNull();
+            feature.MaxRequestBodySize.Should().Be(2L * maxFileBytes + DynamicModules.WebAPI.Controllers.v3.Dynamic.UploadGuard.MultipartOverhead);
+        }
+    }
+
+    private sealed class FakeBodySizeFeature : Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature
+    {
+        public const long Initial = 30_000_000;
+        public bool IsReadOnly => false;
+        public long? MaxRequestBodySize { get; set; } = Initial;
+    }
+
+    private sealed class FixedReader(int value) : DynamicModules.Application.Dynamic.PolicyService.IPolicyReader
+    {
+        public Task<DynamicModules.Application.Dynamic.PolicyService.PolicyResolution> ResolveAsync(DynamicModules.Domain.Policies.PolicyDefinition def, long? moduleId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int> IntAsync(DynamicModules.Domain.Policies.PolicyDefinition def, long? moduleId, CancellationToken ct) => Task.FromResult(value);
+        public Task<bool> BoolAsync(DynamicModules.Domain.Policies.PolicyDefinition def, long? moduleId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<string> ChoiceAsync(DynamicModules.Domain.Policies.PolicyDefinition def, long? moduleId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<string>> ListAsync(DynamicModules.Domain.Policies.PolicyDefinition def, long? moduleId, CancellationToken ct) => throw new NotSupportedException();
+        public void Invalidate() { }
+    }
+
     /// <summary>長度未知（不能 seek）的資料流，讓 HttpClient 算不出 Content-Length。</summary>
     private sealed class UnknownLengthStream(long total) : Stream
     {
