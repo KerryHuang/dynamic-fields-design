@@ -96,7 +96,12 @@ public sealed class LocaleRegistry(IServiceScopeFactory scopes, TimeProvider tim
             catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogWarning(e, "讀取已安裝語系失敗，沿用上次的清單");
-                Publish(cur => cur with { Failed = true, LoadedAt = now });
+                // 失敗也不能蓋掉刷新期間收到的失效通知：有新失效就保留「已過期」，資料庫恢復後下一個請求就重讀
+                Publish(cur => cur with
+                {
+                    Failed = true,
+                    LoadedAt = Interlocked.Read(ref _invalidations) != invalidationsAtStart ? DateTimeOffset.MinValue : now,
+                });
             }
         }
         finally

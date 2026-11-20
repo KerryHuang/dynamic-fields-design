@@ -218,6 +218,29 @@ public class LocaleRegistryTests
     }
 
     [Fact]
+    public async Task InvalidateDuringFailedRefresh_NotLost()
+    {
+        var (r, repo, _, _) = Create();
+        var gate = NewGate();
+        repo.ListGate = gate;
+        await Task.Run(async () =>
+        {
+            var refresh = r.EnsureFreshAsync(default);
+            await WaitUntil(() => repo.ListCalls == 1);
+            r.Invalidate();
+            repo.Throw = new InvalidOperationException("db down");
+            gate.SetResult();
+            await refresh;
+        });
+
+        repo.Throw = null;
+        repo.Add("ja", "日本語");
+        await r.EnsureFreshAsync(default);
+        repo.ListCalls.Should().Be(2, "讀取失敗時也不能蓋掉刷新期間收到的失效通知，資料庫恢復後下一個請求就重讀");
+        r.Codes.Should().EndWith("ja");
+    }
+
+    [Fact]
     public async Task FallbacksFor_UsesParentsAndDefault()
     {
         var (r, repo, _, _) = Create();

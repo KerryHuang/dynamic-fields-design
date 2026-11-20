@@ -20,6 +20,8 @@ public class LocaleCodeTests
     [InlineData("abcd")]
     [InlineData("zh-tw")]
     [InlineData("zh-Hant-hk")]
+    [InlineData("ja\n")]
+    [InlineData("zh-TW\n")]
     [InlineData("")]
     [InlineData(null)]
     public void NonCanonical_IsInvalid(string? code) => LocaleCode.IsValid(code).Should().BeFalse();

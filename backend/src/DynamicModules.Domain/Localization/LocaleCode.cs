@@ -10,7 +10,8 @@ public static partial class LocaleCode
 {
     public const int MaxLength = 35;
 
-    [GeneratedRegex("^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$", RegexOptions.CultureInvariant)]
+    // 結尾用 \z 不用 $：.NET 的 $ 會讓「ja\n」通過（存得進去卻用 ja 取不到）
+    [GeneratedRegex("^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?\\z", RegexOptions.CultureInvariant)]
     private static partial Regex Canonical();
 
     public static bool IsValid(string? code) => code is { Length: > 0 and <= MaxLength } && Canonical().IsMatch(code);
