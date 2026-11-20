@@ -647,7 +647,7 @@ Formwright 的取捨：
 |---|---|---|---|
 | i4a | `Dynamic_Locale` 與 migration（兩種資料庫）、內建四語同步、`LocaleRegistry`（版本戳記）、`I18nText.IsValid` 改只驗格式與必填（M1）與新退回鏈、`X-Locale`、p3 三政策改動態選項（選項名稱用自稱）、`auth/options` 加 `locales`、**§1 列的寫死清單逐條改完並勾驗**（後端 8 處 `SupportedLocales`、前端 6 處 `LOCALES`／型別／`I18nTextInput`、`PolicyValueEditor`）、Quasar glob 全開 | 無變化（仍是四語） | p3 |
 | i4b | 內建介面文字搬 `shared/i18n/`（**影響 139 個 import 檔**，用 alias 或轉出口降低 diff）、後端內嵌＋**兩份 Dockerfile、建置檢查、啟動自檢**、`quasar-langs.json`、`GET i18n/ui/{code}`（伺服器合併退回鏈、快取標頭規則）、前端只打包 zh-TW、啟動載入與 stale-while-revalidate、瀏覽器快取、前端預編譯、`ensureLocaleMessages` 與兩個多語產生點（每個已安裝語系）、管理員試看（M2） | 無變化（首屏多一次請求）；冒煙：登入頁切 English、ไทย | i4a |
-| i4c | `IMessageCatalog`、解析點改 DI、直接呼叫點改注入（列出剩餘清單）、**`TaskReportFields` 的四語表也一併改成走 `IMessageCatalog`（它在 Domain，要想辦法讓 Domain 取得解析，例如由 Application 層組裝欄位時傳入）**、`AsI18n` 改已安裝語系（3 個 `static readonly` 改方法） | 無變化 | i4a（可與 i4b 平行） |
+| i4c | `IMessageCatalog`、解析點改 DI、直接呼叫點改注入（列出剩餘清單）、**`TaskReportFields` 的四語表也一併改成走 `IMessageCatalog`（它在 Domain，要想辦法讓 Domain 取得解析，例如由 Application 層組裝欄位時傳入）**、`AsI18n` 改已安裝語系（3 個 `static readonly` 改方法） | 無變化 | i4a（可與 i4b 平行）；已上線 bf6fef7b |
 | i4d1 | 後端：語系包格式 v1、驗證器與共用案例檔、預覽／套用（併發 409、暫存上限）、覆寫層版本表（migration）與回滾、移除覆寫、安裝與移除語系、稽核、Demo 開關、A38、A39；加一個最小的匯入畫面（上傳 → 報告 → 套用） | 最小匯入畫面；Demo 站可預覽、不能套用 | i4b、i4c、O2 |
 | i4d2 | 語系頁完整版（四種寬度）、JSON 匯出樣板、完整度與「原文已更新」「覆寫已失效」、「以此語系預覽」、手冊 | 語系頁；Demo 站可預覽、可匯出、不能套用 | i4d1 |
 | i4e | 可翻譯來源清單與路徑（綁定代碼優先）、`designData` 段、Excel 匯出匯入（三張工作表，U9）、原文已改偵測、只翻設計資料的入口 | 匯出 Excel 翻譯樣板 | i4d2；i3（報表、儀表板名稱多語才翻得到） |
