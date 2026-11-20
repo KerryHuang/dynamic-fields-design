@@ -41,7 +41,8 @@ public class BusinessTimeZoneApiTests : IDisposable
 
     private CachedSystemPolicy Cache => _app.Services.GetRequiredService<CachedSystemPolicy>();
 
-    private async Task Ping() => (await _app.AsUser().GetAsync("/api/health/ready")).StatusCode.Should().Be(HttpStatusCode.OK);
+    /// <summary>送一個請求觸發 SystemPolicyRefreshMiddleware。打 live 而非 ready：ready 會在 2 秒逾時內查資料庫，CI 負載高時回 503（票 #67）。</summary>
+    private async Task Ping() => (await _app.AsUser().GetAsync("/api/health/live")).StatusCode.Should().Be(HttpStatusCode.OK);
 
     /// <summary>直接寫資料庫（模擬另一台伺服器改的）。</summary>
     private void WriteSetting(string value)
