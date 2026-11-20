@@ -9,8 +9,11 @@ import { BUILTIN_LOCALES } from './locale';
 import { setLocaleInfos, type LocaleInfo } from './locale-settings';
 import {
   UI_CACHE_KEY, UI_FETCH_TIMEOUT_MS, ensureLocaleMessages, hasUiMessages, installUiMessages, loadedHash, prepareMessages,
-  readUiCache, refreshLoadedMessages, resetUiMessagesForTests, writeUiCache,
+  readUiCache, refreshLoadedMessages, resetUiMessagesForTests, writeUiCache, endPreview,
 } from './ui-messages';
+import { LOCALE_KEY } from './locale';
+import { setLocaleSettings } from './locale-settings';
+import { PREVIEW_KEY } from './locale-preview';
 
 function leaves(o: unknown, path = ''): Record<string, string> {
   if (typeof o === 'string') return { [path]: o };
@@ -234,5 +237,36 @@ describe('瀏覽器快取', () => {
   it('localStorage 不可用回 null', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
     expect(readUiCache()).toBeNull();
+  });
+});
+
+describe('endPreview', () => {
+  afterEach(() => { setLocaleSettings({ defaultLocale: 'zh-TW', enabled: ['zh-TW', 'en-US', 'th', 'vi'] }); sessionStorage.clear(); });
+
+  it('記住的語系已停用：結束試看回預設語系、不改記住的值（i4b 修正輪 3）', async () => {
+    const i18n = newI18n();
+    installUiMessages(i18n, 'th', th, 'T');
+    installUiMessages(i18n, 'en-US', { 'menu.home': 'Home' }, 'E');
+    installUiMessages(i18n, 'ja', ja, 'J');
+    localStorage.setItem(LOCALE_KEY, 'th');
+    setLocaleSettings({ defaultLocale: 'en-US', enabled: ['zh-TW', 'en-US'] });
+    sessionStorage.setItem(PREVIEW_KEY, 'ja');
+    i18n.global.locale.value = 'ja';
+    endPreview(i18n);
+    await flushPromises();
+    expect(i18n.global.locale.value).toBe('en-US');
+    expect(localStorage.getItem(LOCALE_KEY)).toBe('th');
+  });
+
+  it('記住的語系仍啟用：回記住的語系', async () => {
+    const i18n = newI18n();
+    installUiMessages(i18n, 'th', th, 'T');
+    installUiMessages(i18n, 'ja', ja, 'J');
+    localStorage.setItem(LOCALE_KEY, 'th');
+    sessionStorage.setItem(PREVIEW_KEY, 'ja');
+    i18n.global.locale.value = 'ja';
+    endPreview(i18n);
+    await flushPromises();
+    expect(i18n.global.locale.value).toBe('th');
   });
 });

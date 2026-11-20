@@ -4,7 +4,7 @@ import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { FALLBACK_LOCALE, STARTUP_BUDGET_MS, applyLocale, readLocale, type LocaleCode } from './locale';
-import { defaultLocaleOrNull, localeInfo, nativeName, type LocaleInfo } from './locale-settings';
+import { defaultLocaleOrNull, enabledLocales, localeInfo, nativeName, type LocaleInfo } from './locale-settings';
 import { previewEpoch, previewLocale, setPreviewLocale } from './locale-preview';
 
 // 介面文字執行期載入（語系包設計 §8.2–8.4、i4b 計畫判斷 11、14–16）。前端只打包繁中；其他語系（含繁中的覆寫）從
@@ -228,7 +228,13 @@ export async function switchLocale(i18n: I18nWithT, code: LocaleCode, opts: { pr
 export function endPreview(i18n: I18nWithT): void {
   const p = previewLocale();
   setPreviewLocale(null);
-  if (p && i18n.global.locale.value === p) void switchLocale(i18n, readLocale() ?? defaultLocaleOrNull() ?? FALLBACK_LOCALE, { remember: false });
+  if (!p || i18n.global.locale.value !== p) return;
+  // 記住的語系之後可能被停用：只在仍啟用時恢復，否則用目前的預設語系（記住的值不改，同 startup）
+  const stored = readLocale();
+  let enabled: LocaleCode[] = [];
+  try { enabled = enabledLocales(); } catch { /* 語系設定還沒載入：不恢復記住的值 */ }
+  const back = stored && enabled.includes(stored) ? stored : (defaultLocaleOrNull() ?? FALLBACK_LOCALE);
+  void switchLocale(i18n, back, { remember: false });
 }
 
 export function readUiCache(): { code: LocaleCode; hash: string; messages: Record<string, string> } | null {
