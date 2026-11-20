@@ -1,4 +1,5 @@
 import { LOCALES } from 'src/i18n/locale';
+import type { LocaleInfo } from 'src/i18n/locale-settings';
 import { joinList } from 'src/i18n/translate';
 
 export type PolicyKind = 'integer' | 'boolean' | 'choice' | 'roleSet' | 'codeList' | 'recipients' | 'utcOffset';
@@ -37,6 +38,8 @@ export interface ModulePolicy extends PolicyMeta {
 export interface EffectivePolicies {
   moduleKey?: string;
   values: Record<string, PolicyValue>;
+  /** 全部已安裝語系（含沒啟用的）的自稱、Quasar 語言包與上層語系 */
+  locales: LocaleInfo[];
 }
 
 type Translate = (key: string, params?: Record<string, unknown>) => string;

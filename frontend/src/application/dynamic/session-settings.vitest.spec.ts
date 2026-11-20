@@ -11,7 +11,7 @@ afterEach(() => {
 
 describe('session-settings', () => {
   it('載入營運時區', async () => {
-    vi.spyOn(dynamicApi, 'getEffectivePolicies').mockResolvedValue({ values: { 'locale.timeZone': '+07:00' } });
+    vi.spyOn(dynamicApi, 'getEffectivePolicies').mockResolvedValue({ locales: [], values: { 'locale.timeZone': '+07:00' } });
     await loadSessionSettings();
     expect(businessOffset()).toBe('+07:00');
     expect(sessionSettingsLoaded()).toBe(true);

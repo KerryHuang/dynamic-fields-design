@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ApprovalEdgeDef } from 'src/domain/dynamic/approval-flow-types';
 import { setEdge } from 'src/domain/dynamic/approval-graph-edit';
-import type { ModuleDetail } from 'src/domain/dynamic/types';
+import type { I18nText, ModuleDetail } from 'src/domain/dynamic/types';
 import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
 import ConditionEdgeFields from './ConditionEdgeFields.vue';
 import { fieldErrors } from './designer-graph';
@@ -14,7 +14,7 @@ const props = defineProps<{ designer: GraphDesigner; edge: ApprovalEdgeDef; modu
 const { t } = useI18n();
 const fromCondition = computed(() => props.designer.state.value?.definition.nodes.find((n) => n.id === props.edge.from)?.kind === 'condition');
 const errs = computed(() => fieldErrors(props.designer.issues.value?.errors.edges[props.edge.id]));
-function setLabel(label: Record<string, string>) {
+function setLabel(label: I18nText) {
   props.designer.edit((s) => setEdge(s, props.edge.id, { label: Object.keys(label).length ? label : undefined }), `edge:${props.edge.id}:label`);
 }
 </script>

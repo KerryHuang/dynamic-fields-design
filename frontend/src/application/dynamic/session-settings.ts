@@ -18,6 +18,6 @@ export function resetSessionSettings(): void {
 export async function loadSessionSettings(): Promise<void> {
   const eff = await dynamicApi.getEffectivePolicies(null);
   setBusinessOffset(String(eff.values['locale.timeZone']));
-  applyLocalePolicies(eff.values);
+  applyLocalePolicies(eff.values, eff.locales);
   loaded = true;
 }

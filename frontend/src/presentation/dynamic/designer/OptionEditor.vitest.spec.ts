@@ -10,7 +10,7 @@ import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import OptionEditor from './OptionEditor.vue';
 
-const options: DesignerOption[] = [{ id: 1, value: 'opt_1', label: { 'zh-TW': '甲' }, active: true } as DesignerOption];
+const options: DesignerOption[] = [{ id: 1, value: 'opt_1', label: { 'zh-TW': '甲' }, active: true, sequence: 0 } as DesignerOption];
 
 function mountEditor() {
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });

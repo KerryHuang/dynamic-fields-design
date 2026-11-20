@@ -20,8 +20,9 @@ export function useBusinessTimeWatch(): void {
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
-  // 語系政策變了只更新設定、不提示：新設定從下一次開啟的輸入框起生效
-  watch(() => query.data.value?.values, (values) => { if (values) applyLocalePolicies(values); }, { immediate: true });
+  // 語系政策或語系資訊變了只更新設定、不提示：新設定從下一次開啟的輸入框起生效。看整份回應：結構共享會讓只有 locales 變時
+  // values 仍是同一個參考
+  watch(() => query.data.value, (eff) => { if (eff?.values) applyLocalePolicies(eff.values, eff.locales); }, { immediate: true });
   let prompted: string | null = null;
   watch(() => query.data.value?.values?.['locale.timeZone'], (zone) => {
     if (typeof zone !== 'string' || zone === businessOffset() || zone === prompted) return;

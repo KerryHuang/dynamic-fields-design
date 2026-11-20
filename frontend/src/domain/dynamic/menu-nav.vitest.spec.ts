@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { BUILTIN_LOCALES } from 'src/i18n/locale';
+import { setLocaleInfos } from 'src/i18n/locale-settings';
 import { groupMenu, systemLinks } from './menu-nav';
 
 const item = (key: string, section?: string, closed?: boolean) =>
@@ -14,6 +16,14 @@ describe('groupMenu 沒有繁中的分區', () => {
 });
 
 describe('groupMenu', () => {
+  it('分區只有新裝的語系有值時，以那個語系分組', () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null }]);
+    const g = groupMenu([sec('a', { ja: '販売' }), sec('b', { ja: '販売' })], 'ja');
+    setLocaleInfos(BUILTIN_LOCALES);
+    expect(g).toHaveLength(1);
+    expect(g[0]!.key).toBe('販売');
+    expect(g[0]!.title).toBe('販売');
+  });
   it('puts unsectioned items first (title undefined), then sections by name, keeping /menu order inside a group', () => {
     const g = groupMenu([item('b', 'Z'), item('a1', 'A'), item('x'), item('a2', 'A'), item('y', '')], 'zh-TW');
     expect(g.map((x) => x.title)).toEqual([undefined, 'A', 'Z']);

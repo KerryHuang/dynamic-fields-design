@@ -6,8 +6,8 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import enUS from 'src/i18n/en-US.json';
 import zhTW from 'src/i18n/zh-TW.json';
 import LocaleSwitcher from 'src/presentation/locale/LocaleSwitcher.vue';
-import { setLocaleSettings } from './locale-settings';
-import { LOCALE_KEY, LOCALES, applyLocale, readLocale } from './locale';
+import { setLocaleInfos, setLocaleSettings } from './locale-settings';
+import { BUILTIN_LOCALES, LOCALE_KEY, applyDocumentLocale, applyLocale, quasarPacks, readLocale } from './locale';
 
 const NAME = { 'zh-TW': '訂單', 'en-US': 'Orders', th: 'คำสั่งซื้อ' };
 
@@ -22,8 +22,14 @@ describe('readLocale', () => {
     localStorage.setItem(LOCALE_KEY, 'th');
     expect(readLocale()).toBe('th');
   });
-  it('存了不認得的值時回 null', () => {
+  it('不對照寫死清單：存什麼讀回什麼（是否啟用由 auth guard 判斷）', () => {
     localStorage.setItem(LOCALE_KEY, 'fr');
+    expect(readLocale()).toBe('fr');
+    localStorage.setItem(LOCALE_KEY, 'ja');
+    expect(readLocale()).toBe('ja');
+  });
+  it('只有空白回 null', () => {
+    localStorage.setItem(LOCALE_KEY, '   ');
     expect(readLocale()).toBeNull();
   });
   it('localStorage 讀取丟例外時回 null', () => {
@@ -61,6 +67,51 @@ describe('applyLocale', () => {
   });
 });
 
+describe('applyDocumentLocale（Quasar 語言包全開）', () => {
+  const pack = (code: string) => `../../node_modules/quasar/lang/${code}.js`;
+  const saved = { ...quasarPacks };
+  afterEach(() => {
+    for (const k of Object.keys(quasarPacks)) delete quasarPacks[k];
+    Object.assign(quasarPacks, saved);
+    setLocaleInfos(BUILTIN_LOCALES);
+  });
+  const lastSet = (spy: { mock: { calls: { 0: { isoName: string } }[] } }) => spy.mock.calls.at(-1)?.[0].isoName;
+
+  it('新裝的語系依 quasarLang 載入對應的語言包', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null }]);
+    const setLang = vi.spyOn(quasar.Quasar.lang, 'set').mockImplementation(() => {});
+    applyDocumentLocale('ja');
+    expect(document.documentElement.lang).toBe('ja');
+    await vi.waitFor(() => expect(lastSet(setLang)).toBe('ja'));
+  });
+  it('沒有 Quasar 語言包（quasarLang: null）時載入 en-US', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'xx', nativeName: 'X', quasarLang: null, fallbackCode: null }]);
+    const setLang = vi.spyOn(quasar.Quasar.lang, 'set').mockImplementation(() => {});
+    applyDocumentLocale('xx');
+    await vi.waitFor(() => expect(lastSet(setLang)).toBe('en-US'));
+  });
+  it('語言包載入失敗改載 en-US', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null }]);
+    quasarPacks[pack('ja')] = () => Promise.reject(new Error('chunk failed'));
+    const setLang = vi.spyOn(quasar.Quasar.lang, 'set').mockImplementation(() => {});
+    applyDocumentLocale('ja');
+    await vi.waitFor(() => expect(lastSet(setLang)).toBe('en-US'));
+  });
+  it('快速連切：較早的載入較晚完成也不蓋掉後選的語言', async () => {
+    let releaseTh!: () => void;
+    const th = saved[pack('th')]!;
+    quasarPacks[pack('th')] = () => new Promise((resolve) => { releaseTh = () => resolve(th()); });
+    const setLang = vi.spyOn(quasar.Quasar.lang, 'set').mockImplementation(() => {});
+    applyDocumentLocale('th');
+    applyDocumentLocale('vi');
+    await vi.waitFor(() => expect(lastSet(setLang)).toBe('vi'));
+    releaseTh();
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(lastSet(setLang)).toBe('vi');
+  });
+});
+
 describe('LocaleSwitcher', () => {
   it('選單列出四種語言的自稱，點選後立即切換並記住', async () => {
     const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW, 'en-US': enUS } });
@@ -71,7 +122,6 @@ describe('LocaleSwitcher', () => {
     (document.body.querySelector('[data-testid="locale-open"]') as HTMLElement).click();
     await flushPromises();
     const items = [...document.body.querySelectorAll('[data-testid^="locale-option-"]')].map((e) => e.textContent?.trim());
-    expect(items).toEqual(LOCALES.map((l) => l.label));
     expect(items).toEqual(['繁體中文', 'English', 'ไทย', 'Tiếng Việt']);
     (document.body.querySelector('[data-testid="locale-option-en-US"]') as HTMLElement).click();
     await flushPromises();

@@ -1,8 +1,11 @@
 import type { RecordApprovalLock, RecordApprovalSummary } from './approval-types';
 import type { MeTheme } from 'src/domain/theme/theme-model';
 
-export type Locale = 'zh-TW' | 'en-US' | 'th' | 'vi';
-export type I18nText = Partial<Record<Locale, string>>;
+import type { LocaleCode } from 'src/i18n/locale';
+import type { LocaleInfo } from 'src/i18n/locale-settings';
+
+export type Locale = LocaleCode;
+export type I18nText = Partial<Record<string, string>>;
 
 export type FieldType =
   | 'text' | 'textarea' | 'integer' | 'decimal' | 'currency' | 'percent'
@@ -334,6 +337,8 @@ export interface AuthOptions {
   defaultLocale: string;
   /** 語系政策 locale.enabled 的生效值 */
   enabledLocales: string[];
+  /** 啟用語系的自稱、Quasar 語言包與上層語系（順序同已安裝語系） */
+  locales: LocaleInfo[];
 }
 
 export interface AdminUser {

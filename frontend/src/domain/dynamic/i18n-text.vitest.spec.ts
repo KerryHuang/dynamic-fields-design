@@ -1,8 +1,23 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { setLocaleSettings } from 'src/i18n/locale-settings';
+import cases from '../../../../shared/locale-chain-cases.json';
+import { BUILTIN_LOCALES } from 'src/i18n/locale';
+import { setLocaleInfos, setLocaleSettings } from 'src/i18n/locale-settings';
 import { compactI18n, missingRequired, resolveI18n, sameI18n } from './i18n-text';
 
-afterEach(() => setLocaleSettings({ defaultLocale: 'zh-TW', requiredText: ['zh-TW'] }));
+afterEach(() => {
+  setLocaleInfos(BUILTIN_LOCALES);
+  setLocaleSettings({ defaultLocale: 'zh-TW', requiredText: ['zh-TW'] });
+});
+
+describe('resolveI18n 跑共用案例（與後端 I18nText.Resolve 同結果）', () => {
+  for (const c of cases.cases) {
+    it(c.name, () => {
+      setLocaleInfos(c.installed.map((l) => ({ code: l.code, nativeName: l.code, quasarLang: null, fallbackCode: l.fallback })));
+      setLocaleSettings({ defaultLocale: c.default });
+      expect(resolveI18n(c.text, c.locale)).toBe(c.expected);
+    });
+  }
+});
 
 describe('resolveI18n', () => {
   it('returns the requested locale when present', () => {

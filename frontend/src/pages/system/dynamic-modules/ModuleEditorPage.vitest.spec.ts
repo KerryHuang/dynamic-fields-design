@@ -404,7 +404,7 @@ describe('ModuleEditorPage', () => {
     const withColumns = (columns: number): ModuleDetail => ({
       ...detail, status: 'Draft', blocks: [{ id: 9, label: { 'zh-TW': '區塊' }, sequence: 1, collapsed: false, columns, fields: [] }],
     });
-    const policies = (maxColumns: number) => api.getEffectivePolicies.mockResolvedValue({ moduleKey: 'm', values: { 'form.maxColumns': maxColumns } });
+    const policies = (maxColumns: number) => api.getEffectivePolicies.mockResolvedValue({ locales: [], moduleKey: 'm', values: { 'form.maxColumns': maxColumns } });
     const columnButtons = () => Array.from(document.body.querySelectorAll('[data-testid="block-columns"] .q-btn')) as HTMLElement[];
     async function openEdit(w: Awaited<ReturnType<typeof mountPage>>) {
       await w.get(`[title="${zhTW.designer.editBlock}"]`).trigger('click');

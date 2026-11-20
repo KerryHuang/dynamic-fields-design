@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useQuasar } from 'quasar';
 import { useI18n } from 'vue-i18n';
 import type { ApprovalNodeDef } from 'src/domain/dynamic/approval-flow-types';
+import type { I18nText } from 'src/domain/dynamic/types';
 import { setNode } from 'src/domain/dynamic/approval-graph-edit';
 import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
 import { nodeLabel } from './designer-graph';
@@ -17,7 +18,7 @@ const branches = computed(() => def.value.edges.filter((e) => e.from === props.n
   const n = def.value.nodes.find((x) => x.id === e.to);
   return { id: e.id, name: n ? nodeLabel(n, locale.value, t) : e.to };
 }));
-const setName = (name: Record<string, string>) => props.designer.edit((s) => setNode(s, props.node.id, { name: Object.keys(name).length ? name : undefined }), `node:${props.node.id}:name`);
+const setName = (name: I18nText) => props.designer.edit((s) => setNode(s, props.node.id, { name: Object.keys(name).length ? name : undefined }), `node:${props.node.id}:name`);
 </script>
 
 <template>
