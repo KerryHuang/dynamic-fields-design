@@ -640,7 +640,7 @@ Formwright 的取捨：
 
 - **i4a 實作完成**（2026-11-20）；`auth/options` 的 `uiHash` 移到 i4b（i4a 計畫判斷 12），i4b 再加這個欄位、不改形狀。
 - **i4b 已上線**（2026-11-21，7843faa9）。
-- **i4c 計畫**：[i4c 計畫](../plans/2026-11-17-language-packs-i4c.md)（切 i4c-1、i4c-2；待決 Q1 警示信走語系包、Q2 匯入是否欄位接受已安裝語系）。
+- **i4c 計畫**：[i4c 計畫](../plans/2026-11-17-language-packs-i4c.md)（切 i4c-1、i4c-2；2026-11-21 裁決：Q1 警示信文字併進 `IMessageCatalog`（`alert.` 命名空間）、Q2 匯入是否欄位接受所有已安裝語系的是／否文字，撞字（含固定別名）當無法判斷；第二輪審查後修正，見計畫開頭的對照表）。
 - i4a 是其他各段的基礎；i4b、i4c 可平行；i4d1 要等兩者；i4d2 接 i4d1。依賴本身：p3 → i4a → i4b／i4c → i4d1（加 O2）→ i4d2 → i4e（加 i3）；i4f 與 i3 一起升格式版本。
 - **migration**：每段一個符合 `.claude/rules/backend.md`：i4a 一個（`Dynamic_Locale`）、i4d1 一個（`Dynamic_LocalePack`；`previewId` 若存資料庫再加一個）。i4d1 不能和其他會加 migration 的段平行。
 - i3 與 i4 的關係：i4a–i4d2 不依賴 i3；i4e 依賴 i3（否則報表、儀表板名稱翻不到）；i4f 建議與 i3 的格式升版放同一段或緊接著合併。路線順序維持「p3 → i3、i4」，段內可排 i4a → i4b／i4c → i3 → i4d1 → i4d2 → i4e、i4f。
