@@ -225,6 +225,8 @@ static async Task InitializeDatabaseAsync(WebApplication app, string? databaseDi
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
     await db.Database.MigrateAsync();
+    // 內建語系同步成 Dynamic_Locale 的 builtin 列；完成後才載入語系快照與政策快照（語系包設計 §4.1）
+    await BuiltinLocaleSync.EnsureAsync(db, app.Services.GetRequiredService<TimeProvider>(), CancellationToken.None);
     // 全系統政策快照（營運時區等）在索引回填與 Demo 資料之前載入；讀不到時沿用部署出廠值，不擋啟動
     await app.Services.GetRequiredService<CachedSystemPolicy>().EnsureFreshAsync(CancellationToken.None);
     await SeedData.EnsureSeededAsync(db);

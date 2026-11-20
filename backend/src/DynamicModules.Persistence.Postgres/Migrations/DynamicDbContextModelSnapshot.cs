@@ -1924,6 +1924,56 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                     b.ToTable("Dynamic_HealthCheckResult", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.InstalledLocale", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(35)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("CreatedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FallbackCode")
+                        .HasMaxLength(35)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime>("ModifiedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NativeName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("QuasarLang")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.HasKey("Code");
+
+                    b.ToTable("Dynamic_Locale", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.LedgerReversal", b =>
                 {
                     b.Property<long>("OriginalRecordId")
