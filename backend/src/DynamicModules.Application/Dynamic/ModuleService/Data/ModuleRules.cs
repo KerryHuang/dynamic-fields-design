@@ -29,5 +29,5 @@ public static class ModuleRules
             .Must(s => s is null || s.Values.Values.All(v => (v?.Length ?? 0) <= SectionMaxLength))
             .WithMessage($"選單分區不能超過 {SectionMaxLength} 字");
 
-    private static string? UnsupportedLocale(I18nText? s) => s is null ? null : I18nText.UnknownLocale(s.Values.Keys);
+    private static string? UnsupportedLocale(I18nText? s) => s is null ? null : I18nText.InvalidLocale(s.Values.Keys);
 }

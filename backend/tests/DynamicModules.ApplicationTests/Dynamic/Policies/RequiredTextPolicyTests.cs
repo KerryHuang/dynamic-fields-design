@@ -105,6 +105,22 @@ public class RequiredTextPolicyTests : DesignerTestBase
         label.Resolve("th").Should().Be("Note");
     }
 
+    /// <summary>M1（語系包設計 §19）：沒安裝的語系文字照收照存；改繁中標籤再存檔時保留。</summary>
+    [Fact]
+    public async Task Rename_WithUninstalledLocaleText_Allowed()
+    {
+        await NewModule("memo");
+        var m = await Detail("memo");
+        var r = await Send(new Application.Dynamic.FieldService.Commands.AddField.AddFieldRequest(
+            "memo", m.Blocks[0].Id, FieldType.Text, T(("zh-TW", "客戶"), ("ja", "顧客")), new FieldConfig()));
+        r.IsCreated.Should().BeTrue(string.Join(";", r.Errors.Select(e => e.Key + e.Value[0])));
+        var f = (FieldResponse)r.Data!;
+        var u = await Send(new UpdateFieldRequest(f.Id, f.Type, T(("zh-TW", "客戶名稱"), ("ja", "顧客")), new FieldConfig(), f.BlockId));
+        u.IsSuccess.Should().BeTrue(string.Join(";", u.Errors.Select(e => e.Key + e.Value[0])));
+        var label = (await Db.Context.Set<Field>().AsNoTracking().SingleAsync(x => x.Id == f.Id)).LabelI18n;
+        label.Values.Should().Contain("ja", "顧客").And.Contain("zh-TW", "客戶名稱");
+    }
+
     [Fact]
     public async Task CreateGroup_WritesNameIntoEveryRequiredLocale()
     {

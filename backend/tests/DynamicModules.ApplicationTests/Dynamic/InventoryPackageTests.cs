@@ -1,6 +1,7 @@
 using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
+using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 
@@ -121,7 +122,7 @@ public class InventoryPackageTests
         texts.AddRange(p.ApprovalFlows.SelectMany(f => f.Stages!.Select(st => ($"flow {f.Code} stage {st.Code}", st.Name))));
 
         foreach (var (where, text) in texts)
-            text.Values.Keys.Should().BeEquivalentTo(I18nText.SupportedLocales, where);
+            text.Values.Keys.Should().BeEquivalentTo(BuiltinLocales.Codes, where);
     }
 
     [Fact]

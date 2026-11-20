@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.TemplateService;
+using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 
@@ -87,10 +88,10 @@ public class ModuleSectionPackageTests
             .Where(x => x.Section is not null).ToList();
         sections.Should().NotBeEmpty();
         foreach (var (app, code, section) in sections)
-            section!.Values.Keys.Should().BeEquivalentTo(I18nText.SupportedLocales, $"{app}.{code} 的分區要有四個語系");
+            section!.Values.Keys.Should().BeEquivalentTo(BuiltinLocales.Codes, $"{app}.{code} 的分區要有四個語系");
 
         foreach (var group in sections.GroupBy(x => x.Section!.Values["zh-TW"]))
-            foreach (var locale in I18nText.SupportedLocales)
+            foreach (var locale in BuiltinLocales.Codes)
                 group.Select(x => x.Section!.Values[locale]).Distinct().Should().ContainSingle($"「{group.Key}」的 {locale} 譯名在所有套件要一致");
     }
 }

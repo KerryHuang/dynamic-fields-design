@@ -39,7 +39,7 @@ public class ModulesApiTests : IClassFixture<TestApp>
         => (await _admin.GetAsync($"{Base}/modules/nope-nope")).StatusCode.Should().Be(HttpStatusCode.NotFound);
 
     [Theory]
-    [InlineData("ja", "マスタ", "不支援的語系：ja")]
+    [InlineData("zh_TW", "x", "不支援的語系：zh_TW")]
     [InlineData("en-US", null, "選單分區不能超過 100 字")]
     public async Task Update_InvalidSection_Returns400(string locale, string? text, string message)
     {
@@ -53,6 +53,22 @@ public class ModulesApiTests : IClassFixture<TestApp>
 
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await res.Content.ReadAsStringAsync()).Should().Contain(message);
+    }
+
+    [Fact]
+    public async Task Section_WithJapanese_Accepted()
+    {
+        var key = await CreateModule(_admin);
+
+        var res = await _admin.PutAsJsonAsync($"{Base}/modules/{key}", new
+        {
+            name = new Dictionary<string, string> { ["zh-TW"] = "x" },
+            section = new Dictionary<string, string> { ["zh-TW"] = "主檔", ["ja"] = "マスタ" }
+        });
+
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var got = await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"));
+        got.GetProperty("section").GetProperty("ja").GetString().Should().Be("マスタ");
     }
 
     [Fact]

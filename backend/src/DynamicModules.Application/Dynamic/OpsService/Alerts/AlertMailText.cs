@@ -1,5 +1,6 @@
 using System.Globalization;
 using DynamicModules.Application.Dynamic.OpsService.Health;
+using DynamicModules.Domain.Localization;
 
 namespace DynamicModules.Application.Dynamic.OpsService.Alerts;
 
@@ -9,7 +10,8 @@ namespace DynamicModules.Application.Dynamic.OpsService.Alerts;
 /// </summary>
 public static class AlertMailText
 {
-    public static readonly IReadOnlyList<string> Locales = ["zh-TW", "en-US", "th", "vi"];
+    /// <summary>這張表有翻譯的語系＝內建語系。</summary>
+    public static readonly IReadOnlyList<string> Locales = BuiltinLocales.Codes;
 
     public const string
         Subject = nameof(Subject), SubjectDirect = nameof(SubjectDirect), DigestSubject = nameof(DigestSubject),

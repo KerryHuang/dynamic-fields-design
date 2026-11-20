@@ -1,6 +1,7 @@
 using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 
@@ -68,7 +69,7 @@ public class MesPackageTests
         texts.AddRange(p.PrintTemplates.Select(t => ($"print {t.Code}", t.Name)));
 
         foreach (var (where, text) in texts)
-            text.Values.Keys.Should().BeEquivalentTo(I18nText.SupportedLocales, where);
+            text.Values.Keys.Should().BeEquivalentTo(BuiltinLocales.Codes, where);
     }
 
     [Fact]

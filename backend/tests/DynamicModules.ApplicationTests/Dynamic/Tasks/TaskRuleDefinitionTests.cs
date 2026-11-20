@@ -11,6 +11,7 @@ using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.TaskRuleService;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
@@ -359,9 +360,23 @@ public class TaskRuleDefinitionTests : TaskTestBase
         var longDesc = Step(r) with { Description = new I18nText([KeyValuePair.Create("th", new string('x', 4001))]) };
         (await Send(new CreateTaskRuleRequest(r.Key, Rule("rule-c", steps: [longDesc])))).Errors.Should().ContainKey("tasks[0].description");
 
-        var full = new I18nText(I18nText.SupportedLocales.Select(l => KeyValuePair.Create(l, new string('x', 200))));
+        var full = new I18nText(BuiltinLocales.Codes.Select(l => KeyValuePair.Create(l, new string('x', 200))));
         var created = await Create(r, Rule("rule-d", steps: [Step(r, title: full)]));
         created.Tasks[0].Title.Values.Should().HaveCount(4);
+    }
+
+    /// <summary>M1：任務標題只驗語系代碼格式，沒安裝的語系也收；格式不對才擋。</summary>
+    [Fact]
+    public async Task TitleI18n_UninstalledLocale_Accepted_MalformedRejected()
+    {
+        var r = await BuildRig();
+        var ja = new I18nText([KeyValuePair.Create("zh-TW", "打電話"), KeyValuePair.Create("ja", "電話する")]);
+        var created = await Create(r, Rule("rule-a", steps: [Step(r, title: ja)]));
+        created.Tasks[0].Title.Values.Should().ContainKey("ja");
+
+        var bad = new I18nText([KeyValuePair.Create("zh-TW", "打電話"), KeyValuePair.Create("zh_TW", "x")]);
+        (await Send(new CreateTaskRuleRequest(r.Key, Rule("rule-b", steps: [Step(r, title: bad)])))).Errors["tasks[0].title"][0]
+            .Should().Be("不支援的語系：zh_TW");
     }
 
     [Fact]
