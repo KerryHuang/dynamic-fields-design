@@ -183,3 +183,116 @@ describe('LocalePackImportDialog 套用', () => {
     w.unmount();
   });
 });
+
+describe('LocalePackImportDialog 換檔與關閉時作廢舊流程（第二輪審查必修 1）', () => {
+  const deferred = <T>() => {
+    let resolve!: (v: T) => void; let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+  };
+  const reportFor = (id: string) => report({ previewId: `pv-${id}`, fileHash: `hash-${id}`, fileName: `${id}.json`,
+    locale: { code: 'ja', isNew: true, builtin: false, nativeName: `語系${id}`, quasarLang: 'ja', fallbackCode: 'en-US', changes: [], ignored: [] } });
+  const BYTES_A = new Uint8Array([1]);
+  const BYTES_B = new Uint8Array([2]);
+  const firstByte = (c: Call) => new Uint8Array(c.data as ArrayBuffer)[0];
+
+  it('先選 A 再選 B，B 先回、A 後回：報告與套用都是 B', async () => {
+    const waits = { 1: deferred<unknown>(), 2: deferred<unknown>() } as Record<number, ReturnType<typeof deferred<unknown>>>;
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/preview' ? waits[firstByte(c)]!.promise : undefined));
+    await pick(BYTES_A, 'A.json');
+    await pick(BYTES_B, 'B.json');
+    waits[2]!.resolve(reportFor('B'));
+    await tick();
+    waits[1]!.resolve(reportFor('A'));
+    await tick();
+    expect(q('pack-report')!.textContent).toContain('語系B');
+    expect(q('pack-report')!.textContent).not.toContain('語系A');
+    q('pack-apply')!.click();
+    await tick();
+    expect(bodyOf(calls.find((c) => c.url === '/i18n/packs/apply'))).toEqual({ previewId: 'pv-B', fileHash: 'hash-B' });
+    w.unmount();
+  });
+
+  it('A 的預覽在選 B 之後才失敗：不顯示 A 的錯誤', async () => {
+    const waits = { 1: deferred<unknown>(), 2: deferred<unknown>() } as Record<number, ReturnType<typeof deferred<unknown>>>;
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/preview' ? waits[firstByte(c)]!.promise : undefined));
+    await pick(BYTES_A, 'A.json');
+    await pick(BYTES_B, 'B.json');
+    waits[2]!.resolve(reportFor('B'));
+    await tick();
+    waits[1]!.reject(new Error('A 壞了'));
+    await tick();
+    expect(q('pack-error')).toBeNull();
+    expect(q('pack-report')!.textContent).toContain('語系B');
+    w.unmount();
+  });
+
+  it('A 還在讀檔時換成 B：只預覽 B', async () => {
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/preview' ? reportFor(firstByte(c) === 1 ? 'A' : 'B') : undefined));
+    const input = q('pack-file') as HTMLInputElement;
+    const reading = deferred<ArrayBuffer>();
+    const fileA = new File([BYTES_A as BlobPart], 'A.json', { type: 'application/json' });
+    Object.defineProperty(fileA, 'arrayBuffer', { value: () => reading.promise });
+    Object.defineProperty(input, 'files', { value: [fileA], configurable: true });
+    input.dispatchEvent(new Event('change'));
+    await tick();
+    await pick(BYTES_B, 'B.json');
+    reading.resolve(BYTES_A.buffer as ArrayBuffer);
+    await tick();
+    expect(previews()).toHaveLength(1);
+    expect(firstByte(previews()[0]!)).toBe(2);
+    expect(q('pack-report')!.textContent).toContain('語系B');
+    expect(document.body.textContent).toContain('B.json');
+    expect(document.body.textContent).not.toContain('A.json');
+    w.unmount();
+  });
+
+  it('預覽中關閉再打開：舊流程的結果不寫回', async () => {
+    const wait = deferred<unknown>();
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/preview' ? wait.promise : undefined));
+    await pick(BYTES_A, 'A.json');
+    await w.setProps({ modelValue: false });
+    await tick();
+    await w.setProps({ modelValue: true });
+    await tick();
+    wait.resolve(reportFor('A'));
+    await tick();
+    expect(q('pack-report')).toBeNull();
+    expect(q('pack-loading')).toBeNull();
+    w.unmount();
+  });
+
+  it('套用中關閉再打開：舊套用的結果不寫回', async () => {
+    const wait = deferred<unknown>();
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/apply' ? wait.promise : undefined));
+    await pick();
+    q('pack-apply')!.click();
+    await tick();
+    await w.setProps({ modelValue: false });
+    await tick();
+    await w.setProps({ modelValue: true });
+    await tick();
+    wait.resolve({ code: 'ja', isNew: true, noChanges: false, packId: 5, enabled: false });
+    await tick();
+    expect(q('pack-done')).toBeNull();
+    w.unmount();
+  });
+
+  it('預覽與套用進行中停用換檔', async () => {
+    const previewWait = deferred<unknown>();
+    const applyWait = deferred<unknown>();
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/preview' ? previewWait.promise : c.url === '/i18n/packs/apply' ? applyWait.promise : undefined));
+    const disabled = () => q('pack-pick')!.getAttribute('disabled') ?? q('pack-pick')!.getAttribute('aria-disabled');
+    await pick();
+    expect(disabled()).not.toBeNull();
+    previewWait.resolve(reportFor('A'));
+    await tick();
+    expect(disabled()).toBeNull();
+    q('pack-apply')!.click();
+    await tick();
+    expect(disabled()).not.toBeNull();
+    applyWait.resolve({ code: 'ja', isNew: true, noChanges: false, packId: 5, enabled: true });
+    await tick();
+    w.unmount();
+  });
+});

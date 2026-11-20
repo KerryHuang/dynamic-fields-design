@@ -25,11 +25,17 @@ const result = ref<ApplyLocalePackResult | null>(null);
 const enabledNow = ref(false);
 const error = ref<string | null>(null);
 const canRepreview = ref(false);
+const busy = ref<'preview' | 'apply' | null>(null);
+
+// 換檔、重新預覽、關閉或打開對話框都會推進世代；每個 await 回來先核對世代，舊流程的結果與錯誤一律不寫回（第二輪審查必修 1）
+let generation = 0;
+const isCurrent = (gen: number) => gen === generation;
 
 function reset() {
-  picked.value = null; report.value = null; result.value = null; enabledNow.value = false; error.value = null; canRepreview.value = false;
+  generation++;
+  picked.value = null; report.value = null; result.value = null; enabledNow.value = false; error.value = null; canRepreview.value = false; busy.value = null;
 }
-watch(() => props.modelValue, (open) => { if (open) reset(); });
+watch(() => props.modelValue, reset);
 
 /** 檔案大小上限以 MB 顯示（最多一位小數）。 */
 const sizeText = computed(() => String(Math.round((props.packMaxBytes / 1048576) * 10) / 10));
@@ -42,11 +48,15 @@ const messageOf = (e: unknown, fallbackKey: string) => {
 
 async function runPreview() {
   if (!picked.value) return;
-  error.value = null; canRepreview.value = false; report.value = null; result.value = null; enabledNow.value = false;
+  const gen = ++generation;
+  error.value = null; canRepreview.value = false; report.value = null; result.value = null; enabledNow.value = false; busy.value = 'preview';
   try {
-    report.value = await preview.mutateAsync({ bytes: picked.value.bytes, fileName: picked.value.name });
+    const r = await preview.mutateAsync({ bytes: picked.value.bytes, fileName: picked.value.name });
+    if (isCurrent(gen)) report.value = r;
   } catch (e) {
-    error.value = messageOf(e, 'localePacks.dialog.previewFailed');
+    if (isCurrent(gen)) error.value = messageOf(e, 'localePacks.dialog.previewFailed');
+  } finally {
+    if (isCurrent(gen)) busy.value = null;
   }
 }
 
@@ -55,37 +65,47 @@ async function onFile(ev: Event) {
   const file = input.files?.[0];
   if (!file) return;
   reset();
+  const gen = generation;
+  input.value = '';
   // 送出一定會被後端擋才先擋（frontend.md）：上限來自清單回應，不在前端存常數
   if (file.size > props.packMaxBytes) {
     error.value = tooLarge();
-  } else {
-    picked.value = { name: file.name, bytes: await file.arrayBuffer() };
-    await runPreview();
+    return;
   }
-  input.value = '';
+  const bytes = await file.arrayBuffer();
+  if (!isCurrent(gen)) return;
+  picked.value = { name: file.name, bytes };
+  await runPreview();
 }
 
 async function doApply() {
   if (!report.value?.previewId) return;
-  error.value = null;
+  const gen = generation;
+  error.value = null; busy.value = 'apply';
   try {
-    result.value = await apply.mutateAsync({ previewId: report.value.previewId, fileHash: report.value.fileHash });
+    const r = await apply.mutateAsync({ previewId: report.value.previewId, fileHash: report.value.fileHash });
+    if (isCurrent(gen)) result.value = r;
   } catch (e) {
+    if (!isCurrent(gen)) return;
     const err = e as ApiError;
     canRepreview.value = err.code === 'localePackStale' || err.code === 'localePackPreviewExpired';
     error.value = messageOf(e, 'localePacks.dialog.applyFailed');
+  } finally {
+    if (isCurrent(gen)) busy.value = null;
   }
 }
 
 async function doEnable() {
   if (!result.value) return;
+  const gen = generation;
   error.value = null;
   try {
     await enable.mutateAsync(result.value.code);
+    if (!isCurrent(gen)) return;
     enabledNow.value = true;
     $q.notify({ type: 'positive', message: t('localePacks.dialog.enabledDone', { name: report.value?.locale.nativeName ?? result.value.code }) });
   } catch (e) {
-    error.value = messageOf(e, 'localePacks.failed');
+    if (isCurrent(gen)) error.value = messageOf(e, 'localePacks.failed');
   }
 }
 
@@ -100,10 +120,10 @@ const applyDisabled = computed(() => !report.value?.previewId || !props.importEn
       <q-card-section class="scroll" style="max-height: 70vh">
         <p class="text-muted">{{ t('localePacks.dialog.hint') }}</p>
         <input ref="fileInput" type="file" accept=".json,application/json" class="hidden" data-testid="pack-file" @change="onFile" />
-        <q-btn outline no-caps icon="upload_file" :label="t('localePacks.dialog.pick')" :disable="!!result" data-testid="pack-pick" @click="fileInput?.click()" />
+        <q-btn outline no-caps icon="upload_file" :label="t('localePacks.dialog.pick')" :disable="!!result || !!busy" data-testid="pack-pick" @click="fileInput?.click()" />
         <span v-if="picked" class="q-ml-sm text-caption" style="overflow-wrap: anywhere">{{ picked.name }}</span>
 
-        <div v-if="preview.isPending.value" class="q-mt-md row items-center q-gutter-sm" data-testid="pack-loading">
+        <div v-if="busy === 'preview'" class="q-mt-md row items-center q-gutter-sm" data-testid="pack-loading">
           <q-spinner size="20px" /><span>{{ t('localePacks.dialog.previewing') }}</span>
         </div>
         <div v-if="error" class="q-mt-md text-negative" data-testid="pack-error">
@@ -125,7 +145,7 @@ const applyDisabled = computed(() => !report.value?.previewId || !props.importEn
       </q-card-section>
       <q-card-actions align="right">
         <q-btn flat no-caps :label="result ? t('localePacks.dialog.close') : t('dynamic.cancel')" data-testid="pack-close" @click="close" />
-        <q-btn v-if="!result" color="primary" no-caps :label="t('localePacks.dialog.apply')" :disable="applyDisabled" :loading="apply.isPending.value"
+        <q-btn v-if="!result" color="primary" no-caps :label="t('localePacks.dialog.apply')" :disable="applyDisabled" :loading="busy === 'apply'"
           data-testid="pack-apply" @click="doApply" />
       </q-card-actions>
     </q-card>
