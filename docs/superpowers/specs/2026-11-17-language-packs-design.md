@@ -707,14 +707,14 @@ Formwright 的取捨：
 | i4b | 內建介面文字搬 `shared/i18n/`（**影響 139 個 import 檔**，用 alias 或轉出口降低 diff）、後端內嵌＋**兩份 Dockerfile、建置檢查、啟動自檢**、`quasar-langs.json`、`GET i18n/ui/{code}`（伺服器合併退回鏈、快取標頭規則）、前端只打包 zh-TW、啟動載入與 stale-while-revalidate、瀏覽器快取、前端預編譯、`ensureLocaleMessages` 與兩個多語產生點（每個已安裝語系）、管理員試看（M2） | 無變化（首屏多一次請求）；冒煙：登入頁切 English、ไทย | i4a |
 | i4c | `IMessageCatalog`、解析點改 DI、直接呼叫點改注入（列出剩餘清單）、**`TaskReportFields` 的四語表也一併改成走 `IMessageCatalog`（它在 Domain，要想辦法讓 Domain 取得解析，例如由 Application 層組裝欄位時傳入）**、`AsI18n` 改已安裝語系（3 個 `static readonly` 改方法） | 無變化 | i4a（可與 i4b 平行）；已上線 bf6fef7b |
 | i4d1 | 後端：語系包格式 v1、驗證器與共用案例檔、預覽／套用（併發 409、暫存上限）、覆寫層版本表（migration）與回滾、移除覆寫、安裝與移除語系、稽核、Demo 開關、A38、A39；加一個最小的匯入畫面（上傳 → 報告 → 套用） | 最小匯入畫面；Demo 站可預覽、不能套用 | i4b、i4c、O2；已上線 0e42b98e |
-| i4d2 | 語系頁完整版（四種寬度）、JSON 匯出樣板、完整度與「原文已更新」「覆寫已失效」、「以此語系預覽」、手冊 | 語系頁；Demo 站可預覽、可匯出、不能套用 | i4d1 |
+| i4d2 | 語系頁完整版（四種寬度）、JSON 匯出樣板、完整度與「原文已更新」「覆寫已失效」、「以此語系預覽」、手冊 | 語系頁；Demo 站可預覽、可匯出、不能套用 | i4d1；已上線 028015c5 |
 | i4e | 可翻譯來源清單與路徑（綁定代碼優先）、`designData` 段、Excel 匯出匯入（三張工作表，U9）、原文已改偵測、只翻設計資料的入口 | 匯出 Excel 翻譯樣板 | i4d2；i3（報表、儀表板名稱多語才翻得到） |
 | i4f | 套件 schema 與 C# 驗證器語系鍵改代碼格式（舊 `formatVersion` 仍只收四語）、匯出帶所有語系、手冊與套件文件 | 無變化 | i4a；**與 i3 的套件升版合併成一次** |
 
 - **i4a 實作完成**（2026-11-20）；`auth/options` 的 `uiHash` 移到 i4b（i4a 計畫判斷 12），i4b 再加這個欄位、不改形狀。
 - **i4b 已上線**（2026-11-21，7843faa9）。
 - **i4d1 計畫**：[i4d1 計畫](../plans/2026-11-17-language-packs-i4d1.md)（i4d1-1 至 i4d1-4 已實作；使用者行為類 Q1–Q12 為主控暫定、待使用者確認）。**i4d1 已上線**（2026-11-21，0e42b98e）。
-- **i4d2 計畫**：[i4d2 計畫](../plans/2026-11-17-language-packs-i4d2.md)（i4d2-1、i4d2-2 已實作；使用者行為類 Q1–Q9 為主控暫定、待使用者確認，見 §17.5）。
+- **i4d2 計畫**：[i4d2 計畫](../plans/2026-11-17-language-packs-i4d2.md)（i4d2-1、i4d2-2 已實作；使用者行為類 Q1–Q9 為主控暫定、待使用者確認，見 §17.5）。**i4d2 已上線**（2026-11-21，028015c5）。
 - **i4c 計畫**：[i4c 計畫](../plans/2026-11-17-language-packs-i4c.md)（i4c-1、i4c-2 已實作；2026-11-21 裁決：Q1 警示信文字併進 `IMessageCatalog`（`alert.` 命名空間）、Q2 匯入是否欄位接受所有已安裝語系的是／否文字，撞字（含固定別名）當無法判斷；第二輪審查後修正，見計畫開頭的對照表）。
 - i4a 是其他各段的基礎；i4b、i4c 可平行；i4d1 要等兩者；i4d2 接 i4d1。依賴本身：p3 → i4a → i4b／i4c → i4d1（加 O2）→ i4d2 → i4e（加 i3）；i4f 與 i3 一起升格式版本。
 - **migration**：每段一個符合 `.claude/rules/backend.md`：i4a 一個（`Dynamic_Locale`）、i4d1 一個（`Dynamic_LocalePack`；`previewId` 若存資料庫再加一個）。i4d1 不能和其他會加 migration 的段平行。
