@@ -41,11 +41,15 @@ function openExport(target: LocaleAdminEntry | null) {
   showExport.value = true;
 }
 
-// 管理員試看（M2）：沿用 switchLocale 的完整試看流程；previewLocale 不是響應式，切完自己記一份讓按鈕跟著換
-const previewing = ref<string | null>(previewLocale());
+// 管理員試看（M2）：沿用 switchLocale 的完整試看流程。previewLocale 不是響應式，所以只在「試看標記就是目前畫面語系」時才算試看中，
+// 目前語系（composer.locale）是響應式的：從語言選單切走（一般切換會清掉標記）時，這個值跟著重算，試看鈕就會回來。
+const previewing = computed(() => {
+  const current = composer.locale.value; // 先讀響應式的語系，否則標記為空時不會登記依賴
+  const p = previewLocale();
+  return p && p === current ? p : null;
+});
 async function startPreview(code: string) {
   await switchLocale({ global: composer }, code, { preview: true });
-  previewing.value = previewLocale();
 }
 
 type Action = 'rollback' | 'clear' | 'remove';
