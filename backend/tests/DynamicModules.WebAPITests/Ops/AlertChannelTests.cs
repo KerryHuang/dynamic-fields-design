@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Application.Dynamic.OpsService.Health;
 using DynamicModules.Application.Dynamic.OpsService.Incidents;
@@ -575,20 +576,22 @@ public class AlertChannelTests
     public void IncidentSnapshot_UsesDefaultLocaleThenZhTw()
     {
         var p = new Dictionary<string, object> { ["change"] = "granted" };
-        var en = IncidentTitles.Snapshot(new LocaleContext("en-US", ["en-US", "zh-TW", "th", "vi"]), "ops.title.adminChanged", p);
-        var zh = IncidentTitles.Snapshot(new LocaleContext("zh-TW", ["zh-TW", "en-US", "th", "vi"]), "ops.title.adminChanged", p);
-        var unknown = IncidentTitles.Snapshot(new LocaleContext("ja", []), "ops.title.adminChanged", p);
+        var en = IncidentTitles.Snapshot(BuiltinMessageCatalog.Instance, new LocaleContext("en-US", ["en-US", "zh-TW", "th", "vi"]), "ops.title.adminChanged", p);
+        var zh = IncidentTitles.Snapshot(BuiltinMessageCatalog.Instance, new LocaleContext("zh-TW", ["zh-TW", "en-US", "th", "vi"]), "ops.title.adminChanged", p);
+        var unknown = IncidentTitles.Snapshot(BuiltinMessageCatalog.Instance, new LocaleContext("ja", []), "ops.title.adminChanged", p);
         en.Should().NotBe(zh);
         unknown.Should().Be(zh);
-        IncidentTitles.Snapshot(new LocaleContext("ja", ["en-US", "zh-TW"]), "ops.title.adminChanged", p).Should().Be(en);
+        IncidentTitles.Snapshot(BuiltinMessageCatalog.Instance, new LocaleContext("ja", ["en-US", "zh-TW"]), "ops.title.adminChanged", p).Should().Be(en);
     }
 
     [Fact]
     public void AlertMailText_Locale_WalksChain()
     {
-        AlertMailText.Locale(new LocaleContext("ja", ["en-US", "zh-TW"])).Should().Be("en-US");
-        AlertMailText.Locale(new LocaleContext("ja", ["ko"])).Should().Be("zh-TW");
-        AlertMailText.Locale(new LocaleContext("th", ["zh-TW"])).Should().Be("th");
+        // i4c 起逐句沿鏈取（Q1）：內建層只有四語，結果同「挑第一個有翻譯的語系」
+        string Critical(LocaleContext lc) => AlertMailText.Label(BuiltinMessageCatalog.Instance, lc, "severity.critical");
+        Critical(new LocaleContext("ja", ["en-US", "zh-TW"])).Should().Be(Critical(new LocaleContext("en-US", [])));
+        Critical(new LocaleContext("ja", ["ko"])).Should().Be(Critical(new LocaleContext("zh-TW", [])));
+        Critical(new LocaleContext("th", ["zh-TW"])).Should().Be(Critical(new LocaleContext("th", []))).And.NotBe(Critical(new LocaleContext("zh-TW", [])));
     }
 
     // ── 新裝的語系（語系包 i4a 計畫判斷 23）：ja 的上層是 en-US；信件文字只有內建四語，寄出退回鏈上第一個有翻譯的 ──

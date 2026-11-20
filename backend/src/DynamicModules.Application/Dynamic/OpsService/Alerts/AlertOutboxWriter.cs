@@ -40,7 +40,8 @@ public sealed record AlertBackfill(string TransitionId, bool Superseded);
 /// </summary>
 public sealed class AlertOutboxWriter(
     IAlertChannelRepository channels, IMailSettingsRepository mailSettings, IAlertOutboxRepository outbox, IOpsIncidentRepository incidents, IPolicyReader policies,
-    DirectAlertQueue direct, AfterCommitActions afterCommit, IOpsEnvironment env, AlertMailOptions options, TimeProvider time, LocaleRegistry registry)
+    DirectAlertQueue direct, AfterCommitActions afterCommit, IOpsEnvironment env, AlertMailOptions options, TimeProvider time, LocaleRegistry registry,
+    Common.Localization.IMessageCatalog messages)
 {
     /// <summary>回傳這列的狀態；沒寫回 null。</summary>
     public async Task<AlertOutboxStatus?> EnqueueAsync(long incidentId, AlertTransition transition, AlertBackfill? backfill, CancellationToken ct)
@@ -50,7 +51,7 @@ public sealed class AlertOutboxWriter(
         var channel = await channels.GetAsync(AlertChannel.Smtp, ct);
         var now = time.GetUtcNow().UtcDateTime;
         var defaultLocale = await policies.ChoiceAsync(PolicyCatalog.LocaleDefault, null, ct);
-        var mail = AlertMailComposer.Incident(incident, transition, registry.ContextFor(channel?.MailLocale ?? defaultLocale, defaultLocale), env.Edition, options);
+        var mail = AlertMailComposer.Incident(incident, transition, messages, registry.ContextFor(channel?.MailLocale ?? defaultLocale, defaultLocale), env.Edition, options);
         var row = new AlertOutbox
         {
             Channel = AlertChannel.Smtp, IncidentId = incident.Id, Transition = transition, TransitionId = backfill?.TransitionId,

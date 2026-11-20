@@ -27,7 +27,8 @@ public sealed record ClaimAlertRequest(JobLeaseFence? Fence, string ClaimedBy) :
 
 public sealed class ClaimAlertHandler(
     IScheduledJobRepository jobs, IAlertChannelRepository channels, IMailSettingsRepository mailSettings, IAlertOutboxRepository outbox,
-    IOpsIncidentRepository incidents, IPolicyReader policies, IUnitOfWork uow, TimeProvider time, LocaleRegistry registry)
+    IOpsIncidentRepository incidents, IPolicyReader policies, IUnitOfWork uow, TimeProvider time, LocaleRegistry registry,
+    Common.Localization.IMessageCatalog messages)
     : IRequestHandler<ClaimAlertRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ClaimAlertRequest r, CancellationToken ct)
@@ -76,10 +77,10 @@ public sealed class ClaimAlertHandler(
             items.Add(incident is null
                 ? new DigestItem(row.IncidentId, IncidentSeverity.Warning, null, row.Subject, row.CreatedUtc)
                 : new DigestItem(incident.Id, incident.Severity, incident.Category,
-                    IncidentTitles.Text(AlertMailText.Locale(mailContext), incident.TitleKey, IncidentTitles.FromJson(incident.TitleParamsJson)),
+                    IncidentTitles.Text(messages, mailContext, incident.TitleKey, IncidentTitles.FromJson(incident.TitleParamsJson)),
                     row.CreatedUtc));
         }
-        var mail = AlertMailComposer.Digest(items, mailContext);
+        var mail = AlertMailComposer.Digest(items, messages, mailContext);
         var digest = new AlertOutbox
         {
             Channel = AlertChannel.Smtp, Transition = AlertTransition.Digest, Subject = mail.Subject, Body = mail.Body,

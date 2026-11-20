@@ -18,7 +18,7 @@ public class BuiltinServerTextTests
     public static readonly string[] Locales = ["zh-TW", "en-US", "th", "vi"];
 
     /// <summary>明列的基準檔；Task 4、7 各加一個。</summary>
-    private static readonly string[] BaselineFiles = ["message-report.json", "task-report.json"];
+    private static readonly string[] BaselineFiles = ["message-report.json", "task-report.json", "alert.json"];
 
     /// <summary>repo 根目錄（往上找到有 shared/locale-chain-cases.json 的那層）。</summary>
     public static string RepoRoot()
@@ -59,6 +59,19 @@ public class BuiltinServerTextTests
     {
         Consts(typeof(ReportText)).Should().NotBeEmpty().And.OnlyContain(k => k.StartsWith("report.", StringComparison.Ordinal));
         Consts(typeof(MessageText)).Should().NotBeEmpty().And.OnlyContain(k => !k.Contains('.'));
+    }
+
+    [Fact]
+    public void AlertKeys_Prefixed()
+    {
+        var alert = BuiltinServerText.Table.Keys.Where(k => k.StartsWith("alert.", StringComparison.Ordinal)).ToList();
+        alert.Should().BeEquivalentTo(Baseline("alert.json").Keys);
+        Consts(typeof(Application.Dynamic.OpsService.Alerts.AlertMailText)).Should().NotBeEmpty()
+            .And.OnlyContain(k => k.StartsWith("alert.", StringComparison.Ordinal) && !k.StartsWith("alert.label.", StringComparison.Ordinal));
+        alert.Count(k => k.StartsWith("alert.label.", StringComparison.Ordinal)).Should().BeGreaterThan(0);
+        foreach (var c in Application.Dynamic.OpsService.Health.HealthCheckCatalog.All)
+            BuiltinServerText.Table["alert.check." + c.Code].Zh.Should().Be(c.ZhName);
+        alert.Count(k => k.StartsWith("alert.check.", StringComparison.Ordinal)).Should().Be(Application.Dynamic.OpsService.Health.HealthCheckCatalog.All.Count);
     }
 
     [Fact]

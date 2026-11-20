@@ -1,6 +1,5 @@
-using System.Globalization;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Dynamic.OpsService.Health;
-using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.OpsService.Alerts;
@@ -8,25 +7,27 @@ namespace DynamicModules.Application.Dynamic.OpsService.Alerts;
 /// <summary>
 /// 告警信與事件標題的四語字串（維運設計 §17.2.2、§17.2.6、O2-U14；形式同 ReportText：鍵、四語、string.Format 參數）。
 /// 繁中的事件標題必須與 o2b 的站內通知快照逐字相同。泰文與越南文待母語者校對。
+/// 是 <see cref="IMessageCatalog"/> 的內建層之一（語系包 i4c 計畫判斷 3、Q1）：主表的鍵是 <c>alert.&lt;常數名&gt;</c>、
+/// 代碼名稱 <c>alert.label.&lt;代碼&gt;</c>、健康檢查名稱 <c>alert.check.&lt;代碼&gt;</c>，鍵是語系包契約；信件每一句沿退回鏈取。
 /// </summary>
 public static class AlertMailText
 {
-    /// <summary>這張表有翻譯的語系＝內建語系。</summary>
-    public static readonly IReadOnlyList<string> Locales = BuiltinLocales.Codes;
+    private const string P = "alert.";
+    private const string LabelPrefix = "alert.label.", CheckPrefix = "alert.check.";
 
     public const string
-        Subject = nameof(Subject), SubjectDirect = nameof(SubjectDirect), DigestSubject = nameof(DigestSubject),
-        DigestIntro = nameof(DigestIntro), DigestMore = nameof(DigestMore), DigestLine = nameof(DigestLine),
-        TestSubject = nameof(TestSubject), TestBody = nameof(TestBody), MailTestSubject = nameof(MailTestSubject), MailTestBody = nameof(MailTestBody),
-        DirectNote = nameof(DirectNote), TooLong = nameof(TooLong),
-        Category = nameof(Category), Handler = nameof(Handler), Transition = nameof(Transition), Count = nameof(Count),
-        FirstSeen = nameof(FirstSeen), LastSeen = nameof(LastSeen), CheckedAt = nameof(CheckedAt), Version = nameof(Version), Link = nameof(Link),
+        Subject = P + nameof(Subject), SubjectDirect = P + nameof(SubjectDirect), DigestSubject = P + nameof(DigestSubject),
+        DigestIntro = P + nameof(DigestIntro), DigestMore = P + nameof(DigestMore), DigestLine = P + nameof(DigestLine),
+        TestSubject = P + nameof(TestSubject), TestBody = P + nameof(TestBody), MailTestSubject = P + nameof(MailTestSubject), MailTestBody = P + nameof(MailTestBody),
+        DirectNote = P + nameof(DirectNote), TooLong = P + nameof(TooLong),
+        Category = P + nameof(Category), Handler = P + nameof(Handler), Transition = P + nameof(Transition), Count = P + nameof(Count),
+        FirstSeen = P + nameof(FirstSeen), LastSeen = P + nameof(LastSeen), CheckedAt = P + nameof(CheckedAt), Version = P + nameof(Version), Link = P + nameof(Link),
         // 事件標題（§17.2.2 標題表；組字只在 IncidentTitles）
-        TitleServer = nameof(TitleServer), TitleClient = nameof(TitleClient), TitleRouteSuffix = nameof(TitleRouteSuffix),
-        TitleAdminGranted = nameof(TitleAdminGranted), TitleAdminRevoked = nameof(TitleAdminRevoked), TitleHealth = nameof(TitleHealth),
-        TitleChannel = nameof(TitleChannel), TitleChannelCode = nameof(TitleChannelCode),
-        TitleConfig = nameof(TitleConfig), TitleRulePaused = nameof(TitleRulePaused),
-        TitlePrivilegeGranted = nameof(TitlePrivilegeGranted), TitlePrivilegeRevoked = nameof(TitlePrivilegeRevoked);
+        TitleServer = P + nameof(TitleServer), TitleClient = P + nameof(TitleClient), TitleRouteSuffix = P + nameof(TitleRouteSuffix),
+        TitleAdminGranted = P + nameof(TitleAdminGranted), TitleAdminRevoked = P + nameof(TitleAdminRevoked), TitleHealth = P + nameof(TitleHealth),
+        TitleChannel = P + nameof(TitleChannel), TitleChannelCode = P + nameof(TitleChannelCode),
+        TitleConfig = P + nameof(TitleConfig), TitleRulePaused = P + nameof(TitleRulePaused),
+        TitlePrivilegeGranted = P + nameof(TitlePrivilegeGranted), TitlePrivilegeRevoked = P + nameof(TitlePrivilegeRevoked);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -140,29 +141,17 @@ public static class AlertMailText
         [HealthCheckCatalog.SecurityLoginFailures] = ("Failed sign-ins", "การเข้าสู่ระบบล้มเหลว", "Số lần đăng nhập thất bại"),
     };
 
-    /// <summary>
-    /// 信件文字用哪張表：沿語系與退回鏈（<see cref="Common.LocaleRegistry.ContextFor"/>）找第一個這張表有翻譯的，都沒有就繁中（i4a 計畫判斷 23）。
-    /// 通道存的語系之後被停用也照常寄；存的語系已移除時鏈不含它的上層，落到系統預設語系（N2）。
-    /// </summary>
-    public static string Locale(LocaleContext mail) =>
-        new[] { mail.Locale }.Concat(mail.Fallbacks).FirstOrDefault(l => Locales.Contains(l)) ?? "zh-TW";
+    /// <summary>內建層的全部列（<see cref="BuiltinServerText"/> 合併）：主表、代碼名稱、健康檢查名稱（繁中取自 <see cref="HealthCheckCatalog"/>，維持單一來源）。</summary>
+    internal static IEnumerable<KeyValuePair<string, (string Zh, string En, string Th, string Vi)>> Entries =>
+        Table.Concat(Labels.Select(kv => KeyValuePair.Create(LabelPrefix + kv.Key, kv.Value)))
+            .Concat(HealthCheckCatalog.All.Select(c => KeyValuePair.Create(CheckPrefix + c.Code,
+                CheckNames.TryGetValue(c.Code, out var e) ? (c.ZhName, e.En, e.Th, e.Vi) : (c.ZhName, c.ZhName, c.ZhName, c.ZhName))));
 
-    public static string Get(string locale, string key, params object[] args)
-    {
-        var text = Pick(Table[key], locale);
-        return args.Length == 0 ? text : string.Format(CultureInfo.InvariantCulture, text, args);
-    }
+    /// <summary>代碼值的名稱（<c>severity.critical</c>…）；沒登記的回代碼第一個 <c>.</c> 之後那段（代碼值來自事件參數，不丟例外）。</summary>
+    public static string Label(IMessageCatalog messages, LocaleContext mail, string code) =>
+        BuiltinServerText.Table.ContainsKey(LabelPrefix + code) ? messages.Get(mail, LabelPrefix + code) : code[(code.IndexOf('.') + 1)..];
 
-    /// <summary>代碼值的名稱（<c>severity.critical</c>…）；沒登記的回代碼本身。</summary>
-    public static string Label(string locale, string key) => Labels.TryGetValue(key, out var e) ? Pick(e, locale) : key[(key.IndexOf('.') + 1)..];
-
-    public static string CheckName(string locale, string code)
-    {
-        var zh = HealthCheckCatalog.Find(code)?.ZhName ?? code;
-        if (!CheckNames.TryGetValue(code, out var e)) return zh;
-        return locale switch { "en-US" => e.En, "th" => e.Th, "vi" => e.Vi, _ => zh };
-    }
-
-    private static string Pick((string Zh, string En, string Th, string Vi) e, string locale) =>
-        locale switch { "en-US" => e.En, "th" => e.Th, "vi" => e.Vi, _ => e.Zh };
+    /// <summary>健康檢查名稱；不在 <see cref="HealthCheckCatalog"/> 的代碼回代碼本身。</summary>
+    public static string CheckName(IMessageCatalog messages, LocaleContext mail, string code) =>
+        HealthCheckCatalog.Find(code) is null ? code : messages.Get(mail, CheckPrefix + code);
 }

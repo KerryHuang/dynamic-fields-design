@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Domain.ValueObjects;
 
@@ -57,31 +58,31 @@ public static partial class IncidentTitles
             e => e.Value.ValueKind == JsonValueKind.Number ? (object)e.Value.GetInt64() : e.Value.GetString() ?? "", StringComparer.Ordinal);
     }
 
-    /// <summary>系統預設語系的標題（通知 TitleSnapshot 的退路，截斷 200 字）；預設語系沒有翻譯表時沿它的退回鏈找，都沒有退繁中。</summary>
-    public static string Snapshot(LocaleContext systemDefault, string titleKey, IReadOnlyDictionary<string, object>? p)
+    /// <summary>系統預設語系的標題（通知 TitleSnapshot 的退路，截斷 200 字）；每一句沿預設語系的退回鏈取，最後是繁中。</summary>
+    public static string Snapshot(IMessageCatalog m, LocaleContext systemDefault, string titleKey, IReadOnlyDictionary<string, object>? p)
     {
-        var text = Text(AlertMailText.Locale(systemDefault), titleKey, p);
+        var text = Text(m, systemDefault, titleKey, p);
         return text.Length <= 200 ? text : text[..200];
     }
 
     /// <summary>依語系組標題（不截斷；呼叫端各自有長度預算）。沒登記的標題代碼回代碼本身。</summary>
-    public static string Text(string locale, string titleKey, IReadOnlyDictionary<string, object>? p)
+    public static string Text(IMessageCatalog m, LocaleContext locale, string titleKey, IReadOnlyDictionary<string, object>? p)
     {
         string P(string k) => p is not null && p.TryGetValue(k, out var v) ? Convert.ToString(v, CultureInfo.InvariantCulture) ?? "" : "";
-        string Route() => P("route") is { Length: > 0 } r ? AlertMailText.Get(locale, AlertMailText.TitleRouteSuffix, r) : "";
+        string Route() => P("route") is { Length: > 0 } r ? m.Get(locale, AlertMailText.TitleRouteSuffix, r) : "";
         return titleKey switch
         {
-            ServerError => AlertMailText.Get(locale, AlertMailText.TitleServer, P("exceptionType")) + Route(),
-            ClientError => AlertMailText.Get(locale, AlertMailText.TitleClient, P("errorName")) + Route(),
-            AdminChanged => AlertMailText.Get(locale, P("change") == "granted" ? AlertMailText.TitleAdminGranted : AlertMailText.TitleAdminRevoked),
-            ChannelFailed => AlertMailText.Get(locale, AlertMailText.TitleChannel, AlertMailText.Label(locale, "stage." + P("stage"))
-                + (P("serverCode") is { Length: > 0 } c ? AlertMailText.Get(locale, AlertMailText.TitleChannelCode, c) : "")),
-            PrivilegeChanged => AlertMailText.Get(locale, P("change") == "granted" ? AlertMailText.TitlePrivilegeGranted : AlertMailText.TitlePrivilegeRevoked),
-            RulePaused => AlertMailText.Get(locale, AlertMailText.TitleRulePaused, P("ruleKey"), P("failures")),
-            _ when titleKey.StartsWith(ConfigPrefix, StringComparison.Ordinal) => AlertMailText.Get(locale, AlertMailText.TitleConfig, P("ruleKey"),
-                AlertMailText.Label(locale, "ruleError." + titleKey[ConfigPrefix.Length..])),
-            _ when titleKey.StartsWith(HealthPrefix, StringComparison.Ordinal) => AlertMailText.Get(locale, AlertMailText.TitleHealth,
-                AlertMailText.CheckName(locale, titleKey[HealthPrefix.Length..]), AlertMailText.Label(locale, "status." + P("status"))),
+            ServerError => m.Get(locale, AlertMailText.TitleServer, P("exceptionType")) + Route(),
+            ClientError => m.Get(locale, AlertMailText.TitleClient, P("errorName")) + Route(),
+            AdminChanged => m.Get(locale, P("change") == "granted" ? AlertMailText.TitleAdminGranted : AlertMailText.TitleAdminRevoked),
+            ChannelFailed => m.Get(locale, AlertMailText.TitleChannel, AlertMailText.Label(m, locale, "stage." + P("stage"))
+                + (P("serverCode") is { Length: > 0 } c ? m.Get(locale, AlertMailText.TitleChannelCode, c) : "")),
+            PrivilegeChanged => m.Get(locale, P("change") == "granted" ? AlertMailText.TitlePrivilegeGranted : AlertMailText.TitlePrivilegeRevoked),
+            RulePaused => m.Get(locale, AlertMailText.TitleRulePaused, P("ruleKey"), P("failures")),
+            _ when titleKey.StartsWith(ConfigPrefix, StringComparison.Ordinal) => m.Get(locale, AlertMailText.TitleConfig, P("ruleKey"),
+                AlertMailText.Label(m, locale, "ruleError." + titleKey[ConfigPrefix.Length..])),
+            _ when titleKey.StartsWith(HealthPrefix, StringComparison.Ordinal) => m.Get(locale, AlertMailText.TitleHealth,
+                AlertMailText.CheckName(m, locale, titleKey[HealthPrefix.Length..]), AlertMailText.Label(m, locale, "status." + P("status"))),
             _ => titleKey,
         };
     }

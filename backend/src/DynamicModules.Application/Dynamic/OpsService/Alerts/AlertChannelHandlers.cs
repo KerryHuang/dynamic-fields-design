@@ -122,7 +122,8 @@ public sealed record SendSmtpTestRequest : IRequest<ServiceResult>, ISystemAdmin
 
 public sealed class SendSmtpTestHandler(
     IAlertChannelRepository channels, IMailSettingsRepository mailSettings, IAlertSecretProtector protector, IAlertMailSender mailer,
-    SmtpTestGate gate, AuthSettings auth, CachedSystemPolicy policyCache, LocaleRegistry registry, ICurrentUser user, IAuditLog audit, TimeProvider time)
+    SmtpTestGate gate, AuthSettings auth, CachedSystemPolicy policyCache, LocaleRegistry registry, ICurrentUser user, IAuditLog audit, TimeProvider time,
+    Common.Localization.IMessageCatalog messages)
     : IRequestHandler<SendSmtpTestRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SendSmtpTestRequest request, CancellationToken ct)
@@ -138,7 +139,7 @@ public sealed class SendSmtpTestHandler(
         MailSendResult result;
         using (var timeout = new CancellationTokenSource(AlertLimits.SendTimeout, time))
         using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token))
-            result = await mailer.SendAsync(settings, password, AlertMailComposer.Test(registry.ContextFor(settings.MailLocale ?? policyCache.DefaultLocale, policyCache.DefaultLocale)), linked.Token);
+            result = await mailer.SendAsync(settings, password, AlertMailComposer.Test(messages, registry.ContextFor(settings.MailLocale ?? policyCache.DefaultLocale, policyCache.DefaultLocale)), linked.Token);
         await audit.TryWriteNowAsync(new AuditEntry("ops.channel.test", result.Ok ? AuditResult.Success : AuditResult.Failed,
             AuditTargets.Channel, AlertChannel.Smtp, ReasonCode: result.Ok ? null : result.Stage,
             Summary: new AuditSummary().Add("sentTo", settings.ToAddresses.Count).Add("serverCode", result.ServerCode).ToJson()), ct);
