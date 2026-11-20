@@ -509,6 +509,41 @@ public sealed class ServerMessageChainApiTests : IDisposable
         error.GetProperty("errors").GetProperty(m.Flag)[0].GetString().Should().Be("請輸入「是」或「否」");
     }
 
+    /// <summary>語系的否帶前後空白（審查必修 1）：匯出原樣寫出，匯入去空白後要回到「否」；去空白後撞到固定別名就整格拒收，不悄悄翻成「是」。</summary>
+    [Fact]
+    public async Task Import_PaddedWord_RoundTrip()
+    {
+        using var app = WithJaWords("はい", " いいえ ");
+        await Japanese(app);
+        var admin = app.AsUser();
+        var m = await BooleanModule(admin);
+        (await admin.PostAsJsonAsync($"{Base}/modules/{m.Key}/records", new { values = new Dictionary<string, object> { [m.Title] = "B", [m.Flag] = false } }))
+            .EnsureSuccessStatusCode();
+        var ja = Client(app, "ja");
+        var exported = await ExportLines(ja, m.Key);
+
+        var preview = await Preview(ja, m.Key, string.Join("\r\n", exported) + "\r\n");
+        preview.GetProperty("valid").GetInt32().Should().Be(1, preview.ToString());
+        preview.GetProperty("errors").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Import_PaddedWordHitsFixedAlias_Rejected()
+    {
+        using var app = WithJaWords("はい", " true ");
+        await Japanese(app);
+        var admin = app.AsUser();
+        var m = await BooleanModule(admin);
+        (await admin.PostAsJsonAsync($"{Base}/modules/{m.Key}/records", new { values = new Dictionary<string, object> { [m.Title] = "B", [m.Flag] = false } }))
+            .EnsureSuccessStatusCode();
+        var ja = Client(app, "ja");
+        var exported = await ExportLines(ja, m.Key);
+
+        var preview = await Preview(ja, m.Key, string.Join("\r\n", exported) + "\r\n");
+        preview.GetProperty("valid").GetInt32().Should().Be(0, preview.ToString());
+        preview.GetProperty("errors").EnumerateArray().Single().GetProperty("errors").GetProperty(m.Flag)[0].GetString().Should().Be("請輸入「是」或「否」");
+    }
+
     [Fact]
     public async Task Factory_FourLocales_Unchanged()
     {

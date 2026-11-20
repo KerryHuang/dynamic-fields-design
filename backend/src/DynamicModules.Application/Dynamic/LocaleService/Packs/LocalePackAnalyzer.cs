@@ -157,7 +157,7 @@ public static class LocalePackAnalyzer
         var collisions = new List<BooleanCollision>();
         foreach (var word in ambiguous.Order(StringComparer.Ordinal))
         {
-            bool Same(string t) => string.Equals(t, word, StringComparison.OrdinalIgnoreCase);
+            bool Same(string t) => string.Equals(BooleanWords.Normalize(t), word, StringComparison.OrdinalIgnoreCase);
             var packKeys = new List<string>();
             if (packCode is not null && words.FirstOrDefault(w => w.Code == packCode) is { Code: not null } mine)
             {

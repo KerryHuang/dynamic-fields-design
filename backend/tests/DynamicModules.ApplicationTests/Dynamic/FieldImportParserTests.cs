@@ -136,6 +136,24 @@ public class FieldImportParserTests
         B(oneAsNo, "0").Should().Be("false");
     }
 
+    /// <summary>匯入先去掉儲存格前後空白：語系的是／否文字也要用同一套正規化（審查必修 1），否則「 true 」匯出再匯入會悄悄變成是。</summary>
+    [Fact]
+    public void Boolean_WordsNormalizedLikeCells()
+    {
+        var padded = BooleanWords.From([.. Builtin4, (" はい ", "\tいいえ ")]);
+        B(padded, "はい").Should().Be("true");
+        B(padded, " いいえ ").Should().Be("false");
+
+        var paddedAlias = BooleanWords.From([.. Builtin4, ("はい", " true ")]);
+        paddedAlias.Ambiguous.Should().Contain("true");
+        B(paddedAlias, "true").Should().Be(Reject);
+        B(paddedAlias, " TRUE ").Should().Be(Reject);
+
+        var acrossLocales = BooleanWords.From([.. Builtin4, ("はい", "いいえ"), ("예", " はい")]);
+        B(acrossLocales, "はい").Should().Be(Reject);
+        BooleanWords.Normalize("  はい\t").Should().Be("はい");
+    }
+
     [Theory]
     [InlineData("true", "true")]
     [InlineData("TRUE", "true")]

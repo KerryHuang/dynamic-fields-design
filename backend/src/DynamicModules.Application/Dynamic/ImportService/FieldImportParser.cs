@@ -38,15 +38,18 @@ public sealed class BooleanWords
     private BooleanWords(IEnumerable<(string Yes, string No)> perLocale)
     {
         var words = perLocale.ToList();
-        _yes = new HashSet<string>(FixedYes.Concat(words.Select(w => w.Yes)), StringComparer.OrdinalIgnoreCase);
-        _no = new HashSet<string>(FixedNo.Concat(words.Select(w => w.No)), StringComparer.OrdinalIgnoreCase);
+        _yes = new HashSet<string>(FixedYes.Concat(words.Select(w => w.Yes)).Select(Normalize), StringComparer.OrdinalIgnoreCase);
+        _no = new HashSet<string>(FixedNo.Concat(words.Select(w => w.No)).Select(Normalize), StringComparer.OrdinalIgnoreCase);
         // 固定別名併進兩邊之後才算撞字
         _ambiguous = new HashSet<string>(_yes.Where(_no.Contains), StringComparer.OrdinalIgnoreCase);
     }
 
     public static BooleanWords From(IEnumerable<(string Yes, string No)> perLocale) => new(perLocale);
 
-    /// <summary>同時出現在「是」與「否」兩邊的字（含固定別名，不分大小寫）；語系包分析用它判斷撞字（票 #68，i4d1 計畫判斷 6）。</summary>
+    /// <summary>比對前的正規化，和 <see cref="FieldImportParser.Parse"/> 處理儲存格一致（去前後空白）；兩側集合、撞字判斷與語系包分析都經這裡（審查必修 1）。</summary>
+    public static string Normalize(string text) => text.Trim();
+
+    /// <summary>同時出現在「是」與「否」兩邊的字（含固定別名，不分大小寫，已經 <see cref="Normalize"/>）；語系包分析用它判斷撞字（票 #68，i4d1 計畫判斷 6）。</summary>
     public IReadOnlySet<string> Ambiguous => _ambiguous;
 
     /// <summary>內建四語（經 <see cref="BuiltinMessageCatalog"/>）；沒有 DI 的呼叫端與測試用。</summary>
@@ -54,8 +57,11 @@ public sealed class BooleanWords
         .Select(lc => (BuiltinMessageCatalog.Instance.Get(lc, ReportText.Yes), BuiltinMessageCatalog.Instance.Get(lc, ReportText.No))));
 
     /// <summary>true／false；撞字或不認得回 null。</summary>
-    public bool? Parse(string text) =>
-        _ambiguous.Contains(text) ? null : _yes.Contains(text) ? true : _no.Contains(text) ? false : null;
+    public bool? Parse(string text)
+    {
+        text = Normalize(text);
+        return _ambiguous.Contains(text) ? null : _yes.Contains(text) ? true : _no.Contains(text) ? false : null;
+    }
 }
 
 /// <summary>匯入值解析（FieldDisplay.Format 的反向）：只把文字轉成儲存的 JSON 形狀，驗證交給型別處理器。</summary>
