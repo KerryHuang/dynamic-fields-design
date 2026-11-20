@@ -200,4 +200,24 @@ public class FieldImportParserTests
         var l = None with { BusinessOffset = TimeSpan.FromHours(7) };
         P(F(FieldType.DateTime), "2026-11-11 09:00", l).Should().Be(("\"2026-11-11T09:00:00+07:00\"", null));
     }
+
+    [Theory]
+    [InlineData("-12:00", "9999-12-31 23:30")]   // UTC 超過上限（建構 DateTimeOffset 就會失敗）
+    [InlineData("+14:00", "0001-01-01 00:30")]   // UTC 早於下限
+    public void DateTime_LocalTextOutOfUtcRange_IsFieldError(string zone, string text)
+    {
+        var l = None with { BusinessOffset = DynamicModules.Domain.Policies.PolicyCatalog.UtcOffsetOf(zone) };
+        P(F(FieldType.DateTime), text, l).Should().Be((null, "日期時間格式錯誤"));
+    }
+
+    [Theory]
+    [InlineData("-12:00", "9999-12-31 11:30", "\"9999-12-31T11:30:00-12:00\"")]
+    [InlineData("+14:00", "0001-01-01 14:00", "\"0001-01-01T14:00:00+14:00\"")]
+    [InlineData("+14:00", "9999-12-31 23:59", "\"9999-12-31T23:59:00+14:00\"")]
+    [InlineData("-12:00", "0001-01-01 00:00", "\"0001-01-01T00:00:00-12:00\"")]
+    public void DateTime_LocalTextAtUtcBoundary_IsAccepted(string zone, string text, string expected)
+    {
+        var l = None with { BusinessOffset = DynamicModules.Domain.Policies.PolicyCatalog.UtcOffsetOf(zone) };
+        P(F(FieldType.DateTime), text, l).Should().Be((expected, null));
+    }
 }

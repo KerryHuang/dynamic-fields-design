@@ -96,7 +96,12 @@ public static class FieldImportParser
     {
         DateTimeOffset dto;
         if (System.DateTime.TryParseExact(text, "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var local))
+        {
+            // 營運時區的牆上時間換成 UTC 後超出 DateTime 範圍時，new DateTimeOffset 會丟例外：先檢查，回逐列的欄位錯誤
+            if (offset < TimeSpan.Zero ? local > System.DateTime.MaxValue + offset : local < System.DateTime.MinValue + offset)
+                return Fail("日期時間格式錯誤");
             dto = new DateTimeOffset(local, offset);
+        }
         else if (!HasOffset.IsMatch(text) || !DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out dto))
             return Fail("日期時間格式錯誤");
         if (BusinessClock.Overflows(dto, offset)) return Fail("日期時間格式錯誤");
