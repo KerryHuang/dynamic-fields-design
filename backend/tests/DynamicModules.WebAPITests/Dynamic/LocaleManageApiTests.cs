@@ -6,6 +6,8 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.LocaleService.Packs;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Persistence.Repositories.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -459,5 +461,52 @@ public class LocaleManageApiTests : IDisposable
         ja.GetProperty("completeness").GetProperty("ui").GetProperty("have").GetInt32().Should().Be(1, "完整度也讀資料庫，不讀快照");
         _app.Services.GetRequiredService<LocaleRegistry>().Texts().Overlay("ja")!.Ui.Should().HaveCount(30, "快照仍是舊的");
         before.Should().BePositive();
+    }
+
+    /// <summary>
+    /// 清單只讀一次目前版（i4d2 判斷 6、第二輪建議 2）：完整度與覆寫檢視出自同一批列。替身第一次 <c>ListCurrentAsync</c> 回真資料，
+    /// 之後每次都回「ja 已被移除」的另一版；清單若退化成兩次讀取，呼叫次數會是 2、ja 的 current 或完整度會和覆寫句數對不起來。
+    /// </summary>
+    [Fact]
+    public async Task List_ReadsCurrentVersionsOnce()
+    {
+        var spy = new SpyState();
+        using var app = new TestApp { ExtraServices = s => s.AddScoped<ILocalePackRepository>(sp => new SpyPacks(new LocalePackRepository(sp.GetRequiredService<DynamicDbContext>()), spy)) };
+        await ApplyPackAsync(app, JaPartial, "ja-partial.langpack.json");
+        spy.Divergent = true;
+        spy.Calls = 0;
+
+        var ja = Row(await JsonOf(await app.AsUser().GetAsync($"{I18n}/locales")), "ja");
+
+        spy.Calls.Should().Be(1, "清單用 ReadWithCurrentAsync 一次讀目前版，不再另外呼叫 ListCurrentAsync");
+        ja.GetProperty("current").ValueKind.Should().Be(JsonValueKind.Object);
+        ja.GetProperty("builtFor").GetString().Should().Be("2026.11");
+        ja.GetProperty("overrides").GetProperty("ui").GetInt32().Should().Be(30);
+        ja.GetProperty("completeness").GetProperty("ui").GetProperty("have").GetInt32().Should().Be(30, "完整度與覆寫句數來自同一批列");
+    }
+
+    private sealed class SpyState
+    {
+        public int Calls;
+        public bool Divergent;
+    }
+
+    /// <summary>計 <see cref="ILocalePackRepository.ListCurrentAsync"/> 的呼叫次數；<see cref="SpyState.Divergent"/> 後，第二次起回「ja 被移除」的另一版。</summary>
+    private sealed class SpyPacks(ILocalePackRepository inner, SpyState state) : ILocalePackRepository
+    {
+        public async Task<List<LocalePack>> ListCurrentAsync(CancellationToken ct)
+        {
+            var rows = await inner.ListCurrentAsync(ct);
+            var n = Interlocked.Increment(ref state.Calls);
+            return state.Divergent && n > 1 ? rows.Where(r => r.Code != "ja").ToList() : rows;
+        }
+        public Task<LocalePack?> CurrentAsync(string code, CancellationToken ct) => inner.CurrentAsync(code, ct);
+        public Task<LocalePack?> PreviousAsync(string code, CancellationToken ct) => inner.PreviousAsync(code, ct);
+        public void AddVersion(LocalePack next, LocalePack? current, LocalePack? previous, DateTime now) => inner.AddVersion(next, current, previous, now);
+        public Task DeleteForLocaleAsync(string code, CancellationToken ct) => inner.DeleteForLocaleAsync(code, ct);
+        public void AddPreview(LocalePackPreview p) => inner.AddPreview(p);
+        public Task<LocalePackPreview?> FindPreviewAsync(string id, CancellationToken ct) => inner.FindPreviewAsync(id, ct);
+        public void RemovePreview(LocalePackPreview p) => inner.RemovePreview(p);
+        public Task PrunePreviewsAsync(DateTime now, int keep, CancellationToken ct) => inner.PrunePreviewsAsync(now, keep, ct);
     }
 }
