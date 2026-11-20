@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.LocaleService.Commands.ApplyLocalePack;
 using DynamicModules.Application.Dynamic.LocaleService.Commands.ClearLocaleOverrides;
 using DynamicModules.Application.Dynamic.LocaleService.Commands.PreviewLocalePack;
@@ -34,11 +35,14 @@ public class I18nController(IMediator mediator) : ControllerBase
     /// <summary>
     /// 預覽語系包（語系包設計 §6.3；i4d1 計畫判斷 12）：本文是原始檔案位元組（Content-Type 不限）。主體有上限地讀
     /// （<see cref="LocalePackBodyLimitFilter"/> 給的上限，超過就停止讀取回 413），不整包收進記憶體再判斷。
+    /// 讀主體前先確認系統管理員（審查建議 2），一般使用者不會讓伺服器配置上傳緩衝；預覽請求本身照舊經 pipeline 再判一次。
     /// </summary>
     [HttpPost("packs/preview")]
     [TypeFilter(typeof(LocalePackBodyLimitFilter))]
     public async Task<IActionResult> PreviewPack([FromQuery] string? fileName)
     {
+        var admin = await mediator.Send(new CheckSystemAdminRequest(), HttpContext.RequestAborted);
+        if (!admin.IsSuccess) return admin.ToActionResult(this);
         var limit = HttpContext.Items[LocalePackBodyLimitFilter.LimitItem] as long? ?? 0;
         using var buffer = new MemoryStream();
         var chunk = new byte[81920];

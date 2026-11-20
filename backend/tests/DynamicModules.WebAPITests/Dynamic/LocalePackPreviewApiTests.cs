@@ -57,6 +57,18 @@ public class LocalePackPreviewApiTests : IDisposable
         Db(_app, db => db.Set<LocalePackPreview>().Count()).Should().Be(0);
     }
 
+    /// <summary>一般使用者在讀主體前就被擋（審查建議 2）：伺服器沒讀走任何位元組，不為非管理員配置上傳緩衝。</summary>
+    [Fact]
+    public async Task NonAdmin_403_BodyNotRead()
+    {
+        _app.ResetBodyCount();
+        var res = await Preview(_app.AsUser("sales01"), Fixture("ja-partial.langpack.json"));
+        res.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await JsonOf(res)).GetProperty("message").GetString().Should().NotBeNullOrEmpty();
+        _app.BodyBytesRead.Should().Be(0);
+        Db(_app, db => db.Set<LocalePackPreview>().Count()).Should().Be(0);
+    }
+
     [Fact]
     public async Task Preview_NewLocale_ReportAndStored()
     {
