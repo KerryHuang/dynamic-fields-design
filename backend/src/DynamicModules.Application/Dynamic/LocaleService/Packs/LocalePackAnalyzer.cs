@@ -1,6 +1,7 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Dynamic.ImportService;
+using DynamicModules.Application.Dynamic.OpsService;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.ValueObjects;
@@ -20,7 +21,12 @@ public static class LocalePackAnalyzer
     private static readonly Lazy<HashSet<string>> UiBase = new(() => BuiltinLocaleResources.BaseKeys.ToHashSet(StringComparer.Ordinal));
     private static readonly Lazy<HashSet<string>> ServerBase = new(() => BuiltinServerText.BaseKeys.ToHashSet(StringComparer.Ordinal));
 
-    public static LocalePackAnalysis Analyze(ParsedLocalePack pack, LocaleWorld world, int maxInstalled)
+    public const string WarningBuiltForDiffers = "builtForDiffers";
+
+    /// <param name="platformVersion">平台版本（<c>IOpsEnvironment.Version</c> 原值，分析器內經 <see cref="LocalePackVersions.PlatformBuiltFor"/>）；null 視為 dev。</param>
+    /// <param name="currentReview">目前版的覆寫層檢視（預覽 handler 以 <see cref="LocaleOverlayReview.Of"/> 算好傳入）：原樣再匯入的「原文已更新」句子列進確認（判斷 7）。</param>
+    public static LocalePackAnalysis Analyze(ParsedLocalePack pack, LocaleWorld world, int maxInstalled, string? platformVersion,
+        OverlayReview? currentReview = null)
     {
         var code = pack.Code;
         var info = world.Installed.FirstOrDefault(i => i.Code == code);
@@ -61,7 +67,7 @@ public static class LocalePackAnalyzer
 
         // ── 句子 ──
         var current = world.Overlays.GetValueOrDefault(code);
-        var ui = new SectionBuilder(pack.UiProblems);
+        var ui = new SectionBuilder(pack.UiProblems, currentReview?.Ui.AllBaseChanged);
         var uiBuiltin = BuiltinLocaleResources.Ui.GetValueOrDefault(code);
         foreach (var (key, text) in pack.Ui.OrderBy(kv => kv.Key, StringComparer.Ordinal))
         {
@@ -76,7 +82,7 @@ public static class LocalePackAnalyzer
             ui.Compare(key, text, uiBuiltin?.GetValueOrDefault(key), current?.Ui);
         }
 
-        var server = new SectionBuilder(pack.ServerProblems);
+        var server = new SectionBuilder(pack.ServerProblems, currentReview?.Server.AllBaseChanged);
         var candidates = new Dictionary<string, BooleanCandidate>(StringComparer.Ordinal);
         var candidateKind = new Dictionary<string, Kind>(StringComparer.Ordinal);
         foreach (var (key, text) in pack.Server.OrderBy(kv => kv.Key, StringComparer.Ordinal))
@@ -100,7 +106,10 @@ public static class LocalePackAnalyzer
         }
 
         var basePlan = new LocalePackPlan(code, isNew, target, ui.Set, ui.Remove.ToList(), server.Set, server.Remove.ToList(), [], candidates,
-            new LocalePackInfo(pack.PackVersion, pack.BuiltFor, pack.BaseLocale, pack.Note));
+            new LocalePackInfo(pack.PackVersion, pack.BuiltFor, pack.BaseLocale, pack.Note))
+        {
+            UiConfirm = ui.Confirm.ToList(), ServerConfirm = server.Confirm.ToList(),
+        };
         var (rejected, rejectedItems, collisions) = FilterBoolean(After(world, basePlan), code, candidates);
         var serverSet = new Dictionary<string, string>(server.Set, StringComparer.Ordinal);
         var serverRemove = server.Remove.ToList();
@@ -118,6 +127,7 @@ public static class LocalePackAnalyzer
         var warnings = collisions.Collisions
             .Select(c => new LocalePackWarning(WarningBooleanCollisionExisting, [c.Word, string.Join(", ", c.YesLocales), string.Join(", ", c.NoLocales)]))
             .ToList();
+        if (BuiltForDiffers(pack, platformVersion) is { } builtForWarning) warnings.Add(builtForWarning);
 
         var report = new LocalePackReport(null, null, false, "", "",
             new LocaleReport(code, isNew, builtin, after.NativeName, after.QuasarLang, after.FallbackCode, changes, ignored),
@@ -186,6 +196,20 @@ public static class LocalePackAnalyzer
     // ── 內部 ──
 
     private static LocalePackAnalysis Fail(MessageRef error) => new(null, null, error);
+
+    /// <summary>
+    /// <c>builtFor</c> 比對（判斷 2、Q1）：兩邊都有值、都不是 dev、而且不相等才提示，參數 <c>[builtFor, 平台, 這份檔缺幾句]</c>；
+    /// 缺幾句＝這份包沒帶非空值的基準鍵數（<c>ui</c>＋<c>server</c>），與完整度無關。只提示、不擋。
+    /// </summary>
+    private static LocalePackWarning? BuiltForDiffers(ParsedLocalePack pack, string? platformVersion)
+    {
+        var platform = LocalePackVersions.PlatformBuiltFor(platformVersion);
+        if (string.IsNullOrWhiteSpace(pack.BuiltFor) || pack.BuiltFor == IOpsEnvironment.DevVersion
+            || platform == IOpsEnvironment.DevVersion || string.Equals(pack.BuiltFor, platform, StringComparison.Ordinal)) return null;
+        var missing = BuiltinLocaleResources.BaseKeys.Count(k => pack.Ui.GetValueOrDefault(k) is not { Length: > 0 })
+            + BuiltinServerText.BaseKeys.Count(k => pack.Server.GetValueOrDefault(k) is not { Length: > 0 });
+        return new LocalePackWarning(WarningBuiltForDiffers, [pack.BuiltFor, platform, missing.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+    }
 
     private static Dictionary<string, string> Merge(IReadOnlyDictionary<string, string>? current, IReadOnlyDictionary<string, string> set, IReadOnlyList<string> remove)
     {
@@ -285,8 +309,16 @@ public static class LocalePackAnalyzer
         private int _added, _changed, _unchanged, _skipped, _same, _extra;
         private readonly List<string> _extraKeys = [];
         private readonly List<RejectedItem> _rejected;
+        private readonly IReadOnlySet<string>? _baseChanged;
 
-        public SectionBuilder(IReadOnlyList<RejectedItem> problems) => _rejected = [.. problems];
+        public SectionBuilder(IReadOnlyList<RejectedItem> problems, IReadOnlySet<string>? baseChanged)
+        {
+            _rejected = [.. problems];
+            _baseChanged = baseChanged;
+        }
+
+        /// <summary>與目前覆寫相同、而且原文已更新的鍵（原樣再匯入即確認，判斷 7）。</summary>
+        public SortedSet<string> Confirm { get; } = new(StringComparer.Ordinal);
 
         public Dictionary<string, string> Set { get; } = new(StringComparer.Ordinal);
         public SortedSet<string> Remove { get; } = new(StringComparer.Ordinal);
@@ -312,7 +344,12 @@ public static class LocalePackAnalyzer
                 if (had is not null) Remove.Add(key);
                 return Kind.SameAsBuiltin;
             }
-            if (had == text) { _unchanged++; return Kind.Unchanged; }
+            if (had == text)
+            {
+                _unchanged++;
+                if (_baseChanged?.Contains(key) == true) Confirm.Add(key);
+                return Kind.Unchanged;
+            }
             Set[key] = text;
             if (had is not null) { _changed++; return Kind.Changed; }
             _added++;
@@ -336,7 +373,7 @@ public static class LocalePackAnalyzer
             var rejected = _rejected.OrderBy(r => r.Key, StringComparer.Ordinal).ToList();
             return new SectionReport(_added, _changed, _unchanged, _skipped, _same, _extra,
                 _extraKeys.Order(StringComparer.Ordinal).Take(LocalePackLimits.MaxListedItems).ToList(),
-                rejected.Count, rejected.Take(LocalePackLimits.MaxListedItems).ToList());
+                rejected.Count, rejected.Take(LocalePackLimits.MaxListedItems).ToList()) { Confirmed = Confirm.Count };
         }
     }
 }

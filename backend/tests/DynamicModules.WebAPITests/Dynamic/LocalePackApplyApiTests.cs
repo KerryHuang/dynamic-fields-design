@@ -406,6 +406,113 @@ public class LocalePackApplyApiTests : IDisposable
         Packs(app, "ja").Select(p => p.Id).Should().Equal(single);
     }
 
+    // ── i4d2（計畫 Task 1）：只有確認也寫版本、只改語系欄位不寫版本、已失效的鍵、i4d1 形狀的預覽列 ──
+
+    private static string ZhHash(string key) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+        Encoding.UTF8.GetBytes(BuiltinLocaleResources.Ui["zh-TW"][key])))[..16].ToLowerInvariant();
+
+    private static Dictionary<string, Dictionary<string, string>> Hashes(LocalePack row) =>
+        JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(row.BaseHashesJson)!;
+
+    /// <summary>直接改目前版：把 <paramref name="key"/> 的原文雜湊改成舊的。</summary>
+    private static void StaleHash(TestApp app, string code, string key)
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+        var row = db.Set<LocalePack>().Single(p => p.Code == code && p.IsCurrent);
+        var hashes = Hashes(row);
+        hashes["ui"][key] = "0000000000000000";
+        row.BaseHashesJson = JsonSerializer.Serialize(hashes);
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task Apply_ConfirmOnly_WritesVersion()
+    {
+        await ApplyPackAsync(_app, JaPartial);
+        var key = JaPartialUiKeys()[0];
+        StaleHash(_app, "ja", key);
+        var before = Packs(_app, "ja").Single();
+
+        var report = await PreviewOkAsync(_app.AsUser(), JaPartial);
+        report.GetProperty("ui").GetProperty("confirmed").GetInt32().Should().Be(1);
+        report.GetProperty("ui").GetProperty("unchanged").GetInt32().Should().Be(30);
+        var res = await ApplyAsync(_app.AsUser(), report);
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var r = await JsonOf(res);
+        r.GetProperty("noChanges").GetBoolean().Should().BeFalse();
+
+        var rows = Packs(_app, "ja");
+        rows.Should().HaveCount(2);
+        var current = rows.Single(p => p.IsCurrent);
+        current.Id.Should().NotBe(before.Id).And.Be(r.GetProperty("packId").GetInt64());
+        rows.Single(p => !p.IsCurrent).Id.Should().Be(before.Id, "上一版是確認前的那一列");
+        Hashes(current)["ui"][key].Should().Be(ZhHash(key));
+        current.UiJson.Should().Be(before.UiJson, "譯文不變");
+
+        var audit = Db(_app, db => db.Set<AuditLogEntry>().AsNoTracking().Where(a => a.Action == "locale.pack.import").ToList().OrderBy(a => a.Id).Last());
+        Regex.Unescape(audit.SummaryJson!).Should().Contain("\"confirmed\":1");
+    }
+
+    [Fact]
+    public async Task Apply_LocaleFieldsOnly_WithOrphans_NoVersion()
+    {
+        await ApplyPackAsync(_app, JaPartial);
+        LocalePackPreviewApiTests.AddOrphan(_app, "ja", "zz.renamedKey", "古い訳");
+        var before = Packs(_app, "ja").Single();
+
+        var r = await ApplyPackAsync(_app, Pack("ja", nativeName: "日本語（改）"));
+        r.NoChanges.Should().BeFalse();
+        Db(_app, db => db.Set<InstalledLocale>().AsNoTracking().Single(l => l.Code == "ja")).NativeName.Should().Be("日本語（改）");
+        var rows = Packs(_app, "ja");
+        rows.Select(p => p.Id).Should().Equal(before.Id);
+        Layer(rows.Single().UiJson).Should().ContainKey("zz.renamedKey");
+    }
+
+    [Fact]
+    public async Task Apply_Orphaned_Dropped()
+    {
+        await ApplyPackAsync(_app, JaPartial);
+        LocalePackPreviewApiTests.AddOrphan(_app, "ja", "zz.renamedKey", "古い訳");
+        await ApplyPackAsync(_app, Pack("ja", ui: new Dictionary<string, string> { ["menu.home"] = "（新）ホーム" }));
+        var rows = Packs(_app, "ja");
+        Layer(rows.Single(p => p.IsCurrent).UiJson).Should().NotContainKey("zz.renamedKey");
+        Layer(rows.Single(p => !p.IsCurrent).UiJson).Should().ContainKey("zz.renamedKey", "回到上一版會帶回來（判斷 8）");
+    }
+
+    [Fact]
+    public async Task Apply_LegacyPreviewRow()
+    {
+        var report = await PreviewOkAsync(_app.AsUser(), JaPartial);
+        var id = report.GetProperty("previewId").GetString()!;
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            var row = db.Set<LocalePackPreview>().Single(p => p.Id == id);
+            var plan = System.Text.Json.Nodes.JsonNode.Parse(row.PlanJson)!.AsObject();
+            plan.Remove("uiConfirm").Should().BeTrue();
+            plan.Remove("serverConfirm").Should().BeTrue();
+            var rep = System.Text.Json.Nodes.JsonNode.Parse(row.ReportJson)!.AsObject();
+            rep["ui"]!.AsObject().Remove("confirmed").Should().BeTrue();
+            rep["server"]!.AsObject().Remove("confirmed").Should().BeTrue();
+            rep.Remove("orphanedDropped").Should().BeTrue();
+            rep["completeness"]!.AsObject().Remove("topMissing").Should().BeTrue();
+            (row.PlanJson, row.ReportJson) = (plan.ToJsonString(), rep.ToJsonString());
+            db.SaveChanges();
+        }
+        var res = await ApplyAsync(_app.AsUser(), report);
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var r = await JsonOf(res);
+        (r.GetProperty("isNew").GetBoolean(), r.GetProperty("noChanges").GetBoolean(), r.GetProperty("enabled").GetBoolean()).Should().Be((true, false, false));
+        var version = Packs(_app, "ja").Single();
+        Layer(version.UiJson).Should().HaveCount(30);
+        var stored = JsonDocument.Parse(version.ReportJson!).RootElement;
+        stored.GetProperty("ui").GetProperty("confirmed").GetInt32().Should().Be(0);
+        stored.GetProperty("ui").GetProperty("added").GetInt32().Should().Be(30);
+        var audit = Db(_app, db => db.Set<AuditLogEntry>().AsNoTracking().Single(a => a.Action == "locale.install"));
+        Regex.Unescape(audit.SummaryJson!).Should().Contain("\"added\":30").And.Contain("\"confirmed\":0");
+    }
+
     /// <summary>在 <see cref="ILocalePackRepository.AddVersion"/> 丟例外（SaveChanges 之前）。</summary>
     private sealed class ThrowingPacks(ILocalePackRepository inner) : ILocalePackRepository
     {

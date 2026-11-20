@@ -50,18 +50,53 @@ public sealed record LocalePackPlan(
     IReadOnlyList<string> BooleanRejected, IReadOnlyDictionary<string, BooleanCandidate> BooleanCandidates,
     LocalePackInfo Pack)
 {
+    private readonly IReadOnlyList<string> _uiConfirm = [], _serverConfirm = [];
+
+    /// <summary>
+    /// 原樣再匯入的「原文已更新」句子（i4d2 計畫判斷 7、Q3）：套用時只換新記下的原文雜湊，譯文不變。i4d1 形狀的 <c>PlanJson</c> 沒有這欄，
+    /// 反序列化成 null 時正規化成空清單。
+    /// </summary>
+    public IReadOnlyList<string> UiConfirm { get => _uiConfirm; init => _uiConfirm = value ?? []; }
+
+    /// <inheritdoc cref="UiConfirm"/>
+    public IReadOnlyList<string> ServerConfirm { get => _serverConfirm; init => _serverConfirm = value ?? []; }
+
+    /// <summary>覆寫層要寫新版本（有句子要設、要拿掉或要確認；判斷 7）。只改語系列欄位不算。</summary>
+    [JsonIgnore]
+    public bool OverlayChanged =>
+        UiSet.Count + UiRemove.Count + ServerSet.Count + ServerRemove.Count + UiConfirm.Count + ServerConfirm.Count > 0;
+
     /// <summary>語系列與覆寫層都沒有任何變動（套用時不寫新版本，只記稽核）。</summary>
-    public bool NoChanges => Locale is null && UiSet.Count == 0 && UiRemove.Count == 0 && ServerSet.Count == 0 && ServerRemove.Count == 0;
+    public bool NoChanges => Locale is null && !OverlayChanged;
 }
 
 /// <summary>一段（<c>ui</c> 或 <c>server</c>）的筆數；<see cref="ExtraKeys"/>、<see cref="RejectedItems"/> 只列前 <see cref="LocalePackLimits.MaxListedItems"/> 筆。</summary>
 public sealed record SectionReport(int Added, int Changed, int Unchanged, int Skipped, int SameAsBuiltin, int Extra, IReadOnlyList<string> ExtraKeys,
-    int Rejected, IReadOnlyList<RejectedItem> RejectedItems);
+    int Rejected, IReadOnlyList<RejectedItem> RejectedItems)
+{
+    /// <summary>與目前覆寫相同、而且原文已更新的句子數（套用即確認，i4d2 計畫判斷 7）；i4d1 形狀的報告沒有這欄，是 0。</summary>
+    public int Confirmed { get; init; }
+}
 
 /// <summary>套用後「該語系自己有句子」的鍵數（覆寫層＋該語系的內建層，不含走退回鏈補的）。</summary>
 public sealed record CompletenessCount(int Have, int Total);
 
-public sealed record CompletenessReport(CompletenessCount Ui, CompletenessCount Server);
+/// <summary>
+/// 完整度（<see cref="LocaleCompleteness.Of"/>；報告用套用後的覆寫層，清單用目前的）。<see cref="TopMissing"/> 是缺最多的前
+/// <see cref="LocalePackLimits.MaxMissingCategories"/> 個分類（i4d2 計畫判斷 4）；i4d1 形狀的報告沒有這欄，正規化成空清單。
+/// </summary>
+public sealed record CompletenessReport(CompletenessCount Ui, CompletenessCount Server)
+{
+    private readonly IReadOnlyList<MissingCategory> _topMissing = [];
+
+    public IReadOnlyList<MissingCategory> TopMissing { get => _topMissing; init => _topMissing = value ?? []; }
+}
+
+/// <summary>一個缺句的分類：<see cref="Segment"/> 是 <c>ui</c> 或 <c>server</c>；分類規則見 <see cref="LocaleCompleteness"/>。</summary>
+public sealed record MissingCategory(string Segment, string Category, int Missing);
+
+/// <summary>這次套用會清掉的已失效覆寫句數（i4d2 計畫判斷 8）；不寫新版本時兩個都是 0。</summary>
+public sealed record OrphanedDroppedReport(int Ui, int Server);
 
 public sealed record DesignDataReport(int Count);
 
@@ -83,7 +118,13 @@ public sealed record LocalePackReport(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? ExpiresUtc,
     bool ImportEnabled, string FileName, string FileHash,
     LocaleReport Locale, LocalePackInfo Pack, SectionReport Ui, SectionReport Server,
-    CompletenessReport Completeness, DesignDataReport DesignData, IReadOnlyList<LocalePackWarning> Warnings);
+    CompletenessReport Completeness, DesignDataReport DesignData, IReadOnlyList<LocalePackWarning> Warnings)
+{
+    private readonly OrphanedDroppedReport _orphanedDropped = new(0, 0);
+
+    /// <summary>由預覽 handler 補（分析器不碰原始列）；i4d1 形狀的報告沒有這欄，正規化成 (0, 0)。</summary>
+    public OrphanedDroppedReport OrphanedDropped { get => _orphanedDropped; init => _orphanedDropped = value ?? new(0, 0); }
+}
 
 /// <summary>分析結果：<see cref="Error"/> 不是 null＝整包拒收（代碼、自稱、上層語系、A39），此時沒有報告與計畫。</summary>
 public sealed record LocalePackAnalysis(LocalePackReport? Report, LocalePackPlan? Plan, MessageRef? Error);
