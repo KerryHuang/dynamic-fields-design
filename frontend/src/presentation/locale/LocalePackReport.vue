@@ -38,6 +38,9 @@ const rejectedSections = computed(() => SECTIONS.filter((s) => props.report[s].r
       {{ t(report.locale.isNew ? 'localePacks.report.installNew' : 'localePacks.report.update', { name: report.locale.nativeName, code: report.locale.code }) }}
     </div>
     <div v-if="report.pack.version" class="text-caption text-muted">{{ t('localePacks.report.packVersion', { version: report.pack.version }) }}</div>
+    <div v-if="report.pack.builtFor" class="text-caption text-muted" style="overflow-wrap: anywhere" data-testid="report-built-for">
+      {{ t('localePacks.report.builtFor', { version: report.pack.builtFor }) }}
+    </div>
     <div v-if="report.locale.changes.length" class="text-caption" data-testid="report-changes">
       {{ t('localePacks.report.changes', { fields: fieldList(report.locale.changes) }) }}
     </div>

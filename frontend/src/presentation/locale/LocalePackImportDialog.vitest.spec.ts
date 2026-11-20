@@ -94,6 +94,22 @@ describe('LocalePackImportDialog 預覽', () => {
     w.unmount();
   });
 
+  it('報告顯示 builtFor（只顯示、不比對），值照字面呈現', async () => {
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/preview'
+      ? report({ pack: { version: '1.2.0', builtFor: '<b>2026.11</b>', baseLocale: 'zh-TW', note: null } }) : undefined));
+    await pick();
+    expect(q('report-built-for')!.textContent).toContain('<b>2026.11</b>');
+    expect(q('report-built-for')!.querySelector('b')).toBeNull();
+    w.unmount();
+  });
+
+  it('沒有 builtFor 時不顯示', async () => {
+    const w = await mountDialog();
+    await pick();
+    expect(q('report-built-for')).toBeNull();
+    w.unmount();
+  });
+
   it('拒收清單超過回傳筆數時註明總數', async () => {
     const w = await mountDialog((c) => (c.url === '/i18n/packs/preview'
       ? report({ ui: section({ rejected: 120, rejectedItems: [{ key: 'a.b', reason: 'syntax', args: [] }] }) }) : undefined));
