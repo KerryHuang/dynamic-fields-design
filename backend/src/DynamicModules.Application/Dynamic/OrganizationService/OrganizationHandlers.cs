@@ -80,15 +80,20 @@ public sealed class DepartmentValidator(IOrganizationRepository org, IPermission
 
     private async Task<string?> ParentErrorAsync(long? selfId, long? parentId, bool checkDepth, CancellationToken ct)
     {
-        if (parentId is not { } pid) return null;
+        // 根節點：新建的根部門只有 1 層，不必讀政策；把既有部門移到根時父層深度當 0，仍要檢查子樹高度
+        if (parentId is null && (selfId is null || !checkDepth)) return null;
         var all = await org.ListAsync(ct);
         var byId = all.ToDictionary(d => d.Id);
-        if (!byId.ContainsKey(pid)) return OrganizationMessages.NotFound;
-        if (selfId is { } id && (pid == id || DepartmentRules.Descendants(all, id).Contains(pid))) return OrganizationMessages.Cycle;
+        if (parentId is { } pid)
+        {
+            if (!byId.ContainsKey(pid)) return OrganizationMessages.NotFound;
+            if (selfId is { } id && (pid == id || DepartmentRules.Descendants(all, id).Contains(pid))) return OrganizationMessages.Cycle;
+        }
         if (!checkDepth) return null;
         var max = await policies.IntAsync(PolicyCatalog.OrganizationMaxDepth, null, ct);
         var height = selfId is { } self ? DepartmentRules.HeightOf(all, self) : 1;
-        return DepartmentRules.DepthOf(byId, pid) + height > max ? OrganizationMessages.TooDeep(max) : null;
+        var parentDepth = parentId is { } p ? DepartmentRules.DepthOf(byId, p) : 0;
+        return parentDepth + height > max ? OrganizationMessages.TooDeep(max) : null;
     }
 }
 

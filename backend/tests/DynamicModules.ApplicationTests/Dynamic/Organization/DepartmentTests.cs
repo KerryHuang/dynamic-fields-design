@@ -116,6 +116,21 @@ public class DepartmentTests : DesignerTestBase
     }
 
     [Fact]
+    public async Task Depth_MoveToRoot_StillChecksSubtreeHeight()
+    {
+        var a = await Create("a");
+        var b = await Create("b", a);
+        var c = await Create("c", b);
+        await Create("d", c);
+        await SetMaxDepth(2);
+
+        // 第 2 層的 b 移到根：上級改了，子樹 b→c→d 有 3 層，超過上限 → 擋，訊息帶上限
+        Err(await Send(new UpdateDepartmentRequest(b, Input("b", null))), "parentId").Should().Be("部門最多 2 層");
+        // 子樹只有 2 層的 c 移到根 → 可以
+        (await Send(new UpdateDepartmentRequest(c, Input("c", null)))).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Cycle_StillCheckedWhenParentUnchanged()
     {
         // 上級沒變卻已形成循環的資料無法經 API 構造；改測拆段後「改上級成自己的子部門」仍回循環錯誤，且不被層數條件吃掉
