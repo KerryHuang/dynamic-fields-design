@@ -1,3 +1,4 @@
+using DynamicModules.Application.Dynamic.LocaleService.Commands.ApplyLocalePack;
 using DynamicModules.Application.Dynamic.LocaleService.Commands.PreviewLocalePack;
 using DynamicModules.Application.Dynamic.LocaleService.Queries.GetUiMessages;
 using MediatR;
@@ -46,4 +47,11 @@ public class I18nController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(new PreviewLocalePackRequest(buffer.ToArray(), fileName), HttpContext.RequestAborted);
         return result.ToActionResult(this);
     }
+
+    /// <summary>套用預覽過的語系包（i4d1 計畫判斷 12、16）：本文 <c>{ previewId, fileHash }</c>，成功回 <see cref="ApplyLocalePackResponse"/>。</summary>
+    [HttpPost("packs/apply")]
+    public async Task<IActionResult> ApplyPack([FromBody] ApplyLocalePackBody body) =>
+        (await mediator.Send(new ApplyLocalePackRequest(body.PreviewId ?? "", body.FileHash ?? ""), HttpContext.RequestAborted)).ToActionResult(this);
 }
+
+public sealed record ApplyLocalePackBody(string? PreviewId, string? FileHash);

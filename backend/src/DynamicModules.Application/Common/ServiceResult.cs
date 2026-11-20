@@ -51,6 +51,9 @@ public sealed class ServiceResult
 
     public static ServiceResult NotFound(MessageRef? message) => new() { IsNotFound = true, MessageSource = message };
 
+    /// <summary>404 並帶機器代碼（例如 <c>localePackPreviewExpired</c>）：回應多一個 <c>code</c>。</summary>
+    public static ServiceResult NotFound(MessageRef? message, string code) => new() { IsNotFound = true, MessageSource = message, Code = code };
+
     public static ServiceResult Conflict(MessageRef? message, string? code = null, object? @params = null) =>
         new() { IsConflict = true, MessageSource = message, Code = code, Params = @params };
 

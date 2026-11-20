@@ -84,6 +84,10 @@ public class LocalePackPreviewApiTests : IDisposable
         row.PlanJson.Should().Contain("\"code\":\"ja\"");
         Db(_app, db => db.Set<InstalledLocale>().Count()).Should().Be(localesBefore);
         Db(_app, db => db.Set<LocalePack>().Count()).Should().Be(0);
+
+        // 預覽真的存了檔：用回傳的 previewId 套用成功（Task 7 補上）
+        var apply = await _app.AsUser().PostAsJsonAsync($"{Base}/i18n/packs/apply", new { previewId, fileHash = r.GetProperty("fileHash").GetString() });
+        apply.StatusCode.Should().Be(HttpStatusCode.OK, await apply.Content.ReadAsStringAsync());
     }
 
     [Fact]
