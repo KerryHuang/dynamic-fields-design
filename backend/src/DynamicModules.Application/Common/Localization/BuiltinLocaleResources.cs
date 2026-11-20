@@ -36,6 +36,27 @@ public static partial class BuiltinLocaleResources
     private static readonly Lazy<IReadOnlySet<string>> QuasarLangsLazy = new(() =>
         ParseQuasarLangs(Load().QuasarLangsJson ?? throw new InvalidOperationException("缺少內嵌資源 quasar-langs.json")));
 
+    private static readonly Lazy<IReadOnlyDictionary<string, IReadOnlySet<string>>> UiPlaceholderNamesLazy = new(() =>
+        BaseKeys.ToDictionary(k => k, k => (IReadOnlySet<string>)Ui.Values
+            .SelectMany(texts => texts.TryGetValue(k, out var t) ? PlaceholderNames(t) : [])
+            .ToHashSet(StringComparer.Ordinal), StringComparer.Ordinal));
+
+    /// <summary>
+    /// 每個基準鍵在內建四語用到的佔位符名稱聯集（i4d1 計畫判斷 4）：語系包的介面文字只能用這些名稱（少用不擋）。
+    /// 有幾句四語的名稱集合不同（例 <c>approval.stagesMore</c>），所以取聯集而不是只看繁中。
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlySet<string>> UiPlaceholderNames => UiPlaceholderNamesLazy.Value;
+
+    /// <summary>去掉字面量 <c>{'…'}</c> 與 <c>{{…}}</c> 之後的 <c>{名稱}</c>（同前端 locales.vitest.spec.ts 的 placeholders）。</summary>
+    private static IEnumerable<string> PlaceholderNames(string text)
+        => PlaceholderName().Matches(LiteralOrMustache().Replace(text, "")).Select(m => m.Groups[1].Value);
+
+    [GeneratedRegex(@"\{\{.*?\}\}|\{'.*?'\}")]
+    private static partial Regex LiteralOrMustache();
+
+    [GeneratedRegex(@"\{(\w+)\}")]
+    private static partial Regex PlaceholderName();
+
     /// <summary>代碼 → 壓平的內建層。</summary>
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Ui => UiLazy.Value;
 

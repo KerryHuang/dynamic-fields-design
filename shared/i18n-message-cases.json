@@ -1,0 +1,51 @@
+{
+  "$comment": "語系包匯入的文字驗證共用案例（語系包設計 §13.2、T15；i4d1 計畫判斷 3、22）。ui 段前後端都跑（後端 LocaleMessageCasesTests、前端 message-check.vitest.spec.ts）；server、boolean 段只有後端跑。expected 是拒收原因代碼，null＝通過；repeat＝把 text 重複這麼多次。",
+  "ui": [
+    { "name": "一般文字", "text": "沒有符合的選項", "allowed": [], "expected": null },
+    { "name": "允許的佔位符", "text": "已選 {n} 筆", "allowed": ["n"], "expected": null },
+    { "name": "名稱不在允許集合", "text": "已選 {count} 筆", "allowed": ["n"], "expected": "placeholder" },
+    { "name": "少用佔位符不擋（Q7）", "text": "已選取", "allowed": ["n"], "expected": null },
+    { "name": "照英文語序用聯集裡的名稱", "text": "{first} と {rest}", "allowed": ["count", "first", "rest"], "expected": null },
+    { "name": "裸 @（vue-i18n 的連結訊息）", "text": "寄到 a@b.com", "allowed": [], "expected": "syntax" },
+    { "name": "裸 |（複數分隔）", "text": "a|b", "allowed": [], "expected": "syntax" },
+    { "name": "%{ 舊式插值", "text": "共 %{x} 筆", "allowed": ["x"], "expected": "syntax" },
+    { "name": "百分比不是語法", "text": "完成 50%", "allowed": [], "expected": null },
+    { "name": "未配對的左大括號", "text": "a { b", "allowed": [], "expected": "syntax" },
+    { "name": "未配對的右大括號", "text": "a } b", "allowed": [], "expected": "syntax" },
+    { "name": "雙左大括號", "text": "{{x}", "allowed": ["x"], "expected": "syntax" },
+    { "name": "巢狀大括號", "text": "{a{b}}", "allowed": ["a", "b"], "expected": "syntax" },
+    { "name": "名稱前後有空白", "text": "{ n }", "allowed": ["n"], "expected": "syntax" },
+    { "name": "字面量 @", "text": "寄到 a{'@'}b.com", "allowed": [], "expected": null },
+    { "name": "字面量 |", "text": "a{'|'}b", "allowed": [], "expected": null },
+    { "name": "內建寫法：字面量包大括號", "text": "欄位寫成 {'{{f_12}}'}；{'{{_index}}'} 是明細列號", "allowed": [], "expected": null },
+    { "name": "字面量內有單引號", "text": "{'it's'}", "allowed": [], "expected": "syntax" },
+    { "name": "字面量沒有收尾", "text": "{'abc", "allowed": [], "expected": "syntax" },
+    { "name": "雙向控制字元 U+202E", "text": "登入‮", "allowed": [], "expected": "control" },
+    { "name": "雙向控制字元 U+2066", "text": "⁦登入", "allowed": [], "expected": "control" },
+    { "name": "其他控制字元 BEL", "text": "登入\u0007", "allowed": [], "expected": "control" },
+    { "name": "換行與 tab 合法", "text": "第一行\n第二行\t結尾", "allowed": [], "expected": null },
+    { "name": "超過 2000 字", "text": "字", "repeat": 2001, "allowed": [], "expected": "tooLong" },
+    { "name": "剛好 2000 字", "text": "字", "repeat": 2000, "allowed": [], "expected": null }
+  ],
+  "server": [
+    { "name": "一個參數", "base": "找不到 {0}", "text": "{0} not found", "expected": null },
+    { "name": "跳脫的大括號", "base": "找不到 {0}", "text": "{{0}} {0}", "expected": null },
+    { "name": "沒有參數的範本", "base": "沒有權限", "text": "Forbidden", "expected": null },
+    { "name": "缺參數", "base": "找不到 {0}", "text": "not found", "expected": "placeholder" },
+    { "name": "多參數", "base": "找不到 {0}", "text": "{0} {1}", "expected": "placeholder" },
+    { "name": "參數順序可以換", "base": "{0} 到 {1}", "text": "{1} から {0}", "expected": null },
+    { "name": "對齊子句", "base": "找不到 {0}", "text": "{0,100000000}", "expected": "formatClause" },
+    { "name": "格式子句", "base": "找不到 {0}", "text": "{0:D99999}", "expected": "formatClause" },
+    { "name": "名稱不是數字", "base": "找不到 {0}", "text": "{x}", "expected": "syntax" },
+    { "name": "大括號沒收尾", "base": "找不到 {0}", "text": "{0", "expected": "syntax" },
+    { "name": "單獨的右大括號", "base": "找不到 {0}", "text": "{0} }", "expected": "syntax" },
+    { "name": "雙向控制字元", "base": "找不到 {0}", "text": "{0}‮", "expected": "control" }
+  ],
+  "boolean": [
+    { "name": "同一份包的是與否相同：拒收否、保留是（否被誤翻的機率高，是仍可判斷）", "installed": [{ "code": "en-US", "fallback": null, "yes": "Yes", "no": "No" }], "pack": { "code": "ja", "fallback": "en-US", "yes": "はい", "no": "はい" }, "expectedRejected": ["report.No"], "expectedWarnings": 0 },
+    { "name": "是撞到固定別名 No", "installed": [], "pack": { "code": "ja", "fallback": "en-US", "yes": "No", "no": "いいえ" }, "expectedRejected": ["report.Yes"], "expectedWarnings": 0 },
+    { "name": "是撞到其他語系的否", "installed": [{ "code": "th", "fallback": null, "yes": "ใช่", "no": "ไม่" }], "pack": { "code": "ja", "fallback": "en-US", "yes": "ไม่", "no": "いいえ" }, "expectedRejected": ["report.Yes"], "expectedWarnings": 0 },
+    { "name": "只有是、否走上層語系", "installed": [], "pack": { "code": "ja", "fallback": "en-US", "yes": "はい", "no": null }, "expectedRejected": [], "expectedWarnings": 0 },
+    { "name": "兩個既有語系本來就撞、這份包沒帶是否：不拒收、警告", "installed": [{ "code": "ko", "fallback": null, "yes": "예", "no": "아니요" }, { "code": "ja", "fallback": null, "yes": "はい", "no": "예" }], "pack": { "code": "fr", "fallback": null, "yes": null, "no": null }, "expectedRejected": [], "expectedWarnings": 1 }
+  ]
+}

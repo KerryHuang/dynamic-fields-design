@@ -150,4 +150,29 @@ public class BuiltinLocaleResourcesTests
         BuiltinLocaleResources.QuasarLangs.Should().HaveCount(74);
         BuiltinLocaleResources.QuasarLangs.Should().Contain(BuiltinLocales.All.Select(l => l.QuasarLang));
     }
+
+    [Fact]
+    public void UiPlaceholderNames_UnionOfFourLocales()
+    {
+        var names = BuiltinLocaleResources.UiPlaceholderNames;
+
+        names.Keys.Should().BeEquivalentTo(BuiltinLocaleResources.BaseKeys);
+        names["approval.stagesMore"].Should().BeEquivalentTo(["count", "first", "rest"]);
+        names["menu.home"].Should().BeEmpty();
+        names["print.bodyHint"].Should().BeEmpty("字面量 {'{{f_12}}'} 裡的名稱不算佔位符");
+    }
+
+    [Fact]
+    public void Builtin_PassesSyntax()
+    {
+        var bad = new List<string>();
+        foreach (var (code, texts) in BuiltinLocaleResources.Ui)
+            foreach (var (key, text) in texts)
+            {
+                var reason = LocaleTextSafety.Check(text, LocalePackLimits.MaxTextLength) ?? UiMessageSyntax.Check(text, BuiltinLocaleResources.UiPlaceholderNames[key]);
+                if (reason is not null) bad.Add($"{code} {key}: {reason}");
+            }
+
+        bad.Should().BeEmpty("內建層不會被自己的驗證器拒收");
+    }
 }
