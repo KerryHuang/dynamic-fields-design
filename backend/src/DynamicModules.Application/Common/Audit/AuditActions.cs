@@ -16,9 +16,9 @@ public static class AuditActions
     }
 
     public const string Auth = "auth", User = "user", Group = "group", Permission = "permission", Policy = "policy", Org = "org",
-        Design = "design", App = "app", Ops = "ops", Mcp = "mcp";
+        Design = "design", App = "app", Ops = "ops", Mcp = "mcp", Locale = "locale";
 
-    public static readonly IReadOnlyList<string> Groups = [Auth, User, Group, Permission, Policy, Org, Design, App, Ops, Mcp];
+    public static readonly IReadOnlyList<string> Groups = [Auth, User, Group, Permission, Policy, Org, Design, App, Ops, Mcp, Locale];
 
     private const AuditRiskLevel W = AuditRiskLevel.Write, H = AuditRiskLevel.HighRisk;
 
@@ -123,6 +123,12 @@ public static class AuditActions
         new("ops.channel.test", Ops, W),
         new("mailSettings.update", Ops, W),
         new("mailSettings.test", Ops, W),
+        // 語系與語系包（語系包設計 §11；i4d1 計畫判斷 17）：一般寫入，高風險只留權限類
+        new("locale.install", Locale, W),
+        new("locale.pack.import", Locale, W),
+        new("locale.pack.rollback", Locale, W),
+        new("locale.pack.clear", Locale, W),
+        new("locale.remove", Locale, W),
     ];
 
     private static readonly Dictionary<string, Entry> ByCode = All.ToDictionary(e => e.Code, StringComparer.Ordinal);

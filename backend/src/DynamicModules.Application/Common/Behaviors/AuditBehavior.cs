@@ -28,7 +28,10 @@ public class AuditBehavior<TReq, TRes>(AuditContext context, IAuditLog audit, IU
             var response = await next();
             if (context.Depth != 1 || response is not ServiceResult { IsSuccess: true }) return response;
             var action = audited.Audit;
-            var row = audit.Add(new AuditEntry(action.Code, AuditResult.Success, action.TargetKind,
+            var code = context.ActionCode ?? action.Code;
+            if (context.ActionCode is not null && AuditActions.Find(code) is null)
+                throw new InvalidOperationException($"{typeof(TReq).Name} 換成的稽核動作 {code} 沒有登記在 AuditActions");
+            var row = audit.Add(new AuditEntry(code, AuditResult.Success, action.TargetKind,
                 context.TargetId ?? action.TargetId, context.TargetLabel ?? action.TargetLabel, Summary: context.Summary?.ToJson()));
             await uow.CommitAsync(ct);
             // 系統管理員異動：稽核列有 Id 之後同一交易開安全事件，樣本只存這筆稽核的 Id 與行為者（§17.2.2）

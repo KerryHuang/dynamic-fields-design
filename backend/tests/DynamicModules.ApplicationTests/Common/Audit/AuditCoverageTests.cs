@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Audit;
+using DynamicModules.Application.Common.Behaviors;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
@@ -84,5 +85,25 @@ public class AuditCoverageTests
             AuditActions.Find(code)!.Risk.Should().Be(AuditRiskLevel.HighRisk, code);
         AuditActions.CodesOf(AuditActions.Group).Should().Contain("group.setMembers").And.NotContain("user.update");
         AuditActions.CodesOf("nope").Should().BeEmpty();
+    }
+
+    private sealed record OverrideProbe : MediatR.IRequest<ServiceResult>, ITransactionalRequest, IAuditedRequest
+    {
+        public AuditAction Audit => AuditAction.For("locale.pack.import", AuditTargets.Locale, null);
+    }
+
+    /// <summary>handler 換掉的動作代碼也要登記在目錄（語系包 i4d1 計畫判斷 17：新安裝換成 <c>locale.install</c>）；沒登記丟例外，不寫一列沒有標籤的稽核。</summary>
+    [Fact]
+    public async Task ActionOverride_MustBeRegistered()
+    {
+        var context = new AuditContext();
+        var behavior = new AuditBehavior<OverrideProbe, ServiceResult>(context, null!, null!, null!);
+        var act = () => behavior.Handle(new OverrideProbe(), () =>
+        {
+            context.Action("locale.nope");
+            return Task.FromResult(ServiceResult.Success());
+        }, CancellationToken.None);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*locale.nope*");
+        context.ActionCode.Should().BeNull("請求結束就清掉");
     }
 }

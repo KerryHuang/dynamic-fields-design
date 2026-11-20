@@ -9,6 +9,9 @@ public sealed class AuditContext
 {
     internal int Depth { get; set; }
 
+    /// <summary>handler 換掉的動作代碼（例：套用語系包時新安裝換成 <c>locale.install</c>）；null＝用請求宣告的。</summary>
+    public string? ActionCode { get; private set; }
+
     public string? TargetId { get; private set; }
     public string? TargetLabel { get; private set; }
     public AuditSummary? Summary { get; private set; }
@@ -20,6 +23,12 @@ public sealed class AuditContext
     public bool? PrivilegeChanged { get; private set; }
 
     private bool Outermost => Depth <= 1;
+
+    /// <summary>換掉這次的動作代碼（只在最外層生效）；代碼要登記在 <see cref="AuditActions"/>，沒登記的由 <see cref="Behaviors.AuditBehavior{TReq,TRes}"/> 丟例外。</summary>
+    public void Action(string code)
+    {
+        if (Outermost) ActionCode = code;
+    }
 
     /// <summary>補目標：建立後才知道 id 的、或要記顯示名快照的。</summary>
     public void Target(string? id = null, string? label = null)
@@ -55,6 +64,7 @@ public sealed class AuditContext
 
     internal void Reset()
     {
+        ActionCode = null;
         AdminChanged = null;
         PrivilegeChanged = null;
         TargetId = null;

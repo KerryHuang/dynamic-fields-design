@@ -32,5 +32,5 @@ public static class AuditTargets
         TaskRule = "taskRule", Workflow = "workflow", ApprovalFlow = "approvalFlow", PrintTemplate = "printTemplate",
         Conversion = "conversion", Dashboard = "dashboard", Department = "department", Template = "template", Theme = "theme",
         Integration = "integration", HealthCheck = "healthCheck", Incident = "incident", Channel = "channel",
-        MailSettings = "mailSettings";
+        MailSettings = "mailSettings", Locale = "locale";
 }
