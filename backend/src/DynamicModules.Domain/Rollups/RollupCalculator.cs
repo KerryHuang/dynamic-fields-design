@@ -11,17 +11,16 @@ namespace DynamicModules.Domain.Rollups;
 /// <summary>彙總欄位的計算：純函式，不碰資料庫。children 是屬於同一個父記錄、未刪除的子記錄值。</summary>
 public static class RollupCalculator
 {
-    private static readonly FieldTypeRegistry Registry = FieldTypeRegistry.CreateDefault();
-
     /// <param name="source">子記錄所屬模組；條件與彙總對象依它解析。</param>
     /// <param name="userIds">user 欄位條件的有效使用者 id，由呼叫端取自 IModuleRepository.ListUserIdsAsync。</param>
+    /// <param name="registry">型別處理器（DI 的那一份，日期時間條件依營運時區偏移解析）。</param>
     /// <returns>sum、count 空集合得 0；min、max 空集合或全部缺值得 null。</returns>
     public static JsonElement? Compute(
         Field rollup, Module source, IEnumerable<IReadOnlyDictionary<string, JsonElement?>> children, DateOnly today,
-        IReadOnlySet<string> userIds)
+        IReadOnlySet<string> userIds, FieldTypeRegistry registry)
     {
         var cfg = rollup.Config.Rollup ?? throw new InvalidOperationException($"欄位 {rollup.Id} 沒有彙總設定");
-        var rows = Filter(cfg, source, children, today, userIds);
+        var rows = Filter(cfg, source, children, today, userIds, registry);
 
         if (cfg.Function == RollupFunction.Count) return Number(rows.Count, 0);
 
@@ -49,13 +48,13 @@ public static class RollupCalculator
 
     private static List<IReadOnlyDictionary<string, JsonElement?>> Filter(
         RollupConfig cfg, Module source, IEnumerable<IReadOnlyDictionary<string, JsonElement?>> children, DateOnly today,
-        IReadOnlySet<string> userIds)
+        IReadOnlySet<string> userIds, FieldTypeRegistry registry)
     {
         if (cfg.Condition is not { ValueKind: JsonValueKind.Object } condition) return children.ToList();
-        var parsed = ConditionParser.Parse(condition, source, Registry, ConditionUsage.Rule, userIds);
+        var parsed = ConditionParser.Parse(condition, source, registry, ConditionUsage.Rule, userIds);
         // 比照 RuleEngine：設計時已驗證過，執行期解析失敗就略過條件（全部列都算），不能讓存檔失敗
         if (parsed.Error is not null) return children.ToList();
-        return children.Where(c => ConditionEvaluator.Evaluate(parsed.Node, c, Registry, today)).ToList();
+        return children.Where(c => ConditionEvaluator.Evaluate(parsed.Node, c, registry, today)).ToList();
     }
 
     private static JsonElement Number(decimal value, int scale) =>

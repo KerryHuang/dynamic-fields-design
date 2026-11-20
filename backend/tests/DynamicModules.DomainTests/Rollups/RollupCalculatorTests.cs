@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Rollups;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
@@ -10,6 +11,7 @@ namespace DynamicModules.DomainTests.Rollups;
 public class RollupCalculatorTests
 {
     private static readonly DateOnly Today = new(2026, 11, 4);
+    private static readonly FieldTypeRegistry Registry = FieldTypeRegistry.CreateDefault();
 
     /// <summary>來源模組：10 參照、11 decimal、12 currency、13 date、14 text。</summary>
     private static Module Source() => Mod(
@@ -27,7 +29,7 @@ public class RollupCalculatorTests
     private static IReadOnlyDictionary<string, JsonElement?> Row(params (long id, string json)[] items) => Values(items);
 
     private static JsonElement? Compute(Field rollup, params IReadOnlyDictionary<string, JsonElement?>[] rows) =>
-        RollupCalculator.Compute(rollup, Source(), rows, Today, new HashSet<string>());
+        RollupCalculator.Compute(rollup, Source(), rows, Today, new HashSet<string>(), Registry);
 
     [Fact]
     public void Sum_Decimal()
@@ -90,7 +92,7 @@ public class RollupCalculatorTests
         var source = Mod(Fld(10, FieldType.Reference), Fld(11, FieldType.Decimal), Fld(15, FieldType.User));
         var rollup = Rollup(RollupFunction.Sum, 11, condition: """{"field":15,"op":"eq","value":"alice"}""");
         var rows = new[] { Row((11, "10"), (15, "\"alice\"")), Row((11, "5"), (15, "\"bob\"")) };
-        RollupCalculator.Compute(rollup, source, rows, Today, new HashSet<string> { "alice", "bob" })!.Value.GetDecimal().Should().Be(10m);
+        RollupCalculator.Compute(rollup, source, rows, Today, new HashSet<string> { "alice", "bob" }, Registry)!.Value.GetDecimal().Should().Be(10m);
     }
 
     [Fact]
@@ -117,8 +119,20 @@ public class RollupCalculatorTests
         var source = Mod(Fld(10, FieldType.Reference), Fld(11, FieldType.Decimal), Fld(16, FieldType.Decimal, new FieldConfig { Scale = 0 }));
         var rollup = Rollup(RollupFunction.Sum, 11, condition: """{"field":16,"op":"gt","value":1.5}""");
         var rows = new[] { Row((11, "10"), (16, "1")), Row((11, "5"), (16, "3")) };
-        var act = () => RollupCalculator.Compute(rollup, source, rows, Today, new HashSet<string>());
+        var act = () => RollupCalculator.Compute(rollup, source, rows, Today, new HashSet<string>(), Registry);
         act.Should().NotThrow();
         act()!.Value.GetDecimal().Should().Be(15m);
+    }
+
+    [Fact]
+    public void Condition_OnDateTime_UsesGivenRegistryOffset()
+    {
+        // UTC 16:30 在 +08:00 是 11-05 00:30（不是今天），在 +07:00 是 11-04 23:30（今天）
+        var source = Mod(Fld(10, FieldType.Reference), Fld(11, FieldType.Decimal), Fld(17, FieldType.DateTime));
+        var rollup = Rollup(RollupFunction.Count, null, scale: 0, condition: """{"field":17,"op":"withinNextDays","value":0}""");
+        var rows = new[] { Row((17, "\"2026-11-04T16:30:00Z\"")) };
+        RollupCalculator.Compute(rollup, source, rows, Today, new HashSet<string>(), Registry)!.Value.GetDecimal().Should().Be(0m);
+        var west = FieldTypeRegistry.CreateDefault(() => TimeSpan.FromHours(7));
+        RollupCalculator.Compute(rollup, source, rows, Today, new HashSet<string>(), west)!.Value.GetDecimal().Should().Be(1m);
     }
 }

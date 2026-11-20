@@ -107,7 +107,7 @@ public class RollupRecalc(
     {
         var userIds = await modules.ListUserIdsAsync(ct);
         return (await SourcesOfAsync(module, ct)).ToDictionary(
-            x => x.Rollup.Key, x => RollupCalculator.Compute(x.Rollup, x.SourceModule, [], today, userIds));
+            x => x.Rollup.Key, x => RollupCalculator.Compute(x.Rollup, x.SourceModule, [], today, userIds, registry));
     }
 
     /// <summary>父模組每個啟用中彙總欄位，配上來源參照欄位與來源模組。</summary>
@@ -133,7 +133,7 @@ public class RollupRecalc(
         {
             var children = (await records.ListByRefAsync(source.Id, record.Id.ToString(), ct))
                 .Select(c => (IReadOnlyDictionary<string, JsonElement?>)RecordValueProcessor.Parse(c.ValuesJson));
-            if (RollupCalculator.Compute(rollup, sourceModule, children, today, userIds) is { } v) values[rollup.Key] = v;
+            if (RollupCalculator.Compute(rollup, sourceModule, children, today, userIds, registry) is { } v) values[rollup.Key] = v;
             else values.Remove(rollup.Key);
         }
         // 已記帳的來源（有事件事實）公式保留記帳當時的值，彙總本身照常更新（設計 §4.7、§10.4）

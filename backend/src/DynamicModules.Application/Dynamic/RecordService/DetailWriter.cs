@@ -178,7 +178,7 @@ public class DetailWriter(
             .Concat(set.Changes.Where(c => c.After is not null).Select(c => (IReadOnlyDictionary<string, JsonElement?>)c.After!))
             .ToList();
         foreach (var rollup in rollups)
-            into[rollup.Key] = RollupCalculator.Compute(rollup, set.Child, rows, time.Today, userIds);
+            into[rollup.Key] = RollupCalculator.Compute(rollup, set.Child, rows, time.Today, userIds, registry);
     }
 
     /// <summary>寫入明細列（決策 4 第 8 步）；parentRecord 必須已有 Id。呼叫端負責 CommitAsync。</summary>
