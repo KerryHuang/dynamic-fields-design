@@ -56,6 +56,8 @@ function checkSyntax(text: string, allowed: ReadonlySet<string>): 'syntax' | 'co
   let i = 0;
   while (i < text.length) {
     const c = text[i];
+    // 普通文字的跳脫照 message compiler 的 readText：\ 後接 { } @ | \ 兩字一起當文字，其他反斜線就是反斜線（第二輪審查必修 2）
+    if (c === '\\' && i + 1 < text.length && '{}@|\\'.includes(text[i + 1]!)) { i += 2; continue; }
     if (c === '@' || c === '|' || c === '}' || (c === '%' && text[i + 1] === '{')) return 'syntax';
     if (c === '{') {
       const end = readBrace(text, i, names);

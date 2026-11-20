@@ -4,7 +4,8 @@ namespace DynamicModules.Domain.Localization;
 /// 介面文字的語法白名單（語系包設計 §13.2；i4d1 計畫判斷 3）：只接受一般文字、<c>{名稱}</c>（名稱 <c>[A-Za-z_][A-Za-z0-9_]*</c>）、
 /// <c>{'字面'}</c>（可含大括號，例如內建的 <c>{'{{欄位}}'}</c>）。字面量照 vue-i18n message compiler 的規則：跳脫只認 <c>\\</c>、<c>\'</c>、
 /// <c>\uXXXX</c>、<c>\UXXXXXX</c>，其他跳脫、位數不足、超過 U+10FFFF、字面量內換行（含 CR、U+2028、U+2029）是語法錯誤；Unicode 跳脫解碼後
-/// 仍過 <see cref="LocaleTextSafety.IsForbidden"/>，解出控制字元回控制字元錯誤（審查必修 2）。裸 <c>@</c>、<c>|</c>、<c>%{</c>、未配對或巢狀的大括號是語法錯誤；
+/// 仍過 <see cref="LocaleTextSafety.IsForbidden"/>，解出控制字元回控制字元錯誤（審查必修 2）。普通文字的 <c>\</c> 後接 <c>{ } @ | \</c> 是 compiler 的文字跳脫，
+/// 兩字一起當文字，所以 <c>\{'x'}</c> 的結尾 <c>}</c> 落單是語法錯誤、<c>\\{n}</c> 是反斜線加佔位符（第二輪審查必修 2）。裸 <c>@</c>、<c>|</c>、<c>%{</c>、未配對或巢狀的大括號是語法錯誤；
 /// 名稱不在允許集合裡是佔位符錯誤（少用不擋，Q7）。前端 <c>message-check.ts</c> 跑同一份共用案例（<c>shared/i18n-message-cases.json</c>）。
 /// </summary>
 public static class UiMessageSyntax
@@ -21,6 +22,10 @@ public static class UiMessageSyntax
             var c = text[i];
             switch (c)
             {
+                // 普通文字的跳脫照 message compiler 的 readText：\ 後接 { } @ | \ 兩字一起當文字（顯示成後一字），其他反斜線就是反斜線（第二輪審查必修 2）
+                case '\\' when i + 1 < text.Length && text[i + 1] is '{' or '}' or '@' or '|' or '\\':
+                    i += 2;
+                    continue;
                 case '@' or '|' or '}':
                     return LocalePackReasons.Syntax;
                 case '%' when i + 1 < text.Length && text[i + 1] == '{':
