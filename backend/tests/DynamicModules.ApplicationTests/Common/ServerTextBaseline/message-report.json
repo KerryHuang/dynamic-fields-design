@@ -1309,7 +1309,7 @@
   },
   "report.RowMeaning": {
     "zh-TW": "一筆{0}",
-    "en-US": "One {0}",
+    "en-US": "a record in {0}",
     "th": "{0} หนึ่งรายการ",
     "vi": "Một {0}"
   },

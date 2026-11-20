@@ -412,7 +412,7 @@ public class ReportRunnerTests : ReportTestBase
     // ---- 語系 ----
 
     [Theory]
-    [InlineData("en-US", "(Blank)", "(Deleted)", "(No permission)", " sum", "One ")]
+    [InlineData("en-US", "(Blank)", "(Deleted)", "(No permission)", " sum", "a record in ")]
     [InlineData("th", "(ว่าง)", "(ถูกลบแล้ว)", "(ไม่มีสิทธิ์)", "ผลรวม ", " หนึ่งรายการ")]
     [InlineData("vi", "(Trống)", "(Đã xóa)", "(Không có quyền)", "Tổng ", "Một ")]
     [InlineData("zh-TW", "（空白）", "（已刪除）", "（無權限）", " 加總", "一筆")]

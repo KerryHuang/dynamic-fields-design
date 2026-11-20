@@ -41,7 +41,7 @@ public static class ReportText
             "Dữ liệu nguồn vượt quá giới hạn tải của hệ thống và các điều kiện, trường của báo cáo này không thể xử lý trong cơ sở dữ liệu. Hãy đặt các trường đang dùng là có thể lọc, hoặc liên hệ quản trị viên"),
         [SqlTimeout] = ("報表執行逾時，請加上條件縮小範圍", "The report took too long to run. Add conditions to narrow it down",
             "รายงานใช้เวลานานเกินไป โปรดเพิ่มเงื่อนไขเพื่อจำกัดขอบเขต", "Báo cáo chạy quá thời gian, vui lòng thêm điều kiện để thu hẹp phạm vi"),
-        [RowMeaning] = ("一筆{0}", "One {0}", "{0} หนึ่งรายการ", "Một {0}"),
+        [RowMeaning] = ("一筆{0}", "a record in {0}", "{0} หนึ่งรายการ", "Một {0}"),
         [Count] = ("{0}筆數", "{0} count", "จำนวน {0}", "Số {0}"),
         [Sum] = ("{0} 加總", "{0} sum", "ผลรวม {0}", "Tổng {0}"),
         [Avg] = ("{0} 平均", "{0} average", "ค่าเฉลี่ย {0}", "Trung bình {0}"),
