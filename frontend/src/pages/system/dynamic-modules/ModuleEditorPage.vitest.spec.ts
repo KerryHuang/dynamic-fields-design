@@ -429,6 +429,21 @@ describe('ModuleEditorPage', () => {
       w.unmount();
     });
 
+    it('上限調低後選了較小的欄數，選項仍保留開啟時的現值，儲存前能改回', async () => {
+      policies(2);
+      const w = await mountPage(withColumns(4));
+      await openEdit(w);
+      columnButtons()[1]!.click();
+      await flushPromises();
+      const buttons = columnButtons();
+      expect(buttons.map((b) => b.textContent?.trim())).toEqual(['1', '2', '3', '4']);
+      expect(buttons[1]!.getAttribute('aria-pressed')).toBe('true');
+      buttons[3]!.click();
+      await flushPromises();
+      expect(columnButtons()[3]!.getAttribute('aria-pressed')).toBe('true');
+      w.unmount();
+    });
+
     it('新增區塊不送欄數；生效值還沒回來時新增區塊鈕仍可按', async () => {
       api.getEffectivePolicies.mockReturnValue(new Promise(() => {}));
       api.addBlock.mockResolvedValue({} as never);

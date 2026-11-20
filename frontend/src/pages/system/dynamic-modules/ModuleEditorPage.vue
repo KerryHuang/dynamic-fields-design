@@ -125,12 +125,13 @@ const block = computed(() => mod.value?.blocks.find((b) => b.id === selectedBloc
 const blockDialog = ref(false);
 const blockForm = ref<{ id?: number; label: I18nText; collapsed: boolean; columns: number }>({ label: {}, collapsed: false, columns: 4 });
 const blockError = ref<ApiError | null>(null);
-// 欄數選項到 max(上限 form.maxColumns, 區塊現值)：調低上限後既有區塊仍看得到現值並能改小；生效值未回來時只列到現值。
+// 欄數選項到 max(上限 form.maxColumns, 開啟對話框時的欄數)：調低上限後既有區塊仍看得到原值、改小後儲存前還能改回；生效值未回來時只列到原值。
 // 新增區塊不送欄數（後端依政策決定），columns 的 4 只是新增模式的佔位
 const policies = useEffectivePolicies(moduleKey);
+const openedColumns = ref(4);
 const columnOptions = computed(() => {
   const max = policies.data.value?.values['form.maxColumns'] as number | undefined;
-  const n = Math.max(max ?? 0, blockForm.value.columns);
+  const n = Math.max(max ?? 0, openedColumns.value);
   return Array.from({ length: n }, (_, i) => ({ label: String(i + 1), value: i + 1 }));
 });
 const blockInput = ref<{ validate(): Promise<boolean> } | null>(null);
@@ -140,6 +141,7 @@ const updateBlock = mutation((v: { id: number; label: I18nText; collapsed: boole
 
 function openBlock(b?: DesignerBlock) {
   blockForm.value = b ? { id: b.id, label: { ...b.label }, collapsed: b.collapsed, columns: b.columns } : { label: {}, collapsed: false, columns: 4 };
+  openedColumns.value = blockForm.value.columns;
   blockError.value = null;
   blockDialog.value = true;
 }
