@@ -10,16 +10,16 @@
 
 | 工作段 | 內容 | 狀態 | 設計 |
 |---|---|---|---|
-| t1a、t1b、t2、t3a、t3b | 任務資料表、權限、API；留言、@、附件；站內通知與到期提醒；前端任務區塊、我的任務、通知鈴與首頁卡片 | ✅ 已上線 | [任務管理](superpowers/specs/2026-11-10-task-management-design.md) |
-| t4a1、t4a2、t4b、t4c、t4d、t5 | 任務規則（定義、引擎、手動套用）、套件格式 7、設計器分頁、逐模組開關、Demo 與文件 | ✅ 已上線 | [任務管理](superpowers/specs/2026-11-10-task-management-design.md) |
-| a1、a2a、a2b | 組織骨架；簽核定義、版本、約束驗證；送出、同意、退回、撤回（含 a2b2：查詢、簽核中心 API、防少簽補強） | ✅ 已上線 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
-| a2c | 重新比對、預覽、臨時讀取權 | ✅ 已上線（程式與測試已在 main，功能清單已勾） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
-| m1、i1、i2a、i2b、i2c | 多語系：模組選單分區、前端寫死文字、後端語系機制、記錄寫入與簽核訊息 | ✅ 已上線 | — |
-| s2c、s3a | 應用程式整合層；報表資料庫端聚合 | ✅ 已上線 | [應用程式整合](superpowers/specs/2026-11-09-app-integration-design.md)、[報表資料庫端聚合](superpowers/specs/2026-11-10-report-db-aggregation-design.md) |
-| p1a | 政策後端基礎：政策登記、讀值服務、模組覆寫表與 migration、政策 API；接上 A1、A2 | ✅ 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
-| p1b | 政策前端：系統「政策設定」頁、模組設計「政策」分頁；任務規則畫面改讀生效值 | ✅ 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
-| p1c | 任務與通知政策：A6、A7、A13、A14 | ✅ 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
-| p1d | 附件政策：A20（含部署設定檔當出廠值） | ✅ 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| t1a、t1b、t2、t3a、t3b | 任務資料表、權限、API；留言、@、附件；站內通知與到期提醒；前端任務區塊、我的任務、通知鈴與首頁卡片 | ✅ 已上線（2026-11-11，9aa90b25） | [任務管理](superpowers/specs/2026-11-10-task-management-design.md) |
+| t4a1、t4a2、t4b、t4c、t4d、t5 | 任務規則（定義、引擎、手動套用）、套件格式 7、設計器分頁、逐模組開關、Demo 與文件 | ✅ 已上線（2026-11-11，c0005bd0） | [任務管理](superpowers/specs/2026-11-10-task-management-design.md) |
+| a1、a2a、a2b | 組織骨架；簽核定義、版本、約束驗證；送出、同意、退回、撤回（含 a2b2：查詢、簽核中心 API、防少簽補強） | ✅ 已上線（2026-11-10，067b0195） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| a2c | 重新比對、預覽、臨時讀取權 | ✅ 已上線（2026-11-11，5c0bab07；程式與測試已在 main，功能清單已勾） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| m1、i1、i2a、i2b、i2c | 多語系：模組選單分區、前端寫死文字、後端語系機制、記錄寫入與簽核訊息 | ✅ 已上線（2026-11-11，0dd0e2ea） | — |
+| s2c、s3a | 應用程式整合層；報表資料庫端聚合 | ✅ 已上線（2026-11-08，751162c6） | [應用程式整合](superpowers/specs/2026-11-09-app-integration-design.md)、[報表資料庫端聚合](superpowers/specs/2026-11-10-report-db-aggregation-design.md) |
+| p1a | 政策後端基礎：政策登記、讀值服務、模組覆寫表與 migration、政策 API；接上 A1、A2 | ✅ 已上線（2026-11-11，1b67aa23） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p1b | 政策前端：系統「政策設定」頁、模組設計「政策」分頁；任務規則畫面改讀生效值 | ✅ 已上線（2026-11-11，1b67aa23） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p1c | 任務與通知政策：A6、A7、A13、A14 | ✅ 已上線（2026-11-11，1b67aa23） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p1d | 附件政策：A20（含部署設定檔當出廠值） | ✅ 已上線（2026-11-11，1b67aa23） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a2d1 | 簽核鎖定寫入：鎖定狀態、鎖定欄位與明細的寫入守衛（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | ✅ 已上線（2026-11-12，ef3c00ab） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a4b | 前端：送簽畫面與簽核中心 | ✅ 已上線（2026-11-12，6ac7ec80） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a6 | CRM 設計案與簽核 Demo、文件 | ✅ 已上線（2026-11-12，026620fd） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
@@ -34,7 +34,7 @@
 | tz1 | 報表「今天、本月」等日期區間與無時區日期時間改用營運時區（Asia/Taipei），不依主機時區；修好後 CI 拿掉 `TZ` 覆寫。ci1 在 UTC 的 GitHub 機器上抓到：SQL 路徑依主機時區計算，Render 也是 UTC | ✅ 已上線（2026-11-13，b51c169d） | — |
 | a5 | 套件格式 8：簽核流程；接手 CRM 設計案流程：套件內建，刪 `DemoApprovals`；採購單金額門檻的 Demo 在這裡驗收 | ✅ 已上線（2026-11-14，ef66fda7） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a3 | 轉交、管理員終止與改派、後加簽、個人代理設定、逾期提醒、臨時讀取的列印預覽（使用者 11-12 裁決） | ✅ 已上線（2026-11-14，a3a–a3d 3f584c8a、6a5dc263 等；a3e、a3f affc0766） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
-| a3g | a3 收尾：Demo 補採購單列印範本、a3 裁決寫回設計文件、手冊總收 | ✅ 已完成（待上線） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| a3g | a3 收尾：Demo 補採購單列印範本、a3 裁決寫回設計文件、手冊總收 | ✅ 已完成（2026-11-14，b35c79e7；待上線） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | fg1 | 簽核流程圖地基（fg1a 資料欄位、只有草稿的流程、執行期守門、分支數政策；fg1b 型別、參照、轉換；fg1c 結構驗證與共用案例；fg1d 警告、Application 驗證、總收）：圖形定義型別、結構驗證、sequence → graph 轉換、migration、分支數政策；API 仍不收 graph（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | ✅ 已上線（2026-11-14，fg1a 301b0da1、fg1b＋fg1c 6a3681cb、fg1d d5ae6594） | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg2 | 流程圖執行引擎（fg2a1–fg2g2 九段）：並行分支、全部到齊／任一到齊匯合、分支取消、退回與撤回延伸、重新比對、預覽與試算預計路徑、同一單據動作序列化、與 sequence 的等價性；API 開始接受 graph 存檔（沒有畫面，只能從 API 建立）、已存的 graph 流程可送出與簽核；通知節點、匯出仍不收 | ✅ 已上線（2026-11-15，9f3a7cb6）；回退下限 fg2g2 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg4 | 單據頁唯讀進度流程圖（fg4a 並行摘要文案、fg4b 後端進度圖資料、fg4c Vue Flow 與寬螢幕進度圖、fg4d 手機縮圖與全螢幕、節點細節；使用者 11-15 裁決提前到 fg3 之前，首次引入 Vue Flow；左到右排版）、並行時簽核摘要列出進行中的關 | ✅ 已上線（2026-11-16，fg4a 5959b8fc、fg4b 756eada5、fg4c ec502385、fg4d c40152d4）；<br>沒有資料變更，回退到任何更早版本都安全 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
