@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.LocaleService.Commands.ClearLocaleOverr
 using DynamicModules.Application.Dynamic.LocaleService.Commands.PreviewLocalePack;
 using DynamicModules.Application.Dynamic.LocaleService.Commands.RemoveLocale;
 using DynamicModules.Application.Dynamic.LocaleService.Commands.RollbackLocalePack;
+using DynamicModules.Application.Dynamic.LocaleService.Queries.GetLocaleTemplate;
 using DynamicModules.Application.Dynamic.LocaleService.Queries.GetLocales;
 using DynamicModules.Application.Dynamic.LocaleService.Queries.GetUiMessages;
 using MediatR;
@@ -75,6 +76,23 @@ public class I18nController(IMediator mediator) : ControllerBase
     [HttpPost("locales/{code}/clear")]
     public async Task<IActionResult> Clear(string code) =>
         (await mediator.Send(new ClearLocaleOverridesRequest(code), HttpContext.RequestAborted)).ToActionResult(this);
+
+    /// <summary>
+    /// 匯出 JSON 翻譯樣板（i4d2 計畫判斷 9）：成功回附件 <c>&lt;代碼&gt;.langpack.json</c>，失敗走 <c>ToActionResult</c>（400 <c>localePackInvalid</c>）。
+    /// <c>source</c>、<c>reference</c> 取原始查詢值：預設 binder 會把空字串轉成 null，而 <c>reference=</c>（空字串）代表不附參考段。
+    /// </summary>
+    [HttpGet("locales/{code}/template")]
+    public async Task<IActionResult> Template(string code, [FromQuery(Name = "scopes")] string[]? scopes, [FromQuery] bool onlyMissing,
+        [FromQuery] bool onlyBaseChanged, [FromQuery] string? nativeName, [FromQuery] string? fallback, [FromQuery] string? quasarLang)
+    {
+        string Raw(string name, string fallbackValue) => Request.Query.TryGetValue(name, out var v) ? v.ToString() : fallbackValue;
+        var options = new LocaleTemplateOptions(code, scopes ?? [], onlyMissing, onlyBaseChanged,
+            Raw("source", LocaleTemplateOptions.DefaultSource), Raw("reference", LocaleTemplateOptions.DefaultReference), nativeName, fallback, quasarLang);
+        var result = await mediator.Send(new GetLocaleTemplateRequest(options), HttpContext.RequestAborted);
+        return result.IsSuccess && result.Data is LocaleTemplateFile file
+            ? File(file.Content, "application/json; charset=utf-8", file.FileName)
+            : result.ToActionResult(this);
+    }
 
     /// <summary>移除匯入的語系：成功 204（<c>ToActionResult</c> 對沒有資料的成功回 200，所以這裡照 <c>OpsController</c> 回 <c>NoContent</c>）。</summary>
     [HttpDelete("locales/{code}")]
