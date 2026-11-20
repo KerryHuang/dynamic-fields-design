@@ -1,4 +1,3 @@
-using System.Globalization;
 using DynamicModules.Domain.ValueObjects;
 using TK = DynamicModules.Domain.Reports.TaskReportFields.TextKeys;
 
@@ -115,12 +114,4 @@ public static class ReportText
 
     /// <summary>給 <see cref="Common.Localization.BuiltinServerText"/> 合併用（鍵即常數值，已帶 <c>report.</c>）。</summary>
     internal static IEnumerable<KeyValuePair<string, (string Zh, string En, string Th, string Vi)>> Entries => Table;
-
-    /// <summary>沒有對應語系時退回繁中，與 <see cref="I18nText.FallbackLocale"/> 一致。</summary>
-    public static string Get(string? locale, string key, params object[] args)
-    {
-        var e = Table[key];
-        var text = locale switch { "en-US" => e.En, "th" => e.Th, "vi" => e.Vi, _ => e.Zh };
-        return args.Length == 0 ? text : string.Format(CultureInfo.InvariantCulture, text, args);
-    }
 }

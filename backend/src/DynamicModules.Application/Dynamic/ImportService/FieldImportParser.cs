@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
@@ -15,11 +16,44 @@ namespace DynamicModules.Application.Dynamic.ImportService;
 /// <para><see cref="UserIdByName"/>：鍵是 DisplayName、值是 UserId；文字等於任一個都接受。</para>
 /// <para><see cref="RefKeysByTitle"/>：[欄位 Id][標題] → 同名的參照鍵（字串）；標題完全相等才算。</para>
 /// <para><see cref="BusinessOffset"/>：營運時區偏移（政策 locale.timeZone），不帶偏移的日期時間文字視為這個時區。</para>
+/// <para><see cref="Words"/>：是否欄位接受的文字（固定別名＋各已安裝語系的是／否）。</para>
 /// </summary>
 public sealed record ImportLookups(
     IReadOnlyDictionary<string, string> UserIdByName,
     IReadOnlyDictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>> RefKeysByTitle,
-    TimeSpan BusinessOffset);
+    TimeSpan BusinessOffset,
+    BooleanWords Words);
+
+/// <summary>
+/// 是否欄位接受的文字（語系包 i4c Q2）：固定別名「是、true、yes、1」／「否、false、no、0」加上每個已安裝語系（含已停用）匯出的
+/// <see cref="ReportText.Yes"/>／<see cref="ReportText.No"/>，不分大小寫。兩邊都有的字（含撞到固定別名）一律無法判斷，
+/// 不讓語系包的錯譯悄悄把「否」判成「是」（資料完整性守衛）。
+/// </summary>
+public sealed class BooleanWords
+{
+    private static readonly string[] FixedYes = ["是", "true", "yes", "1"], FixedNo = ["否", "false", "no", "0"];
+
+    private readonly HashSet<string> _yes, _no, _ambiguous;
+
+    private BooleanWords(IEnumerable<(string Yes, string No)> perLocale)
+    {
+        var words = perLocale.ToList();
+        _yes = new HashSet<string>(FixedYes.Concat(words.Select(w => w.Yes)), StringComparer.OrdinalIgnoreCase);
+        _no = new HashSet<string>(FixedNo.Concat(words.Select(w => w.No)), StringComparer.OrdinalIgnoreCase);
+        // 固定別名併進兩邊之後才算撞字
+        _ambiguous = new HashSet<string>(_yes.Where(_no.Contains), StringComparer.OrdinalIgnoreCase);
+    }
+
+    public static BooleanWords From(IEnumerable<(string Yes, string No)> perLocale) => new(perLocale);
+
+    /// <summary>內建四語（經 <see cref="BuiltinMessageCatalog"/>）；沒有 DI 的呼叫端與測試用。</summary>
+    public static BooleanWords Builtin { get; } = From(BuiltinLocales.Codes.Select(l => new LocaleContext(l, []))
+        .Select(lc => (BuiltinMessageCatalog.Instance.Get(lc, ReportText.Yes), BuiltinMessageCatalog.Instance.Get(lc, ReportText.No))));
+
+    /// <summary>true／false；撞字或不認得回 null。</summary>
+    public bool? Parse(string text) =>
+        _ambiguous.Contains(text) ? null : _yes.Contains(text) ? true : _no.Contains(text) ? false : null;
+}
 
 /// <summary>匯入值解析（FieldDisplay.Format 的反向）：只把文字轉成儲存的 JSON 形狀，驗證交給型別處理器。</summary>
 public static class FieldImportParser
@@ -39,7 +73,7 @@ public static class FieldImportParser
                 Ok(StripInjectionApostrophe(text)),
             FieldType.Integer or FieldType.Decimal or FieldType.Currency => Number(text, percent: false),
             FieldType.Percent => Number(text, percent: true),
-            FieldType.Boolean => Boolean(text),
+            FieldType.Boolean => Boolean(text, lookups.Words),
             FieldType.Date => Date(text),
             FieldType.DateTime => DateTime(text, lookups.BusinessOffset),
             FieldType.Time => Time(text),
@@ -69,18 +103,9 @@ public static class FieldImportParser
             : Fail("請輸入數字");
     }
 
-    private static (JsonElement?, string?) Boolean(string text)
-    {
-        if (text.Equals("是", StringComparison.OrdinalIgnoreCase) || text.Equals("true", StringComparison.OrdinalIgnoreCase)
-            || text.Equals("yes", StringComparison.OrdinalIgnoreCase) || text == "1" || IsDisplayed(text, ReportText.Yes)) return Ok(true);
-        if (text.Equals("否", StringComparison.OrdinalIgnoreCase) || text.Equals("false", StringComparison.OrdinalIgnoreCase)
-            || text.Equals("no", StringComparison.OrdinalIgnoreCase) || text == "0" || IsDisplayed(text, ReportText.No)) return Ok(false);
-        return Fail("請輸入「是」或「否」");
-    }
-
-    // 各語系匯出的布林文字（FieldDisplay 用 ReportText）都要能原樣匯回。
-    private static bool IsDisplayed(string text, string key) =>
-        BuiltinLocales.Codes.Any(l => text.Equals(ReportText.Get(l, key), StringComparison.OrdinalIgnoreCase));
+    // 各已安裝語系匯出的是／否文字（FieldDisplay 經 catalog）都要能原樣匯回
+    private static (JsonElement?, string?) Boolean(string text, BooleanWords words) =>
+        words.Parse(text) is { } b ? Ok(b) : Fail("請輸入「是」或「否」");
 
     private static (JsonElement?, string?) Date(string text) =>
         System.DateTime.TryParseExact(text, DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)

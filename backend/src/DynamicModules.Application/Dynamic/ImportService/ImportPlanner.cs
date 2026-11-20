@@ -7,6 +7,7 @@ using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.References;
+using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
 using DynamicModules.Domain.Policies;
@@ -25,7 +26,8 @@ public sealed record ImportPlan(Module Module, List<ImportColumn> Columns, List<
 /// </summary>
 public class ImportPlanner(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IDynamicAccessGuard guard,
-    ReferenceProviderRegistry providers, RecordCreator creator, IPolicyReader policies, CachedSystemPolicy systemPolicy, DynamicModules.Application.Common.RequestLocale requestLocale)
+    ReferenceProviderRegistry providers, RecordCreator creator, IPolicyReader policies, CachedSystemPolicy systemPolicy, DynamicModules.Application.Common.RequestLocale requestLocale,
+    Common.LocaleRegistry registry, Common.Localization.IMessageCatalog messages)
 {
     public const string FileKey = "file";
     public const string ComputedColumn = "系統計算的欄位";
@@ -87,7 +89,10 @@ public class ImportPlanner(
             }
         }
 
-        var lookups = new ImportLookups(await UsersAsync(ct), await ReferenceTitlesAsync(mapped, csv.Rows, ct), systemPolicy.BusinessOffset);
+        // 是否欄位：每個已安裝語系（含已停用，Q2）匯出的是／否文字，同一份語系快照
+        var words = BooleanWords.From(registry.ContextsFor(systemPolicy.DefaultLocale)
+            .Select(lc => (messages.Get(lc, ReportText.Yes), messages.Get(lc, ReportText.No))));
+        var lookups = new ImportLookups(await UsersAsync(ct), await ReferenceTitlesAsync(mapped, csv.Rows, ct), systemPolicy.BusinessOffset, words);
         var rows = new List<ImportRowPlan>();
         foreach (var row in csv.Rows)
         {

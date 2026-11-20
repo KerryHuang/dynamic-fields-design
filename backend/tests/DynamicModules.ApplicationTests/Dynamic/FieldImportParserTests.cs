@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Dynamic.ImportService;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -12,7 +13,7 @@ public class FieldImportParserTests
 {
     private static readonly ImportLookups None = new(
         new Dictionary<string, string>(),
-        new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>>(), TimeSpan.FromHours(8));
+        new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>>(), TimeSpan.FromHours(8), BooleanWords.Builtin);
 
     private static Field F(FieldType type, FieldConfig? config = null, params FieldOption[] options) =>
         new() { Id = 7, Key = "f", Type = type, Config = config ?? new FieldConfig(), Options = [.. options] };
@@ -78,8 +79,80 @@ public class FieldImportParserTests
     [InlineData("vi")]
     public void Parse_Boolean_accepts_what_each_locale_exports(string locale)
     {
-        P(F(FieldType.Boolean), ReportText.Get(locale, ReportText.Yes)).Should().Be(("true", null));
-        P(F(FieldType.Boolean), ReportText.Get(locale, ReportText.No)).Should().Be(("false", null));
+        var lc = new LocaleContext(locale, []);
+        P(F(FieldType.Boolean), BuiltinMessageCatalog.Instance.Get(lc, ReportText.Yes)).Should().Be(("true", null));
+        P(F(FieldType.Boolean), BuiltinMessageCatalog.Instance.Get(lc, ReportText.No)).Should().Be(("false", null));
+    }
+
+    // ---- 是否欄位接受各已安裝語系的是／否文字（語系包 i4c Q2）----
+
+    private static readonly (string Yes, string No)[] Builtin4 = new[] { "zh-TW", "en-US", "th", "vi" }
+        .Select(l => (BuiltinMessageCatalog.Instance.Get(new LocaleContext(l, []), ReportText.Yes), BuiltinMessageCatalog.Instance.Get(new LocaleContext(l, []), ReportText.No)))
+        .ToArray();
+
+    private static string? B(BooleanWords words, string text) =>
+        P(F(FieldType.Boolean), text, None with { Words = words }) is var (raw, error) ? raw ?? error : null;
+
+    private const string Reject = "請輸入「是」或「否」";
+
+    [Fact]
+    public void Boolean_InstalledLocaleWords()
+    {
+        var words = BooleanWords.From([.. Builtin4, ("はい", "いいえ")]);
+        B(words, "はい").Should().Be("true");
+        B(words, "いいえ").Should().Be("false");
+        B(words, "ハイ").Should().Be(Reject);
+        foreach (var (yes, no) in Builtin4)
+        {
+            B(words, yes).Should().Be("true");
+            B(words, no).Should().Be("false");
+        }
+    }
+
+    [Fact]
+    public void Boolean_AmbiguousAcrossLocales_Rejected()
+    {
+        var words = BooleanWords.From([.. Builtin4, ("はい", "いいえ"), ("いいえ", "ダメ")]);
+        B(words, "いいえ").Should().Be(Reject);
+        B(words, "はい").Should().Be("true");
+        B(words, "ダメ").Should().Be("false");
+    }
+
+    [Fact]
+    public void Boolean_AmbiguousWithFixedAlias_Rejected()
+    {
+        var yesAsNo = BooleanWords.From([.. Builtin4, ("はい", "Yes")]);
+        B(yesAsNo, "Yes").Should().Be(Reject);
+        B(yesAsNo, "yes").Should().Be(Reject);
+        foreach (var t in new[] { "true", "1", "是" }) B(yesAsNo, t).Should().Be("true", t);
+        foreach (var t in new[] { "No", "否", "0" }) B(yesAsNo, t).Should().Be("false", t);
+
+        var zhYesAsNo = BooleanWords.From([.. Builtin4, ("はい", "是")]);
+        B(zhYesAsNo, "是").Should().Be(Reject);
+        B(zhYesAsNo, "yes").Should().Be("true");
+
+        var oneAsNo = BooleanWords.From([.. Builtin4, ("はい", "1")]);
+        B(oneAsNo, "1").Should().Be(Reject);
+        B(oneAsNo, "0").Should().Be("false");
+    }
+
+    [Theory]
+    [InlineData("true", "true")]
+    [InlineData("TRUE", "true")]
+    [InlineData("yes", "true")]
+    [InlineData("YES", "true")]
+    [InlineData("1", "true")]
+    [InlineData("是", "true")]
+    [InlineData("false", "false")]
+    [InlineData("False", "false")]
+    [InlineData("no", "false")]
+    [InlineData("NO", "false")]
+    [InlineData("0", "false")]
+    [InlineData("否", "false")]
+    public void Boolean_FixedWordsStillAccepted(string text, string expected)
+    {
+        B(BooleanWords.Builtin, text).Should().Be(expected);
+        B(BooleanWords.From([.. Builtin4, ("はい", "いいえ")]), text).Should().Be(expected);
     }
 
     [Fact]
@@ -136,7 +209,7 @@ public class FieldImportParserTests
     public void Parse_User_ByIdOrName()
     {
         var l = new ImportLookups(new Dictionary<string, string> { ["王小明"] = "u01" },
-            new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>>(), TimeSpan.FromHours(8));
+            new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>>(), TimeSpan.FromHours(8), BooleanWords.Builtin);
         var f = F(FieldType.User);
         P(f, "王小明", l).Should().Be(("\"u01\"", null));
         P(f, "u01", l).Should().Be(("\"u01\"", null));
@@ -151,7 +224,7 @@ public class FieldImportParserTests
             ["甲"] = ["12"], ["乙"] = ["1", "2"],
         };
         var l = new ImportLookups(new Dictionary<string, string>(),
-            new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>> { [7] = titles }, TimeSpan.FromHours(8));
+            new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>> { [7] = titles }, TimeSpan.FromHours(8), BooleanWords.Builtin);
         var module = F(FieldType.Reference, new FieldConfig { RefTarget = new ReferenceTarget("module", "m") });
         var entity = F(FieldType.Reference, new FieldConfig { RefTarget = new ReferenceTarget("entity", "e") });
 
@@ -180,7 +253,7 @@ public class FieldImportParserTests
             new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>>
             {
                 [7] = new Dictionary<string, IReadOnlyList<string>> { ["+甲"] = ["12"] },
-            }, TimeSpan.FromHours(8));
+            }, TimeSpan.FromHours(8), BooleanWords.Builtin);
         P(F(FieldType.User), "'@小明", l).Should().Be(("\"u01\"", null));
         P(F(FieldType.Reference, new FieldConfig { RefTarget = new ReferenceTarget("module", "m") }), "'+甲", l)
             .Should().Be(("12", null));

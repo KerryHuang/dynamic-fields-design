@@ -31,16 +31,21 @@ public sealed class ServerMessageChainApiTests : IDisposable
     public void Dispose() => _app.Dispose();
 
     /// <summary>裝 ja（上層 <paramref name="parent"/>）、啟用 zh-TW／en-US／th／ja、預設 th（同 LocaleChainApiTests.Japanese）。</summary>
-    private async Task Japanese(string? parent = "en-US")
+    private Task Japanese(string? parent = "en-US") => Japanese(_app, parent);
+
+    private static async Task Japanese(TestApp app, string? parent = "en-US")
     {
-        await LocaleTestKit.InstallAsync(_app, "ja", "日本語", fallback: parent);
-        (await _admin.PutAsJsonAsync($"{Base}/system/policies/locale.enabled", new { value = new[] { "zh-TW", "en-US", "th", "ja" } })).EnsureSuccessStatusCode();
-        (await _admin.PutAsJsonAsync($"{Base}/system/policies/locale.default", new { value = "th" })).EnsureSuccessStatusCode();
+        var admin = app.AsUser();
+        await LocaleTestKit.InstallAsync(app, "ja", "日本語", fallback: parent);
+        (await admin.PutAsJsonAsync($"{Base}/system/policies/locale.enabled", new { value = new[] { "zh-TW", "en-US", "th", "ja" } })).EnsureSuccessStatusCode();
+        (await admin.PutAsJsonAsync($"{Base}/system/policies/locale.default", new { value = "th" })).EnsureSuccessStatusCode();
     }
 
-    private HttpClient Client(string locale, string? user = "admin")
+    private HttpClient Client(string locale, string? user = "admin") => Client(_app, locale, user);
+
+    private static HttpClient Client(TestApp app, string locale, string? user = "admin")
     {
-        var c = _app.AsUser(user);
+        var c = app.AsUser(user);
         c.DefaultRequestHeaders.Add("X-Locale", locale);
         return c;
     }
@@ -393,6 +398,115 @@ public sealed class ServerMessageChainApiTests : IDisposable
         var html = await res.Content.ReadAsStringAsync();
         res.StatusCode.Should().Be(HttpStatusCode.OK, html);
         html.Should().Contain($"<p>{En(ReportText.Yes)}</p>").And.NotContain("<script>x</script>");
+    }
+
+    // ---- 匯入是否欄位接受已安裝語系的是／否文字（i4c 計畫 Task 8、Q2）----
+
+    /// <summary>測試用 catalog：ja 的 report.Yes／report.No 換成指定文字（模擬 i4d1 匯入的語系包），其他交給真的 catalog。</summary>
+    private sealed class JaBooleanCatalog(MessageCatalog inner, string yes, string no) : IMessageCatalog
+    {
+        public string Get(Domain.ValueObjects.LocaleContext lc, string key, params object[] args) =>
+            lc.Locale == "ja" && key == ReportText.Yes ? yes : lc.Locale == "ja" && key == ReportText.No ? no : inner.Get(lc, key, args);
+
+        public Domain.ValueObjects.I18nText AsI18n(string key, params object[] args)
+        {
+            var t = inner.AsI18n(key, args);
+            if (key is ReportText.Yes or ReportText.No && t.Values.ContainsKey("ja")) t.Set("ja", key == ReportText.Yes ? yes : no);
+            return t;
+        }
+    }
+
+    private static TestApp WithJaWords(string yes, string no) => new()
+    {
+        ExtraServices = s =>
+        {
+            s.AddSingleton<MessageCatalog>();
+            s.AddSingleton<IMessageCatalog>(sp => new JaBooleanCatalog(sp.GetRequiredService<MessageCatalog>(), yes, no));
+        }
+    };
+
+    private static System.Net.Http.MultipartFormDataContent Csv(string text)
+    {
+        var file = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(text));
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/csv");
+        return new System.Net.Http.MultipartFormDataContent { { file, "file", "import.csv" } };
+    }
+
+    /// <summary>模組（標題、是否）；回傳模組鍵、標題鍵、是否鍵。</summary>
+    private static async Task<(string Key, string Title, string Flag)> BooleanModule(HttpClient admin)
+    {
+        var key = await CreateModule(admin);
+        var flag = await AddField(admin, key, "boolean");
+        await Activate(admin, key);
+        return (key, await TitleKey(admin, key), flag.Key);
+    }
+
+    private static async Task<JsonElement> Preview(HttpClient c, string module, string csv)
+    {
+        var res = await c.PostAsync($"{Base}/modules/{module}/import", Csv(csv));
+        var body = await res.Content.ReadAsStringAsync();
+        res.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        return JsonDocument.Parse(body).RootElement;
+    }
+
+    private static async Task<List<string>> ExportLines(HttpClient c, string module)
+    {
+        var res = await c.GetAsync($"{Base}/modules/{module}/export?format=csv");
+        var csv = await res.Content.ReadAsStringAsync();
+        res.StatusCode.Should().Be(HttpStatusCode.OK, csv);
+        return csv.TrimStart('\uFEFF').Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries).ToList();
+    }
+
+    [Fact]
+    public async Task Import_Ja_RoundTrip()
+    {
+        using var app = WithJaWords("はい", "いいえ");
+        await Japanese(app);
+        var admin = app.AsUser();
+        var m = await BooleanModule(admin);
+        foreach (var (t, v) in new[] { ("A", true), ("B", false) })
+            (await admin.PostAsJsonAsync($"{Base}/modules/{m.Key}/records", new { values = new Dictionary<string, object> { [m.Title] = t, [m.Flag] = v } }))
+                .EnsureSuccessStatusCode();
+        var before = await ExportLines(admin, m.Key);
+
+        var ja = Client(app, "ja");
+        var exported = await ExportLines(ja, m.Key);
+        exported.Skip(1).Should().Contain(l => l.EndsWith(",はい")).And.Contain(l => l.EndsWith(",いいえ"), "匯出走 catalog，且不是內建四語本來就認得的字");
+
+        var commit = await ja.PostAsync($"{Base}/modules/{m.Key}/import?commit=true", Csv(string.Join("\r\n", exported) + "\r\n"));
+        commit.StatusCode.Should().Be(HttpStatusCode.OK, await commit.Content.ReadAsStringAsync());
+        (await JsonOf(commit)).GetProperty("created").GetInt32().Should().Be(2);
+        var after = await ExportLines(admin, m.Key);
+        after.Skip(1).Order(StringComparer.Ordinal).Should().Equal(before.Skip(1).Concat(before.Skip(1)).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task Import_DisabledInstalledLocale_StillAccepted()
+    {
+        using var app = WithJaWords("はい", "いいえ");
+        await Japanese(app);
+        var admin = app.AsUser();
+        (await admin.PutAsJsonAsync($"{Base}/system/policies/locale.enabled", new { value = new[] { "zh-TW", "en-US", "th" } })).EnsureSuccessStatusCode();
+        var m = await BooleanModule(admin);
+
+        var preview = await Preview(Client(app, "zh-TW"), m.Key, $"{m.Title},{m.Flag}\r\nA,はい\r\nB,いいえ\r\n");
+        preview.GetProperty("valid").GetInt32().Should().Be(2, preview.ToString());
+        preview.GetProperty("errors").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Import_Ambiguous_Rejected()
+    {
+        using var app = WithJaWords("はい", "Yes");
+        await Japanese(app);
+        var admin = app.AsUser();
+        var m = await BooleanModule(admin);
+
+        var preview = await Preview(admin, m.Key, $"{m.Title},{m.Flag}\r\nA,Yes\r\nB,true\r\n");
+        preview.GetProperty("valid").GetInt32().Should().Be(1, preview.ToString());
+        var error = preview.GetProperty("errors").EnumerateArray().Single();
+        error.GetProperty("line").GetInt32().Should().Be(2);
+        error.GetProperty("errors").GetProperty(m.Flag)[0].GetString().Should().Be("請輸入「是」或「否」");
     }
 
     [Fact]
