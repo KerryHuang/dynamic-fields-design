@@ -16,6 +16,12 @@
 
 ## 修訂紀錄
 
+### 2026-11-20 第三輪（codex 短核對 `1ce95100`；`.tmp/plans/20261120-i4a/plan-recheck.answer.md`，本機）
+
+1. 必修 5（static 的 composer 與 `IncidentTitles` 拿不到快取）→ static 方法不讀快取，改收呼叫端組好的 `LocaleContext`；新增 `LocaleRegistry.ContextFor(locale, defaultLocale)`；逐一列出 `AlertOutboxWriter`、`ClaimAlertHandler`、`DirectAlertQueue`、`AlertChannelHandlers` 的測試信、`SendMailSettingsTestHandler`、`OpsNotifier` 的簽章調整與測試 → 判斷 23，Task 8 的 Files 與案例。
+2. 必修 10（白名單漏列）→ F2 補 `router/auth-guard.ts` 引用 `BUILTIN_LOCALES`（判斷 22 的斷線退路）；F6 補 (e) `i18n/locale.ts` 的 Quasar 語言包載入失敗退回 `'en-US'`（判斷 17）→ 整段驗收。
+3. 新必修 11（generation 不一致會繞過失敗退避）→ 讀取失敗的快照優先套 `FailureTtl`：記下這次嘗試的 `FailedGeneration`，重試時間是 `LoadedAt + FailureTtl`，10 秒內 generation 不一致也不重讀 → 判斷 5，Task 4 介面與兩個案例。
+
 ### 2026-11-20 第二輪（codex 審查 `875cbba3`；`.tmp/plans/20261120-i4a/plan-review.answer.md`，本機）
 
 主控裁決：必修 1 採「斷線時仍列內建四語」；必修 2、3 用 generation＋CAS；必修 5 後端改驗「已安裝且啟用」。
@@ -84,6 +90,7 @@
    - `CachedSystemPolicy.Published` 加 `LocaleGeneration`：重載在讀資料庫**之前**記下 `registry.Generation`，發布時寫進去；`Apply`（系統 PUT 提交後）沿用目前值不改。
    - `IsStale` 多一條：`p.LocaleGeneration != registry.Generation` 就算過期（不等 60 秒）。所以 registry 換了內容之後，下一個進到 `EnsureFreshAsync` 的請求一定重載政策；拿不到刷新鎖的請求照現行「沿用舊值、不等待」，最多那幾個並行請求看到舊的正規化結果，不會快取 60 秒。
    - 政策重載期間 registry 又換新（重載記下的是舊 generation）：發布後 generation 仍不一致，下一個請求再重載一次；不會用舊 generation 把新的蓋掉，因為比較的是 registry 的**目前**值。
+   - **失敗退避優先於 generation**（第三輪必修 11）：重載失敗時（`CachedSystemPolicy.cs:158-163` 的 catch）發布 `cur with { Failed = true, LoadedAt = now, FailedGeneration = gen }`，`LocaleGeneration` 留舊值、`FailedGeneration` 記這次嘗試的 generation，重試時間＝`LoadedAt + FailureTtl`（10 秒）。`IsStale` 改成先看 `Failed`：失敗的快照只看 `FailureTtl`，期間 generation 不一致（含又換新一次）也不重讀；到期重試成功才寫入新的 `LocaleGeneration`、`FailedGeneration` 清成 null。否則資料庫故障時每個請求都會因為 generation 不一致重讀一次。
    - 理由：政策快照重載時經 `PolicyReader` → `PolicyOptionSource` → `IInstalledLocales` 正規化語系政策，registry 舊的話新語系的啟用值會被判成無效、或已移除的語系還留在啟用清單。
 6. 〔技術〕**退回鏈＝要求的語系 → 上層語系（最多 3 層、遇到環或未安裝就停）→ 系統預設語系 → 繁中 → 全部已安裝語系（依安裝順序），去重**（設計 §8.3、§10.1，U3）。`fallbacks` 清單是「要求的語系之後」那幾步：上層語系＋預設＋繁中＋已安裝語系，不特地剔除要求的語系本身（重複無害；沒有上層語系時，同一個預設語系下所有語系的清單相同，例：出廠 `["zh-TW","en-US","th","vi"]`）。`I18nText.Resolve(locale, fallbacks)` 的最後一步原本是「`SupportedLocales` 順序第一個有值的」，改成「`BuiltinLocales` 順序第一個有值的」（安全網；registry 組的鏈已含全部已安裝語系，到這一步時結果不變）。**不挑沒安裝的語系鍵**：文字只有 `ja` 而 `ja` 沒安裝時回空字串（U6「存起來但不顯示」）。單參數 `Resolve(locale)`（中文訊息、套件格式用）行為與現在逐字相同。
 7. 〔技術〕**語系代碼格式守衛 `LocaleCode`**（`Domain/Localization/LocaleCode.cs`）：`IsValid(string)` 只認正規形式 `語言[-文字][-地區]`（語言 2–3 小寫、文字 4 字母首大寫、地區 2 大寫或 3 位數字，正則 `^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$`）；`TryNormalize(string, out string)` 把 `JA`、`zh-hant-hk` 轉成 `ja`、`zh-Hant-HK`（i4d1 安裝時用；i4a 只有測試）。`I18nText` 的鍵要求正規形式（`"JA"` 不收），錯誤文字沿用 `不支援的語系：{key}`，不改訊息。`UnknownLocale` 改名 `InvalidLocale`，語意從「不在支援清單」改成「格式不對」。
@@ -104,7 +111,17 @@
 22. 〔技術〕**前端斷線退路列內建四語，取自 `shared/builtin-locales.json`**（主控裁決，第二輪必修 1）：`auth-guard.ts` 取不到 `auth/options` 時 `setLocaleInfos(builtin)`、`enabled = builtin 的代碼`，行為與 p3 判斷 15 相同；`vitest.setup.ts` 也從同一份檔設語系資訊。前端不另寫自稱字串。
 23. 〔技術〕**警示信語言分兩件事：「可設定的語系」＝已安裝且啟用；「信件文字用哪張表」＝沿退回鏈挑 C# 表有翻譯的第一個**（主控裁決，第二輪必修 5；通知退路用預設語系是 N2）。
    - PUT 驗證（`AlertChannelHandlers.cs:70`）拿掉 `AlertMailText.Locales.Contains`，改成 `registry.Codes.Contains(m) && policyCache.EnabledLocales.Contains(m)`，訊息照舊 `OptionInvalid`。
-   - `AlertMailText.Locale(string? mailLocale, string defaultLocale)` 改成 `Locale(string? mailLocale, IReadOnlyList<string> fallbacks)`：依 `[mailLocale, ...fallbacks]` 找第一個在 `Locales`（內建語系）裡的，都沒有就 `zh-TW`；呼叫端（`AlertMailComposer.cs:24,49,73,92,99`、`AlertDelivery.cs:76`、`IncidentTitles.cs:62`）傳 `policyCache.FallbacksFor(mailLocale ?? policyCache.DefaultLocale)`。出廠時結果與現在相同（鏈的第一步是預設語系）。
+   - **static 方法不讀快取，改收呼叫端組好的 `LocaleContext`**（Domain 既有的 `LocaleContext(Locale, Fallbacks)`；第三輪必修 5）。`AlertMailText.Locale(string? mailLocale, string defaultLocale)` 改成 `Locale(LocaleContext mail)`：依 `[mail.Locale, ...mail.Fallbacks]` 找第一個在 `Locales`（內建語系）裡的，都沒有就 `zh-TW`。`AlertMailComposer` 的 `Incident`／`Direct`／`Digest`／`Test`／`MailTest`（`AlertMailComposer.cs:22,45,71,90,97`）把 `string? mailLocale, string defaultLocale` 兩個參數換成一個 `LocaleContext mail`，內部（`:24,49,73,92,99`）改呼叫 `AlertMailText.Locale(mail)`；`IncidentTitles.Snapshot(string defaultLocale, …)`（`IncidentTitles.cs:60-62`）改成 `Snapshot(LocaleContext systemDefault, …)`。
+   - **語境由 `LocaleRegistry.ContextFor(string locale, string defaultLocale)` 組**（新方法，＝`new LocaleContext(locale, FallbacksFor(locale, defaultLocale))`）。用 registry 而不是 `policyCache.FallbacksFor`，是因為寄信與通知的三個寫入端在交易裡用 `IPolicyReader` 讀預設語系（比快取新），鏈要用同一個預設語系，不混兩個來源。外層呼叫端各自注入 `LocaleRegistry`（singleton，Application 與背景服務都拿得到）：
+     | 呼叫端 | 現況 | 改成 |
+     |---|---|---|
+     | `AlertOutboxWriter.EnqueueAsync`（`AlertOutboxWriter.cs:41-53`） | `Incident(…, channel?.MailLocale, defaultLocale, …)` | 主建構子加 `LocaleRegistry registry`；`registry.ContextFor(channel?.MailLocale ?? defaultLocale, defaultLocale)` |
+     | `ClaimAlertHandler`（`AlertDelivery.cs:27-46,63,76,79`） | `DigestAsync(now, settings, defaultLocale, ct)`；`:76` 標題與 `:79` 摘要信各自解析 | 主建構子加 `LocaleRegistry`；`Handle` 組一次 `mail = registry.ContextFor(settings.MailLocale ?? defaultLocale, defaultLocale)`，`DigestAsync` 的參數由 `string defaultLocale` 改成 `LocaleContext mail`，`:76` 用 `AlertMailText.Locale(mail)`、`:79` 傳 `mail` |
+     | `DirectAlertQueue`（`DirectAlertQueue.cs:39-41,163-165`） | `Direct(…, _settings?.MailLocale, policyCache.DefaultLocale, …)` | 主建構子加 `LocaleRegistry`；`registry.ContextFor(_settings?.MailLocale ?? policyCache.DefaultLocale, policyCache.DefaultLocale)` |
+     | `SendSmtpTestHandler`（`AlertChannelHandlers.cs:121,138`） | `Test(settings.MailLocale, policyCache.DefaultLocale)` | 該 handler 主建構子加 `LocaleRegistry`；同上組法 |
+     | `SendMailSettingsTestHandler`（`MailSettingsHandlers.cs:120-122,138`） | `MailTest(smtp.MailLocale, locale.Locale)`（沒存語系時用請求語系） | 主建構子加 `LocaleRegistry`、`CachedSystemPolicy`；`smtp.MailLocale is { } m ? registry.ContextFor(m, cache.DefaultLocale) : registry.ContextFor(locale.Locale, cache.DefaultLocale)`（沒存時仍是請求語系，行為不變） |
+     | `OpsNotifier.NotifyAsync`（`OpsNotifier.cs:16-17,38`） | `Snapshot(await policies.ChoiceAsync(LocaleDefault…), …)` | 主建構子加 `LocaleRegistry`；`var def = await policies.ChoiceAsync(…)`，`Snapshot(registry.ContextFor(def, def), …)`（N1／N2：系統預設語系） |
+     出廠時結果與現在相同：鏈是「存的語系 → 預設 → 繁中 → 其餘內建」，四語都在 `Locales` 裡，第一步就命中；存的語系已移除時鏈不含它的上層，落到預設語系（N2）。這些類別都由 DI 建立，測試沒有直接 `new`（`grep "new DirectAlertQueue(\|new OpsNotifier(\|new AlertOutboxWriter(" backend/tests` 無結果），直接呼叫的只有 `AlertChannelTests.IncidentSnapshot_UsesDefaultLocaleThenZhTw`（`AlertChannelTests.cs:574-581`，改傳 `LocaleContext`）。
    - GET（`AlertChannelHandlers.cs:33`）的現值改回**存的值**（`c.MailLocale ?? policyCache.DefaultLocale`），不再經 `AlertMailText.Locale` 換成有翻譯的語系，否則存了 `ja` 的下拉會顯示成 English。已停用的現值照 N3 顯示。
 
 ---
@@ -257,7 +274,7 @@ i4a 沒有待使用者裁決的題目（原 Q1 已由主控 2026-11-20 裁決：
 - Modify: `backend/src/DynamicModules.Application/DependencyInjection.cs:49`（`AddSingleton<LocaleRegistry>()`；`AddSingleton<IInstalledLocales>(sp => sp.GetRequiredService<LocaleRegistry>())`）
 - Modify: `backend/src/DynamicModules.WebAPI/Ops/SystemPolicyRefreshMiddleware.cs`（先 `registry.EnsureFreshAsync`、再 `cache.EnsureFreshAsync`，判斷 5；類別註解同步）、`backend/src/DynamicModules.WebAPI/Program.cs`（同步之後、政策快照之前 `registry.EnsureFreshAsync`）
 - Modify: `backend/src/DynamicModules.Application/Dynamic/PolicyService/PolicyReader.cs:88-95`（判斷 11：語系類 RoleSet 已存值先濾掉沒安裝的項目）
-- Modify: `backend/src/DynamicModules.Application/Dynamic/PolicyService/CachedSystemPolicy.cs:25,36-38,127,129-160`（建構子收 `LocaleRegistry`；`Published` 加 `LocaleGeneration`；`IsStale` 多比 generation；重載在讀之前記下 generation；判斷 5、10）
+- Modify: `backend/src/DynamicModules.Application/Dynamic/PolicyService/CachedSystemPolicy.cs:25,36-38,125-166`（建構子收 `LocaleRegistry`；`Published` 加 `LocaleGeneration`、`FailedGeneration`；`IsStale` 多比 generation、失敗時只看 `FailureTtl`；重載在讀之前記下 generation；判斷 5、10）
 - Modify（建構子多一個參數；第二輪必修 7）：`backend/tests/DynamicModules.ApplicationTests/Common/CachedSystemPolicyTests.cs:62`、`RequestLocaleTests.cs:19`、`backend/tests/DynamicModules.WebAPITests/ZoneBusinessTimeTests.cs:13`
 - Create: `backend/tests/DynamicModules.WebAPITests/LocaleTestKit.cs`、`backend/tests/DynamicModules.ApplicationTests/Common/LocaleTestKit.cs`（判斷 21）
 - Test: `backend/tests/DynamicModules.ApplicationTests/Common/LocaleRegistryTests.cs`（新，純記憶體，用假 `ILocaleRepository` 計次與 `ManualTimeProvider`）、`backend/tests/DynamicModules.WebAPITests/Dynamic/InstalledLocalePolicyTests.cs`（新，`Category=Postgres`）、`backend/tests/DynamicModules.WebAPITests/Dynamic/PolicyApiTests.cs:150-186`、`backend/tests/DynamicModules.ApplicationTests/Dynamic/Policies/PolicyReaderTests.cs:198`
@@ -271,7 +288,7 @@ i4a 沒有待使用者裁決的題目（原 Q1 已由主控 2026-11-20 裁決：
   - `Task EnsureFreshAsync(CancellationToken ct)`：沒過期直接返回；`WaitAsync(0)` 拿不到就返回；過期時記下 `_invalidations`，先 `StampAsync`，與上次相同只把 `LoadedAt` 延到現在（generation 不變），不同才 `ListAsync` 重建並遞增 generation；讀不到（例外或 `ReadTimeout`）記 Warning、沿用上次（從沒成功過就是內建四語），標 `Failed` 用 `FailureTtl`。發布一律經 CAS；期間有 `Invalidate` 就把新快照標成過期（判斷 4）。
   - `void Invalidate()`：遞增 `_invalidations`，並以 CAS 把目前快照標成過期。
   - `public Action? BeforePublishForTests { get; set; }`（同 `CachedSystemPolicy`，交錯案例用）。
-- `CachedSystemPolicy`：`Published` 加 `long LocaleGeneration`；`IsStale(p, now) => p.LocaleGeneration != registry.Generation || 既有 TTL 規則`；`EnsureFreshAsync` 在讀資料庫之前 `var gen = registry.Generation`，發布時寫入 `gen`。
+- `CachedSystemPolicy`：`Published` 加 `long LocaleGeneration`、`long? FailedGeneration`；`IsStale` 從 static 改成實例方法：`p.Failed ? now - p.LoadedAt >= FailureTtl : p.LocaleGeneration != registry.Generation || now - p.LoadedAt >= Ttl`（失敗退避優先，第三輪必修 11）；`EnsureFreshAsync` 在讀資料庫之前 `var gen = registry.Generation`，成功時寫入 `LocaleGeneration = gen`、`FailedGeneration = null`，失敗時 `cur with { Failed = true, LoadedAt = now, FailedGeneration = gen }`（Warning 帶上 `gen`）。
   - 註解寫設計 §4.2、判斷 2–5，以及「i4b 的介面文字合併表與雜湊也放這裡」。
 
 - [ ] **Step 1: 寫失敗的測試**
@@ -286,6 +303,8 @@ i4a 沒有待使用者裁決的題目（原 Q1 已由主控 2026-11-20 裁決：
     - `RegistryGenerationChanged_ReloadsBeforeTtl`：政策快照剛載入（未過 60 秒），registry 換新內容（generation＋1）→ 下一次 `EnsureFreshAsync` 重讀政策（假 reader 計次）。
     - `RegistryChangedDuringPolicyReload_ReloadsAgain`：政策重載讀到一半（假 reader 卡住）時 registry 換新 → 放行後發布的快照記的是舊 generation，下一次 `EnsureFreshAsync` 再重讀一次，最後的語系政策值依新 registry 正規化（例：新裝的 `ja` 留在啟用清單）。
     - `RemovedLocale_Interleaved`：啟用 `["zh-TW","ja"]` 已在快照，registry 移除 `ja`（generation＋1）→ 下一次 `EnsureFreshAsync` 後 `EnabledLocales == ["zh-TW"]`，不等 60 秒。
+    - `GenerationMismatch_ReadFails_BacksOff10s`（第三輪必修 11）：政策快照在 generation 1 載入；registry 換新到 2；假 reader 丟例外 → `EnsureFreshAsync` 讀 1 次，`Published.Failed == true`、`FailedGeneration == 2`、`LocaleGeneration == 1`；時間前進 9 秒內連叫 5 次 `EnsureFreshAsync` → reader 仍只叫 1 次；前進到第 10 秒、reader 改成成功 → 再讀 1 次，`LocaleGeneration == 2`、`Failed == false`、`FailedGeneration == null`。
+    - `GenerationChangedAgainDuringBackoff_StillWaits`：同上失敗後，退避期間 registry 再換到 3 → 10 秒內 reader 不再被叫；到期成功後 `LocaleGeneration == 3`。
     - `FallbacksFor_UsesParentsAndDefault`：`ja`→`en-US`、預設 `th` → `FallbacksFor("ja","th") == ["en-US","th","zh-TW","vi","ja"]`。
   - `InstalledLocalePolicyTests`（`Category=Postgres`；用 `LocaleTestKit.InstallAsync(app, "ja", "日本語", fallback: "en-US")`）：
     - `Options_FollowInstalledTable`：GET 系統政策 `locale.enabled` 的 `options` 是 `zh-TW,en-US,th,vi,ja`；PUT `["zh-TW","ja"]` 之前先 PUT 預設與必填維持繁中 → 200；`locale.default` 可設 `ja`（啟用後）。
@@ -389,17 +408,27 @@ i4a 沒有待使用者裁決的題目（原 Q1 已由主控 2026-11-20 裁決：
 - Modify: `frontend/src/presentation/locale/LocaleSwitcher.vue:4,9`（`enabled` 的每項配 `nativeName`）
 - Modify: `frontend/src/domain/dynamic/policy-types.ts:1,59-65`（`isLocalePolicy`、`choiceLabel` 照判斷 19）；`PolicyValueEditor.vue` 不改（經 `choiceLabel`）
 - Modify: `frontend/src/presentation/ops/OpsChannelTab.vue:7,26,32`（`localeName` → `nativeName`；選項從 `enabledLocales()`；N3 的「已停用」照舊）
-- Modify（後端，判斷 23；第二輪必修 5）：`backend/src/DynamicModules.Application/Dynamic/OpsService/Alerts/AlertChannelHandlers.cs:33,70`、`AlertMailText.cs:141-142`、`AlertMailComposer.cs:24,49,73,92,99`、`AlertDelivery.cs:76`、`backend/src/DynamicModules.Application/Dynamic/OpsService/Incidents/IncidentTitles.cs:62`
+- Modify（後端，判斷 23；第二輪必修 5、第三輪必修 5）：`backend/src/DynamicModules.Application/Common/LocaleRegistry.cs`（加 `ContextFor`）；`backend/src/DynamicModules.Application/Dynamic/OpsService/Alerts/` 下的 `AlertChannelHandlers.cs:33,70,121,138`（含 `SendSmtpTestHandler` 建構子）、`AlertMailText.cs:141-142`、`AlertMailComposer.cs:22-24,45-49,71-73,90-92,97-99`、`AlertDelivery.cs:27-46,63,76,79`、`AlertOutboxWriter.cs:41-53`、`DirectAlertQueue.cs:39-41,163-165`；`backend/src/DynamicModules.Application/Dynamic/OpsService/Incidents/{IncidentTitles.cs:60-62,OpsNotifier.cs:16-17,38}`；`backend/src/DynamicModules.Application/Dynamic/MailService/MailSettingsHandlers.cs:120-122,138`
 - Modify: `frontend/src/presentation/dynamic/ledger/LedgerTab.vue:21,91`、`frontend/src/presentation/dynamic/approval-designer/graph/designer-graph.ts:67-70`（判斷 16；`designer-graph` 的 `LOCALES` 匯出刪除）
 - Modify: `frontend/src/i18n/translate.ts:2,7`（`as LocaleCode` 轉型已無意義，刪掉）
-- Test: `frontend/src/presentation/locale/` 的 `LocaleSwitcher` 案例（在 `src/i18n/locale.vitest.spec.ts:63-80`）、`frontend/src/domain/dynamic/policy-types.vitest.spec.ts`、`frontend/src/presentation/policies/PolicyValueEditor.vitest.spec.ts`、`frontend/src/presentation/ops/OpsChannelTab.vitest.spec.ts`、`frontend/src/presentation/dynamic/ledger/LedgerTab.vitest.spec.ts`、`frontend/src/presentation/dynamic/approval-designer/graph/designer-graph.vitest.spec.ts`、`backend/tests/DynamicModules.WebAPITests/Ops/AlertChannelTests.cs`
+- Test: `frontend/src/presentation/locale/` 的 `LocaleSwitcher` 案例（在 `src/i18n/locale.vitest.spec.ts:63-80`）、`frontend/src/domain/dynamic/policy-types.vitest.spec.ts`、`frontend/src/presentation/policies/PolicyValueEditor.vitest.spec.ts`、`frontend/src/presentation/ops/OpsChannelTab.vitest.spec.ts`、`frontend/src/presentation/dynamic/ledger/LedgerTab.vitest.spec.ts`、`frontend/src/presentation/dynamic/approval-designer/graph/designer-graph.vitest.spec.ts`、`backend/tests/DynamicModules.WebAPITests/Ops/AlertChannelTests.cs`（寄信設定測試信與純函式案例也放這裡，同既有 `IncidentSnapshot_UsesDefaultLocaleThenZhTw`）、`backend/tests/DynamicModules.ApplicationTests/Common/LocaleRegistryTests.cs`
 
 - [ ] **Step 1: 寫失敗的測試**
   - `LocaleSwitcher`：預設四語時選項仍是 `['繁體中文','English','ไทย','Tiếng Việt']`（改成不引用 `LOCALES`）；`setLocaleInfos` 加 `ja` 且啟用 → 多一項 `日本語`、點選後 `i18n.locale === 'ja'`。
   - `policy-types`：已安裝含 `ja` 時 `locale.enabled` 的 `isLocalePolicy` 為 true、`choiceLabel(meta,'ja')` 是 `日本語`；`calendar.weekStart` 仍走 `policies.choices.monday`。
   - `PolicyValueEditor`：`locale.enabled` 選項有 `日本語`，不出現 `policies.choices.ja`（設計 §1、§19）。
   - `OpsChannelTab`：啟用 `ja` 時下拉有 `日本語`；已存 `th` 又停用時仍顯示 `ไทย（已停用）`（N3 既有案例照過）。
-  - `AlertChannelTests`（後端，判斷 23）：`MailLocale_InstalledAndEnabled_Saves`：裝 `ja`（上層 `en-US`）並啟用 → PUT `mailLocale: "ja"` 200、GET 回 `ja`；測試信是英文（退回鏈的上層語系）。`MailLocale_InstalledNotEnabled_400`、`MailLocale_NotInstalled_400`（`OptionInvalid`）。既有「已存 `th` 又停用照常寄泰文」「預設 `en-US` 時出廠是英文」照過。
+  - `AlertChannelTests`（後端，判斷 23）：`MailLocale_InstalledAndEnabled_Saves`：裝 `ja`（上層 `en-US`）並啟用 → PUT `mailLocale: "ja"` 200、GET 回 `ja`；測試信是英文（退回鏈的上層語系）。`MailLocale_InstalledNotEnabled_400`、`MailLocale_NotInstalled_400`（`OptionInvalid`）。既有「已存 `th` 又停用照常寄泰文」「預設 `en-US` 時出廠是英文」照過。第三輪必修 5 的外層呼叫端各一案（都裝 `ja`、上層 `en-US`、存 `mailLocale: "ja"`）：
+    - `Outbox_JaChannel_EnglishMail`：觸發一筆會寫佇列的事件 → 佇列列的主旨是英文（`AlertOutboxWriter`）。
+    - `Digest_JaChannel_EnglishLines`：超過每小時上限進摘要（同 D03 的造法）→ 摘要信主旨與每行標題是英文（`ClaimAlertHandler`）。
+    - `Direct_JaChannel_EnglishMail`：健康檢查直送（同既有直送案例的造法）→ 英文（`DirectAlertQueue`）。
+    - `ChannelTest_JaChannel_English`：通道測試信主旨是 `[Formwright] Alert channel test email`。
+    - `Notification_DefaultJa_SnapshotFallsBackToParent`：預設語系設 `ja` → 站內通知的 `TitleSnapshot` 是英文（`OpsNotifier`，經 `en-US`）；預設改回 `zh-TW` 是中文。
+    - `RemovedMailLocale_UsesDefault`：存 `ja` 後移除 `ja`（`LocaleTestKit` 刪列＋`Invalidate`）→ 寄出的是預設語系（N2）。
+  - `IncidentSnapshot_UsesDefaultLocaleThenZhTw`（`AlertChannelTests.cs:574-581`）：改傳 `new LocaleContext("en-US", […])`、`new LocaleContext("zh-TW", […])`、`new LocaleContext("ja", [])`，斷言不變（`ja` 沒有鏈時是繁中）；加一句 `new LocaleContext("ja", ["en-US","zh-TW"])` 是英文。
+  - `MailSettingsTest_*`（寄信設定的測試信）：存 `ja` → 英文；沒存語系、`X-Locale: th` → 泰文（行為不變）。
+  - `AlertMailText_Locale_WalksChain`（純函式）：`Locale(new("ja", ["en-US","zh-TW"])) == "en-US"`；`Locale(new("ja", ["ko"])) == "zh-TW"`；`Locale(new("th", ["zh-TW"])) == "th"`。
+  - `LocaleRegistryTests.ContextFor_UsesChain`：裝 `ja`（上層 `en-US`）→ `ContextFor("ja","th")` 是 `("ja", ["en-US","th","zh-TW","vi","ja"])`，與 `FallbacksFor` 相同。
   - `LedgerTab`、`designer-graph`（這兩案是 F4 的驗收，取代原本的名稱掃描）：已安裝四語時產生四語（既有斷言照過）；已安裝多一個沒有翻譯包的 `ja` 時產生的物件**沒有** `ja` 鍵；已安裝 `ja` 且測試先 `setLocaleMessage('ja', …)` 時**有** `ja` 鍵、值是日文那句（證明清單來自已安裝語系，不是寫死；判斷 16）。
 - [ ] **Step 2: 跑測試確認失敗**：`cd frontend && bunx vitest run src/i18n/locale.vitest.spec.ts src/domain/dynamic/policy-types.vitest.spec.ts src/presentation/policies src/presentation/ops/OpsChannelTab.vitest.spec.ts src/presentation/dynamic/ledger src/presentation/dynamic/approval-designer/graph/designer-graph.vitest.spec.ts --maxWorkers=2`；`cd backend && dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~AlertChannelTests|FullyQualifiedName~Incident"`
 - [ ] **Step 3: 實作**
@@ -489,7 +518,7 @@ grep -rnE '"(en-US|th|vi)"' backend/src --include='*.cs' | grep -v "/Migrations/
 # F1 型別不再是四語聯集
 grep -rnE "'zh-TW' \| 'en-US'" src --include='*.ts' --include='*.vue'                                   # 無結果
 # F2 寫死清單
-grep -rn "LOCALES" src --include='*.ts' --include='*.vue' | grep -v "spec.ts"                           # 只剩 PrintTab.vue:20（區域 computed，讀 enabledLocales()）與 :120（模板引用它）；i18n/locale.ts 的 BUILTIN_LOCALES（讀 shared 檔）
+grep -rn "LOCALES" src --include='*.ts' --include='*.vue' | grep -v "spec.ts"                           # 只剩 PrintTab.vue:20（區域 computed，讀 enabledLocales()）與 :120（模板引用它）；i18n/locale.ts 的 BUILTIN_LOCALES（讀 shared 檔）；router/auth-guard.ts 對 BUILTIN_LOCALES 的引用（斷線退路，判斷 22）
 grep -rnE "\['zh-TW', 'en-US', 'th', 'vi'\]" src --include='*.ts' --include='*.vue' | grep -v "spec.ts\|test-kit\|fixtures"   # 無結果（vitest.setup.ts 在 src 外）
 # F3 Quasar 語言包全開
 grep -n "quasar/lang/\*\.js" src/i18n/locale.ts                                                          # 1 筆
@@ -503,6 +532,7 @@ grep -rnE "['\"\`](zh-TW|en-US|th|vi)['\"\`]" src --include='*.ts' --include='*.
 #   (b) 打包的翻譯包：boot/i18n.ts 的四語 messages（i4b 改成只打包繁中）
 #   (c) 測試用 helper（非 spec 檔）：pages/dashboards/dashboard-test-kit.ts、presentation/tasks/board/board-fixtures.ts
 #   (d) 畫面內部的暫時物件（p3 Task 12 白名單）：presentation/dynamic/designer/FieldEditorDialog.vue 的暫時欄位標籤
+#   (e) Quasar 語言包的退路 'en-US'：Task 7 在 i18n/locale.ts 的 applyDocumentLocale 加的載入失敗退回（判斷 17；Quasar 的語言包代碼，不是平台語系清單）
 #   其他任何一處（特別是 LedgerTab、designer-graph、LocaleSwitcher、OpsChannelTab、policy-types、auth-guard、i18n-text）出現都算沒改完
 ```
 
@@ -540,7 +570,7 @@ grep -rnE "['\"\`](zh-TW|en-US|th|vi)['\"\`]" src --include='*.ts' --include='*.
 
 1. **設計覆蓋（§20 i4a 列）**：`Dynamic_Locale` 與兩種 migration → Task 3；內建四語同步 → Task 3；`LocaleRegistry`（版本戳記）→ Task 4；`IsValid` 只驗格式與必填（M1）→ Task 2（必填在 p3 已完成）；新退回鏈（含上層語系，U3）→ Task 1、5；`X-Locale` → Task 5；三政策動態選項、自稱 → Task 4、8；`auth/options` 加 `locales` → Task 6；後端 8 處、前端 6 處、`PolicyValueEditor` → 整段驗收表；Quasar glob → Task 7；使用者可見行為無變化 → Global Constraints 與 Task 9 走查。
 2. **§4.3** 第 1 點 → Task 4；第 2 點（不能移除啟用中的語系）屬 i4d1（i4a 沒有移除入口）；第 3 點 → 判斷 11、Task 4；第 4 點出廠值不變 → `NoLocalePack_SameAsP3`。
-3. **型別一致**：`LocaleCode`（Domain 類別）與前端型別 `LocaleCode` 同名不同物，前端只在 `src/i18n`；`BuiltinLocales.Codes`、`LocaleChain.Fallbacks`、`InstalledLocale`、`LocaleOrigin`、`ILocaleRepository.{ListAsync,StampAsync}`、`LocaleVersionStamp`、`BuiltinLocaleSync.EnsureAsync`、`LocaleRegistry.{Locales,Codes,Find,FallbacksFor,Generation,EnsureFreshAsync,Invalidate}`、`CachedSystemPolicy.Published.LocaleGeneration`、`InstalledLocaleInfo`、`LocaleInfoResponse`、`CachedSystemPolicy.FallbacksFor`；前端 `BUILTIN_LOCALES`、`LocaleInfo`、`setLocaleInfos`、`installedLocales`、`localeInfo`、`nativeName`、`localeChain`、`useLocales`。
+3. **型別一致**：`LocaleCode`（Domain 類別）與前端型別 `LocaleCode` 同名不同物，前端只在 `src/i18n`；`BuiltinLocales.Codes`、`LocaleChain.Fallbacks`、`InstalledLocale`、`LocaleOrigin`、`ILocaleRepository.{ListAsync,StampAsync}`、`LocaleVersionStamp`、`BuiltinLocaleSync.EnsureAsync`、`LocaleRegistry.{Locales,Codes,Find,FallbacksFor,ContextFor,Generation,EnsureFreshAsync,Invalidate}`、`CachedSystemPolicy.Published.{LocaleGeneration,FailedGeneration}`、`AlertMailText.Locale(LocaleContext)`、`IncidentTitles.Snapshot(LocaleContext, …)`、`InstalledLocaleInfo`、`LocaleInfoResponse`、`CachedSystemPolicy.FallbacksFor`；前端 `BUILTIN_LOCALES`、`LocaleInfo`、`setLocaleInfos`、`installedLocales`、`localeInfo`、`nativeName`、`localeChain`、`useLocales`。
 4. **待決**：無；原 Q1 留到 i4b、警示信未翻譯語系留到 i4c（見「待決」節）。
 
 ## 使用者裁決（沿用，不再問）
