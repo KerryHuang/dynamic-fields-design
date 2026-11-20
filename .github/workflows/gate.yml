@@ -92,9 +92,14 @@ jobs:
         working-directory: backend
         env:
           FORMWRIGHT_TEST_DB: postgres
+          FORMWRIGHT_LATENCY_TRACE: ${{ runner.temp }}/latency-trace.md
         run: >-
           dotnet test tests/DynamicModules.${{ matrix.project }} --logger "console;verbosity=minimal"
           --filter "Category=Postgres&Category!=SqliteOnly&Category!=Benchmark"
+      # 票 #70／#72 診斷：WebAPITests 的排隊延遲紀錄（StallDiagnostics.LatencyTrace）
+      - name: latency trace
+        if: always() && matrix.pg
+        run: cat "${{ runner.temp }}/latency-trace.md" 2>/dev/null || echo "沒有排隊延遲紀錄"
       # 依測試類別切份（scripts/ci/shard-tests.sh）：從實際清單算分配，並核對實際執行數＝預期，不會漏測
       - name: dotnet test (shard ${{ matrix.shard }}/${{ matrix.shards }})
         if: matrix.shards > 1

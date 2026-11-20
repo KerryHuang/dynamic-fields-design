@@ -119,7 +119,7 @@ internal static class StallDiagnostics
 
     /// <summary>
     /// 票 #70／#72 的整輪證據：第一個 TestApp 建立時（在 xUnit 的同步內容上）開始，每 500 ms 量一次同步內容與執行緒池的排隊延遲，
-    /// 以 5 秒為一格記最大值；只在 GitHub Actions（有 GITHUB_STEP_SUMMARY）時於行程結束寫進該步驟的摘要。通過的輪次也留證據。
+    /// 以 5 秒為一格記最大值；設了 FORMWRIGHT_LATENCY_TRACE（檔案路徑）才記，行程結束時附加寫入（CI 的 PostgreSQL job 之後印出）。通過的輪次也留證據。
     /// </summary>
     internal static class LatencyTrace
     {
@@ -132,7 +132,7 @@ internal static class StallDiagnostics
 
         public static void EnsureStarted()
         {
-            var summary = Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY");
+            var summary = Environment.GetEnvironmentVariable("FORMWRIGHT_LATENCY_TRACE");
             if (string.IsNullOrEmpty(summary) || SynchronizationContext.Current is not { } ctx) return;
             if (Interlocked.CompareExchange(ref _context, ctx, null) is not null) return;
             _timer = new Timer(_ => Tick(), null, 0, 500);
