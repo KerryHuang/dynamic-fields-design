@@ -67,6 +67,8 @@ public class AuthorizationWriteInventoryTests
     private static readonly HashSet<BatchMethod> NonGuardBatchMethods =
     [
         new($"{Repo}AlertRepositories.cs", "LockAsync"),              // 告警通道（AlertChannel）搶鎖
+        new($"{Repo}LocalePackRepository.cs", "DeleteForLocaleAsync"), // 語系覆寫層與預覽（LocalePack／LocalePackPreview）移除語系時清除
+        new($"{Repo}LocalePackRepository.cs", "PrunePreviewsAsync"),  // 語系包預覽暫存逾期與超量清除
         new($"{Repo}AlertRepositories.cs", "RecordSuccessAsync"),     // 告警通道送出成功的狀態
         new($"{Repo}AlertRepositories.cs", "RecordFailureAsync"),     // 告警通道送出失敗的狀態
         new($"{Repo}AlertRepositories.cs", "TryClaimAsync"),          // 告警外送佇列（AlertOutbox）認領
