@@ -25,7 +25,7 @@ import type {
   TaskScheduleResult, TaskViewConfig, TaskViewDetail, TaskViewKind, TaskViewList, TaskViewShareKind, TaskViewShareTargets,
 } from 'src/domain/dynamic/task-board-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
-import type { ApplyLocalePackResult, LocaleAdminList, LocalePackReportData } from 'src/domain/dynamic/locale-pack-types';
+import type { ApplyLocalePackResult, LocaleAdminList, LocalePackReportData, LocaleTemplateOptions } from 'src/domain/dynamic/locale-pack-types';
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import type {
   AuditAction, AuditDetail, AuditFilter, AuditList, HealthCheckConfig, HealthCheckState, HealthCheckUpdate, HealthResults, IncidentDetail, IncidentFilter,
@@ -606,6 +606,20 @@ export const dynamicApi = {
     http.post<LocalePackReportData>('/i18n/packs/preview', bytes, { params: { fileName }, headers: { 'Content-Type': 'application/octet-stream' } }).then(data),
   applyLocalePack: (previewId: string, fileHash: string) =>
     http.post<ApplyLocalePackResult>('/i18n/packs/apply', { previewId, fileHash }).then(data),
+  /** 同 exportReport：validateStatus 繞過 interceptor，錯誤本文（Blob）在這裡解析成 ApiError。 */
+  exportLocaleTemplate: async (code: string, options: LocaleTemplateOptions) => {
+    const r = await http.get<Blob>(`/i18n/locales/${encodeURIComponent(code)}/template`, {
+      params: options, paramsSerializer: { indexes: null }, responseType: 'blob', validateStatus: () => true,
+    });
+    if (r.status >= 400) {
+      let body: unknown;
+      try { body = JSON.parse(await r.data.text()); } catch { body = undefined; }
+      const err = toApiError({ response: { status: r.status, data: body } });
+      handleAuthFailure(err);
+      throw err;
+    }
+    return { blob: r.data, fileName: dispositionFileName(r.headers['content-disposition']) ?? `${code}.langpack.json` };
+  },
   rollbackLocalePack: (code: string) => http.post<{ code: string; packId: number }>(`/i18n/locales/${encodeURIComponent(code)}/rollback`).then(data),
   clearLocaleOverrides: (code: string) => http.post<{ code: string; packId: number }>(`/i18n/locales/${encodeURIComponent(code)}/clear`).then(data),
   removeLocale: (code: string) => http.delete(`/i18n/locales/${encodeURIComponent(code)}`).then(data),
