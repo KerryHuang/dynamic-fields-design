@@ -47,20 +47,33 @@ internal static class LocaleTestKit
     private static Task RefreshAsync(TestApp app, Func<IReadOnlyList<string>, bool> done) =>
         WaitForSnapshotAsync(app, texts => done(texts.Infos.Select(i => i.Code).ToList()));
 
-    /// <summary>共用的等待（i4d1 計畫判斷 21）：<c>Invalidate</c> → <c>EnsureFreshAsync</c> → 判斷，20 ms 重試、10 秒逾時。</summary>
-    public static async Task WaitForSnapshotAsync(TestApp app, Func<LocaleTexts, bool> done)
+    /// <summary>
+    /// 共用的等待（i4d1 計畫判斷 21）：<c>Invalidate</c> → <c>EnsureFreshAsync</c> → 判斷，20 ms 重試、30 秒逾時。
+    /// CI 的 PostgreSQL 偶發 10 秒逾時、根因未證實，先放寬並在逾時訊息附上 <paramref name="describe"/> 對最後一次快照的描述、
+    /// 快照 generation、嘗試次數與總耗時（CI 偶發診斷）。
+    /// </summary>
+    public static async Task WaitForSnapshotAsync(TestApp app, Func<LocaleTexts, bool> done, Func<LocaleTexts, string>? describe = null)
     {
         var registry = app.Services.GetRequiredService<LocaleRegistry>();
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var started = DateTime.UtcNow;
+        var deadline = started.AddSeconds(30);
+        var attempts = 0;
         while (true)
         {
+            attempts++;
             registry.Invalidate();
             await registry.EnsureFreshAsync(CancellationToken.None);
-            if (done(registry.Texts())) return;
-            if (DateTime.UtcNow > deadline) throw new TimeoutException("語系快照 10 秒內沒有反映寫入");
+            var texts = registry.Texts();
+            if (done(texts)) return;
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException($"語系快照 30 秒內沒有反映寫入；{(describe is null ? "" : describe(texts) + "；")}"
+                    + $"generation={registry.Generation}、嘗試 {attempts} 次、耗時 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
             await Task.Delay(20);
         }
     }
+
+    private static string PackIdState(LocaleTexts t, string code, long? expected) =>
+        $"預期 {code} 的 packId={expected?.ToString() ?? "null"}、實際 Overlay({code})?.PackId={t.Overlay(code)?.PackId.ToString() ?? "null"}、清單含 {code}={t.Infos.Any(i => i.Code == code)}";
 
     // ── 語系包 API（i4d1 計畫判斷 21）：寫入後都等快照反映「預期的結果」 ──
 
@@ -114,7 +127,8 @@ internal static class LocaleTestKit
         var text = await res.Content.ReadAsStringAsync();
         if (res.StatusCode != HttpStatusCode.OK) throw new HttpRequestException($"套用失敗 {(int)res.StatusCode}：{text}");
         var r = JsonSerializer.Deserialize<ApplyLocalePackResponse>(text, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
-        await WaitForSnapshotAsync(app, t => t.Infos.Any(i => i.Code == r.Code) && t.Overlay(r.Code)?.PackId == r.PackId);
+        await WaitForSnapshotAsync(app, t => t.Infos.Any(i => i.Code == r.Code) && t.Overlay(r.Code)?.PackId == r.PackId,
+            t => PackIdState(t, r.Code, r.PackId));
         return r;
     }
 
@@ -130,7 +144,7 @@ internal static class LocaleTestKit
         var text = await res.Content.ReadAsStringAsync();
         if (res.StatusCode != HttpStatusCode.OK) throw new HttpRequestException($"{action} 失敗 {(int)res.StatusCode}：{text}");
         var packId = JsonDocument.Parse(text).RootElement.GetProperty("packId").GetInt64();
-        await WaitForSnapshotAsync(app, t => t.Overlay(code)?.PackId == packId);
+        await WaitForSnapshotAsync(app, t => t.Overlay(code)?.PackId == packId, t => $"{action}：" + PackIdState(t, code, packId));
         return packId;
     }
 
