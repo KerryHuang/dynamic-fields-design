@@ -639,7 +639,7 @@ Formwright 的取捨：
 | i4f | 套件 schema 與 C# 驗證器語系鍵改代碼格式（舊 `formatVersion` 仍只收四語）、匯出帶所有語系、手冊與套件文件 | 無變化 | i4a；**與 i3 的套件升版合併成一次** |
 
 - **i4a 實作完成**（2026-11-20）；`auth/options` 的 `uiHash` 移到 i4b（i4a 計畫判斷 12），i4b 再加這個欄位、不改形狀。
-- **i4b 實作完成**（2026-11-20，待上線；上線 SHA 由上線時補）。
+- **i4b 已上線**（2026-11-21，7843faa9）。
 - i4a 是其他各段的基礎；i4b、i4c 可平行；i4d1 要等兩者；i4d2 接 i4d1。依賴本身：p3 → i4a → i4b／i4c → i4d1（加 O2）→ i4d2 → i4e（加 i3）；i4f 與 i3 一起升格式版本。
 - **migration**：每段一個符合 `.claude/rules/backend.md`：i4a 一個（`Dynamic_Locale`）、i4d1 一個（`Dynamic_LocalePack`；`previewId` 若存資料庫再加一個）。i4d1 不能和其他會加 migration 的段平行。
 - i3 與 i4 的關係：i4a–i4d2 不依賴 i3；i4e 依賴 i3（否則報表、儀表板名稱翻不到）；i4f 建議與 i3 的格式升版放同一段或緊接著合併。路線順序維持「p3 → i3、i4」，段內可排 i4a → i4b／i4c → i3 → i4d1 → i4d2 → i4e、i4f。
