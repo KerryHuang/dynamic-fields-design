@@ -1,3 +1,4 @@
+import { businessOffset, businessOffsetMs } from 'src/domain/dynamic/business-time';
 import type { HealthUnit, IncidentSeverity } from './ops-types';
 
 type Translate = (key: string, params?: Record<string, unknown>) => string;
@@ -65,13 +66,14 @@ export function thresholdHint(value: number | null, unit: HealthUnit | string, t
   return unit === 'basisPoints' || unit === 'bytes' || unit === 'hours' ? formatHealthValue(value, unit, t, locale) : undefined;
 }
 
-/** 時間（UTC ISO）→ 本地 YYYY-MM-DD HH:mm；缺值回「—」。 */
+/** 時間（UTC ISO）→ 營運時區 YYYY-MM-DD HH:mm 加時區尾綴（例 +08:00），不看瀏覽器時區；缺值回「—」、解析不了原樣回傳。 */
 export function formatTime(utc: string | undefined | null): string {
   if (!utc) return '—';
-  const d = new Date(utc);
-  if (Number.isNaN(d.getTime())) return utc;
+  const ms = new Date(utc).getTime();
+  if (Number.isNaN(ms)) return utc;
+  const d = new Date(ms + businessOffsetMs());
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} ${businessOffset()}`;
 }
 
 export const SEVERITY_ICON: Record<IncidentSeverity, { icon: string; color: string }> = {
@@ -129,11 +131,10 @@ export function mailTestError(e: { code?: string; message?: string; params?: Rec
   return e.message || t('ops.saveFailed');
 }
 
-/** 本地日期（YYYY-MM-DD）當天 0 點的 UTC ISO。 */
-export const localDayStartUtc = (d: string) => new Date(`${d}T00:00:00`).toISOString();
+/** 營運時區日期（YYYY-MM-DD）當天 0 點的 UTC ISO。 */
+export const businessDayStartUtc = (d: string) => new Date(`${d}T00:00:00${businessOffset()}`).toISOString();
 
-/** 本地日期（YYYY-MM-DD）的最後一毫秒（UTC ISO）：本地日曆的隔天 0 點減 1 ms。 */
-export function localDayEndUtc(d: string): string {
-  const day = new Date(`${d}T00:00:00`);
-  return new Date(new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime() - 1).toISOString();
+/** 營運時區日期（YYYY-MM-DD）的最後一毫秒（UTC ISO）：固定偏移、沒有日光節約，一天固定 24 小時。 */
+export function businessDayEndUtc(d: string): string {
+  return new Date(new Date(`${d}T00:00:00${businessOffset()}`).getTime() + 86_400_000 - 1).toISOString();
 }

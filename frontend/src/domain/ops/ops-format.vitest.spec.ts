@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import enUS from 'src/i18n/en-US.json';
 import zhTW from 'src/i18n/zh-TW.json';
-import { auditDiff, formatHealthValue, incidentTitle, localDayEndUtc, localDayStartUtc, mailTestError } from './ops-format';
+import { setBusinessOffset } from 'src/domain/dynamic/business-time';
+import { auditDiff, businessDayEndUtc, businessDayStartUtc, formatHealthValue, formatTime, incidentTitle, mailTestError } from './ops-format';
 
 const i18n = (locale: 'zh-TW' | 'en-US') => {
   const g = createI18n({ legacy: false, locale, messages: { 'zh-TW': zhTW, 'en-US': enUS } }).global;
@@ -63,28 +64,32 @@ describe('mailTestError', () => {
   });
 });
 
-// 審查修正 4：日末用本地日曆的隔天 0 點減 1 ms，不是加固定 24 小時（夏令時間切換日一天是 23 或 25 小時）
-describe('localDayStartUtc／localDayEndUtc（夏令時間切換日）', () => {
+// 稽核與維運的時間照營運時區（使用者 2026-11-20 裁決），不受瀏覽器時區影響
+describe('formatTime／businessDayStartUtc／businessDayEndUtc（營運時區）', () => {
   const tz = process.env.TZ;
   afterEach(() => {
     if (tz === undefined) delete process.env.TZ;
     else process.env.TZ = tz;
+    setBusinessOffset('+08:00');
   });
 
-  it('DST 前進日（23 小時）：日末不跨到隔天', () => {
+  const check = () => {
+    setBusinessOffset('+07:00');
+    expect(formatTime('2026-11-20T03:00:00Z')).toBe('2026-11-20 10:00 +07:00');
+    expect(businessDayStartUtc('2026-11-20')).toBe('2026-11-19T17:00:00.000Z');
+    expect(businessDayEndUtc('2026-11-20')).toBe('2026-11-20T16:59:59.999Z');
+  };
+
+  it('+07:00', () => check());
+
+  it('瀏覽器時區是 America/New_York 時結果相同', () => {
     process.env.TZ = 'America/New_York';
-    expect(localDayStartUtc('2026-03-08')).toBe('2026-03-08T05:00:00.000Z');
-    expect(localDayEndUtc('2026-03-08')).toBe('2026-03-09T03:59:59.999Z');
+    check();
   });
 
-  it('DST 退回日（25 小時）：日末包含最後一小時', () => {
-    process.env.TZ = 'America/New_York';
-    expect(localDayStartUtc('2026-11-01')).toBe('2026-11-01T04:00:00.000Z');
-    expect(localDayEndUtc('2026-11-01')).toBe('2026-11-02T04:59:59.999Z');
-  });
-
-  it('沒有夏令時間的時區：照常 24 小時', () => {
-    process.env.TZ = 'Asia/Taipei';
-    expect(localDayEndUtc('2026-11-01')).toBe('2026-11-01T15:59:59.999Z');
+  it('缺值與解析不了', () => {
+    expect(formatTime(null)).toBe('—');
+    expect(formatTime('nope')).toBe('nope');
+    expect(formatTime('2026-11-20T03:00:00Z')).toBe('2026-11-20 11:00 +08:00');
   });
 });

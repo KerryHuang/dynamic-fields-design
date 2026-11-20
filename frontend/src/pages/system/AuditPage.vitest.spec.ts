@@ -80,15 +80,22 @@ describe('AuditPage', () => {
     w.unmount();
   });
 
-  it('起訖日換成 UTC 區間：起日當天 0 點、迄日當天最後一毫秒', async () => {
+  it('起訖日換成 UTC 區間：營運時區起日當天 0 點、迄日當天最後一毫秒', async () => {
     const { w } = await mountPage('/system/audit');
     const dates = w.findAllComponents({ name: 'DateSelect' });
     dates[0]!.vm.$emit('update:modelValue', '2026-11-01');
     dates[1]!.vm.$emit('update:modelValue', '2026-11-02');
     await flushPromises();
     const p = lists().at(-1)!.params as Record<string, string>;
-    expect(new Date(p.fromUtc!).getTime()).toBe(new Date('2026-11-01T00:00:00').getTime());
-    expect(new Date(p.toUtc!).getTime()).toBe(new Date('2026-11-03T00:00:00').getTime() - 1);
+    expect(p.fromUtc).toBe('2026-10-31T16:00:00.000Z');
+    expect(p.toUtc).toBe('2026-11-02T15:59:59.999Z');
+    w.unmount();
+  });
+
+  it('列表時間標時區、日期篩選標示依營運時區', async () => {
+    const { w } = await mountPage('/system/audit');
+    expect(q('audit-row-41')!.textContent).toContain('2026-11-19 10:00 +08:00');
+    expect(q('audit-from')!.closest('.q-field')!.textContent).toContain('UTC+08:00');
     w.unmount();
   });
 

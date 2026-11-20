@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { toBusinessWallClock, withBusinessOffset } from 'src/domain/dynamic/business-time';
 
 // withTime: native datetime-local input showing business-time-zone wall clock; emits yyyy-MM-ddTHH:mm:ss plus the business offset (policy locale.timeZone, same as backend).
-const props = defineProps<{ modelValue: string | null | undefined; label: string; error?: string; readonly?: boolean; required?: boolean; withTime?: boolean }>();
+const props = defineProps<{ modelValue: string | null | undefined; label: string; error?: string; readonly?: boolean; required?: boolean; withTime?: boolean; hint?: string }>();
 const emit = defineEmits<{ 'update:modelValue': [value: string | null] }>();
 const shown = computed(() => (props.withTime ? (toBusinessWallClock(props.modelValue ?? '') ?? '').slice(0, 16) : (props.modelValue ?? '')));
 
@@ -16,7 +16,7 @@ function onInput(v: string | number | null) {
 <template>
   <q-input
     :model-value="shown" :label="required ? `${label} *` : label" :error="!!error" :error-message="error"
-    :readonly="readonly" :type="withTime ? 'datetime-local' : undefined" :mask="withTime ? undefined : '####-##-##'"
+    :readonly="readonly" :hint="hint" :type="withTime ? 'datetime-local' : undefined" :mask="withTime ? undefined : '####-##-##'"
     :stack-label="withTime" outlined dense @update:model-value="onInput"
   >
     <template v-if="!withTime && !readonly" #append>

@@ -6,8 +6,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAudit, useAuditActions } from 'src/application/dynamic/queries/ops-queries';
 import { useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import DateSelect from 'src/components/framework/DateSelect.vue';
+import { businessOffset } from 'src/domain/dynamic/business-time';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
-import { formatTime, labelOr, localDayEndUtc, localDayStartUtc } from 'src/domain/ops/ops-format';
+import { businessDayEndUtc, businessDayStartUtc, formatTime, labelOr } from 'src/domain/ops/ops-format';
 import type { AuditFilter, AuditSummary } from 'src/domain/ops/ops-types';
 import AuditDetailPanel from 'src/presentation/ops/AuditDetailPanel.vue';
 import { isForbidden, type ApiError } from 'src/services/api/http';
@@ -15,6 +16,8 @@ import { isForbidden, type ApiError } from 'src/services/api/http';
 // 稽核頁（維運設計 §17.3）：篩選列＋清單（Id 遞減 keyset，捲到底自動載入下一頁）；點開是詳細。
 // 桌機詳細與清單並排，其他寬度用對話框（手機全螢幕）。`?id=` 直接開詳細（通知與事件樣本的連結），`?targetKind=&targetId=` 帶入目標篩選。
 const { t, te } = useI18n();
+// 日期篩選依營運時區切日（政策 locale.timeZone）
+const zoneHint = t('audit.filters.zoneHint', { offset: `UTC${businessOffset()}` });
 const $q = useQuasar();
 const route = useRoute();
 const router = useRouter();
@@ -43,8 +46,8 @@ const filter = computed<AuditFilter>(() => {
   const f = form.value;
   const a = f.action;
   return {
-    ...(f.from ? { fromUtc: localDayStartUtc(f.from) } : {}),
-    ...(f.to ? { toUtc: localDayEndUtc(f.to) } : {}),
+    ...(f.from ? { fromUtc: businessDayStartUtc(f.from) } : {}),
+    ...(f.to ? { toUtc: businessDayEndUtc(f.to) } : {}),
     ...(f.actor ? { actorUserId: f.actor } : {}),
     ...(a?.startsWith('group:') ? { actionGroup: a.slice(6) } : a ? { action: a } : {}),
     ...(f.channel ? { channel: f.channel } : {}),
@@ -96,8 +99,8 @@ function onLoad(_index: number, done: (stop?: boolean) => void) {
       <div class="text-h6 q-mb-sm">{{ t('audit.title') }}</div>
       <q-expansion-item v-model="showFilters" dense icon="filter_list" :label="t('ops.filters')" class="q-mb-sm" data-testid="audit-filters">
         <div class="row q-col-gutter-sm q-pa-sm">
-          <div class="col-12 col-sm-6 col-md-4 col-xl-2"><DateSelect v-model="form.from" :label="t('audit.from')" data-testid="audit-from" /></div>
-          <div class="col-12 col-sm-6 col-md-4 col-xl-2"><DateSelect v-model="form.to" :label="t('audit.to')" data-testid="audit-to" /></div>
+          <div class="col-12 col-sm-6 col-md-4 col-xl-2"><DateSelect v-model="form.from" :label="t('audit.from')" :hint="zoneHint" data-testid="audit-from" /></div>
+          <div class="col-12 col-sm-6 col-md-4 col-xl-2"><DateSelect v-model="form.to" :label="t('audit.to')" :hint="zoneHint" data-testid="audit-to" /></div>
           <div class="col-12 col-sm-6 col-md-4 col-xl-2">
             <q-select v-model="form.actor" :options="actorOptions" clearable emit-value map-options dense outlined :label="t('audit.cols.actor')" data-testid="audit-actor" />
           </div>
