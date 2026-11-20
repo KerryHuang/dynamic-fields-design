@@ -131,10 +131,10 @@ public class NotificationUpkeepJobTests : IDisposable
         var runner = await Ready();
         var client = _app.AsUser("sales01");
 
-        await Within(Task.WhenAll(
-            runner.TickAsync(CancellationToken.None),
-            client.GetAsync("/api/v3/dynamic/notifications"),
-            client.GetAsync("/api/v3/dynamic/notifications")));
+        await StallDiagnostics.WithinAsync(_app,
+            ("job", runner.TickAsync(CancellationToken.None)),
+            ("get1", client.GetAsync("/api/v3/dynamic/notifications")),
+            ("get2", client.GetAsync("/api/v3/dynamic/notifications")));
 
         (await Notifications("sales01", NotificationKinds.TaskDueSoon)).Should().HaveCount(1);
         (await Notifications("sales01", NotificationKinds.TaskOverdue)).Should().HaveCount(1);
