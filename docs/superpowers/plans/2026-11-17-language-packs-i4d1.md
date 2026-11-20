@@ -6,7 +6,7 @@
 
 **Architecture:** 驗證規則是 Domain 的純函式（`Domain/Localization/`：介面文字語法、後端範本語法、控制字元、上層語系圖），前端另有一份介面文字語法檢查，兩邊跑 `shared/i18n-message-cases.json`。Application 的 `LocaleService/Packs/` 分三層：`LocalePackParser`（位元組 → 模型，整包層級的錯誤）、`LocalePackAnalyzer`（逐句驗證、和目前覆寫層比對、完整度、是／否撞字，產生報告與「套用後的覆寫層」）、四支 handler（預覽、套用、回到上一版／移除覆寫、移除語系）加一支清單查詢。預覽結果存資料表 `Dynamic_LocalePackPreview`（多台部署可跨台），套用時比對預覽當下記下的語系版本（該語系列的內容指紋＋目前版的 Id），不一致回 409；套用時另在交易內用最新資料重驗上層語系圖、A39 與是／否撞字（判斷 16）。覆寫層存 `Dynamic_LocalePack`（每語系最多兩列：目前版、上一版）；**每一次覆寫層寫入（匯入、回到上一版、移除覆寫）都新增一列**，`Id` 自增不重用，所以「目前版 Id」就是持久化的版本 token（判斷 7）。兩張表同一個 migration `LocalePacks`。`LocaleRegistry` 的快照多帶每個語系的覆寫層（介面、後端兩份字典），版本戳記加上 `Dynamic_LocalePack` 的筆數與最大 `Id`；`Ui()` 與 `MessageCatalog` 在每個語系的內建層前面先查覆寫層。套用、回到上一版、移除覆寫、移除語系在交易提交後 `registry.Invalidate()`。
 
-**修訂：** 第二輪（2026-11-21，跨家族審查必修 11 條、建議 5 條全收）：預覽與套用明列存檔、覆寫層每次寫入新增一列並以 `Id` 當版本 token（取代對調與修改時間戳記）、套用與回到上一版在交易內用最新資料重驗上層語系圖、A39 與是／否撞字（新增 Q11、Q12）、Parser 自己走 JSON 保留逐鍵問題、訊息前移到 Task 5、明示 null 與 DELETE 204、測試預期值修正。
+**修訂：** 第二輪（2026-11-21，跨家族審查必修 11 條、建議 5 條全收）：預覽與套用明列存檔、覆寫層每次寫入新增一列並以 `Id` 當版本 token（取代對調與修改時間戳記）、套用與回到上一版在交易內用最新資料重驗上層語系圖、A39 與是／否撞字（新增 Q11、Q12）、Parser 自己走 JSON 保留逐鍵問題、訊息前移到 Task 5、明示 null 與 DELETE 204、測試預期值修正。第三輪（同日，短核對新必修 3、建議 2）：`LocaleWorldReader` 的三個語系政策改用交易內清單正規化（不經 registry 快照）、計畫保存是／否兩鍵篩選前的候選值供重驗、更正「移除覆寫不會新增撞字」並補測試、5a／5b 檔案歸屬、只改語系欄位的匯入不換版本 token 與其限制措辭。Task 1–4 的介面沒有改。
 
 **Tech Stack:** .NET 8、MediatR、FluentValidation、EF Core（SQLite 研發、PostgreSQL 正式）、xUnit＋FluentAssertions；Vue 3＋Quasar、TanStack Query、vitest。不新增套件（後端 JSON 用 `System.Text.Json`；前端語法檢查用已直接相依的 `@intlify/message-compiler`）。
 
@@ -31,8 +31,8 @@
 | 批 | 內容 | Task | 手寫行數（估） | migration |
 |---|---|---|---|---|
 | i4d1-1 | 驗證規則與共用案例（後端）、資料表與 migration、語系列寫入方法、覆寫層接進快照與後端訊息、政策 A38／A39 | 1–4 | ≈ 1730（測試約 55%） | `LocalePacks`（Task 2，唯一一個） |
-| i4d1-2 | 後端訊息與基準檔、語系包解析與分析（含 #68、交易內重驗）、預覽 API（暫存、Demo 不暫存、上限 5 筆） | 5–6 | ≈ 1550（測試約 55%） | 無 |
-| i4d1-3 | 套用 API（409、交易內重驗、合併、安裝、稽核）、回到上一版／移除覆寫／移除語系、清單 API | 7–8 | ≈ 1430（測試約 60%） | 無 |
+| i4d1-2 | 後端訊息與基準檔、語系包解析與分析（含 #68、交易內重驗）、預覽 API（暫存、Demo 不暫存、上限 5 筆） | 5–6 | ≈ 1610（測試約 55%） | 無 |
+| i4d1-3 | 套用 API（409、交易內重驗、合併、安裝、稽核）、回到上一版／移除覆寫／移除語系、清單 API | 7–8 | ≈ 1495（測試約 60%） | 無 |
 | i4d1-4 | 前端語法檢查與共用案例、最小語系頁、文件與手冊、gate、走查 | 9–11 | ≈ 1300（測試約 40%） | 無 |
 
 同一分支 `i4d1`（worktree `../formwright-i4d1`），每個 Task 各自 commit。前三批收尾各跑一次窄範圍 PostgreSQL 雙跑（不跑 gate）；i4d1-4 收尾才跑 gate、合併。
@@ -120,14 +120,14 @@
 16. 〔技術〕**套用的流程**（設計 §6.3 第 3 步、T16；Task 7）：交易內 →
     1. 取預覽列（不存在、過期（`ExpiresUtc <= TimeProvider.GetUtcNow()`）、`UserId` 不是自己 → 404）→ `fileHash` 比對（不同 → 409）。
     2. 重讀該語系列（`ILocaleRepository.FindAsync`）算內容指紋、重讀目前版 `Id`，和預覽列的 `LocaleFingerprint`、`CurrentPackId` 不同 → 409。
-    3. **用交易內最新資料重驗**（必修 5、6）：`LocaleWorldReader.ReadAsync`（判斷 25）重讀**完整**已安裝清單、所有目前版覆寫層與預設語系。(a) 計畫有上層語系變更（新安裝，或既有匯入語系改 `fallback`）時，對「套用後的清單」跑 `LocaleGraphRules.Check`（每個語系的鏈都驗，兩個語系各自改上層合起來成環也擋得到）→ 失敗 400；(b) 新安裝時以這份清單的筆數比 A39（交易內 `IPolicyReader` 讀生效值）→ 失敗 400；(c) 以套用後的狀態重跑判斷 6 的撞字模擬，被拒收的鍵集合與預覽列記下的不同 → 409 `localePackStale`（Q11：要求重新預覽，不在套用時默默多拒一句）。
+    3. **用交易內最新資料重驗**（必修 5、6）：`LocaleWorldReader.ReadAsync`（判斷 25）重讀**完整**已安裝清單、所有目前版覆寫層與預設語系。(a) 計畫有上層語系變更（新安裝，或既有匯入語系改 `fallback`）時，對「套用後的清單」跑 `LocaleGraphRules.Check`（每個語系的鏈都驗，兩個語系各自改上層合起來成環也擋得到）→ 失敗 400；(b) 新安裝時以這份清單的筆數比 A39（交易內 `IPolicyReader` 讀生效值）→ 失敗 400；(c) 從計畫的 `BooleanCandidates`（篩選前的 `report.Yes`／`report.No` 意圖）以套用後的狀態重跑判斷 6 的撞字篩選，得到的拒收鍵集合與計畫的 `BooleanRejected` 不同 → 409 `localePackStale`（Q11：要求重新預覽，不在套用時默默多拒一句）。
     4. 寫語系列（新安裝：`ILocaleRepository.Add`，`Origin=installed`、`CreatedUtc=ModifiedUtc=now`；既有的匯入語系有 `locale` 欄位變動才更新並改 `ModifiedUtc`；內建語系不動，Q3）。
-    5. 組新版本：目前版的覆寫層＋計畫裡的句子（U5 逐句合併；「與內建相同」的句子從覆寫層拿掉，Q6）→ `AddVersion`（計畫是 `NoChanges` 就跳過這步）→ `RemovePreview` → **`IUnitOfWork.CommitAsync`**（`TransactionBehavior` 只提交交易、不存檔；業務資料在這裡寫進交易，之後 `AuditBehavior` 寫稽核列再存一次）→ 稽核補充 → `afterCommit.Add("locale-registry", registry.Invalidate)`。
+    5. 組新版本：目前版的覆寫層＋計畫裡的句子（U5 逐句合併；「與內建相同」的句子從覆寫層拿掉，Q6）→ `AddVersion`（**覆寫層沒有任何變動就跳過**，包含只改了 `locale` 欄位的套用：不為了換 token 多加一版，否則會把上一版擠掉；見已知限制）→ `RemovePreview` → **`IUnitOfWork.CommitAsync`**（`TransactionBehavior` 只提交交易、不存檔；業務資料在這裡寫進交易，之後 `AuditBehavior` 寫稽核列再存一次）→ 稽核補充 → `afterCommit.Add("locale-registry", registry.Invalidate)`。
     不重新驗句子：計畫是預覽時驗過、存進預覽列的，第 2 步保證該語系基底沒變；第 3 步只重驗會受**別的語系**影響的三件事。`now` 一律取 `TimeProvider.GetUtcNow().UtcDateTime`（測試用 `app.Time.Advance` 控制）。
 17. 〔技術〕**稽核**（設計 §11）：`AuditActions` 加分組 `locale`（四語標籤 `audit.groups.locale`）與動作 `locale.install`、`locale.pack.import`、`locale.pack.rollback`、`locale.pack.clear`、`locale.remove`（都是 `W`：`backend.md` 的 HighRisk 只留權限類）；`AuditTargets.Locale = "locale"`。套用請求宣告 `locale.pack.import`，handler 在**新安裝**時呼叫新的 `AuditContext.Action("locale.install")` 換掉動作代碼（只在最外層生效，`AuditBehavior` 寫列時用 `context.ActionCode ?? action.Code`；換成沒登記的代碼丟 `InvalidOperationException`，`AuditCoverageTests` 加一案）。摘要：語系、檔名、檔案雜湊、各段新增／變更／略過／拒收筆數、`designData` 筆數（本段一律 0 套用）、是否新安裝；不記句子內容。目標名稱用語系的 `NativeName`（自稱，不隨語系翻，符合「寫進資料的系統文字用預設語系」的精神）。預覽不稽核：`AuditCoverageTests.Exempt` 加 `PreviewLocalePackRequest`，理由「只寫 10 分鐘的預覽暫存，不改任何設定；套用時才稽核」。
 18. 〔技術〕**新的後端訊息進 `MessageText`（四語）**，集中在 `LocaleService/LocalePackMessages.cs` 組 `MessageRef`（`backend.md`：使用者看得到的訊息集中在同功能的 `*Messages.cs`）。新鍵另建範本基準檔 `ServerTextBaseline/locale-pack.json`（Task 5 Step 1 由新表產生後凍結；Parser 在 Task 5 就要回這些 `MessageRef`，訊息、四語表與基準檔一起放 Task 5，Task 5 才能單獨編譯、驗收、commit），`BuiltinServerTextTests.BaselineFiles` 加這個檔名；**既有三個基準檔不准改**（S5 驗）。新鍵也會成為語系包 `server` 段的基準鍵（語系包本身的錯誤訊息也翻得到）。
-19. 〔技術〕**移除語系**（設計 §4.5；Task 8）：只限 `Origin=installed`（內建回 409「內建語系不能移除，只能停用」）；讀三個語系政策的生效值（交易內 `IPolicyReader`），在啟用、預設或必填裡就 409「請先在政策設定停用這個語系」；有其他已安裝語系的 `FallbackCode` 指向它就 409「請先改掉{0}的上層語系」（`{0}` 列自稱，多個用「、」接）——**被引用檢查讀交易內的 `ILocaleRepository.ListAsync`**，不用 `LocaleRegistry` 的快照（快照可能還沒看到剛裝的下游語系）。通過就 `ILocaleRepository.Remove` 語系列、`DeleteForLocaleAsync` 刪版本與預覽、`CommitAsync`，設計資料裡的文字不動。告警通道的信件語系剛好是它時不擋（Q9）。移除不會造成新的是／否撞字（被移除的語系不在任何語系的鏈上：不是別人的上層、也不是預設語系），不必重跑模擬。
-20. 〔技術〕**回到上一版、移除覆寫**（設計 §6.4、§6.5；Task 8）：回到上一版＝`AddVersion(next: 上一版內容的複本, current, previous)`：新列是上一版的 `UiJson`、`ServerJson`、`BaseHashesJson`、檔案資訊與報告摘要的複本（`ImportedUserId`／`ImportedUtc` 照抄原本的匯入資訊，`ModifiedUtc=now`），原本的目前版成為上一版、舊的上一版列刪掉；使用者看到的仍是「兩版之間切換、可以再切回來」（設計 §6.4），但每次切換的目前版 `Id` 都不同（必修 7）。沒有上一版 409。移除覆寫＝`AddVersion` 一個空的新版本（Q5），目前版本來就是空的（或沒有任何版本）409「這個語系沒有覆寫可以移除」。兩者都不動語系列，都在交易內用 `LocaleWorld` 重跑判斷 6 的撞字模擬（`LocalePackAnalyzer.BooleanCollisions`）：切換後有語系的「是」「否」撞在一起、而切換前沒有 → 409 `localeBooleanCollision`，訊息帶撞到的字與另一個語系的自稱（Q12）。實際會撞的只有回到上一版（還原的是任意舊字）；移除覆寫後該語系改用鏈上其他已安裝語系的字，那些字本來就在集合裡，只會讓集合變小，但 handler 照樣呼叫同一個檢查，規則將來改了不會漏。
+19. 〔技術〕**移除語系**（設計 §4.5；Task 8）：只限 `Origin=installed`（內建回 409「內建語系不能移除，只能停用」）；讀三個語系政策的生效值（取自 `LocaleWorld` 的 `DefaultLocale`、`Enabled`、`Required`，判斷 25；**不用 scope 裡的 `IPolicyReader`**，它經 `PolicyOptionSource` 以 registry 快照正規化，另一台剛安裝並啟用的語系會被當成沒安裝而濾掉，守衛就漏擋），在啟用、預設或必填裡就 409「請先在政策設定停用這個語系」；有其他已安裝語系的 `FallbackCode` 指向它就 409「請先改掉{0}的上層語系」（`{0}` 列自稱，多個用「、」接）——**被引用檢查讀交易內的 `ILocaleRepository.ListAsync`**，不用 `LocaleRegistry` 的快照（快照可能還沒看到剛裝的下游語系）。通過就 `ILocaleRepository.Remove` 語系列、`DeleteForLocaleAsync` 刪版本與預覽、`CommitAsync`，設計資料裡的文字不動。告警通道的信件語系剛好是它時不擋（Q9）。移除不會造成新的是／否撞字（被移除的語系不在任何語系的鏈上：不是別人的上層、也不是預設語系），不必重跑模擬。
+20. 〔技術〕**回到上一版、移除覆寫**（設計 §6.4、§6.5；Task 8）：回到上一版＝`AddVersion(next: 上一版內容的複本, current, previous)`：新列是上一版的 `UiJson`、`ServerJson`、`BaseHashesJson`、檔案資訊與報告摘要的複本（`ImportedUserId`／`ImportedUtc` 照抄原本的匯入資訊，`ModifiedUtc=now`），原本的目前版成為上一版、舊的上一版列刪掉；使用者看到的仍是「兩版之間切換、可以再切回來」（設計 §6.4），但每次切換的目前版 `Id` 都不同（必修 7）。沒有上一版 409。移除覆寫＝`AddVersion` 一個空的新版本（Q5），目前版本來就是空的（或沒有任何版本）409「這個語系沒有覆寫可以移除」。兩者都不動語系列，都在交易內用 `LocaleWorld` 重跑判斷 6 的撞字模擬（`LocalePackAnalyzer.BooleanCollisions`）：切換後有語系的「是」「否」撞在一起、而切換前沒有 → 409 `localeBooleanCollision`，訊息帶撞到的字與另一個語系的自稱（Q12）。回到上一版與移除覆寫**都可能**造成新撞字：回到上一版還原的是任意舊字；移除覆寫會讓該語系**被覆寫遮住的內建層**重新露出來（例：泰文內建「否」是「ไม่ใช่」，覆寫成「ไม่」之後匯入日文「是＝ไม่ใช่」不撞；清空泰文覆寫，「ไม่ใช่」回來就和日文的「是」撞），所以兩者都要模擬，都有自己的 409 測試（Task 8）。
 21. 〔技術〕**測試造資料**：`WebAPITests/LocaleTestKit.cs` 拆出共用的 `WaitForSnapshotAsync(TestApp app, Func<LocaleTexts, bool> done)`（照既有 `RefreshAsync` 的重試寫法：`Invalidate` → `EnsureFreshAsync` → 判斷 → 20 ms 重試、10 秒逾時；`EnsureFreshAsync` 遇到別人正在換新會直接返回，設計如此；不等的話下一個請求可能拿到舊快照，i4a 的 CI 偶發就是這個），既有 `RefreshAsync` 改成呼叫它（行為不變）。寫入 helper 都經它、依**預期的結果**判斷，不依「Id 有沒有變」：
     - `ApplyPackAsync(app, json, fileName = "t.langpack.json") → ApplyLocalePackResponse`：預覽＋套用，等到 `Texts().Overlay(code)?.PackId == response.packId` 且清單含 `code`；`noChanges` 時同一個條件即「原版本仍在」。
     - `RollbackAsync(app, code)`、`ClearAsync(app, code)`：呼叫 API，等到 `Overlay(code)?.PackId` 等於回應的 `packId`。
@@ -136,7 +136,7 @@
 22. 〔技術〕**前端語法檢查**（設計 §13.2、T15；Task 9）：`frontend/src/i18n/message-check.ts` 的 `checkUiMessage(text, allowed): string | null` 實作判斷 3 的同一套規則（含控制字元與長度），再加 `baseCompile` 不得報錯。`shared/i18n-message-cases.json` 的 `ui` 段前後端都跑；`server`、`boolean` 段只有後端跑（前端沒有後端範本與撞字的檢查）。`locales.vitest.spec.ts` 加「四份內建檔每句都通過 `checkUiMessage`（allowed＝該鍵四語名稱聯集）」。執行期的 `prepareMessages` **不改**（仍只做 `baseCompile` 縱深防禦；伺服器回的文字已在匯入時驗過，前端再多一層白名單會讓兩邊規則漂移時整句消失而沒人發現）。
 23. 〔技術〕**前端最小語系頁**（Task 10）：路由 `/system/locales`，`systemLinks` 只對 `isSystemAdmin` 加 `{ to: '/system/locales', label: 'menu.locales', icon: 'translate', testid: 'locales-menu' }`（放在「政策設定」之後）。頁面 `pages/system/LocalesPage.vue`＋`presentation/locale/LocalePackImportDialog.vue`＋`presentation/locale/LocalePackReport.vue`；查詢 `application/dynamic/queries/locale-packs-queries.ts`；API 加在 `services/api/dynamic-api.ts`。清單用 `q-list`（390 寬也是同一個列表，不用 `q-table`），每列顯示自稱、代碼、來源（內建／匯入）、啟用／預設標籤、覆寫句數（介面、後端訊息）、目前版本與匯入時間（營運時區加 `+08:00` 標示，`frontend.md`「時間顯示」）。上傳用隱藏的 `<input type="file" accept=".json,application/json">`（同 `AppsPage.vue`）讀成 `ArrayBuffer` 原樣送出。**套用、回到上一版、移除覆寫、移除語系**成功後都 invalidate 三個 query key：語系清單 `['locale-admin']`（新的）、生效政策 `['effective-policies']`（前綴比對，涵蓋 `policies-queries.ts` 的 `['effective-policies', moduleKey]` 與 `use-business-time-watch.ts` 的 `['effective-policies', '']`）、登入選項 `['auth-options']`（`auth-queries.ts`）；i4b 的 `refreshLoadedMessages` 在生效政策回來後就換上新文字，不重新整理頁面、不等下一次 60 秒輪詢。「現在啟用」走既有的政策更新 mutation（`policies-queries.ts`，它自己會失效 `effective-policies`），成功後另外失效 `['locale-admin']`。
 24. 〔技術〕**`pack.builtFor` 本段只顯示、不比對**（設計 §5.2「`builtFor` 與目前版本不同：只提示」）：平台目前沒有可比的版本號（main 上沒有任何版本字串可取），硬湊一個會每次都誤報。i4d2 的匯出樣板開始寫 `builtFor` 時，再一起定平台版本的來源與提示。**這是對設計 §5.2 的延期**，列在下方「與設計的差異」；Task 11 回填設計時寫進 §15 已知限制（設計文件本計畫不改，交付時才回填）。
-25. 〔技術〕**分析與重驗的輸入 `LocaleWorld`**（必修 5、6）：`public sealed record LocaleWorld(IReadOnlyList<InstalledLocaleInfo> Installed, IReadOnlyDictionary<string, LocaleOverlay> Overlays, string DefaultLocale)`，由 `Application/Dynamic/LocaleService/Packs/LocaleWorldReader.cs`（scoped，注入 `ILocaleRepository`、`ILocalePackRepository`、`IPolicyReader`）的 `ReadAsync(ct)` 在**交易內**讀：清單用 `LocaleRegistry.InfosFrom(await locales.ListAsync(ct))`（判斷 10，規則與快照相同）、覆寫層用 `ListCurrentAsync` 解析（基準鍵以外的丟掉，同快照）、預設語系用 `IPolicyReader` 讀 `locale.default` 生效值。預覽、套用、回到上一版、移除覆寫都用它，**不讀 `LocaleRegistry` 的快照**。`LocalePackAnalyzer` 因此是純函式（`static`，不注入任何服務），撞字模擬拆成 `LocalePackAnalyzer.BooleanCollisions(LocaleWorld after, string? packCode)`，給 Analyzer 與 rollback／clear handler 共用。**DI**：`Application/DependencyInjection.cs` 加 `services.AddScoped<Dynamic.LocaleService.Packs.LocaleWorldReader>()`（MediatR 只自動註冊 handler，一般服務要自己登記）；`LocalePackSettings` 在 `WebAPI/Program.cs` 註冊 singleton（判斷 15）。
+25. 〔技術〕**分析與重驗的輸入 `LocaleWorld`**（必修 5、6）：`public sealed record LocaleWorld(IReadOnlyList<InstalledLocaleInfo> Installed, IReadOnlyDictionary<string, LocaleOverlay> Overlays, string DefaultLocale, IReadOnlyList<string> Enabled, IReadOnlyList<string> Required)`，由 `Application/Dynamic/LocaleService/Packs/LocaleWorldReader.cs`（scoped，注入 `ILocaleRepository`、`ILocalePackRepository`、`ISystemSettingRepository`、`IModulePolicyRepository`、`PolicyEnvironmentDefaults`、`ILogger<PolicyReader>`）的 `ReadAsync(ct)` 在**交易內**讀：清單用 `LocaleRegistry.InfosFrom(await locales.ListAsync(ct))`（判斷 10，規則與快照相同）、覆寫層用 `ListCurrentAsync` 解析（基準鍵以外的丟掉，同快照）。**三個語系政策（`locale.default`、`locale.enabled`、`locale.required`）用交易內的清單正規化**（第三輪必修 1）：scope 裡的 `IPolicyReader` 經 `PolicyOptionSource(IInstalledLocales)` 用 registry 快照的 `Codes` 濾值，快照落後時剛安裝的語系會被濾掉；所以 `ReadAsync` 每次呼叫都**現建**一個 `new PolicyReader(settings, overrides, env, new PolicyOptionSource(new FixedInstalledLocales(installed.Select(i => i.Code).ToArray())), logger)`（`FixedInstalledLocales` 是 `Packs/` 裡一個 `internal sealed record`，實作既有的 `IInstalledLocales`），讀值與濾值規則和正式的 `PolicyReader` 完全相同、只換選項來源，且沒有任何跨呼叫的快取（不沿用 scope 的 `IPolicyReader` 在取得寫入鎖前可能已快取的 `_system`）。`ReadAsync` 只在 handler 內（`TransactionBehavior` 開交易之後）呼叫，不快取結果。`PolicyReader`、`PolicyOptionSource`、`IInstalledLocales` 本身都不改。A38、A39 不是語系選項，照舊用 scope 的 `IPolicyReader`。預覽、套用、回到上一版、移除覆寫都用它，**不讀 `LocaleRegistry` 的快照**。`LocalePackAnalyzer` 因此是純函式（`static`，不注入任何服務），撞字模擬拆成 `LocalePackAnalyzer.BooleanCollisions(LocaleWorld after, string? packCode)`，給 Analyzer 與 rollback／clear handler 共用。**DI**：`Application/DependencyInjection.cs` 加 `services.AddScoped<Dynamic.LocaleService.Packs.LocaleWorldReader>()`（MediatR 只自動註冊 handler，一般服務要自己登記）；`LocalePackSettings` 在 `WebAPI/Program.cs` 註冊 singleton（判斷 15）。
 
 ---
 
@@ -198,11 +198,12 @@
   - 推薦：**甲的套用回 409「語系在預覽之後被變更了，請重新上傳預覽」**，畫面上按「重新預覽」，新的報告會把日文「是」那句列為拒收（與韓文「否」相同）；甲確認後再套用。理由：報告是管理員同意的內容，套用時默默多拒一句等於套用了沒看過的報告；和「該語系在預覽後被改」同一個 409 與同一個畫面流程，不必多教一種情況。
   - 另一個選項：套用時照樣寫入，但自動拒收新撞到的那句，在成功訊息裡附註「多拒收了 1 句」。代價是報告和實際結果不一致，管理員容易漏看附註。
   - 選錯代價：選「409」，同時匯入的兩位管理員之一要多按一次「重新預覽」；選「自動拒收」如上。注意乙那份韓文包本身會先寫入成功（它預覽時沒有撞字），被擋的是後套用的那份——誰先套用誰贏，與既有的 409 口徑相同。
-- **Q12 「回到上一版」會讓某個語系的「是」「否」撞字時，要不要擋？**（第二輪審查新增；「移除覆寫」理論上不會造成新撞字，見判斷 20，但走同一個檢查與同一個答案）
+- **Q12 「回到上一版」或「移除覆寫」會讓某個語系的「是」「否」撞字時，要不要擋？**（第二輪審查新增；第三輪更正：移除覆寫也會，因為被覆寫遮住的內建字會重新露出來，見判斷 20）
   - 例：泰文的目前版把「否」改成「ไม่ใช่」，上一版的「否」是「ไม่」；之後匯入的日文包，翻譯者貼錯欄，把「是」填成「ไม่」（當時泰文的「否」是「ไม่ใช่」，沒有撞字，所以沒被拒收）。這時按泰文的「回到上一版」，泰文的「否」會變回「ไม่」、和日文的「是」相同，匯入時這個字無法判斷是或否。
   - 推薦：**擋下，409「回到上一版後，ไทย 的「否」會和日本語的「是」相同（ไม่），請先修正其中一個語系」**；確認框之後才檢查，檢查不過就不動任何資料。理由：回到上一版與移除覆寫是「整版切換」，沒有逐句拒收的報告可以給管理員看；默默改掉其中一句等於產生一個沒人匯入過的版本。
   - 另一個選項：照樣切換，自動拿掉撞字的那句（讓它走退回鏈），成功訊息附註。代價是「上一版」不再是原本的那一版，再切回來也回不到原樣。
-  - 選錯代價：選「擋下」，管理員要先去改另一個語系（或重新匯入一份修正過的包）才能回到上一版；選「自動拿掉」如上。實際上要同時有兩個語系覆寫「是／否」才會碰到，機率低。
+  - 移除覆寫的例子：泰文內建「否」是「ไม่ใช่」，管理員覆寫成「ไม่」；之後日文包的「是」寫成「ไม่ใช่」（當時不撞）。按泰文的「移除覆寫」，內建的「ไม่ใช่」回來、和日文的「是」相同 → 同樣擋下。
+  - 選錯代價：選「擋下」，管理員要先去改另一個語系（或重新匯入一份修正過的包）才能回到上一版或移除覆寫；選「自動拿掉」如上。實際上要有覆寫過「是／否」的語系才會碰到，機率低。
 
 ### 與設計的差異（設計文件本計畫不改；Task 11 交付時回填）
 
@@ -451,10 +452,10 @@ public LocaleTexts Texts();
 ### Task 5: 語系包解析與分析（含票 #68）
 
 **Files:**
-- Create: `Application/Dynamic/LocaleService/Packs/LocalePackModels.cs`（`ParsedLocalePack`、`LocalePackReport`（判斷 13 的形狀，`previewId`、`expiresUtc` 標 `JsonIgnoreCondition.Never`）、`LocalePackPlan`（套用要寫的：語系欄位變動、`ui`／`server` 兩份「這次要設的鍵→值」與「這次要拿掉的鍵」（Q6 改回內建原文的）、`NoChanges`、`BooleanRejected`（判斷 6 拒收的鍵集合，套用時重驗比對用，Q11））、`SectionReport`、`RejectedItem`、`LocaleWorld`（判斷 25））
+- Create: `Application/Dynamic/LocaleService/Packs/LocalePackModels.cs`（`ParsedLocalePack`、`LocalePackReport`（判斷 13 的形狀，`previewId`、`expiresUtc` 標 `JsonIgnoreCondition.Never`）、`LocalePackPlan`（套用要寫的：語系欄位變動、`ui`／`server` 兩份「這次要設的鍵→值」與「這次要拿掉的鍵」（Q6 改回內建原文的）、`NoChanges`、`BooleanRejected`（判斷 6 拒收的鍵集合）與 `BooleanCandidates`（第三輪必修 2：`report.Yes`、`report.No` 兩鍵在**撞字篩選之前**的意圖，每鍵是「設成某值」「拿掉（Q6 改回內建原文）」或「沒提到」三者之一；只放這兩鍵，其他被拒收的句子不存原值）——套用時重驗要從候選值重跑篩選，拿已篩過的 Plan 重跑會把「原本就拒收、world 沒變」誤判成不同）、`SectionReport`、`RejectedItem`、`LocaleWorld`、`LocalePackRecheck`（判斷 25））。**歸屬**：5a 建這個檔，只放 Parser 用的 `ParsedLocalePack`、`RejectedItem`；5b 在同一檔加其餘型別。
 - Create: `Application/Dynamic/LocaleService/Packs/LocalePackParser.cs`（判斷 1、2、5；Q2、Q3 的整包層級處理；自己走 JSON、不用 `UiTextMerge.Flatten`）
 - Create: `Application/Dynamic/LocaleService/Packs/LocalePackAnalyzer.cs`（`static`；逐句驗證、比對、完整度、撞字（判斷 6）、警告）
-- Create: `Application/Dynamic/LocaleService/Packs/LocaleWorldReader.cs`（判斷 25）；Modify: `Application/DependencyInjection.cs`（`AddScoped<LocaleWorldReader>()`）
+- Create: `Application/Dynamic/LocaleService/Packs/LocaleWorldReader.cs`（含 `FixedInstalledLocales`，判斷 25）；Modify: `Application/DependencyInjection.cs`（`AddScoped<LocaleWorldReader>()`）——**都屬 5b**
 - Create: `Application/Dynamic/LocaleService/LocalePackMessages.cs`（判斷 18；Parser 與 Analyzer 回的 `MessageRef` 都從這裡組，所以放在本 Task，不等 Task 6）
 - Modify: `Application/Common/MessageText.cs`（下列新鍵與四語；類別註解不動）
 - Create: `ApplicationTests/Common/ServerTextBaseline/locale-pack.json`（Step 1 用新表產生後凍結）
@@ -471,11 +472,13 @@ public static class LocalePackParser
     public static (ParsedLocalePack? Pack, MessageRef? Error) Parse(ReadOnlyMemory<byte> bytes);
 }
 
-public sealed record LocaleWorld(IReadOnlyList<InstalledLocaleInfo> Installed, IReadOnlyDictionary<string, LocaleOverlay> Overlays, string DefaultLocale);
+public sealed record LocaleWorld(IReadOnlyList<InstalledLocaleInfo> Installed, IReadOnlyDictionary<string, LocaleOverlay> Overlays,
+    string DefaultLocale, IReadOnlyList<string> Enabled, IReadOnlyList<string> Required);
 
-public sealed class LocaleWorldReader(ILocaleRepository locales, ILocalePackRepository packs, IPolicyReader policies)
+public sealed class LocaleWorldReader(ILocaleRepository locales, ILocalePackRepository packs, ISystemSettingRepository settings,
+    IModulePolicyRepository overrides, PolicyEnvironmentDefaults env, ILogger<PolicyReader> logger)
 {
-    /// <summary>交易內讀最新的完整清單、所有目前版覆寫層與預設語系（判斷 25）。</summary>
+    /// <summary>交易內讀最新的完整清單、所有目前版覆寫層，三個語系政策用這份清單正規化（每次現建 PolicyReader，判斷 25）。</summary>
     public Task<LocaleWorld> ReadAsync(CancellationToken ct);
 }
 
@@ -484,7 +487,7 @@ public static class LocalePackAnalyzer
     /// <summary>world＝交易內讀的最新狀態（含該語系目前版的覆寫層）；maxInstalled＝A39 生效值。不碰資料庫、不讀快照。</summary>
     public static LocalePackAnalysis Analyze(ParsedLocalePack pack, LocaleWorld world, int maxInstalled);
 
-    /// <summary>套用時重驗（判斷 16 第 3 步）：上層語系圖（每個語系）、A39（新安裝）、撞字拒收集合是否與預覽相同。</summary>
+    /// <summary>套用時重驗（判斷 16 第 3 步）：上層語系圖（每個語系）、A39（新安裝）；撞字從 plan.BooleanCandidates 重跑篩選，得到的拒收集合是否等於 plan.BooleanRejected。</summary>
     public static LocalePackRecheck Recheck(LocalePackPlan plan, LocaleWorld world, int maxInstalled);
 
     /// <summary>以「套用後」的 world 模擬是／否撞字（判斷 6）；packCode 非 null 時區分是不是這份包造成的。rollback／clear 也用它。</summary>
@@ -509,6 +512,9 @@ public sealed record LocalePackRecheck(MessageRef? Invalid, bool BooleanChanged)
     - `SharedBooleanCases`：跑 `shared/i18n-message-cases.json` 的 `boolean` 段（照案例的 `installed` 建 `LocaleWorld` 與覆寫層），被拒收的鍵與警告數照 `expectedRejected`、`expectedWarnings`（票 #68）。案例檔另加一案「拒收後退回的字又撞到第三個語系」：`ja` 的 No 撞 `th` 的 Yes 被拒，退回 `en-US`；`en-US` 的 No 早就被覆寫成和 `vi` 的 Yes 相同 → `report.No` 拒收一次、`report.Yes` 不受影響、迴圈在第二輪停住；`ja` 退回後繼承到的那組撞字是 `en-US` 與 `vi` 原本就有的，只列警告（`expectedWarnings` 1），不再拒收這份包的其他句子（重算到穩定，判斷 6）。
     - `Recheck_GraphAndCount`（必修 5）：計畫把既有 `ja` 的上層改成 `ko`，Recheck 的 world 裡 `ko` 已不在 → `Invalid` 是 `LocaleFallbackNotInstalled`；`ja→ko` 與 world 裡 `ko→ja`（別人後來改的）→ `LocaleFallbackCycle`；新安裝時 world 已有 A39 筆數 → `LocaleMaxInstalled`；既有語系更新不受 A39 影響。
     - `Recheck_BooleanChanged`（必修 6、Q11）：預覽時的 world 沒有撞字；Recheck 的 world 多了一個 `ko`（No＝這份包的 Yes）→ `BooleanChanged` true；world 沒變 → false。
+    - `Recheck_AlreadyRejected_WorldUnchanged`（第三輪必修 2）：預覽時 `report.Yes` 就因撞到 `ko` 的「否」被拒收（`BooleanRejected`＝{`report.Yes`}，計畫要設的鍵裡沒有它，`BooleanCandidates` 裡有它的原值）；Recheck 用同一個 world → `BooleanChanged` false（不能拿篩過的計畫重跑，否則原值不見、拒收集合變空，會誤判 409）。
+    - `Recheck_OriginalCollisionGone`（第三輪必修 2）：同上的預覽，Recheck 的 world 把 `ko` 拿掉（或 `ko` 的「否」已改成別的字）→ 從候選值重跑後沒有拒收、與預覽的 {`report.Yes`} 不同 → `BooleanChanged` true（Q11 的另一面：重新預覽才會收那句）。
+    - `Recheck_RemoveIntent`：候選值是「拿掉」（Q6 改回內建原文）的 `report.No`，world 不變 → `BooleanChanged` false；拿掉後退回的內建字在新 world 會撞 → true。
     - `NewLocale_Counts`：`ja-partial` → `isNew`、`ui.added` 30、`completeness.ui.have` 30、`total` 等於 `BaseKeys.Count`。
     - `Merge_U5`：目前覆寫 30 句、新檔另 20 句（其中 2 句與舊的相同、1 句空字串）→ `added` 17、`unchanged` 2、`skipped` 1；計畫套用後是 47 句（30＋17）。這是 U5「30＋20 句」情境的分析面（20＝17＋2＋1）。
     - `SameAsBuiltin_NotStored`（Q6）：`th-fix` 的那一句和內建相同 → `sameAsBuiltin` 1、不在計畫要設的鍵；之前覆寫過、這次改回內建原文 → 在計畫的「要拿掉的鍵」。
@@ -525,7 +531,9 @@ public sealed record LocalePackRecheck(MessageRef? Invalid, bool BooleanChanged)
 - [ ] **Step 2: 跑測試確認失敗**：`cd backend && dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~LocalePackParserTests|FullyQualifiedName~LocalePackAnalyzerTests"`
 - [ ] **Step 3: 實作**（Parser 與 Analyzer 都不碰資料庫：`LocaleWorld` 與 A39 生效值由呼叫端傳入；`LocaleWorldReader` 只做讀取與組裝，它的資料庫行為在 Task 6、7 的 API 測試驗）
 - [ ] **Step 4: 跑測試確認通過**：同 Step 2；另跑 `--filter "FullyQualifiedName~FieldImportParserTests|FullyQualifiedName~ImportPlanner|FullyQualifiedName~BuiltinServerTextTests|FullyQualifiedName~MessageTextTests"`（`BooleanWords` 行為不變；新訊息四語齊、基準檔相符）。
-- [ ] **Step 5: Commit**（兩個：5a `feat(i18n): 語系包後端訊息與解析器`——訊息、`MessageText`、基準檔、Parser 與 `LocalePackParserTests`；5b `feat(i18n): 語系包分析與重驗，是否欄位撞字的句子拒收（#68）`——`LocaleWorld`、Analyzer、`LocalePackAnalyzerTests`。各自編譯得過、各自跑對應的 Step 4 測試）
+- [ ] **Step 5: Commit**（兩個，各自編譯得過、各自跑對應的 Step 4 測試）：
+  - 5a `feat(i18n): 語系包後端訊息與解析器`：`LocalePackMessages.cs`、`MessageText.cs` 新鍵、`locale-pack.json` 基準檔與 `BuiltinServerTextTests.BaselineFiles`、`LocalePackModels.cs`（只有 `ParsedLocalePack`、`RejectedItem`）、`LocalePackParser.cs`、`LocalePackParserTests.cs`。Step 4 跑 `LocalePackParserTests|BuiltinServerTextTests|MessageTextTests`。
+  - 5b `feat(i18n): 語系包分析與重驗，是否欄位撞字的句子拒收（#68）`：`LocalePackModels.cs` 其餘型別、`LocalePackAnalyzer.cs`、`LocaleWorldReader.cs`（含 `FixedInstalledLocales`）、`Application/DependencyInjection.cs` 的註冊、`FieldImportParser.cs` 的 `BooleanWords.Ambiguous`、`backend/tests/Fixtures/langpacks/*.langpack.json`、`shared/i18n-message-cases.json` 的 `boolean` 段新案例、`LocalePackAnalyzerTests.cs`。Step 4 跑 `LocalePackAnalyzerTests|FieldImportParserTests|ImportPlanner`。
 
 **驗收**：Step 4 全過；`FieldImportParserTests.Boolean_Ambiguous*` 照過（匯入端守衛保留，票 #68 驗收第二條）；本 Task 單獨 commit 時整個 solution 編譯得過（`dotnet build backend`，訊息與基準檔都在本 Task 內）；`git diff main -- backend/tests/DynamicModules.ApplicationTests/Common/ServerTextBaseline/{message-report,task-report,alert}.json` 無變化。
 
@@ -582,6 +590,7 @@ public sealed record LocalePackRecheck(MessageRef? Invalid, bool BooleanChanged)
   - `Stale_AfterABA_409`（必修 7）：甲預覽 `ja`（目前版 A）；乙匯入 B、再「回到上一版」（內容回到 A，但目前版 `Id` 是新的）→ 甲套用 409。`app.Time` 全程不動（同一時間戳），證明不靠修改時間。
   - `OtherLocale_NotAffected`：預覽 `th` 之後別人套用 `ja`（兩者的是／否不相干）→ `th` 照常套用（判斷 16 第 2 步只比該語系）。
   - `CrossLocaleBoolean_409_ThenRepreview`（必修 6、Q11）：甲預覽 `ja`（`report.Yes`＝「はい」）通過；乙預覽並先套用 `ko`（`report.No`＝「はい」，當時 `ja` 未裝、沒有撞字）→ 甲套用 409 `localePackStale`、資料庫沒變；甲重新預覽 → 報告的 `ui`／`server` 拒收清單含 `report.Yes`（`booleanCollision`）→ 套用成功，`ja` 的「是」走退回鏈。
+  - `AlreadyRejected_AppliesWithoutStale`（第三輪必修 2 的 API 面）：`ko` 先套用（否＝「はい」）；甲預覽 `ja`（是＝「はい」）→ 報告拒收 `report.Yes`；world 沒變直接套用 → 200（不是 409），`Dynamic_LocalePack` 的 `ServerJson` 沒有 `report.Yes`。
   - `Preview_OtherUser_404`、`Preview_Expired_404`（`app.Time.Advance(TimeSpan.FromMinutes(11))`）、`FileHash_Mismatch_409`、`Preview_Consumed`（同一個 `previewId` 套用第二次 404）；404 回應的 `code` 都是 `localePackPreviewExpired`。
   - `MaxInstalled_RecheckedAtApply`：A39＝5、預覽 `ja` 時只裝了 4 種 → 預覽通過；套用前別人裝了 `ko` → 套用 400 帶「最多只能安裝 5 個語系」（筆數取自交易內重讀的清單）。
   - `FallbackChange_RecheckedAtApply`（必修 5）：既有匯入語系 `ja`、`ko`（上層 `en-US`）；甲預覽「`ja` 的上層改成 `ko`」通過；乙先套用「`ko` 的上層改成 `ja`」→ 甲套用 400（`LocaleFallbackCycle`）；另一案：甲預覽「`ja` 上層改 `ko`」後乙移除 `ko` → 甲套用 400（`LocaleFallbackNotInstalled`）。兩案資料庫都沒有懸空或成環的關係。
@@ -616,7 +625,10 @@ public sealed record LocalePackRecheck(MessageRef? Invalid, bool BooleanChanged)
   - `List_AfterImport`：套用 `ja-partial` 後有第五列，`overrides.ui` 30、`current.fileName`、`hasPrevious` false。
   - `Rollback_AndBack`（必修 7、10）：`app.Time` 全程不動（固定時鐘）；套兩次 → `RollbackAsync` 後 `GET i18n/ui/ja` 回到第一次的內容；再 `RollbackAsync` 一次又回到第二次（設計 §6.4 可以再切回來）；三次寫入後的目前版 `Id` 兩兩不同、`Dynamic_LocalePack` 始終兩列；沒有上一版 409（`localeNoPrevious`）。
   - `Clear_BuiltinBackToFactory_AndUndo`（Q5）：`th-fix` 後 `ClearAsync` → `GET i18n/ui/th` 等於內建泰文（與 `NoOverlay_UiSameAsBuiltinMerge` 同一個預期值算法）；`RollbackAsync` → 覆寫回來；沒有覆寫時 `clear` 409（`localeNoOverrides`）。
-  - `Rollback_BooleanCollision_409`（必修 6、Q12）：`th` 先匯入「否＝ไม่」、再匯入「否＝ไม่ใช่」；之後匯入 `ja`「是＝ไม่」（當時沒撞字）→ `th` 的 `rollback` 409 `localeBooleanCollision`，訊息含「ไม่」與「日本語」；資料庫兩列與目前版 `Id` 都沒變。`clear` 不另寫案例：清空後該語系的「是／否」改用鏈上其他已安裝語系的字，那些字本來就在撞字集合裡，清空只會讓集合變小、不會新增撞字；handler 仍呼叫同一個檢查（將來規則改了不會漏），判斷 20 註明。
+  - `Rollback_BooleanCollision_409`（必修 6、Q12）：`th` 先匯入「否＝ไม่」、再匯入「否＝ไม่ใช่」；之後匯入 `ja`「是＝ไม่」（當時沒撞字）→ `th` 的 `rollback` 409 `localeBooleanCollision`，訊息含「ไม่」與「日本語」；資料庫兩列與目前版 `Id` 都沒變。
+  - `Clear_BooleanCollision_409`（第三輪必修 3、Q12）：`th` 匯入「否＝ไม่」（覆寫內建的「ไม่ใช่」）；之後匯入 `ja`「是＝ไม่ใช่」（當時 `th` 的否是「ไม่」，不撞，報告沒有拒收）→ `th` 的 `clear` 409 `localeBooleanCollision`，訊息含「ไม่ใช่」與「日本語」；另一個 scope 查 `Dynamic_LocalePack` 的列數、目前版 `Id` 與內容都沒變，`GET i18n/ui/th` 與快照不變。
+  - `Remove_InUse_PolicyNotFromSnapshot`（第三輪必修 1）：先讓快照看到內建四語；用 `DbContext` 直接寫一列 `ja`（installed）與 `policy.locale.enabled` 含 `ja`、`policy.locale.default`＝`ja`，**不 `Invalidate`**（registry 的 `Codes` 沒有 `ja`，scope 的 `IPolicyReader` 會把 `ja` 濾掉）→ `DELETE locales/ja` 409 `localeInUse`。
+  - `WorldReader_DbAheadOfRegistry`（第三輪必修 1）：同上的寫法造資料，從新 scope 解析 `LocaleWorldReader` 呼叫 `ReadAsync` → `Installed` 含 `ja`、`DefaultLocale` 是 `ja`、`Enabled` 含 `ja`；同時斷言 `registry.Codes` 不含 `ja`（證明資料庫確實領先快照）。
   - `Remove_Installed`：未啟用的 `ja` → `RemoveLocaleAsync`；HTTP 狀態碼是 **204**、沒有本文（必修 8）；`Dynamic_Locale`、`Dynamic_LocalePack`、預覽列都沒有 `ja`；某欄位名稱裡的 `ja` 文字還在（設計 §4.5），且這個欄位照常可以改名（M1）。
   - `Remove_Blocked`：內建 `th` 409（`LocaleBuiltinNotRemovable`）；`ja` 啟用中 409（`LocaleInUse`）；`ko` 的上層是 `ja` 時移除 `ja` 409、訊息含 `ko` 的自稱（`LocaleIsFallback`）；不存在 404。
   - `Remove_FallbackCheck_NotFromSnapshot`（必修 5）：先讓快照看到 `ja`；再用 `DbContext` 直接寫一列 `ko`（上層 `ja`），**不呼叫 `Invalidate`、不等快照**（快照裡沒有 `ko`）→ 立刻移除 `ja` → 409 `localeIsFallback`（被引用檢查讀交易內清單，不讀快照）。
@@ -747,25 +759,25 @@ grep -rn "v-html\|html: true" frontend/src   # 無結果
 | | 3 覆寫層接進快照與訊息 | 1 | 4 | ≈ 510（測試約 310） |
 | | 4 政策 A38、A39 | 0 | 8 | ≈ 150（含四語文案） |
 | | 小計 | 16 | 21 | ≈ 1730 |
-| i4d1-2 | 5 訊息與基準檔、解析與分析（#68、重驗） | 12（含 4 個測試檔） | 4 | ≈ 1150（測試約 560；另有約 115 行四語訊息表） |
+| i4d1-2 | 5 訊息與基準檔、解析與分析（#68、重驗） | 12（含 4 個測試檔） | 4 | ≈ 1210（測試約 600；另有約 115 行四語訊息表） |
 | | 6 預覽 API | 5 | 4 | ≈ 400（測試約 230） |
-| | 小計 | 17 | 8 | ≈ 1550 |
-| i4d1-3 | 7 套用 API | 4 | 8 | ≈ 820（測試約 500） |
-| | 8 管理與清單 API | 9 | 2 | ≈ 610（測試約 350） |
-| | 小計 | 13 | 10 | ≈ 1430 |
+| | 小計 | 17 | 8 | ≈ 1610 |
+| i4d1-3 | 7 套用 API | 4 | 8 | ≈ 835（測試約 515） |
+| | 8 管理與清單 API | 9 | 2 | ≈ 660（測試約 400） |
+| | 小計 | 13 | 10 | ≈ 1495 |
 | i4d1-4 | 9 前端語法檢查 | 2 | 1 | ≈ 140（測試約 70） |
 | | 10 最小語系頁 | 6 | 8 | ≈ 930（測試約 350；另有約 280 行四語文案） |
 | | 11 文件與收尾 | 0 | 7 | ≈ 230 |
 | | 小計 | 8 | 16 | ≈ 1300 |
-| 合計 | | 54 | 約 55 | ≈ 6010，其中測試約 52% |
+| 合計 | | 54 | 約 55 | ≈ 6135，其中測試約 52% |
 
-第二輪審查後增加約 800 行，主要是交易內重驗（`LocaleWorld`、`Recheck`）、版本 token 與它們的測試（A→B→A、固定時鐘、跨語系撞字、上層語系競態、業務存檔後才失敗的全有或全無）。每批都超過單批約 800 行的指引，主因是測試（每條寫入路徑都要 SQLite／PostgreSQL 雙跑、409 與全有或全無的案例）與四語文案。產生的 migration、測試用語系包檔不計入。**Task 5 一定拆兩個 commit**：5a＝訊息、`MessageText` 新鍵、基準檔、Parser（≈ 520）；5b＝`LocaleWorld`、Analyzer、Recheck（≈ 630），兩個 commit 各自編譯得過、各自跑 Step 4 的對應測試。Task 7、Task 10 若超過 700 行就拆兩個 commit（套用 handler／重驗與競態測試；清單頁／匯入對話框）。
+第二輪審查後增加約 800 行，主要是交易內重驗（`LocaleWorld`、`Recheck`）、版本 token 與它們的測試（A→B→A、固定時鐘、跨語系撞字、上層語系競態、業務存檔後才失敗的全有或全無）。每批都超過單批約 800 行的指引，主因是測試（每條寫入路徑都要 SQLite／PostgreSQL 雙跑、409 與全有或全無的案例）與四語文案。產生的 migration、測試用語系包檔不計入。**Task 5 一定拆兩個 commit**：5a＝訊息、`MessageText` 新鍵、基準檔、Parser（≈ 520）；5b＝`LocaleWorld`、Analyzer、Recheck（≈ 690）；兩者的檔案清單見 Task 5 Step 5，兩個 commit 各自編譯得過、各自跑 Step 4 的對應測試。Task 7、Task 10 若超過 700 行就拆兩個 commit（套用 handler／重驗與競態測試；清單頁／匯入對話框）。
 
 ## 已知限制（i4d1，交付時寫回設計 §15）
 
 - 本段不套用 `designData`（i4e）、不收 Excel（i4e）、沒有匯出樣板與完整度細項、沒有「以此語系預覽」捷徑（i4d2）；Demo 訪客手上沒有語系包檔時只能看到空的匯入流程（Q10）。
 - 匯入後其他實例最多 60 秒才看到新翻譯（設計 §15 已列）；同一台的已開頁面靠 i4b 的 60 秒生效政策重取或套用後的查詢失效換上新文字。
-- 語系列（`Dynamic_Locale`）的版本戳記仍是「筆數＋最大修改時間」：另一台實例在同一個時間戳內改了匯入語系的欄位（自稱、上層語系），這台要等下一次戳記改變才看得到；寫入的那台靠 `Invalidate` 強制重讀，不受影響（判斷 10）。覆寫層用 `Id` 當 token，沒有這個問題。
+- **只改語系欄位的匯入不換版本 token**（判斷 16 第 5 步）：語系包只改了匯入語系的 `locale` 段（自稱、上層語系、日期元件語言包）、句子沒變時，只更新 `Dynamic_Locale` 那一列、**不新增** `Dynamic_LocalePack` 的版本（新增會把上一版擠掉，使用者的「回到上一版」就沒了）。其他實例靠 `Dynamic_Locale` 的戳記（筆數＋最大修改時間）發現：一般情況下這次寫入的修改時間比表裡的最大值新，下一次 60 秒檢查就看得到；**但若修改時間沒有超過表裡既有的最大值**（例如同一個時間戳內的兩次寫入，或伺服器時鐘倒退），戳記不變，其他實例**不保證在任何時限內**看到，要等之後某次寫入讓戳記改變、或那台重啟。這不在「其他實例最多 60 秒」的保證內。寫入的那台靠 `Invalidate` 強制重讀，不受影響（判斷 10）；覆寫層的變更用 `Id` 當 token，有 60 秒的保證。
 - 預覽暫存全系統最多 5 筆：多位管理員同時預覽時，最舊那位的預覽會被擠掉，套用時看到「預覽已過期，請重新上傳預覽」。
 - 平台升級改了某句後端訊息的參數，覆寫層的舊範本執行期格式錯誤時改用內建翻譯並記 Warning（判斷 11）；語系頁還看不到是哪幾句（i4d2 的「原文已更新」會列出）。
 - 移除語系不檢查告警通道的信件語言，移除後信件改用退回鏈（Q9）。
