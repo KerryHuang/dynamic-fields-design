@@ -78,20 +78,20 @@ describe('applyDocumentLocale（Quasar 語言包全開）', () => {
   const lastSet = (spy: { mock: { calls: { 0: { isoName: string } }[] } }) => spy.mock.calls.at(-1)?.[0].isoName;
 
   it('新裝的語系依 quasarLang 載入對應的語言包', async () => {
-    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null }]);
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null, uiHash: '' }]);
     const setLang = vi.spyOn(quasar.Quasar.lang, 'set').mockImplementation(() => {});
     applyDocumentLocale('ja');
     expect(document.documentElement.lang).toBe('ja');
     await vi.waitFor(() => expect(lastSet(setLang)).toBe('ja'));
   });
   it('沒有 Quasar 語言包（quasarLang: null）時載入 en-US', async () => {
-    setLocaleInfos([...BUILTIN_LOCALES, { code: 'xx', nativeName: 'X', quasarLang: null, fallbackCode: null }]);
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'xx', nativeName: 'X', quasarLang: null, fallbackCode: null, uiHash: '' }]);
     const setLang = vi.spyOn(quasar.Quasar.lang, 'set').mockImplementation(() => {});
     applyDocumentLocale('xx');
     await vi.waitFor(() => expect(lastSet(setLang)).toBe('en-US'));
   });
   it('語言包載入失敗改載 en-US', async () => {
-    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null }]);
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null, uiHash: '' }]);
     quasarPacks[pack('ja')] = () => Promise.reject(new Error('chunk failed'));
     const setLang = vi.spyOn(quasar.Quasar.lang, 'set').mockImplementation(() => {});
     applyDocumentLocale('ja');
@@ -147,7 +147,7 @@ describe('LocaleSwitcher', () => {
 
 describe('LocaleSwitcher 新裝的語系', () => {
   it('裝了 ja 且啟用：多一項「日本語」，點選後切換', async () => {
-    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US' }]);
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US', uiHash: '' }]);
     setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi', 'ja'] });
     const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
     const w = mount(LocaleSwitcher, { attachTo: document.body, global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], i18n] } });
@@ -184,10 +184,10 @@ describe('BUILTIN_LOCALES', () => {
   it('來自 shared/i18n/<code>/locale.json，依 order 排成內建四語的順序，內容不變', () => {
     expect(BUILTIN_LOCALES.map((l) => l.code)).toEqual(['zh-TW', 'en-US', 'th', 'vi']);
     expect(BUILTIN_LOCALES).toEqual([
-      { code: 'zh-TW', nativeName: '繁體中文', quasarLang: 'zh-TW', fallbackCode: null },
-      { code: 'en-US', nativeName: 'English', quasarLang: 'en-US', fallbackCode: null },
-      { code: 'th', nativeName: 'ไทย', quasarLang: 'th', fallbackCode: null },
-      { code: 'vi', nativeName: 'Tiếng Việt', quasarLang: 'vi', fallbackCode: null },
+      { code: 'zh-TW', nativeName: '繁體中文', quasarLang: 'zh-TW', fallbackCode: null, uiHash: '' },
+      { code: 'en-US', nativeName: 'English', quasarLang: 'en-US', fallbackCode: null, uiHash: '' },
+      { code: 'th', nativeName: 'ไทย', quasarLang: 'th', fallbackCode: null, uiHash: '' },
+      { code: 'vi', nativeName: 'Tiếng Việt', quasarLang: 'vi', fallbackCode: null, uiHash: '' },
     ]);
   });
 });

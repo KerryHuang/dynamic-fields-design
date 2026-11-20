@@ -10,6 +10,8 @@ export interface LocaleInfo {
   nativeName: string;
   quasarLang: string | null;
   fallbackCode: string | null;
+  /** 這個語系在目前預設語系下補齊後的介面文字雜湊（GET i18n/ui/{code}?v=…）；內建清單（伺服器連不上時）是空字串＝不知道 */
+  uiHash: string;
 }
 
 // shallowRef：60 秒重取更新政策後，已掛載的元件（語言選單、多語輸入框）的 computed 會跟著重算

@@ -92,7 +92,7 @@ describe('useBusinessTimeWatch', () => {
   });
 
   it('生效值多了新裝的語系：語系資訊跟著換、不提示', async () => {
-    const ja = { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US' };
+    const ja = { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US', uiHash: '' };
     api.getEffectivePolicies.mockResolvedValue({ values: { 'locale.timeZone': '+08:00', 'locale.enabled': ['zh-TW', 'ja'] }, locales: [...BUILTIN_LOCALES, ja] });
     mountWatch();
     await flushPromises();
@@ -109,7 +109,7 @@ describe('useBusinessTimeWatch', () => {
     expect(installedLocales()).not.toContain('ja');
 
     const refetch = async (ja: { nativeName: string; fallbackCode: string | null }) => {
-      api.getEffectivePolicies.mockResolvedValue({ values, locales: [...BUILTIN_LOCALES, { code: 'ja', quasarLang: 'ja', ...ja }] });
+      api.getEffectivePolicies.mockResolvedValue({ values, locales: [...BUILTIN_LOCALES, { code: 'ja', quasarLang: 'ja', uiHash: '', ...ja }] });
       await qc.refetchQueries({ queryKey: ['effective-policies', ''] });
       await flushPromises();
     };

@@ -17,7 +17,7 @@ describe('groupMenu 沒有繁中的分區', () => {
 
 describe('groupMenu', () => {
   it('分區只有新裝的語系有值時，以那個語系分組', () => {
-    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null }]);
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null, uiHash: '' }]);
     const g = groupMenu([sec('a', { ja: '販売' }), sec('b', { ja: '販売' })], 'ja');
     setLocaleInfos(BUILTIN_LOCALES);
     expect(g).toHaveLength(1);

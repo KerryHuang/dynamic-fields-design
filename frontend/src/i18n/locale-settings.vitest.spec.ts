@@ -6,7 +6,7 @@ import {
   setLocaleInfos, setLocaleSettings, toLocaleCodes, type LocaleInfo,
 } from './locale-settings';
 
-const JA: LocaleInfo = { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US' };
+const JA: LocaleInfo = { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US', uiHash: '' };
 
 afterEach(() => {
   setLocaleInfos(BUILTIN_LOCALES);
@@ -65,7 +65,7 @@ describe('locale-settings', () => {
 describe('localeChain 跑共用案例（與後端 LocaleChain 同一條鏈）', () => {
   for (const c of cases.cases) {
     it(c.name, () => {
-      setLocaleInfos(c.installed.map((l) => ({ code: l.code, nativeName: l.code, quasarLang: null, fallbackCode: l.fallback })));
+      setLocaleInfos(c.installed.map((l) => ({ code: l.code, nativeName: l.code, quasarLang: null, fallbackCode: l.fallback, uiHash: '' })));
       setLocaleSettings({ defaultLocale: c.default });
       expect(localeChain(c.locale)).toEqual(c.fallbacks);
     });

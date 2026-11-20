@@ -12,6 +12,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@intlify/message-compiler": "11.4.19",
     "@quasar/extras": "^2.1.0",
     "@tanstack/vue-query": "^5",
     "@vee-validate/zod": "^4.15.1",

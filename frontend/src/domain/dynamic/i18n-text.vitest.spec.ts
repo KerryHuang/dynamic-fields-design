@@ -12,7 +12,7 @@ afterEach(() => {
 describe('resolveI18n 跑共用案例（與後端 I18nText.Resolve 同結果）', () => {
   for (const c of cases.cases) {
     it(c.name, () => {
-      setLocaleInfos(c.installed.map((l) => ({ code: l.code, nativeName: l.code, quasarLang: null, fallbackCode: l.fallback })));
+      setLocaleInfos(c.installed.map((l) => ({ code: l.code, nativeName: l.code, quasarLang: null, fallbackCode: l.fallback, uiHash: '' })));
       setLocaleSettings({ defaultLocale: c.default });
       expect(resolveI18n(c.text, c.locale)).toBe(c.expected);
     });

@@ -12,11 +12,14 @@ type BuiltinLocaleFile = { code: string; nativeName: string; quasarLang: string;
 const builtinLocaleFiles = import.meta.glob<BuiltinLocaleFile>('shared/i18n/*/locale.json', { eager: true, import: 'default' });
 export const BUILTIN_LOCALES: LocaleInfo[] = Object.values(builtinLocaleFiles)
   .sort((a, b) => a.order - b.order)
-  .map(({ code, nativeName, quasarLang }) => ({ code, nativeName, quasarLang, fallbackCode: null }));
+  .map(({ code, nativeName, quasarLang }) => ({ code, nativeName, quasarLang, fallbackCode: null, uiHash: '' }));
 
 /** 伺服器連不上、還沒取得預設語系時的翻譯包退回（不是語系政策的預設）。 */
 export const FALLBACK_LOCALE: LocaleCode = 'zh-TW';
 export const LOCALE_KEY = 'formwright.locale';
+
+/** 啟動與多語產生點等介面文字的上限（毫秒）；技術限制，列在語系包設計 §14。 */
+export const STARTUP_BUDGET_MS = 3000;
 
 const MAX_CODE_LENGTH = 35;
 

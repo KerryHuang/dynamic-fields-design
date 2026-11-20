@@ -59,7 +59,7 @@ describe('語系類政策顯示各語言自稱（不走 policies.choices 翻譯�
     expect(policyValueText(meta('locale.enabled', 'roleSet'), ['zh-TW', 'th'], t)).toBe('繁體中文、ไทย');
   });
   it('新裝的語系：選項含 ja 仍是語系類，標籤是 API 給的自稱', () => {
-    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US' }]);
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US', uiHash: '' }]);
     const m = { code: 'locale.enabled', category: 'locale', kind: 'roleSet' as const, options: ['zh-TW', 'en-US', 'th', 'vi', 'ja'] };
     expect(isLocalePolicy(m)).toBe(true);
     expect(choiceLabel(m, 'ja', t)).toBe('日本語');

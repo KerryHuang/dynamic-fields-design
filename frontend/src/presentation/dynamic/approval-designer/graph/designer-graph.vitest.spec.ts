@@ -143,7 +143,7 @@ describe('designer-graph', () => {
 
 describe('新節點名稱的語系＝已安裝且前端有翻譯包的語系', () => {
   afterEach(() => setLocaleInfos(BUILTIN_LOCALES));
-  const ja = { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null };
+  const ja = { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null, uiHash: '' };
   it('出廠四語各一份', () => {
     expect(Object.keys(approvalNames(1))).toEqual(['zh-TW', 'en-US', 'th', 'vi']);
     expect(Object.keys(conditionLabels(1))).toEqual(['zh-TW', 'en-US', 'th', 'vi']);

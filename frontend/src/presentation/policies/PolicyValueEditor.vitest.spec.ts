@@ -183,7 +183,7 @@ describe('PolicyValueEditor 語系類', () => {
     expect((sel.props('options') as { label: string }[]).map((o) => o.label)).toEqual(['繁體中文', 'English', 'ไทย', 'Tiếng Việt']);
   });
   it('新裝的語系：選項有「日本語」，不出現 policies.choices.ja', () => {
-    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US' }]);
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US', uiHash: '' }]);
     const m = make({ code: 'locale.default', category: 'locale', kind: 'choice', options: ['zh-TW', 'en-US', 'th', 'vi', 'ja'] }, 'ja');
     const labels = (m.findComponent(quasar.QSelect).props('options') as { label: string }[]).map((o) => o.label);
     setLocaleInfos(BUILTIN_LOCALES);

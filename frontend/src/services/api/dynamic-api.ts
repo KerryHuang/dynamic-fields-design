@@ -344,6 +344,10 @@ export const dynamicApi = {
     http.post<DynamicRecord>(`/records/${id}/reverse`, { values }, idem(idempotencyKey)).then(data),
   getRecordEffects: (id: number) => http.get<RecordEffects>(`/records/${id}/effects`).then(data),
   getAuthOptions: () => http.get<AuthOptions>('/auth/options').then(data),
+  /** 補齊後的扁平介面文字；hash 取回應標頭 X-UI-Hash（實際內容的雜湊，可能和要求的 v 不同：打到還沒換新的另一台）。 */
+  getUiMessages: (code: string, v?: string) =>
+    http.get<Record<string, string>>(`/i18n/ui/${encodeURIComponent(code)}`, v ? { params: { v } } : undefined)
+      .then((r) => ({ hash: String(r.headers['x-ui-hash'] ?? ''), messages: r.data })),
   login: (body: { userId: string; password: string }) => http.post<AuthUser>('/auth/login', body).then(data),
   demoLogin: (userId: string) => http.post<AuthUser>('/auth/demo-login', { userId }).then(data),
   logout: () => http.post('/auth/logout').then(data),

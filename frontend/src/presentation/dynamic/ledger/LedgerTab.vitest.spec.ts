@@ -151,7 +151,7 @@ describe('LedgerTab', () => {
     afterEach(() => setLocaleInfos(BUILTIN_LOCALES));
     const create = async (extra: Record<string, object> = {}) => {
       api.addField.mockResolvedValue(field(9, 'reference', self));
-      setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null }]);
+      setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null, uiHash: '' }]);
       const w = await mountTab(mod({}, [field(1, 'text'), field(2, 'decimal')]), null, false, extra);
       await pick(w, 'ledger-enable', true);
       await w.find('[data-testid="ledger-create-reversal"]').trigger('click');

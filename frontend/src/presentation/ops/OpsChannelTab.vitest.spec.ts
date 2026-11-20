@@ -37,7 +37,7 @@ describe('OpsChannelTab 信件語言', () => {
   });
 
   it('啟用新裝的 ja：下拉有「日本語」', async () => {
-    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US' }]);
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US', uiHash: '' }]);
     setLocaleSettings({ enabled: ['zh-TW', 'ja'] });
     const w = await mountTab(channel('ja', false));
     const o = optionsOf(w);
