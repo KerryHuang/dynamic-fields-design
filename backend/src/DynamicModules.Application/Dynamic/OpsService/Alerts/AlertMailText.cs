@@ -9,8 +9,6 @@ namespace DynamicModules.Application.Dynamic.OpsService.Alerts;
 /// </summary>
 public static class AlertMailText
 {
-    public const string FactoryLocale = "zh-TW";
-
     public static readonly IReadOnlyList<string> Locales = ["zh-TW", "en-US", "th", "vi"];
 
     public const string
@@ -139,8 +137,9 @@ public static class AlertMailText
         [HealthCheckCatalog.SecurityLoginFailures] = ("Failed sign-ins", "การเข้าสู่ระบบล้มเหลว", "Số lần đăng nhập thất bại"),
     };
 
-    /// <summary>信件語系：四語之一，其他（含 null）回出廠的繁中（O2 出廠；p3 後改跟系統預設語系，O2-U14）。</summary>
-    public static string Locale(string? mailLocale) => mailLocale is not null && Locales.Contains(mailLocale) ? mailLocale : FactoryLocale;
+    /// <summary>信件語系：通道存的語系有翻譯表就用它（已存的語言之後被停用也照常寄），否則用系統預設語系（政策 locale.default）；預設語系沒有翻譯表時退繁中。</summary>
+    public static string Locale(string? mailLocale, string defaultLocale) =>
+        mailLocale is not null && Locales.Contains(mailLocale) ? mailLocale : Locales.Contains(defaultLocale) ? defaultLocale : "zh-TW";
 
     public static string Get(string locale, string key, params object[] args)
     {

@@ -9,7 +9,7 @@ import {
   assigneeFields, blankTask, blankTaskRuleDraft, dueFields, fromTaskRule, REPEATS, toTaskRuleBody, TRIGGERS, triggerFields,
   validateDraft, type TaskRule, type TaskRuleDraft, type TaskRuleOn,
 } from 'src/domain/dynamic/task-rule-draft';
-import type { ConditionNode, SchemaField } from 'src/domain/dynamic/types';
+import type { ConditionNode, I18nText, SchemaField } from 'src/domain/dynamic/types';
 import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
 import ConditionEditor from 'src/presentation/dynamic/list/ConditionEditor.vue';
 import { joinList } from 'src/i18n/translate';
@@ -30,10 +30,15 @@ const save = useSaveTaskRule(() => props.moduleKey);
 
 const draft = ref<TaskRuleDraft>(blankTaskRuleDraft());
 const errors = ref<string[]>([]);
+// 開啟時的名稱與各任務標題（獨立副本，任務以代碼對應）：必填語系增加後，沒改文字的既有規則不要求補語系；新加的任務不在其中
+const original = ref<{ name: I18nText; titles: Record<string, I18nText> } | undefined>();
 
 watch(() => [props.modelValue, props.rule] as const, ([open]) => {
   if (!open) return;
   draft.value = props.rule ? fromTaskRule(props.rule) : blankTaskRuleDraft();
+  original.value = props.rule
+    ? { name: { ...props.rule.name }, titles: Object.fromEntries(props.rule.tasks.map((x) => [x.code, { ...x.title }])) }
+    : undefined;
   errors.value = [];
 }, { immediate: true });
 
@@ -77,7 +82,7 @@ const removeTask = (i: number) => draft.value.tasks.splice(i, 1);
 const setWhen = (target: { when?: ConditionNode | null }, v: ConditionNode | undefined) => { target.when = v ?? null; };
 
 function submit() {
-  const problems = validateDraft(draft.value, props.fields, { maxTasks: props.maxTasks, originalTaskCount: props.rule?.tasks.length ?? 0 });
+  const problems = validateDraft(draft.value, props.fields, { maxTasks: props.maxTasks, originalTaskCount: props.rule?.tasks.length ?? 0 }, original.value);
   errors.value = problems.map((k) => t(k, { max: props.maxTasks }));
   if (problems.length) return;
   save.mutate({ ruleKey: props.rule?.key, body: toTaskRuleBody(draft.value) }, {
@@ -101,7 +106,7 @@ function submit() {
           v-model="draft.key" :label="`${t('taskRules.key')} *`" :hint="t('taskRules.keyHint')" :disable="!!rule" outlined dense
           data-testid="task-rule-key"
         />
-        <I18nTextInput v-model="draft.name" :label="t('taskRules.name')" data-testid="task-rule-name" />
+        <I18nTextInput v-model="draft.name" :original="original?.name" :label="t('taskRules.name')" data-testid="task-rule-name" />
         <q-toggle v-model="draft.active" :label="t('taskRules.active')" data-testid="task-rule-active" />
 
         <div>
@@ -152,7 +157,7 @@ function submit() {
                 :data-testid="`task-remove-${i}`" @click="removeTask(i)"
               />
             </div>
-            <I18nTextInput v-model="task.title" :label="t('taskRules.taskTitle')" :data-testid="`task-title-${i}`" />
+            <I18nTextInput v-model="task.title" :original="original?.titles[task.code]" :label="t('taskRules.taskTitle')" :data-testid="`task-title-${i}`" />
             <I18nTextInput :model-value="task.description ?? {}" :label="t('taskRules.taskDescription')" optional @update:model-value="(v) => (task.description = v)" />
             <GenericSelect
               :model-value="task.assigneeFieldId ? String(task.assigneeFieldId) : null" :label="t('taskRules.assigneeField')"

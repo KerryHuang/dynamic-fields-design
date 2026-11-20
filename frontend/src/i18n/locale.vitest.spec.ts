@@ -6,6 +6,7 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import enUS from 'src/i18n/en-US.json';
 import zhTW from 'src/i18n/zh-TW.json';
 import LocaleSwitcher from 'src/presentation/locale/LocaleSwitcher.vue';
+import { setLocaleSettings } from './locale-settings';
 import { LOCALE_KEY, LOCALES, applyLocale, readLocale } from './locale';
 
 const NAME = { 'zh-TW': '訂單', 'en-US': 'Orders', th: 'คำสั่งซื้อ' };
@@ -14,20 +15,20 @@ beforeEach(() => { localStorage.clear(); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('readLocale', () => {
-  it('第一次開啟固定繁中', () => {
-    expect(readLocale()).toBe('zh-TW');
+  it('第一次開啟沒記過語系，回 null 讓呼叫端套用預設語系', () => {
+    expect(readLocale()).toBeNull();
   });
   it('重開讀回上次的選擇', () => {
     localStorage.setItem(LOCALE_KEY, 'th');
     expect(readLocale()).toBe('th');
   });
-  it('存了不認得的值時退回繁中', () => {
+  it('存了不認得的值時回 null', () => {
     localStorage.setItem(LOCALE_KEY, 'fr');
-    expect(readLocale()).toBe('zh-TW');
+    expect(readLocale()).toBeNull();
   });
-  it('localStorage 讀取丟例外時退回繁中', () => {
+  it('localStorage 讀取丟例外時回 null', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
-    expect(readLocale()).toBe('zh-TW');
+    expect(readLocale()).toBeNull();
   });
 });
 
@@ -76,6 +77,20 @@ describe('LocaleSwitcher', () => {
     await flushPromises();
     expect(i18n.global.locale.value).toBe('en-US');
     expect(localStorage.getItem(LOCALE_KEY)).toBe('en-US');
+    w.unmount();
+  });
+
+  it('只列啟用的語系', async () => {
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US'] });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const w = mount(LocaleSwitcher, {
+      attachTo: document.body,
+      global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], i18n] },
+    });
+    (document.body.querySelector('[data-testid="locale-open"]') as HTMLElement).click();
+    await flushPromises();
+    expect([...document.body.querySelectorAll('[data-testid^="locale-option-"]')].map((e) => e.textContent?.trim())).toEqual(['繁體中文', 'English']);
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] });
     w.unmount();
   });
 });

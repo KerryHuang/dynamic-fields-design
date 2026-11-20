@@ -143,7 +143,7 @@ const title = computed(() => (isEdit.value ? t('approval.designer.dialog.edit') 
           <div v-show="section === 'basic'" class="column no-wrap q-gutter-y-md" data-testid="flow-basic">
             <FlowBasicFields
               ref="basicFields" :model-value="form" :module="module" :workflow="workflow" :key-readonly="isEdit" :target-locked="targetLocked"
-              :saved-fallback="flow?.definition.fallbackApprovers" :errors="basicErrors" @patch="onBasicPatch"
+              :saved-fallback="flow?.definition.fallbackApprovers" :original-name="flow?.name" :errors="basicErrors" @patch="onBasicPatch"
             />
             <q-toggle v-if="!isEdit" v-model="form.active" :label="t('approval.designer.basic.active')" data-testid="flow-active" />
           </div>

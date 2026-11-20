@@ -35,7 +35,7 @@ public sealed class OpsNotifier(
         {
             ["titleKey"] = titleKey, ["params"] = titleParams ?? new Dictionary<string, object>(), ["incidentId"] = incidentId,
         });
-        var snapshot = IncidentTitles.ZhTw(titleKey, titleParams);
+        var snapshot = IncidentTitles.Snapshot(await policies.ChoiceAsync(PolicyCatalog.LocaleDefault, null, ct), titleKey, titleParams);
         foreach (var userId in to.Distinct(StringComparer.Ordinal))
             notifications.Add(new Notification
             {

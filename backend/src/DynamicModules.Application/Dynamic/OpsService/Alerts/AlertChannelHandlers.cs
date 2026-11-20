@@ -4,6 +4,7 @@ using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.MailService;
 using DynamicModules.Application.Dynamic.OpsService.Monitor;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
@@ -21,7 +22,7 @@ public sealed record SmtpTestResponse(IReadOnlyList<string> SentTo);
 
 public sealed record GetSmtpChannelRequest : IRequest<ServiceResult>, ISystemAdminRequest;
 
-public sealed class GetSmtpChannelHandler(IAlertChannelRepository channels, IMailSettingsRepository mailSettings, AuthSettings auth)
+public sealed class GetSmtpChannelHandler(IAlertChannelRepository channels, IMailSettingsRepository mailSettings, AuthSettings auth, CachedSystemPolicy policyCache)
     : IRequestHandler<GetSmtpChannelRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetSmtpChannelRequest request, CancellationToken ct)
@@ -29,7 +30,7 @@ public sealed class GetSmtpChannelHandler(IAlertChannelRepository channels, IMai
         var c = await channels.GetAsync(AlertChannel.Smtp, ct) ?? new AlertChannel();
         return ServiceResult.Success(new SmtpChannelResponse(
             c.Enabled, AlertAddresses.Split(c.ToAddresses),
-            new Setting<string>(AlertMailText.Locale(c.MailLocale), AlertMailText.FactoryLocale, c.MailLocale is null),
+            new Setting<string>(AlertMailText.Locale(c.MailLocale, policyCache.DefaultLocale), policyCache.DefaultLocale, c.MailLocale is null),
             c.LastSuccessUtc, c.LastFailureUtc, c.LastError, c.ConsecutiveFailures, !auth.DemoLoginEnabled,
             (await mailSettings.GetAsync(ct))?.Configured ?? false));
     }
@@ -46,7 +47,7 @@ public sealed record UpdateSmtpChannelRequest(bool Enabled, IReadOnlyList<string
 }
 
 public sealed class UpdateSmtpChannelHandler(
-    IAlertChannelRepository channels, AuthSettings auth, ICurrentUser user, AuditContext audit, IUnitOfWork uow, TimeProvider time)
+    IAlertChannelRepository channels, AuthSettings auth, CachedSystemPolicy policyCache, ICurrentUser user, AuditContext audit, IUnitOfWork uow, TimeProvider time)
     : IRequestHandler<UpdateSmtpChannelRequest, ServiceResult>
 {
     // 欄位長度＝§17.4 的欄位長度
@@ -66,7 +67,7 @@ public sealed class UpdateSmtpChannelHandler(
             Error("toAddresses", MessageRef.Of(MessageText.SmtpRecipientsCount, 1, AlertLimits.MaxRecipients));
         else if (to.Any(a => a.Length > AddressMax || !MailAddressRules.IsEmail(a))) Error("toAddresses", MessageRef.Of(MessageText.EmailFormat));
         else if (string.Join(",", to).Length > ToJoinedMax) Error("toAddresses", MessageRef.Of(MessageText.TooLong, ToJoinedMax));
-        if (r.MailLocaleSet && r.MailLocale is not null && !AlertMailText.Locales.Contains(r.MailLocale))
+        if (r.MailLocaleSet && r.MailLocale is not null && (!AlertMailText.Locales.Contains(r.MailLocale) || !policyCache.EnabledLocales.Contains(r.MailLocale)))
             Error("mailLocale", MessageRef.Of(MessageText.OptionInvalid));
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
@@ -119,7 +120,7 @@ public sealed record SendSmtpTestRequest : IRequest<ServiceResult>, ISystemAdmin
 
 public sealed class SendSmtpTestHandler(
     IAlertChannelRepository channels, IMailSettingsRepository mailSettings, IAlertSecretProtector protector, IAlertMailSender mailer,
-    SmtpTestGate gate, AuthSettings auth, ICurrentUser user, IAuditLog audit, TimeProvider time) : IRequestHandler<SendSmtpTestRequest, ServiceResult>
+    SmtpTestGate gate, AuthSettings auth, CachedSystemPolicy policyCache, ICurrentUser user, IAuditLog audit, TimeProvider time) : IRequestHandler<SendSmtpTestRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SendSmtpTestRequest request, CancellationToken ct)
     {
@@ -134,7 +135,7 @@ public sealed class SendSmtpTestHandler(
         MailSendResult result;
         using (var timeout = new CancellationTokenSource(AlertLimits.SendTimeout, time))
         using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token))
-            result = await mailer.SendAsync(settings, password, AlertMailComposer.Test(settings.MailLocale), linked.Token);
+            result = await mailer.SendAsync(settings, password, AlertMailComposer.Test(settings.MailLocale, policyCache.DefaultLocale), linked.Token);
         await audit.TryWriteNowAsync(new AuditEntry("ops.channel.test", result.Ok ? AuditResult.Success : AuditResult.Failed,
             AuditTargets.Channel, AlertChannel.Smtp, ReasonCode: result.Ok ? null : result.Stage,
             Summary: new AuditSummary().Add("sentTo", settings.ToAddresses.Count).Add("serverCode", result.ServerCode).ToJson()), ct);

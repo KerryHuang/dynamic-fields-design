@@ -25,10 +25,13 @@ const form = reactive<ConversionDraft>(emptyConversionDraft());
 const error = ref<ApiError | null>(null);
 const nameInput = ref<{ validate(): Promise<boolean> } | null>(null);
 const isEdit = computed(() => !!props.conversion);
+// 開啟時的名稱（獨立副本）：必填語系增加後，沒改名稱的既有轉換不要求補語系
+const originalName = ref<Conversion['name'] | undefined>();
 
 watch(() => [props.modelValue, props.conversion?.key] as const, ([open]) => {
   if (!open) return;
   error.value = null;
+  originalName.value = props.conversion ? { ...props.conversion.name } : undefined;
   Object.assign(form, props.conversion ? draftFromConversion(props.conversion) : emptyConversionDraft());
 }, { immediate: true });
 
@@ -131,7 +134,7 @@ const definitionErrors = computed(() => Object.entries(error.value?.errors ?? {}
           v-model="form.key" :label="t('docflow.conversion.key')" :hint="t('docflow.conversion.keyHint')" :readonly="isEdit" outlined dense
           data-testid="conversion-key" :error="!!keyError || undefined" :error-message="keyError"
         />
-        <I18nTextInput ref="nameInput" v-model="form.name" :label="t('docflow.conversion.name')" :error="nameError" />
+        <I18nTextInput ref="nameInput" v-model="form.name" :original="originalName" :label="t('docflow.conversion.name')" :error="nameError" />
         <q-toggle v-model="form.active" :label="t('docflow.conversion.active')" data-testid="conversion-active" />
 
         <div class="row q-col-gutter-md">

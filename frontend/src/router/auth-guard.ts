@@ -3,6 +3,8 @@ import type { Router } from 'vue-router';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
 import { loadSessionSettings, resetSessionSettings, sessionSettingsLoaded } from 'src/application/dynamic/session-settings';
+import { FALLBACK_LOCALE, LOCALES, applyLocale, readLocale } from 'src/i18n/locale';
+import { setLocaleSettings, toLocaleCodes } from 'src/i18n/locale-settings';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { useThemeStore } from 'src/stores/use-theme-store';
 
@@ -16,15 +18,36 @@ const loginLocation = (redirect: string) => ({ path: '/login', query: redirect =
 const SERVICE_UNAVAILABLE = '/service-unavailable';
 
 /**
+ * 登入前就要知道預設與啟用語系（GET auth/options）：瀏覽器沒記過語系、或記的語系已停用時套用預設（不寫入 localStorage）。
+ * 取不到時（伺服器連不上）維持繁中、全部語系可選，之後登入後的全系統生效值會再更新。
+ */
+async function loadLocaleSettings(locale: { value: string } | undefined): Promise<void> {
+  let def = FALLBACK_LOCALE;
+  let enabled = LOCALES.map((l) => l.code);
+  try {
+    const o = await dynamicApi.getAuthOptions();
+    const list = toLocaleCodes(o.enabledLocales);
+    const d = toLocaleCodes([o.defaultLocale])[0];
+    if (d && list.length) { def = d; enabled = list; }
+  } catch {
+    /* 維持繁中 */
+  }
+  setLocaleSettings({ defaultLocale: def, enabled });
+  const stored = readLocale();
+  if (locale && (!stored || !enabled.includes(stored))) applyLocale(def, locale, false);
+}
+
+/**
  * First navigation loads the session from GET /me. Only a 401 means signed out; any other failure (500, network) says nothing
  * about the cookie, so keep the store, probe again next time and show the retry page.
  */
-export function installAuthGuard(router: Router) {
+export function installAuthGuard(router: Router, locale?: { value: string }) {
   let sessionLoaded = false;
   router.beforeEach(async (to) => {
     if (to.path === SERVICE_UNAVAILABLE) return true;
     const identity = useIdentityStore();
     if (!sessionLoaded) {
+      await loadLocaleSettings(locale);
       try {
         const me = await dynamicApi.getMe();
         identity.setSession(me.userId, me.mustChangePassword);

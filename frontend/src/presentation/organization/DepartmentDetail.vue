@@ -21,11 +21,14 @@ const $q = useQuasar();
 const FIELDS = ['code', 'name', 'parentId', 'managerUserId'];
 const form = ref({ code: '', name: {} as I18nText, managerUserId: null as string | null, sortOrder: 0, active: true });
 const apiError = ref<ApiError | null>(null);
+// 載入時的名稱（獨立副本）；前端不先擋必填語系（送出照常，後端只在新增或改了名稱時檢查並回訊息）
+const originalName = ref<I18nText | undefined>();
 watch(() => [props.department, props.newParentId], () => {
   const d = props.department;
   form.value = d
     ? { code: d.code, name: { ...d.name }, managerUserId: d.managerUserId, sortOrder: d.sortOrder, active: d.active }
     : { code: '', name: {}, managerUserId: null, sortOrder: 0, active: true };
+  originalName.value = d ? { ...d.name } : undefined;
   apiError.value = null;
 }, { immediate: true });
 
@@ -103,7 +106,7 @@ function runDelete() {
         />
       </div>
       <div class="col-12 col-sm-6">
-        <I18nTextInput v-model="form.name" :label="t('organization.name')" :error="errorFor(apiError, 'name')" />
+        <I18nTextInput v-model="form.name" :original="originalName" :label="t('organization.name')" :error="errorFor(apiError, 'name')" />
       </div>
       <div class="col-12 col-sm-6">
         <q-select

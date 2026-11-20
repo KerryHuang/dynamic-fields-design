@@ -1,14 +1,25 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { sameI18n } from 'src/domain/dynamic/i18n-text';
 import type { I18nText, Locale } from 'src/domain/dynamic/types';
+import { enabledLocales, requiredTextLocales } from 'src/i18n/locale-settings';
 
-/** optional：繁中不必填（不顯示 * 也不驗證）；change：任一語系輸入框改完離開時觸發，給「離開才存」的欄位用。 */
-const props = defineProps<{ modelValue: I18nText; label: string; error?: string; optional?: boolean; hint?: string; maxlength?: number }>();
+/**
+ * optional：必填語系都不必填（不顯示 * 也不驗證）；change：任一語系輸入框改完離開時觸發，給「離開才存」的欄位用；
+ * original：編輯既有資料時傳載入的值（要是獨立的副本，不能是 v-model 綁的同一個物件）。必填語系只在新增（沒有 original）
+ * 或目前文字與 original 不同時才要求，必填語系增加後沒動到的舊資料不先擋。
+ */
+const props = defineProps<{ modelValue: I18nText; label: string; error?: string; optional?: boolean; hint?: string; maxlength?: number; original?: I18nText }>();
 const emit = defineEmits<{ 'update:modelValue': [value: I18nText]; change: [] }>();
 const { t } = useI18n();
-const others: Locale[] = ['en-US', 'th', 'vi'];
-const zhInput = ref<{ validate(): boolean | Promise<boolean> } | null>(null);
+
+const required = computed<Locale[]>(() => (props.optional ? [] : requiredTextLocales()));
+// 輸入框列出必填語系（不論是否有勾選必填，optional 時仍各列一個）；其餘啟用語系放展開區，停用語系不列但保留原值
+const primary = computed<Locale[]>(() => requiredTextLocales());
+const others = computed<Locale[]>(() => enabledLocales().filter((l) => !primary.value.includes(l)));
+const needed = computed(() => !props.original || !sameI18n(props.modelValue, props.original));
+const inputs = ref<{ validate(): boolean | Promise<boolean> }[]>([]);
 
 function set(locale: Locale, v: string | number | null) {
   const next = { ...props.modelValue, [locale]: v == null ? '' : String(v) };
@@ -16,22 +27,30 @@ function set(locale: Locale, v: string | number | null) {
   emit('update:modelValue', next);
 }
 
-defineExpose({ validate: async () => !!(await zhInput.value?.validate()) });
+const rules = (l: Locale) => (required.value.includes(l) && needed.value ? [(v: string) => !!v?.trim() || t('designer.localeRequired', { locale: l })] : []);
+
+defineExpose({
+  validate: async () => {
+    const results = await Promise.all(inputs.value.map((i) => i.validate()));
+    return results.every(Boolean);
+  },
+});
 </script>
 
 <template>
   <div>
-    <div data-testid="i18n-zh-TW">
+    <div v-for="(l, i) in primary" :key="l" :data-testid="`i18n-${l}`">
       <q-input
-        ref="zhInput" :model-value="modelValue['zh-TW'] ?? ''" :label="optional ? `${label} (zh-TW)` : `${label} (zh-TW) *`"
-        :error="!!error || undefined" :error-message="error" :hint="hint" :maxlength="maxlength"
-        :rules="optional ? [] : [(v: string) => !!v?.trim() || t('designer.zhRequired')]" lazy-rules="ondemand" outlined dense
-        @update:model-value="(v) => set('zh-TW', v)" @change="emit('change')"
+        :ref="(el) => { if (el) inputs[i] = el as never; }" :model-value="modelValue[l] ?? ''"
+        :label="required.includes(l) ? `${label} (${l}) *` : `${label} (${l})`"
+        :error="(!!error && i === 0) || undefined" :error-message="i === 0 ? error : undefined" :hint="i === 0 ? hint : undefined" :maxlength="maxlength"
+        :rules="rules(l)" lazy-rules="ondemand" outlined dense :class="{ 'q-mt-xs': i > 0 }"
+        @update:model-value="(v) => set(l, v)" @change="emit('change')"
       />
     </div>
-    <q-expansion-item dense :label="t('designer.otherLocales')" class="q-mt-xs">
+    <q-expansion-item v-if="others.length" dense :label="t('designer.otherLocales')" class="q-mt-xs">
       <q-input
-        v-for="l in others" :key="l" :model-value="modelValue[l] ?? ''"
+        v-for="l in others" :key="l" :model-value="modelValue[l] ?? ''" :data-testid="`i18n-${l}`"
         :label="`${label} (${l})`" :maxlength="maxlength" outlined dense class="q-mt-xs"
         @update:model-value="(v) => set(l, v)" @change="emit('change')"
       />

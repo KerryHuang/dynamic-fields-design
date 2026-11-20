@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { useSaveSmtpChannel, useSmtpChannel, useTestSmtpChannel } from 'src/application/dynamic/queries/ops-queries';
 import { formatTime, mailTestError } from 'src/domain/ops/ops-format';
 import { LOCALES } from 'src/i18n/locale';
+import { enabledLocales } from 'src/i18n/locale-settings';
 import { joinList } from 'src/i18n/translate';
 import type { ApiError } from 'src/services/api/http';
 
@@ -23,17 +24,26 @@ watch(c, (v) => {
 }, { immediate: true });
 
 const localeName = (code: string) => LOCALES.find((l) => l.code === code)?.label ?? code;
-const localeOptions = computed(() => [
-  { value: null, label: t('ops.channel.localeFactory', { name: localeName(c.value?.mailLocale.factory ?? '') }) },
-  ...LOCALES.map((l) => ({ value: l.code, label: l.label })),
-]);
+// 只列啟用語系；已存的語言之後被停用時仍列出並標「已停用」，只能維持、不能新選（照常寄）
+const savedLocale = computed(() => (c.value && !c.value.mailLocale.isFactory ? c.value.mailLocale.value : null));
+const localeOptions = computed(() => {
+  const opts: { value: string | null; label: string; disable?: boolean }[] = [
+    { value: null, label: t('ops.channel.localeFactory', { name: localeName(c.value?.mailLocale.factory ?? '') }) },
+    ...LOCALES.filter((l) => enabledLocales().includes(l.code)).map((l) => ({ value: l.code as string, label: l.label })),
+  ];
+  const saved = savedLocale.value;
+  if (saved && !opts.some((o) => o.value === saved)) opts.push({ value: saved, label: `${localeName(saved)}（${t('ops.channel.localeDisabled')}）`, disable: true });
+  return opts;
+});
 
 const errors = ref<Record<string, string[]>>({});
 const err = (k: string) => (errors.value[k] ?? []).join('；');
 const save = useSaveSmtpChannel();
 function submit() {
   errors.value = {};
-  save.mutate({ enabled: draft.value.enabled, toAddresses: draft.value.toAddresses, mailLocale: draft.value.mailLocale }, {
+  // 信件語言沒改就不送（省略＝不變）：已存的語言即使已停用也不會被後端擋
+  const changed = draft.value.mailLocale !== savedLocale.value;
+  save.mutate({ enabled: draft.value.enabled, toAddresses: draft.value.toAddresses, ...(changed && { mailLocale: draft.value.mailLocale }) }, {
     onSuccess: () => $q.notify({ type: 'positive', message: t('ops.saved') }),
     onError: (e) => {
       const x = e as unknown as ApiError;

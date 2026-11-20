@@ -1,4 +1,5 @@
 import { pruneCondition } from './condition';
+import { missingRequired } from './i18n-text';
 import type { EffectKind, EventEffect, EventSetItem, EventTriggerOn, ModuleEvent } from './events-ledger';
 import type { ConditionNode, I18nText, ModulePermissions } from './types';
 
@@ -118,9 +119,12 @@ function buildEffect(e: EffectDraft): EventEffect | undefined {
   return { ...base, ...(e.each && { each: e.each }), set: e.set.map((s) => buildSet(s, false)) };
 }
 
-/** Request body, or undefined while a required pick is missing (the server validates the rest and its messages are shown as they come). */
-export function buildEvent(d: EventDraft, sourceModuleKey: string): ModuleEvent | undefined {
-  if (!d.key.trim() || !d.name['zh-TW']?.trim()) return undefined;
+/**
+ * Request body, or undefined while a required pick is missing (the server validates the rest and its messages are shown as they come).
+ * `originalName`: the loaded name when editing (a copy); required locales are only enforced when the name is new or changed.
+ */
+export function buildEvent(d: EventDraft, sourceModuleKey: string, originalName?: I18nText): ModuleEvent | undefined {
+  if (!d.key.trim() || missingRequired(d.name, originalName).length) return undefined;
   if (d.on === 'transition' && d.toState == null) return undefined;
   const effects = d.effects.map(buildEffect);
   if (effects.some((e) => !e)) return undefined;

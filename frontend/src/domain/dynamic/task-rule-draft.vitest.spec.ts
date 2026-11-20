@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLocaleSettings } from 'src/i18n/locale-settings';
 import type { SchemaField } from './types';
 import {
   assigneeFields, blankTaskRuleDraft, dueFields, fromTaskRule, toTaskRuleBody, validateDraft, type TaskRule, type TaskRuleDraft,
@@ -138,5 +139,31 @@ describe('task-rule-draft', () => {
       key: 'r1', name: { 'zh-TW': '規則' }, active: false, repeat: 'everyTime',
       trigger: { on: 'onFieldBecomes', fieldId: 6, value: true }, when: rule.when, tasks: rule.tasks,
     });
+  });
+});
+
+describe('必填語系（政策 locale.requiredText）', () => {
+  afterEach(() => setLocaleSettings({ requiredText: ['zh-TW'] }));
+
+  it('必填改成英文時，新增只有繁中的名稱與標題報錯，有英文就過', () => {
+    setLocaleSettings({ requiredText: ['en-US'] });
+    expect(validateDraft(valid(), fields, LIMITS)).toEqual(['taskRules.errors.nameRequired', 'taskRules.errors.titleRequired']);
+    const d = valid();
+    d.name = { 'en-US': 'Follow up' };
+    d.tasks[0]!.title = { 'en-US': 'Call' };
+    expect(validateDraft(d, fields, LIMITS)).toEqual([]);
+  });
+
+  it('編輯既有只有繁中的規則：沒改文字通過；只改了某個任務標題才報該標題', () => {
+    setLocaleSettings({ requiredText: ['zh-TW', 'en-US'] });
+    const original = { name: { 'zh-TW': '跟進' }, titles: { call: { 'zh-TW': '回電' } } };
+    expect(validateDraft(valid(), fields, LIMITS, original)).toEqual([]);
+    const d = valid();
+    d.tasks[0]!.title = { 'zh-TW': '回電給客戶' };
+    expect(validateDraft(d, fields, LIMITS, original)).toEqual(['taskRules.errors.titleRequired']);
+    // 新加的任務（代碼不在原值裡）照必填擋
+    const d2 = valid();
+    d2.tasks.push({ code: 'mail', title: { 'zh-TW': '寄信' }, assigneeFieldId: 1, dueOffsetDays: 0 });
+    expect(validateDraft(d2, fields, LIMITS, original)).toEqual(['taskRules.errors.titleRequired']);
   });
 });

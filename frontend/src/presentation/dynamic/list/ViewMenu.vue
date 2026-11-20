@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import type { I18nText, ListView } from 'src/domain/dynamic/types';
+import { requiredTextLocales } from 'src/i18n/locale-settings';
 
 const props = defineProps<{ views: ListView[]; current?: ListView; modified: boolean }>();
 const emit = defineEmits<{
@@ -29,9 +30,9 @@ function openSaveAs() {
 function submit() {
   const name = form.value.name.trim();
   if (!name) return;
-  // zh-TW is the required locale; also keep the entered text under the UI locale
+  // 名稱寫進每個必填語系（政策 locale.requiredText），並保留在目前介面語系
   saving.value = false;
-  emit('saveAs', { name: { 'zh-TW': name, [locale.value]: name }, shared: form.value.shared, isDefault: form.value.isDefault });
+  emit('saveAs', { name: { ...Object.fromEntries(requiredTextLocales().map((l) => [l, name])), [locale.value]: name }, shared: form.value.shared, isDefault: form.value.isDefault });
 }
 function confirmRemove() {
   Dialog.create({ message: t('dynamic.view.confirmDelete'), cancel: true, persistent: true }).onOk(() => emit('remove'));

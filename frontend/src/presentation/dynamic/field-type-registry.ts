@@ -235,7 +235,7 @@ function filterInputFor(type: FieldType, component: Component) {
     if (type === 'enum' || type === 'multienum' || type === 'user') {
       const options = type === 'user'
         ? useIdentityStore().users.map((u) => ({ value: u.userId, label: u.displayName }))
-        : field.options.map((o) => ({ value: o.value, label: resolveI18n(o.label, 'zh-TW'), color: o.color }));
+        : field.options.map((o) => ({ value: o.value, label: resolveI18n(o.label, currentLocale()), color: o.color }));
       return { component, props: { ...filterBase, multiple: need === 'list' || type === 'multienum', options } };
     }
     const extra: Record<string, unknown> = type === 'datetime' ? { withTime: true } : {};

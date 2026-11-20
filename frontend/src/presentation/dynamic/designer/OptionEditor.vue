@@ -3,6 +3,7 @@ import { useQuasar } from 'quasar';
 import { reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useDesignerMutation } from 'src/application/dynamic/queries/modules-queries';
+import { missingRequired } from 'src/domain/dynamic/i18n-text';
 import type { DesignerOption, I18nText } from 'src/domain/dynamic/types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
@@ -16,10 +17,12 @@ const { t } = useI18n();
 const $q = useQuasar();
 
 const drafts = reactive<Record<number, Draft>>({});
+// 載入時的標籤（獨立副本）：必填語系增加後，沒改標籤的既有選項照常能存
+const originals: Record<number, I18nText> = {};
 const fresh = ref<Draft>({ label: {}, color: '', active: true });
 
 // Seed only rows we have not seen, so saving one row never overwrites another row's unsaved edits.
-const seed = (o: DesignerOption) => { drafts[o.id] = { label: { ...o.label }, color: o.color ?? '', active: o.active }; };
+const seed = (o: DesignerOption) => { originals[o.id] = { ...o.label }; drafts[o.id] = { label: { ...o.label }, color: o.color ?? '', active: o.active }; };
 watch(() => props.options, (list) => { for (const o of list) if (!drafts[o.id]) seed(o); }, { immediate: true, deep: true });
 
 // Option-level 400s are shown on the row's label input (key `Label`); everything else goes to Notify.
@@ -46,7 +49,7 @@ const onAdd = () => add.mutate(fresh.value, { onSuccess: () => { fresh.value = {
     <div class="text-subtitle2 q-mb-sm">{{ t('designer.options') }}</div>
     <div v-for="o in options" :key="o.id" class="row items-start q-col-gutter-sm q-mb-sm">
       <div class="col">
-        <I18nTextInput v-model="drafts[o.id]!.label" :label="t('designer.optionLabel')" :error="errorFor(errors[o.id] ?? null, 'Label')" />
+        <I18nTextInput v-model="drafts[o.id]!.label" :original="originals[o.id]" :label="t('designer.optionLabel')" :error="errorFor(errors[o.id] ?? null, 'Label')" />
       </div>
       <div class="col-3">
         <q-input v-model="drafts[o.id]!.color" :label="t('designer.color')" outlined dense clearable>
@@ -61,7 +64,7 @@ const onAdd = () => add.mutate(fresh.value, { onSuccess: () => { fresh.value = {
         <q-toggle v-model="drafts[o.id]!.active" :label="t('designer.optionActive')" />
         <q-btn
           flat dense color="primary" icon="save" :title="t('designer.saveOption')"
-          :disable="!drafts[o.id]!.label['zh-TW']" @click="update.mutate({ id: o.id, d: drafts[o.id]! }, { onSuccess: () => { errors[o.id] = null; }, onError: (e) => fail(e, o.id) })"
+          :disable="missingRequired(drafts[o.id]!.label, originals[o.id]).length > 0" @click="update.mutate({ id: o.id, d: drafts[o.id]! }, { onSuccess: () => { errors[o.id] = null; }, onError: (e) => fail(e, o.id) })"
         />
       </div>
     </div>
@@ -69,7 +72,7 @@ const onAdd = () => add.mutate(fresh.value, { onSuccess: () => { fresh.value = {
       <div class="col"><I18nTextInput v-model="fresh.label" :label="t('designer.optionLabel')" :error="errorFor(freshError, 'Label')" /></div>
       <div class="col-3"><q-input v-model="fresh.color" :label="t('designer.color')" outlined dense /></div>
       <div class="col-auto">
-        <q-btn color="primary" icon="add" :label="t('designer.addOption')" :disable="!fresh.label['zh-TW']" @click="onAdd" />
+        <q-btn color="primary" icon="add" :label="t('designer.addOption')" :disable="missingRequired(fresh.label).length > 0" @click="onAdd" />
       </div>
     </div>
   </div>

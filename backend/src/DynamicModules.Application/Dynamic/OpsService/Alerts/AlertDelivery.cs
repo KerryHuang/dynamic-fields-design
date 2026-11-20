@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.OpsService.Scheduling;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Ops;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -41,7 +42,8 @@ public sealed class ClaimAlertHandler(
             return ServiceResult.Success(new AlertClaimResult(null));
         }
 
-        await DigestAsync(now, settings, ct);
+        var defaultLocale = await policies.ChoiceAsync(PolicyCatalog.LocaleDefault, null, ct);
+        await DigestAsync(now, settings, defaultLocale, ct);
 
         var policy = await AlertEmailPolicy.ReadAsync(policies, ct);
         var full = await outbox.CountQuotaUsedAsync(AlertChannel.Smtp, now - AlertLimits.QuotaWindow, ct) >= policy.MaxPerHour;
@@ -58,7 +60,7 @@ public sealed class ClaimAlertHandler(
     /// <summary>
     /// 每個整點後的第一輪：這個整點之後還沒有摘要信、而有整點前建立且還沒掛上的 <c>digested</c> 列，就新增一封摘要信並把那些列掛上去（同一交易）。
     /// </summary>
-    private async Task DigestAsync(DateTime now, SmtpSettings settings, CancellationToken ct)
+    private async Task DigestAsync(DateTime now, SmtpSettings settings, string defaultLocale, CancellationToken ct)
     {
         var hour = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc);
         if (await outbox.DigestExistsSinceAsync(AlertChannel.Smtp, hour, ct)) return;
@@ -71,10 +73,10 @@ public sealed class ClaimAlertHandler(
             items.Add(incident is null
                 ? new DigestItem(row.IncidentId, IncidentSeverity.Warning, null, row.Subject, row.CreatedUtc)
                 : new DigestItem(incident.Id, incident.Severity, incident.Category,
-                    IncidentTitles.Text(AlertMailText.Locale(settings.MailLocale), incident.TitleKey, IncidentTitles.FromJson(incident.TitleParamsJson)),
+                    IncidentTitles.Text(AlertMailText.Locale(settings.MailLocale, defaultLocale), incident.TitleKey, IncidentTitles.FromJson(incident.TitleParamsJson)),
                     row.CreatedUtc));
         }
-        var mail = AlertMailComposer.Digest(items, settings.MailLocale);
+        var mail = AlertMailComposer.Digest(items, settings.MailLocale, defaultLocale);
         var digest = new AlertOutbox
         {
             Channel = AlertChannel.Smtp, Transition = AlertTransition.Digest, Subject = mail.Subject, Body = mail.Body,

@@ -9,6 +9,7 @@ import enUS from 'src/i18n/en-US.json';
 import th from 'src/i18n/th.json';
 import vi18n from 'src/i18n/vi.json';
 import zhTW from 'src/i18n/zh-TW.json';
+import { setLocaleSettings } from 'src/i18n/locale-settings';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import FieldEditorDialog from './FieldEditorDialog.vue';
 
@@ -1034,5 +1035,52 @@ describe('FieldEditorDialog', () => {
         w.unmount();
       });
     });
+  });
+});
+
+describe('FieldEditorDialog 必填語系（政策 locale.requiredText）', () => {
+  beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+    setLocaleSettings({ requiredText: ['zh-TW', 'en-US'] });
+  });
+  afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks(); setLocaleSettings({ requiredText: ['zh-TW'] }); });
+  const save = () => [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('儲存'))!.click();
+
+  it('只改其他設定可以存（既有欄位只有繁中、沒動標籤）', async () => {
+    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
+    const w = mountDialog({ field: field('text') });
+    await flushPromises();
+    (q('fullwidth-toggle') as HTMLElement).click();
+    await flushPromises();
+    save();
+    await flushPromises();
+    expect(spy).toHaveBeenCalledOnce();
+    w.unmount();
+  });
+
+  it('改了標籤文字才要求補語系', async () => {
+    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
+    const w = mountDialog({ field: field('text') });
+    await flushPromises();
+    await w.findComponent({ name: 'I18nTextInput' }).vm.$emit('update:modelValue', { 'zh-TW': '欄位二' });
+    await flushPromises();
+    save();
+    await flushPromises();
+    expect(spy).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('en-US 必填');
+    w.unmount();
+  });
+
+  it('新增照必填語系擋', async () => {
+    const spy = vi.spyOn(dynamicApi, 'addField').mockResolvedValue({ id: 9 } as never);
+    const w = mountDialog({});
+    await flushPromises();
+    await w.findComponent({ name: 'I18nTextInput' }).vm.$emit('update:modelValue', { 'zh-TW': '新欄位' });
+    await flushPromises();
+    save();
+    await flushPromises();
+    expect(spy).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('en-US 必填');
+    w.unmount();
   });
 });

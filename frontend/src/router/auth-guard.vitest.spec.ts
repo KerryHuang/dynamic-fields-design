@@ -7,6 +7,8 @@ import { useIdentityStore } from 'src/stores/use-identity-store';
 import { useThemeStore } from 'src/stores/use-theme-store';
 import { resetSessionSettings } from 'src/application/dynamic/session-settings';
 import { businessOffset, setBusinessOffset } from 'src/domain/dynamic/business-time';
+import { LOCALE_KEY } from 'src/i18n/locale';
+import { defaultLocale, enabledLocales, setLocaleSettings } from 'src/i18n/locale-settings';
 import { handleUnauthorized, installAuthGuard, safeRedirect } from './auth-guard';
 
 const page = { template: '<i/>' };
@@ -22,6 +24,8 @@ let meResponse: { status: number; data: unknown };
 let meCalls: number;
 let effResponse: { status: number; data: unknown };
 let effCalls: number;
+let optionsResponse: { status: number; data: unknown };
+let uiLocale: { value: string };
 const effective = (zone: string) => ({ status: 200, data: { values: { 'locale.timeZone': zone } } });
 
 function setup() {
@@ -32,21 +36,27 @@ function setup() {
   http.defaults.adapter = async (config) => {
     if (config.url === '/me') meCalls++;
     if (config.url === '/policies/effective') effCalls++;
-    const r = config.url === '/policies/effective' ? effResponse : meResponse;
+    const r = config.url === '/policies/effective' ? effResponse : config.url === '/auth/options' ? optionsResponse : meResponse;
     if (r.status >= 400) return Promise.reject({ config, response: r });
     return { data: r.data, status: r.status, statusText: 'OK', headers: {}, config };
   };
   const router = createRouter({ history: createMemoryHistory(), routes });
-  installAuthGuard(router);
+  uiLocale = { value: 'zh-TW' };
+  installAuthGuard(router, uiLocale);
   return router;
 }
 
 beforeEach(() => {
   effResponse = effective('+08:00');
+  optionsResponse = { status: 200, data: { demoLoginEnabled: false, demoGenerating: false, demoAccounts: [], defaultLocale: 'zh-TW', enabledLocales: ['zh-TW', 'en-US', 'th', 'vi'] } };
+  localStorage.clear();
 });
 
 // 測試會改營運時區，結束後換回 vitest.setup 的出廠值
-afterEach(() => setBusinessOffset('+08:00'));
+afterEach(() => {
+  setBusinessOffset('+08:00');
+  setLocaleSettings({ defaultLocale: 'zh-TW', enabled: ['zh-TW', 'en-US', 'th', 'vi'], requiredText: ['zh-TW'] });
+});
 
 describe('auth guard', () => {
   beforeEach(() => {
@@ -294,4 +304,56 @@ describe('safeRedirect', () => {
   ])('rejects %s', (p) => expect(safeRedirect(p)).toBe('/'));
 
   it.each([['/dynamic/order'], ['/dynamic/order?q=1'], ['/']])('accepts %s', (p) => expect(safeRedirect(p)).toBe(p));
+});
+
+describe('auth guard 語系政策', () => {
+  const en = (enabled: string[], def = 'en-US') => ({ status: 200, data: { defaultLocale: def, enabledLocales: enabled } });
+  beforeEach(() => {
+    meResponse = { status: 401, data: { message: '請先登入' } };
+  });
+
+  it('沒記過語系時套用預設語系，不寫入 localStorage', async () => {
+    optionsResponse = en(['zh-TW', 'en-US']);
+    const router = setup();
+    await router.push('/login');
+    expect(uiLocale.value).toBe('en-US');
+    expect(localStorage.getItem(LOCALE_KEY)).toBeNull();
+    expect(defaultLocale()).toBe('en-US');
+    expect(enabledLocales()).toEqual(['zh-TW', 'en-US']);
+  });
+
+  it('記的語系仍啟用時沿用，不改', async () => {
+    optionsResponse = en(['zh-TW', 'en-US']);
+    localStorage.setItem(LOCALE_KEY, 'zh-TW');
+    const router = setup();
+    await router.push('/login');
+    expect(uiLocale.value).toBe('zh-TW');
+  });
+
+  it('記的語系已停用時改用預設語系', async () => {
+    optionsResponse = en(['zh-TW', 'en-US']);
+    localStorage.setItem(LOCALE_KEY, 'th');
+    const router = setup();
+    await router.push('/login');
+    expect(uiLocale.value).toBe('en-US');
+    expect(localStorage.getItem(LOCALE_KEY)).toBe('th');
+  });
+
+  it('伺服器連不上時維持繁中、全部語系可選', async () => {
+    optionsResponse = { status: 500, data: null };
+    const router = setup();
+    await router.push('/login');
+    expect(uiLocale.value).toBe('zh-TW');
+    expect(defaultLocale()).toBe('zh-TW');
+    expect(enabledLocales()).toEqual(['zh-TW', 'en-US', 'th', 'vi']);
+  });
+
+  it('登入後載入全系統生效值時更新三個語系設定', async () => {
+    meResponse = { status: 200, data: { userId: 'admin', mustChangePassword: false } };
+    effResponse = { status: 200, data: { values: { 'locale.timeZone': '+08:00', 'locale.default': 'en-US', 'locale.enabled': ['zh-TW', 'en-US'], 'locale.requiredText': ['en-US'] } } };
+    const router = setup();
+    await router.push('/');
+    expect(defaultLocale()).toBe('en-US');
+    expect(enabledLocales()).toEqual(['zh-TW', 'en-US']);
+  });
 });

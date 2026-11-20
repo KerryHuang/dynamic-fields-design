@@ -66,6 +66,8 @@ const form = reactive({
   fillRows: [] as MapRow[],
 });
 const error = ref<ApiError | null>(null);
+// 開啟時的標籤（獨立副本）：必填語系增加後，只改其他設定的既有欄位不要求補語系
+const originalLabel = ref<I18nText | undefined>();
 const labelInput = ref<{ validate(): Promise<boolean> } | null>(null);
 
 const isEdit = computed(() => !!props.field);
@@ -87,6 +89,7 @@ watch(() => [props.modelValue, props.field?.id] as const, ([open]) => {
   if (!open) return;
   const f = props.field;
   error.value = null;
+  originalLabel.value = f ? { ...f.label } : undefined;
   Object.assign(form, {
     type: f?.type ?? 'text',
     label: { ...(f?.label ?? {}) },
@@ -137,7 +140,7 @@ function setRollupSource(id: number | null) {
 
 /** The registry renders the default-value input from a SchemaField, so describe the field being edited as one. */
 const defaultField = computed<SchemaField>(() => ({
-  id: props.field?.id ?? 0, key: 'defaultValue', type: form.type, label: { 'zh-TW': t('designer.defaultValue') },
+  id: props.field?.id ?? 0, key: 'defaultValue', type: form.type, label: { [locale.value]: t('designer.defaultValue') },
   config: { required: false, readOnly: false, showInList: false, isFilterable: false, isSortable: false, scale: num(form.scale) },
   options: (props.field?.options ?? []).map((o) => ({ value: o.value, label: o.label, color: o.color, active: o.active })),
 }));
@@ -336,7 +339,7 @@ const saving = computed(() => create.isPending.value || update.isPending.value);
     <q-card style="min-width: 560px; max-width: 90vw">
       <q-card-section class="text-h6">{{ isEdit ? t('designer.editField') : t('designer.addField') }}</q-card-section>
       <q-card-section class="q-gutter-md scroll" style="max-height: 70vh">
-        <I18nTextInput ref="labelInput" v-model="form.label" :label="t('designer.fieldLabel')" :error="errorFor(error, 'Label')" />
+        <I18nTextInput ref="labelInput" v-model="form.label" :original="originalLabel" :label="t('designer.fieldLabel')" :error="errorFor(error, 'Label')" />
 
         <div data-testid="type-select">
           <q-select v-model="form.type" :options="typeSel.filtered.value" :label="t('designer.fieldType')" emit-value map-options

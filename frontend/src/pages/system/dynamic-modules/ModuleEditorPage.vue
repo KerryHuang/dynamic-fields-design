@@ -134,6 +134,8 @@ const columnOptions = computed(() => {
   const n = Math.max(max ?? 0, openedColumns.value);
   return Array.from({ length: n }, (_, i) => ({ label: String(i + 1), value: i + 1 }));
 });
+// 開啟區塊對話框時的標籤（獨立副本）：必填語系增加後，只改欄數或收合的既有區塊不要求補語系；新增區塊不傳
+const originalBlockLabel = ref<I18nText | undefined>();
 const blockInput = ref<{ validate(): Promise<boolean> } | null>(null);
 const addBlock = mutation((label: I18nText) => dynamicApi.addBlock(moduleKey.value, label));
 const updateBlock = mutation((v: { id: number; label: I18nText; collapsed: boolean; columns: number }) =>
@@ -141,6 +143,7 @@ const updateBlock = mutation((v: { id: number; label: I18nText; collapsed: boole
 
 function openBlock(b?: DesignerBlock) {
   blockForm.value = b ? { id: b.id, label: { ...b.label }, collapsed: b.collapsed, columns: b.columns } : { label: {}, collapsed: false, columns: 4 };
+  originalBlockLabel.value = b ? { ...b.label } : undefined;
   openedColumns.value = blockForm.value.columns;
   blockError.value = null;
   blockDialog.value = true;
@@ -245,7 +248,7 @@ function setTasksEnabled(tasksEnabled: boolean) {
 function setIcon(icon: string) {
   updateModule.mutate({ icon }, { onError: (e) => fail(e) });
 }
-// Blank zh-TW clears the section: `section: undefined` overrides the current value and is dropped from the JSON body.
+// Blank in every locale clears the section: `section: undefined` overrides the current value and is dropped from the JSON body.
 const sectionDraft = ref<I18nText>({});
 watch(() => mod.value?.section, (s) => { sectionDraft.value = { ...s }; }, { immediate: true });
 function saveSection() {
@@ -445,7 +448,7 @@ function saveSection() {
         <q-card style="min-width: 420px; max-width: 90vw">
           <q-card-section class="text-h6">{{ blockForm.id === undefined ? t('designer.addBlock') : t('designer.editBlock') }}</q-card-section>
           <q-card-section class="q-gutter-md">
-            <I18nTextInput ref="blockInput" v-model="blockForm.label" :label="t('designer.blockLabel')" :error="errorFor(blockError, 'Label')" />
+            <I18nTextInput ref="blockInput" v-model="blockForm.label" :original="originalBlockLabel" :label="t('designer.blockLabel')" :error="errorFor(blockError, 'Label')" />
             <q-toggle v-if="blockForm.id !== undefined" v-model="blockForm.collapsed" :label="t('designer.collapsed')" />
             <div v-if="blockForm.id !== undefined">
               <div class="text-caption text-muted">{{ t('designer.columns') }}</div>

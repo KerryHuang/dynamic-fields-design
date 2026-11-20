@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import type { ListView } from 'src/domain/dynamic/types';
+import { setLocaleSettings } from 'src/i18n/locale-settings';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ViewMenu from './ViewMenu.vue';
@@ -95,5 +96,22 @@ describe('ViewMenu', () => {
     };
     expect(await dialogText(true)).toContain(zhTW.dynamic.view.shared);
     expect(await dialogText(false)).not.toContain(zhTW.dynamic.view.shared);
+  });
+
+  it('另存時名稱寫進目前語系與每個必填語系', async () => {
+    setLocaleSettings({ requiredText: ['zh-TW', 'en-US'] });
+    const w = await open(undefined);
+    (item('view-save-as') as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+    const input = document.body.querySelector('.q-dialog input') as HTMLInputElement;
+    input.value = '我的檢視';
+    input.dispatchEvent(new Event('input'));
+    await nextTick();
+    const ok = [...document.body.querySelectorAll('.q-dialog button')].find((b) => b.textContent?.includes('儲存')) as HTMLElement;
+    ok.click();
+    await flushPromises();
+    expect(w.emitted('saveAs')![0]![0]).toMatchObject({ name: { 'zh-TW': '我的檢視', 'en-US': '我的檢視' } });
+    setLocaleSettings({ requiredText: ['zh-TW'] });
+    w.unmount();
   });
 });

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLocaleSettings } from 'src/i18n/locale-settings';
 import {
   buildEvent, draftFromEvent, emptyEffect, emptyEventDraft, emptySet, formulaFieldIds, groupEventErrors, hiddenFieldIds, nextEffectCode,
   setIsComplete, usesAllowHiddenSource, usesHiddenSource,
@@ -153,5 +154,25 @@ describe('groupEventErrors', () => {
     expect(g.effects.get(0)?.own).toEqual(['目標模組不存在']);
     expect(g.effects.get(2)?.own).toEqual(['循環：a → b → a']);
     expect(g.general).toEqual(['事件最多 10 個效果']);
+  });
+});
+
+describe('必填語系（政策 locale.requiredText）', () => {
+  afterEach(() => setLocaleSettings({ requiredText: ['zh-TW'] }));
+
+  it('必填改成英文時，新增只有繁中名稱不能送，只有英文就過', () => {
+    setLocaleSettings({ requiredText: ['en-US'] });
+    expect(buildEvent(draftFromEvent(shipEvent), 'ship')).toBeUndefined();
+    const d = draftFromEvent(shipEvent);
+    d.name = { 'en-US': 'Ship post' };
+    expect(buildEvent(d, 'ship')).toBeDefined();
+  });
+
+  it('編輯既有只有繁中的事件，沒改名稱就能送；改了名稱才要求補語系', () => {
+    setLocaleSettings({ requiredText: ['zh-TW', 'en-US'] });
+    expect(buildEvent(draftFromEvent(shipEvent), 'ship', { ...shipEvent.name })).toBeDefined();
+    const d = draftFromEvent(shipEvent);
+    d.name = { 'zh-TW': '出貨過帳二' };
+    expect(buildEvent(d, 'ship', { ...shipEvent.name })).toBeUndefined();
   });
 });

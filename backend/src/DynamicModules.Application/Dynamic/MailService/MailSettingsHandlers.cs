@@ -135,7 +135,7 @@ public sealed class SendMailSettingsTestHandler(
         MailSendResult result;
         using (var timeout = new CancellationTokenSource(AlertLimits.SendTimeout, time))
         using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token))
-            result = await mailer.SendAsync(smtp, password, AlertMailComposer.MailTest(smtp.MailLocale), linked.Token);
+            result = await mailer.SendAsync(smtp, password, AlertMailComposer.MailTest(smtp.MailLocale, locale.Locale), linked.Token);
         await audit.TryWriteNowAsync(new AuditEntry("mailSettings.test", result.Ok ? AuditResult.Success : AuditResult.Failed,
             AuditTargets.MailSettings, MailSettings.Default, ReasonCode: result.Ok ? null : result.Stage,
             Summary: new AuditSummary().Add("sentTo", smtp.ToAddresses.Count).Add("serverCode", result.ServerCode).ToJson()), ct);

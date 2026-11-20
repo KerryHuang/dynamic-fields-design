@@ -2,7 +2,7 @@ import { z, type ZodTypeAny } from 'zod';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { RuleState } from 'src/domain/dynamic/rule-engine';
 import type { DynamicRecord, ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
-import { tFor, type Translate } from 'src/i18n/translate';
+import { currentLocale, tFor, type Translate } from 'src/i18n/translate';
 import { zodFor } from './field-type-registry';
 import { isWritable } from './rule-state';
 
@@ -29,7 +29,7 @@ export function buildZodSchema(
   mode: 'create' | 'edit',
   existing?: DynamicRecord,
   ruleState?: RuleState,
-  { storedRuleState, locale = 'zh-TW', t = tFor(locale) }: RuleOptions = {},
+  { storedRuleState, locale = currentLocale(), t = tFor(locale) }: RuleOptions = {},
 ) {
   const shape: Record<string, ZodTypeAny> = {};
   const fields: SchemaField[] = schema.blocks.flatMap((b) => b.fields);

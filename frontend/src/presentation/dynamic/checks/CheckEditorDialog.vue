@@ -8,7 +8,7 @@ import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
 import { useSelectFilter } from 'src/components/framework/useSelectFilter';
 import { buildCheck, draftFromCheck, emptyCheckDraft, groupCheckErrors, type CheckDraft } from 'src/domain/dynamic/check-draft';
 import type { CheckOp, ModuleCheck } from 'src/domain/dynamic/events-ledger';
-import type { ConditionNode, ModuleDetail } from 'src/domain/dynamic/types';
+import type { ConditionNode, I18nText, ModuleDetail } from 'src/domain/dynamic/types';
 import DesignerDialog from 'src/presentation/dynamic/designer/DesignerDialog.vue';
 import { fieldOptions } from 'src/presentation/dynamic/designer/field-options';
 import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
@@ -32,10 +32,13 @@ const error = ref<ApiError | null>(null);
 const nameInput = ref<{ validate(): Promise<boolean> } | null>(null);
 const messageInput = ref<{ validate(): Promise<boolean> } | null>(null);
 const isEdit = computed(() => !!props.check);
+// 開啟時的名稱與訊息（獨立副本）：必填語系增加後，沒改文字的既有檢查不要求補語系
+const original = ref<{ name: I18nText; message: I18nText } | undefined>();
 
 watch(() => [props.modelValue, props.check?.key] as const, ([open]) => {
   if (!open) return;
   error.value = null;
+  original.value = props.check ? { name: { ...props.check.name }, message: { ...props.check.definition.message } } : undefined;
   Object.assign(form, props.check ? draftFromCheck(props.check) : emptyCheckDraft());
   // Object.assign keeps a stale optional `where` when the new draft has none
   if (!props.check || !props.check.definition.where) delete form.where;
@@ -70,7 +73,7 @@ const setWhere = (n: ConditionNode | undefined) => { if (n) form.where = n; else
 
 // ---- save ----
 const save = useSaveCheckMutation();
-const body = computed(() => buildCheck(form, props.module.key));
+const body = computed(() => buildCheck(form, props.module.key, original.value));
 async function submit() {
   const names = await Promise.all([nameInput.value?.validate(), messageInput.value?.validate()]);
   if (names.some((ok) => !ok) || !body.value) return;
@@ -101,7 +104,7 @@ const joined = (lines: string[]) => joinList(lines) || undefined;
         :error="!!errors.key.length || undefined" :error-message="joined(errors.key)"
       />
     </div>
-    <div data-testid="check-name"><I18nTextInput ref="nameInput" v-model="form.name" :label="t('checks.name')" :error="joined(errors.name)" /></div>
+    <div data-testid="check-name"><I18nTextInput ref="nameInput" v-model="form.name" :original="original?.name" :label="t('checks.name')" :error="joined(errors.name)" /></div>
     <q-toggle v-model="form.active" :label="t('checks.active')" data-testid="check-active" />
 
     <div data-testid="check-group-by-wrap">
@@ -201,7 +204,7 @@ const joined = (lines: string[]) => joinList(lines) || undefined;
     </div>
 
     <div data-testid="check-message">
-      <I18nTextInput ref="messageInput" v-model="form.message" :label="t('checks.message')" :error="joined(errors.message)" />
+      <I18nTextInput ref="messageInput" v-model="form.message" :original="original?.message" :label="t('checks.message')" :error="joined(errors.message)" />
       <div class="text-caption text-muted q-mt-xs">{{ t('checks.messageHint') }}</div>
     </div>
 

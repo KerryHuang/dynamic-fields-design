@@ -1,4 +1,5 @@
 import { pruneCondition } from './condition';
+import { missingRequired } from './i18n-text';
 import type { CheckLimit, CheckOp, ModuleCheck } from './events-ledger';
 import type { ConditionNode, I18nText } from './types';
 
@@ -44,8 +45,8 @@ function buildLimit(d: CheckDraft): CheckLimit | undefined {
 }
 
 /** Request body, or undefined while a required pick is missing (the server validates the rest and its messages are shown as they come). */
-export function buildCheck(d: CheckDraft, moduleKey: string): ModuleCheck | undefined {
-  if (!d.key.trim() || !d.name['zh-TW']?.trim() || !d.message['zh-TW']?.trim()) return undefined;
+export function buildCheck(d: CheckDraft, moduleKey: string, original?: { name?: I18nText; message?: I18nText }): ModuleCheck | undefined {
+  if (!d.key.trim() || missingRequired(d.name, original?.name).length || missingRequired(d.message, original?.message).length) return undefined;
   if (d.function === 'sum' && d.fieldId == null) return undefined;
   const limit = buildLimit(d);
   if (!limit) return undefined;

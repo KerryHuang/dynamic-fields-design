@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { resolveI18n } from './i18n-text';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLocaleSettings } from 'src/i18n/locale-settings';
+import { compactI18n, missingRequired, resolveI18n, sameI18n } from './i18n-text';
+
+afterEach(() => setLocaleSettings({ defaultLocale: 'zh-TW', requiredText: ['zh-TW'] }));
 
 describe('resolveI18n', () => {
   it('returns the requested locale when present', () => {
@@ -13,5 +16,39 @@ describe('resolveI18n', () => {
   });
   it('returns empty string when nothing is available', () => {
     expect(resolveI18n({}, 'vi')).toBe('');
+  });
+  it('沒有繁中時用第一個有值的語系', () => {
+    expect(resolveI18n({ 'en-US': 'Order' }, 'th')).toBe('Order');
+  });
+  it('預設語系在繁中之前', () => {
+    setLocaleSettings({ defaultLocale: 'en-US' });
+    expect(resolveI18n({ 'zh-TW': '訂單', 'en-US': 'Order' }, 'th')).toBe('Order');
+  });
+});
+
+describe('compactI18n', () => {
+  it('去空白，沒有繁中也保留其他語系', () => {
+    expect(compactI18n({ 'en-US': ' Order ' })).toEqual({ 'en-US': 'Order' });
+  });
+  it('全部空白回 undefined', () => {
+    expect(compactI18n({ 'zh-TW': ' ', 'en-US': '' })).toBeUndefined();
+  });
+});
+
+describe('missingRequired', () => {
+  it('新增（沒有 original）照必填語系擋', () => {
+    setLocaleSettings({ requiredText: ['zh-TW', 'en-US'] });
+    expect(missingRequired({ 'zh-TW': '訂單' })).toEqual(['en-US']);
+    expect(missingRequired({ 'zh-TW': '訂單', 'en-US': 'Order' })).toEqual([]);
+  });
+  it('編輯沒改的既有資料不擋，改了才擋', () => {
+    setLocaleSettings({ requiredText: ['zh-TW', 'en-US'] });
+    const original = { 'zh-TW': '訂單' };
+    expect(missingRequired({ 'zh-TW': ' 訂單 ' }, original)).toEqual([]);
+    expect(missingRequired({ 'zh-TW': '訂單二' }, original)).toEqual(['en-US']);
+  });
+  it('sameI18n 忽略空值與空白', () => {
+    expect(sameI18n({ 'zh-TW': 'a', th: '' }, { 'zh-TW': 'a ' })).toBe(true);
+    expect(sameI18n({ 'zh-TW': 'a' }, { 'zh-TW': 'b' })).toBe(false);
   });
 });

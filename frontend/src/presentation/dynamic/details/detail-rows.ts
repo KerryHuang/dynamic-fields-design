@@ -1,6 +1,6 @@
 import type { RuleState } from 'src/domain/dynamic/rule-engine';
 import type { DetailRowPayload, DynamicRecord, ModuleSchema, ReferenceInfo, SchemaDetail, SchemaField } from 'src/domain/dynamic/types';
-import type { Translate } from 'src/i18n/translate';
+import { currentLocale, type Translate } from 'src/i18n/translate';
 import { buildZodSchema } from '../build-zod-schema';
 import { defaultValueOf } from '../field-type-registry';
 import { ruleStateOf } from '../rule-state';
@@ -101,7 +101,7 @@ export function rowRuleState(detail: SchemaDetail, row: DetailRowState): RuleSta
 }
 
 /** Client checks of the rows that will be sent; row uid -> field key (`_record` for the row) -> first message. */
-export function validateRows(detail: SchemaDetail, rows: DetailRowState[], locale = 'zh-TW', t?: Translate): Map<string, Record<string, string>> {
+export function validateRows(detail: SchemaDetail, rows: DetailRowState[], locale = currentLocale(), t?: Translate): Map<string, Record<string, string>> {
   const schema = asSchema(detail);
   const out = new Map<string, Record<string, string>>();
   for (const r of rows.filter(isSent)) {

@@ -1,4 +1,5 @@
 import { pruneCondition } from './condition';
+import { missingRequired } from './i18n-text';
 import type { ConditionNode, I18nText, Locale, SchemaField } from './types';
 import type { TaskRuleAutoPause, TaskRuleFailureStreak, TaskRuleLastPause } from 'src/domain/ops/ops-types';
 
@@ -119,13 +120,15 @@ export function validateDraft(
   draft: TaskRuleDraft, fields: SchemaField[],
   /** maxTasks 取自政策生效值；已超出新上限的既有規則，任務數沒增加就不報錯（同伺服器）。 */
   limits: { maxTasks: number; originalTaskCount: number },
+  /** 編輯既有規則時載入的名稱與各任務標題（任務代碼對應）；必填語系只在新增或改了文字時要求。 */
+  original?: { name?: I18nText; titles?: Record<string, I18nText> },
 ): string[] {
   const errors = new Set<string>();
   const err = (k: string) => errors.add(`taskRules.errors.${k}`);
   const byId = new Map(fields.map((f) => [f.id, f]));
 
   if (!KEY_PATTERN.test(draft.key.trim())) err('keyBad');
-  if (!draft.name['zh-TW']?.trim()) err('nameRequired');
+  if (missingRequired(draft.name, original?.name).length) err('nameRequired');
   else if (tooLong(draft.name)) err('nameTooLong');
 
   const t = draft.trigger;
@@ -145,7 +148,7 @@ export function validateDraft(
     if (!CODE_PATTERN.test(code)) err('taskCodeBad');
     else if (codes.has(code)) err('taskCodeDup');
     codes.add(code);
-    if (!task.title['zh-TW']?.trim()) err('titleRequired');
+    if (missingRequired(task.title, original?.titles?.[code]).length) err('titleRequired');
     else if (tooLong(task.title)) err('titleTooLong');
     if (tooLong(task.description, DESCRIPTION_MAX)) err('descriptionTooLong');
     if (byId.get(task.assigneeFieldId)?.type !== 'user') err('assigneeField');

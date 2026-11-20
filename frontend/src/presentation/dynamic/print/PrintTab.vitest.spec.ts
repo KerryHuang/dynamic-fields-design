@@ -5,6 +5,7 @@ import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { DesignerField, ModuleDetail, PrintTemplateDefinition } from 'src/domain/dynamic/types';
+import { setLocaleSettings } from 'src/i18n/locale-settings';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import PrintTab from './PrintTab.vue';
@@ -43,6 +44,18 @@ describe('PrintTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  });
+
+  it('範本名稱只列啟用語系，停用語系已存的名稱保留不刪', async () => {
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US'] });
+    api.updatePrintTemplate.mockResolvedValue(tpl);
+    api.getPrintTemplateDefinitions.mockResolvedValue([{ ...tpl, name: { 'zh-TW': '報價單', th: 'ใบเสนอราคา' } }]);
+    const w = await mountTab(mod());
+    api.getPrintTemplateDefinitions.mockResolvedValue([{ ...tpl, name: { 'zh-TW': '報價單', th: 'ใบเสนอราคา' } }]);
+    await w.find('[data-testid="print-item-sheet"]').trigger('click');
+    expect(w.find('[data-testid="print-name-en-US"]').exists()).toBe(true);
+    expect(w.find('[data-testid="print-name-th"]').exists()).toBe(false);
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] });
   });
 
   it('lists templates and saves an edited one under its fixed key', async () => {

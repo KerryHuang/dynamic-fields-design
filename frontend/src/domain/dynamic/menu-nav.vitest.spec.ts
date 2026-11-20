@@ -5,6 +5,14 @@ const item = (key: string, section?: string, closed?: boolean) =>
   ({ key, name: { 'zh-TW': key }, section: section === undefined ? undefined : { 'zh-TW': section }, closed });
 const sec = (key: string, section: Record<string, string>) => ({ key, name: { 'zh-TW': key }, section });
 
+describe('groupMenu 沒有繁中的分區', () => {
+  it('以第一個有值的語系分組，標題照退回鏈', () => {
+    const g = groupMenu([sec('a', { 'en-US': 'Sales' }), sec('b', { 'en-US': 'Sales' }), item('x')], 'th');
+    expect(g.map((x) => x.title)).toEqual([undefined, 'Sales']);
+    expect(g[1].items.map((i) => i.key)).toEqual(['a', 'b']);
+  });
+});
+
 describe('groupMenu', () => {
   it('puts unsectioned items first (title undefined), then sections by name, keeping /menu order inside a group', () => {
     const g = groupMenu([item('b', 'Z'), item('a1', 'A'), item('x'), item('a2', 'A'), item('y', '')], 'zh-TW');

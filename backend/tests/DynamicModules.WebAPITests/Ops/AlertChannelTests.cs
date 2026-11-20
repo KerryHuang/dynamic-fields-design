@@ -542,6 +542,45 @@ public class AlertChannelTests
     }
 
     [Fact]
+    public async Task MailLocale_FollowsDefaultAndEnabledLocales_SavedDisabledLocaleStillSends_NewDisabledRejected()
+    {
+        var mail = new FakeMailSender();
+        using var app = App(mail);
+        SetTime(app, T0);
+        await Configure(app, b => b["mailLocale"] = "th");
+        var admin = app.AsUser();
+        static string Url(string code) => $"/api/v3/dynamic/system/policies/{code}";
+        (await admin.PutAsJsonAsync(Url("locale.default"), new { value = "en-US" })).EnsureSuccessStatusCode();
+        (await admin.PutAsJsonAsync(Url("locale.enabled"), new { value = new[] { "zh-TW", "en-US" } })).EnsureSuccessStatusCode();
+
+        // 已存的泰文即使停用也照常寄；GET 的出廠值是預設語系（英文）
+        (await admin.PostAsync($"{Channel}/test", null)).EnsureSuccessStatusCode();
+        mail.Sent.Last().Subject.Should().Be("[Formwright] อีเมลทดสอบช่องทางแจ้งเตือน");
+        var ml = (await admin.GetFromJsonAsync<JsonElement>(Channel)).GetProperty("mailLocale");
+        ml.GetProperty("value").GetString().Should().Be("th");
+        ml.GetProperty("factory").GetString().Should().Be("en-US");
+
+        // 新選停用的語系被擋；回到出廠後用預設語系（英文）
+        var bad = await PutChannel(app, b => b["mailLocale"] = "vi");
+        bad.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Json(bad)).GetProperty("errors").TryGetProperty("mailLocale", out _).Should().BeTrue();
+        await Configure(app, b => b["mailLocale"] = null);
+        app.Time.Advance(TimeSpan.FromSeconds(31));
+        (await admin.PostAsync($"{Channel}/test", null)).EnsureSuccessStatusCode();
+        mail.Sent.Last().Subject.Should().Be("[Formwright] Alert channel test email");
+    }
+
+    [Fact]
+    public void IncidentSnapshot_UsesDefaultLocaleThenZhTw()
+    {
+        var en = IncidentTitles.Snapshot("en-US", "ops.title.adminChanged", new Dictionary<string, object> { ["change"] = "granted" });
+        var zh = IncidentTitles.Snapshot("zh-TW", "ops.title.adminChanged", new Dictionary<string, object> { ["change"] = "granted" });
+        var unknown = IncidentTitles.Snapshot("ja", "ops.title.adminChanged", new Dictionary<string, object> { ["change"] = "granted" });
+        en.Should().NotBe(zh);
+        unknown.Should().Be(zh);
+    }
+
+    [Fact]
     public async Task ChannelDisabledOrUnconfigured_RowsSkipped_PendingSkippedAtClaim()
     {
         var mail = new FakeMailSender();

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { businessOffset, setBusinessOffset } from 'src/domain/dynamic/business-time';
+import { enabledLocales, requiredTextLocales, setLocaleSettings } from 'src/i18n/locale-settings';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { useBusinessTimeWatch } from './use-business-time-watch';
@@ -38,6 +39,7 @@ describe('useBusinessTimeWatch', () => {
   afterEach(() => {
     Object.defineProperty(window, 'location', { configurable: true, value: original });
     setBusinessOffset('+08:00');
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'], requiredText: ['zh-TW'] });
   });
 
   it('時區沒變不提示', async () => {
@@ -76,5 +78,14 @@ describe('useBusinessTimeWatch', () => {
     await qc.refetchQueries({ queryKey: ['effective-policies', ''] });
     await flushPromises();
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('語系政策變了只更新設定，不提示', async () => {
+    api.getEffectivePolicies.mockResolvedValue({ values: { 'locale.timeZone': '+08:00', 'locale.enabled': ['zh-TW', 'en-US'], 'locale.requiredText': ['zh-TW', 'en-US'] } });
+    mountWatch();
+    await flushPromises();
+    expect(enabledLocales()).toEqual(['zh-TW', 'en-US']);
+    expect(requiredTextLocales()).toEqual(['zh-TW', 'en-US']);
+    expect(create).not.toHaveBeenCalled();
   });
 });

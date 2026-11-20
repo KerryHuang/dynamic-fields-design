@@ -39,6 +39,8 @@ const props = defineProps<{
   disable?: boolean;
   /** Shows "takes effect now, not on publish" under the name and the target (the designer saves them with the draft but they apply at once, U53). */
   immediate?: boolean;
+  /** 編輯既有流程時載入的名稱：必填語系增加後，沒改名稱不要求補語系。 */
+  originalName?: I18nText;
 }>();
 const emit = defineEmits<{ patch: [p: Partial<FlowBasic>] }>();
 const { t, locale } = useI18n();
@@ -83,7 +85,7 @@ const inheritText = computed(() => {
       :model-value="modelValue.key" :label="t('approval.designer.basic.key')" :hint="t('approval.designer.basic.keyHint')" :readonly="keyReadonly" :disable="disable" dense outlined
       data-testid="flow-key" :error="!!err.key || undefined" :error-message="err.key" @update:model-value="(v) => emit('patch', { key: String(v ?? '') })"
     />
-    <I18nTextInput ref="nameInput" :model-value="modelValue.name" :label="t('approval.designer.basic.name')" :error="err.name" @update:model-value="(v) => emit('patch', { name: v })" />
+    <I18nTextInput ref="nameInput" :model-value="modelValue.name" :original="originalName" :label="t('approval.designer.basic.name')" :error="err.name" @update:model-value="(v) => emit('patch', { name: v })" />
     <div v-if="immediate" class="text-caption text-muted" data-testid="flow-immediate-name">{{ t('approval.designer.graph.immediate') }}</div>
     <q-select
       :model-value="modelValue.toOptionId" :options="targetOptions" :label="t('approval.designer.basic.target')" emit-value map-options dense outlined

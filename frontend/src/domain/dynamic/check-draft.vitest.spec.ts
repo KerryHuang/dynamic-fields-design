@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLocaleSettings } from 'src/i18n/locale-settings';
 import { buildCheck, draftFromCheck, emptyCheckDraft, groupCheckErrors, limitText } from './check-draft';
 import type { ModuleCheck } from './events-ledger';
 
@@ -71,5 +72,28 @@ describe('check draft', () => {
     expect(g.message).toEqual(['缺少訊息']);
     expect(g.assert).toEqual(['上限欄位不是數字']);
     expect(g.general).toEqual(['x']);
+  });
+});
+
+describe('必填語系（政策 locale.requiredText）', () => {
+  afterEach(() => setLocaleSettings({ requiredText: ['zh-TW'] }));
+  const full = () => ({ ...draftFromCheck(stock) });
+
+  it('必填改成英文時，新增只有繁中的名稱與訊息不能送，有英文就過', () => {
+    setLocaleSettings({ requiredText: ['en-US'] });
+    expect(buildCheck(full(), 'stock-move')).toBeUndefined();
+    const d = full();
+    d.name = { 'en-US': 'Stock' };
+    d.message = { 'en-US': 'No stock' };
+    expect(buildCheck(d, 'stock-move')).toBeDefined();
+  });
+
+  it('編輯既有只有繁中的檢查，沒改名稱與訊息就能送；改了名稱才要求補語系', () => {
+    setLocaleSettings({ requiredText: ['zh-TW', 'en-US'] });
+    const original = { name: { ...stock.name }, message: { ...stock.definition.message } };
+    expect(buildCheck(full(), 'stock-move', original)).toBeDefined();
+    const d = full();
+    d.name = { 'zh-TW': '庫存不得為負二' };
+    expect(buildCheck(d, 'stock-move', original)).toBeUndefined();
   });
 });

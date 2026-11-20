@@ -56,10 +56,10 @@ public static partial class IncidentTitles
             e => e.Value.ValueKind == JsonValueKind.Number ? (object)e.Value.GetInt64() : e.Value.GetString() ?? "", StringComparer.Ordinal);
     }
 
-    /// <summary>繁中標題（通知 TitleSnapshot 的退路，截斷 200 字）。</summary>
-    public static string ZhTw(string titleKey, IReadOnlyDictionary<string, object>? p)
+    /// <summary>系統預設語系的標題（通知 TitleSnapshot 的退路，截斷 200 字）；預設語系沒有翻譯表時退繁中。</summary>
+    public static string Snapshot(string defaultLocale, string titleKey, IReadOnlyDictionary<string, object>? p)
     {
-        var text = Text(AlertMailText.FactoryLocale, titleKey, p);
+        var text = Text(AlertMailText.Locale(null, defaultLocale), titleKey, p);
         return text.Length <= 200 ? text : text[..200];
     }
 

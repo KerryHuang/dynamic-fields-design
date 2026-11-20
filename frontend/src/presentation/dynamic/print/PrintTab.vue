@@ -7,6 +7,7 @@ import {
   useCreatePrintTemplate, useDeletePrintTemplate, usePrintTemplateDefinitions, useUpdatePrintTemplate,
 } from 'src/application/dynamic/queries/print-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import { enabledLocales } from 'src/i18n/locale-settings';
 import type { Locale, ModuleDetail, PrintTemplateDefinition } from 'src/domain/dynamic/types';
 import { messagesOutside } from 'src/presentation/dynamic/designer/api-error';
 import type { ApiError } from 'src/services/api/http';
@@ -15,7 +16,8 @@ const props = defineProps<{ module: ModuleDetail }>();
 const { t, locale } = useI18n();
 const $q = useQuasar();
 
-const LOCALES: Locale[] = ['zh-TW', 'en-US', 'th', 'vi'];
+// 只列啟用語系（判斷 14）；停用語系已存的名稱保留不刪
+const LOCALES = computed<Locale[]>(() => enabledLocales());
 const key = computed(() => props.module.key);
 const query = usePrintTemplateDefinitions(key);
 const me = useMe();

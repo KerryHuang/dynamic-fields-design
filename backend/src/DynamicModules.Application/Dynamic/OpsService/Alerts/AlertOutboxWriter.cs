@@ -49,7 +49,8 @@ public sealed class AlertOutboxWriter(
         if (!(await AlertEmailPolicy.ReadAsync(policies, ct)).Allows(incident.Category, incident.Severity)) return null;
         var channel = await channels.GetAsync(AlertChannel.Smtp, ct);
         var now = time.GetUtcNow().UtcDateTime;
-        var mail = AlertMailComposer.Incident(incident, transition, channel?.MailLocale, env.Edition, options);
+        var defaultLocale = await policies.ChoiceAsync(PolicyCatalog.LocaleDefault, null, ct);
+        var mail = AlertMailComposer.Incident(incident, transition, channel?.MailLocale, defaultLocale, env.Edition, options);
         var row = new AlertOutbox
         {
             Channel = AlertChannel.Smtp, IncidentId = incident.Id, Transition = transition, TransitionId = backfill?.TransitionId,

@@ -9,18 +9,19 @@ export const LOCALES: { code: LocaleCode; label: string }[] = [
   { code: 'th', label: 'ไทย' },
   { code: 'vi', label: 'Tiếng Việt' },
 ];
-export const DEFAULT_LOCALE: LocaleCode = 'zh-TW';
+/** 伺服器連不上、還沒取得預設語系時的翻譯包退回（不是語系政策的預設）。 */
+export const FALLBACK_LOCALE: LocaleCode = 'zh-TW';
 export const LOCALE_KEY = 'formwright.locale';
 
 const isLocale = (v: unknown): v is LocaleCode => LOCALES.some((l) => l.code === v);
 
-/** 讀不到、值不認得、localStorage 不可用（無痕、被封鎖）一律退回繁中。 */
-export function readLocale(): LocaleCode {
+/** 這個瀏覽器記過的語系；讀不到、值不認得、localStorage 不可用（無痕、被封鎖）回 null（由呼叫端套用預設語系）。 */
+export function readLocale(): LocaleCode | null {
   try {
     const v = localStorage.getItem(LOCALE_KEY);
-    return isLocale(v) ? v : DEFAULT_LOCALE;
+    return isLocale(v) ? v : null;
   } catch {
-    return DEFAULT_LOCALE;
+    return null;
   }
 }
 

@@ -15,7 +15,7 @@ import {
 } from 'src/domain/dynamic/event-draft';
 import type { EventTriggerOn, ModuleEvent } from 'src/domain/dynamic/events-ledger';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import type { ConditionNode, ModuleDetail } from 'src/domain/dynamic/types';
+import type { ConditionNode, I18nText, ModuleDetail } from 'src/domain/dynamic/types';
 import DesignerDialog from 'src/presentation/dynamic/designer/DesignerDialog.vue';
 import { fieldOptions } from 'src/presentation/dynamic/designer/field-options';
 import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
@@ -34,10 +34,13 @@ const form = reactive<EventDraft>(emptyEventDraft());
 const error = ref<ApiError | null>(null);
 const nameInput = ref<{ validate(): Promise<boolean> } | null>(null);
 const isEdit = computed(() => !!props.event);
+// 開啟時的名稱（獨立副本）：必填語系增加後，沒改名稱的既有事件不要求補語系
+const originalName = ref<I18nText | undefined>();
 
 watch(() => [props.modelValue, props.event?.key] as const, ([open]) => {
   if (!open) return;
   error.value = null;
+  originalName.value = props.event ? { ...props.event.name } : undefined;
   Object.assign(form, props.event ? draftFromEvent(props.event) : emptyEventDraft());
   // Object.assign keeps a stale optional `when` when the new draft has none
   if (!props.event?.definition.when) delete form.when;
@@ -83,7 +86,7 @@ const savedEvents = computed(() => events.data.value ?? []);
 
 // ---- save ----
 const save = useSaveEventMutation();
-const body = computed(() => buildEvent(form, props.module.key));
+const body = computed(() => buildEvent(form, props.module.key, originalName.value));
 // 看實際送出的 payload：常值旗標、沖銷附帶的 set 送出時不帶旗標，不擋
 const blockedByConsent = computed(() => consentLocked.value && usesAllowHiddenSource(body.value));
 const incomplete = computed(() => form.effects.some((e) => !e.custom && e.set.some((s) => !setIsComplete(s))));
@@ -116,7 +119,7 @@ const joined = (lines: string[]) => joinList(lines) || undefined;
         :error="!!errors.key.length || undefined" :error-message="joined(errors.key)"
       />
     </div>
-    <div data-testid="event-name"><I18nTextInput ref="nameInput" v-model="form.name" :label="t('events.name')" :error="joined(errors.name)" /></div>
+    <div data-testid="event-name"><I18nTextInput ref="nameInput" v-model="form.name" :original="originalName" :label="t('events.name')" :error="joined(errors.name)" /></div>
     <q-toggle v-model="form.active" :label="t('events.active')" data-testid="event-active" />
 
     <div class="column q-gutter-y-sm">

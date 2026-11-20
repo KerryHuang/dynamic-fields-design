@@ -21,7 +21,8 @@ export function groupMenu(items: MenuItem[], locale: string): MenuGroup[] {
   const closed: MenuItem[] = [];
   for (const m of items) {
     if (m.closed) { closed.push(m); continue; }
-    const key = m.section?.['zh-TW'] || undefined;
+    // 分組鍵：繁中，沒有繁中就用第一個有值的語系（必填語系可能不含繁中）
+    const key = m.section?.['zh-TW'] || Object.values(m.section ?? {}).find((v) => !!v) || undefined;
     const g = groups.get(key);
     if (g) g.push(m); else groups.set(key, [m]);
   }

@@ -26,6 +26,8 @@ const condition = ref<ConditionNode | undefined>(undefined);
 const targets = ref<string[]>([]);
 const optionIds = ref<number[]>([]);
 const message = ref<I18nText>({});
+// 開啟時的訊息（獨立副本）：必填語系增加後，沒改訊息的既有規則不要求補語系
+const originalMessage = ref<I18nText | undefined>();
 const active = ref(true);
 const error = ref('');
 const messageInput = ref<{ validate(): Promise<boolean> } | null>(null);
@@ -38,6 +40,7 @@ watch(() => [props.modelValue, props.rule] as const, ([open]) => {
   targets.value = r ? [...r.targets] : [];
   optionIds.value = r ? [...r.optionIds] : [];
   message.value = r?.message ? { ...r.message } : {};
+  originalMessage.value = r?.message ? { ...r.message } : undefined;
   active.value = r?.active ?? true;
   error.value = '';
 }, { immediate: true });
@@ -139,7 +142,7 @@ async function submit() {
         />
 
         <div v-if="kind === 'validation'" data-testid="rule-message">
-          <I18nTextInput ref="messageInput" v-model="message" :label="t('designer.rules.message')" />
+          <I18nTextInput ref="messageInput" v-model="message" :original="originalMessage" :label="t('designer.rules.message')" />
         </div>
 
         <q-toggle v-model="active" :label="t('designer.rules.active')" />
