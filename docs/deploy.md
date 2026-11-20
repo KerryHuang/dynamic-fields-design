@@ -95,6 +95,7 @@ GitHub Deployments：Render 的部署寫入環境 `demo`（附 Demo 網址）；
 | `Demo__SeedOnStartup` | 啟動時背景產生 Demo 資料 |
 | `Attachments__Root` | 附件存放目錄；沒設就放在資料庫旁的 `attachments`（記憶體資料庫放暫存目錄） |
 | `Attachments__UploadEnabled` | 是否開放上傳；沒設時 `Demo__LoginEnabled` 為 `true` 就關閉，否則開放 |
+| `Localization__PackImportEnabled` | 是否開放匯入語系包（套用、回到上一版、移除覆寫、移除語系）；沒設時 `Demo__LoginEnabled` 為 `true` 就關閉（只能預覽報告），否則開放 |
 | `Attachments__DisabledReason` | 關閉上傳時顯示給使用者的原因 |
 | `Attachments__MaxBytes`、`Attachments__MaxFilesPerField`、`Attachments__AllowedExtensions__0`… | 附件政策在這個環境的出廠值，見下方「附件設定與政策出廠值」 |
 | `Ops__Edition` | 版別，`Cloud` 或 `OnPrem`（其他值記 Warning 並當 `OnPrem`）；顯示在系統管理員的 ops info |

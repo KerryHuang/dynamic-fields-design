@@ -19,6 +19,8 @@ public class AuditCoverageTests
         // 權限軸設計 §7.3、T13：背景產生器另宣告系統管理員只為了讓寫入許可帶 SystemAdminVerified（示範帳號的成員寫入），不是管理請求；內部步驟照常各記一列
         [typeof(DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData.GenerateDemoDataRequest)] =
             "Demo 資料產生器：內部的開套件、建模組等步驟各自寫稽核，整批不另記一列",
+        [typeof(DynamicModules.Application.Dynamic.LocaleService.Commands.PreviewLocalePack.PreviewLocalePackRequest)] =
+            "只寫 10 分鐘的預覽暫存，不改任何設定；套用時才稽核（語系包 i4d1 計畫判斷 17）",
     };
 
     /// <summary>可建立的具體型別（含 struct record）。</summary>

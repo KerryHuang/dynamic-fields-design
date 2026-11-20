@@ -1,3 +1,4 @@
+using DynamicModules.Application.Dynamic.LocaleService.Commands.PreviewLocalePack;
 using DynamicModules.Application.Dynamic.LocaleService.Queries.GetUiMessages;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -23,5 +24,26 @@ public class I18nController(IMediator mediator) : ControllerBase
             : "no-store";
         Response.Headers["X-UI-Hash"] = r.Hash;
         return File(r.Json, "application/json; charset=utf-8");
+    }
+
+    /// <summary>
+    /// 預覽語系包（語系包設計 §6.3；i4d1 計畫判斷 12）：本文是原始檔案位元組（Content-Type 不限）。主體有上限地讀
+    /// （<see cref="LocalePackBodyLimitFilter"/> 給的上限，超過就停止讀取回 413），不整包收進記憶體再判斷。
+    /// </summary>
+    [HttpPost("packs/preview")]
+    [TypeFilter(typeof(LocalePackBodyLimitFilter))]
+    public async Task<IActionResult> PreviewPack([FromQuery] string? fileName)
+    {
+        var limit = HttpContext.Items[LocalePackBodyLimitFilter.LimitItem] as long? ?? 0;
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int n;
+        while ((n = await Request.Body.ReadAsync(chunk, HttpContext.RequestAborted)) > 0)
+        {
+            if (buffer.Length + n > limit) return StatusCode(StatusCodes.Status413PayloadTooLarge);
+            buffer.Write(chunk, 0, n);
+        }
+        var result = await mediator.Send(new PreviewLocalePackRequest(buffer.ToArray(), fileName), HttpContext.RequestAborted);
+        return result.ToActionResult(this);
     }
 }

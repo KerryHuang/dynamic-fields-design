@@ -92,6 +92,9 @@ builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.Aler
 builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.Alerts.IAlertSecretProtector, DataProtectionAlertSecretProtector>();
 builder.Services.AddSingleton(new DynamicModules.Application.Dynamic.OpsService.Alerts.AlertMailOptions(builder.Configuration["Ops:PublicUrl"]));
 builder.Services.AddSingleton(new AuthSettings(builder.Configuration.GetValue<bool>("Demo:LoginEnabled")));
+// 語系包匯入（語系包 i4d1 計畫判斷 15）：沒明確設定時公開 Demo 站（Demo:LoginEnabled）關閉，只能預覽報告
+builder.Services.AddSingleton(new DynamicModules.Application.Dynamic.LocaleService.Packs.LocalePackSettings(
+    builder.Configuration.GetValue<bool?>("Localization:PackImportEnabled") ?? !builder.Configuration.GetValue<bool>("Demo:LoginEnabled")));
 // 附件：預設放在資料庫旁的 attachments 目錄（記憶體資料庫則放暫存目錄）。Demo 登入開啟時預設不開放上傳，可用 Attachments:UploadEnabled 明確覆寫。
 var (attachmentSettings, policyDefaults, attachmentWarnings) = AttachmentSettingsFactory.Create(builder.Configuration, databaseDirectory);
 builder.Services.AddSingleton(attachmentSettings);
