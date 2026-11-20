@@ -141,6 +141,13 @@ public class PolicyCatalogFixtureTests
         new[] { PolicyCatalog.CheckScanMaxViolations, PolicyCatalog.CheckScanMaxGroups, PolicyCatalog.CheckMaxGroupsPerWrite,
                 PolicyCatalog.CheckMaxBackfillRecords }
             .Should().OnlyContain(d => d.Scope == PolicyScope.System && d.Category == "check");
+        // p3a：部門層數（A5）、營運時區（A17）
+        PolicyCatalog.OrganizationMaxDepth.Factory.Should().Be("10");
+        (PolicyCatalog.OrganizationMaxDepth.Min, PolicyCatalog.OrganizationMaxDepth.Max).Should().Be((1, 30));
+        PolicyCatalog.OrganizationMaxDepth.Scope.Should().Be(PolicyScope.System);
+        PolicyCatalog.LocaleTimeZone.Factory.Should().Be("+08:00");
+        PolicyCatalog.LocaleTimeZone.Kind.Should().Be(PolicyKind.UtcOffset);
+        PolicyCatalog.LocaleTimeZone.Scope.Should().Be(PolicyScope.System);
         PolicyCatalog.WeekStartOf("sunday").Should().Be(DayOfWeek.Sunday);
         PolicyCatalog.WeekStartOf("monday").Should().Be(DayOfWeek.Monday);
     }
@@ -152,6 +159,8 @@ public class PolicyCatalogFixtureTests
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
         fixture.Codes.Should().BeEquivalentTo(PolicyCatalog.All.Select(d => d.Code));
         fixture.Categories.Should().BeEquivalentTo(PolicyCatalog.All.Select(d => d.Category).Distinct());
-        fixture.Choices.Should().BeEquivalentTo(PolicyCatalog.All.SelectMany(d => d.Options ?? []).Distinct());
+        // 時區偏移不必翻譯，不進 choices（計畫判斷 2）
+        fixture.Choices.Should().BeEquivalentTo(PolicyCatalog.All.Where(d => d.Kind is PolicyKind.Choice or PolicyKind.RoleSet)
+            .SelectMany(d => d.Options ?? []).Distinct());
     }
 }

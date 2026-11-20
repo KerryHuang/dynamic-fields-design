@@ -266,4 +266,26 @@ public class PolicyDefinitionTests
 
     [Fact]
     public void Target_DefaultsToMain() => Int().Target.Should().Be(PolicyModuleTarget.Main);
+
+    [Theory]
+    [InlineData("+08:00", "+08:00")]
+    [InlineData("-03:30", "-03:30")]
+    [InlineData("+8:00", null)]
+    [InlineData("+08:15", null)]
+    [InlineData("UTC+8", null)]
+    [InlineData(null, null)]
+    public void UtcOffset_Normalize(string? raw, string? expected) =>
+        PolicyCatalog.LocaleTimeZone.Normalize(raw).Should().Be(expected);
+
+    [Fact]
+    public void UtcOffset_Convert()
+    {
+        PolicyCatalog.UtcOffsetOf("+05:45").Should().Be(new TimeSpan(5, 45, 0));
+        PolicyCatalog.UtcOffsetOf("-03:30").Should().Be(-new TimeSpan(3, 30, 0));
+        PolicyCatalog.FormatUtcOffset(TimeSpan.Zero).Should().Be("+00:00");
+        PolicyCatalog.FactoryBusinessOffset.Should().Be(TimeSpan.FromHours(8));
+        PolicyCatalog.UtcOffsets.Should().HaveCount(38).And.OnlyHaveUniqueItems();
+        foreach (var o in PolicyCatalog.UtcOffsets)
+            PolicyCatalog.FormatUtcOffset(PolicyCatalog.UtcOffsetOf(o)).Should().Be(o);
+    }
 }

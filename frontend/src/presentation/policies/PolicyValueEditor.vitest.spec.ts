@@ -58,6 +58,17 @@ describe('PolicyValueEditor', () => {
     expect(m.text()).toContain('負責人');
   });
 
+  it('UtcOffset：選項顯示 UTC 前綴，選 +07:00 送出字串，選單有可讀名稱', async () => {
+    const m = make({ code: 'locale.timeZone', category: 'locale', kind: 'utcOffset', options: ['+07:00', '+08:00'] }, '+08:00');
+    expect(m.text()).toContain('UTC+08:00');
+    const sel = m.findComponent(quasar.QSelect);
+    expect((sel.props('options') as { label: string }[]).map((o) => o.label)).toEqual(['UTC+07:00', 'UTC+08:00']);
+    expect(document.body.querySelector('[aria-label="測試政策"]')).not.toBeNull();
+    sel.vm.$emit('update:modelValue', '+07:00');
+    await flushPromises();
+    expect(lastEmit()).toBe('+07:00');
+  });
+
   it('RoleSet：勾選送出字串陣列，群組有名稱', async () => {
     make({ code: 'a', category: 'task', kind: 'roleSet', options: ['assignee', 'creator'] }, ['creator']);
     expect(document.body.querySelector('[role="group"], [role="checkbox"]')).toBeTruthy();

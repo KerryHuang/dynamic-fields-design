@@ -5,7 +5,7 @@ using DynamicModules.Domain.Policies;
 namespace DynamicModules.Application.Dynamic.PolicyService;
 
 /// <summary>
-/// 系統政策一列。Value 沒設時為 null（序列化時省略）；Min／Max 只在 Integer、CodeList，Options 只在 Choice、RoleSet；
+/// 系統政策一列。Value 沒設時為 null（序列化時省略）；Min／Max 只在 Integer、CodeList，Options 只在 Choice、RoleSet、UtcOffset；
 /// DynamicRecipients 只在允許動態收件人的政策（<c>ops.configIssueRecipients</c> 的 <c>ruleEditor</c>，維運設計 §17.2.5）。
 /// </summary>
 public sealed record SystemPolicyResponse(
@@ -28,6 +28,7 @@ public static class PolicyJson
         PolicyKind.Integer => JsonSerializer.SerializeToElement(int.Parse(canonical, NumberStyles.None, CultureInfo.InvariantCulture)),
         PolicyKind.Boolean => JsonSerializer.SerializeToElement(canonical == "true"),
         PolicyKind.Choice => JsonSerializer.SerializeToElement(canonical),
+        PolicyKind.UtcOffset => JsonSerializer.SerializeToElement(canonical),
         _ => JsonSerializer.SerializeToElement(canonical.Length == 0 ? [] : canonical.Split(',')),
     };
 
@@ -40,6 +41,7 @@ public static class PolicyJson
                 ? n.ToString(CultureInfo.InvariantCulture) : null,
             PolicyKind.Boolean => value.ValueKind switch { JsonValueKind.True => "true", JsonValueKind.False => "false", _ => null },
             PolicyKind.Choice => value.ValueKind == JsonValueKind.String ? value.GetString() : null,
+            PolicyKind.UtcOffset => value.ValueKind == JsonValueKind.String ? value.GetString() : null,
             _ => value.ValueKind == JsonValueKind.Array && value.EnumerateArray().All(e => e.ValueKind == JsonValueKind.String)
                 ? string.Join(",", value.EnumerateArray().Select(e => e.GetString())) : null,
         };
@@ -54,7 +56,7 @@ public static class PolicyJson
 
     public static bool HasRange(PolicyDefinition def) => def.Kind is PolicyKind.Integer or PolicyKind.CodeList or PolicyKind.Recipients;
 
-    public static bool HasOptions(PolicyDefinition def) => def.Kind is PolicyKind.Choice or PolicyKind.RoleSet;
+    public static bool HasOptions(PolicyDefinition def) => def.Kind is PolicyKind.Choice or PolicyKind.RoleSet or PolicyKind.UtcOffset;
 
     public static SystemPolicyResponse System(PolicyDefinition def, PolicyResolution r) => new(
         def.Code, def.Category, def.Kind, def.Scope, def.Unit,

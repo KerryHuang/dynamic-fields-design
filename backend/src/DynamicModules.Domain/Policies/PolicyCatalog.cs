@@ -70,6 +70,29 @@ public static class PolicyCatalog
             Options: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
 
     /// <summary>
+    /// A17：營運時區可選的固定 UTC 偏移（世界實際使用的 38 個；不存 IANA 名稱、不支援日光節約，計畫判斷 1）。
+    /// 技術清單，不是業務政策。
+    /// </summary>
+    public static readonly IReadOnlyList<string> UtcOffsets =
+    [
+        "-12:00", "-11:00", "-10:00", "-09:30", "-09:00", "-08:00", "-07:00", "-06:00", "-05:00", "-04:00", "-03:30", "-03:00",
+        "-02:00", "-01:00", "+00:00", "+01:00", "+02:00", "+03:00", "+03:30", "+04:00", "+04:30", "+05:00", "+05:30", "+05:45",
+        "+06:00", "+06:30", "+07:00", "+08:00", "+08:45", "+09:00", "+09:30", "+10:00", "+10:30", "+11:00", "+12:00", "+12:45",
+        "+13:00", "+14:00",
+    ];
+
+    /// <summary>
+    /// A17：營運時區。決定「今天」、逾期、報表日期切點與日期時間的顯示；改值時同一交易內平移日期時間欄位的索引。
+    /// 多台伺服器時其他台最多 60 秒後才換（快取存活時間）。
+    /// </summary>
+    public static readonly PolicyDefinition LocaleTimeZone =
+        new("locale.timeZone", "locale", PolicyKind.UtcOffset, PolicyScope.System, "+08:00", Options: UtcOffsets);
+
+    /// <summary>A5：部門層數上限；只在新增部門或改上級部門時檢查，已超過的部門照常可改其他欄位。</summary>
+    public static readonly PolicyDefinition OrganizationMaxDepth =
+        new("organization.maxDepth", "organization", PolicyKind.Integer, PolicyScope.System, "10", 1, 30, Unit: "count");
+
+    /// <summary>
     /// 附件副檔名的寫死黑名單（安全檢查，設計 §10）：網頁、腳本與可執行類。白名單從部署設定檔移到畫面可改之後，
     /// 這些項目不論誰設都不收；出廠白名單本來就不含它們。
     /// </summary>
@@ -358,11 +381,29 @@ public static class PolicyCatalog
 
     public static DayOfWeek WeekStartOf(string choice) => Enum.Parse<DayOfWeek>(choice, ignoreCase: true);
 
+    /// <summary><c>+05:45</c> → 5 小時 45 分、<c>-03:30</c> → 負 3 小時 30 分；只收 <see cref="UtcOffsets"/> 的標準寫法。</summary>
+    public static TimeSpan UtcOffsetOf(string canonical)
+    {
+        if (canonical.Length != 6 || canonical[0] is not ('+' or '-') || canonical[3] != ':'
+            || !int.TryParse(canonical.AsSpan(1, 2), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var h)
+            || !int.TryParse(canonical.AsSpan(4, 2), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var m))
+            throw new FormatException($"不是 UTC 偏移：{canonical}");
+        var span = new TimeSpan(h, m, 0);
+        return canonical[0] == '-' ? -span : span;
+    }
+
+    /// <summary>偏移 → <c>+08:00</c> 寫法（零偏移帶正號 <c>+00:00</c>）。</summary>
+    public static string FormatUtcOffset(TimeSpan offset) =>
+        (offset < TimeSpan.Zero ? "-" : "+") + offset.Duration().ToString("hh\\:mm", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>營運時區的出廠偏移（給 Domain 的預設參數用；執行期一律由呼叫端傳入生效值）。</summary>
+    public static TimeSpan FactoryBusinessOffset => UtcOffsetOf(LocaleTimeZone.Factory);
+
     public static IReadOnlyList<PolicyDefinition> All { get; } =
         [TaskMaxRulesPerModule, TaskMaxTasksPerRule, TaskMaxRulesPerPackage,
          TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled, TaskNotifySubtasksDone,
          TaskSupervisorScope, TaskSupervisorScopeRecursive, TaskMaxSubtasksPerTask,
-         NotificationRetentionDays, NotificationReminderScanMinutes, CalendarWeekStart,
+         NotificationRetentionDays, NotificationReminderScanMinutes, CalendarWeekStart, LocaleTimeZone, OrganizationMaxDepth,
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection, OpsUpkeepMinutes, OpsAuditRetentionDays,
          OpsMonitorScanMinutes, OpsHealthResultRetentionDays, OpsIncidentRetentionDays, OpsIncidentSampleRetentionDays,

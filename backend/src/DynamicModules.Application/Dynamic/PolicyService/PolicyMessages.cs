@@ -30,6 +30,7 @@ public static class PolicyMessages
         PolicyKind.RoleSet => $"只能從以下角色挑選：{string.Join("、", d.Options ?? [])}",
         PolicyKind.CodeList => $"要有 {d.Min} 到 {d.Max} 個，每個只能是 1 到 {PolicyDefinition.CodeItemMaxLength} 個小寫英文或數字",
         PolicyKind.Recipients => $"要有 {d.Min} 到 {d.Max} 項，每項是 admins、group:群組編號或 user:帳號",
+        PolicyKind.UtcOffset => "必須是 UTC 偏移，例如 +08:00",
         _ => "值不正確",
     };
 }

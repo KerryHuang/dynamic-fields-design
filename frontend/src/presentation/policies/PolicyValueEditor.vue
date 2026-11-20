@@ -21,6 +21,7 @@ function onNumber(v: string | number | null) {
   if (valid) emit('update:modelValue', n);
 }
 
+const offsetOptions = computed(() => (props.meta.options ?? []).map((o) => ({ value: o, label: `UTC${o}` })));
 const choiceOptions = computed(() => (props.meta.options ?? []).map((o) => ({ value: o, label: t(`policies.choices.${o}`) })));
 
 // 收件人：選項＝呼叫端給的清單，加上已選但清單裡找不到的項目（已停用或不存在），標「找不到或已停用」；
@@ -73,6 +74,10 @@ const hint = computed(() => props.meta.kind === 'integer' && props.meta.unit ===
   <q-select
     v-else-if="meta.kind === 'choice'" :model-value="modelValue as string" :options="choiceOptions" emit-value map-options dense outlined
     :label="label" :disable="disable" @update:model-value="(v: string) => emit('update:modelValue', v)"
+  />
+  <q-select
+    v-else-if="meta.kind === 'utcOffset'" :model-value="modelValue as string" :options="offsetOptions" emit-value map-options dense outlined
+    :label="label" :aria-label="label" :disable="disable" @update:model-value="(v: string) => emit('update:modelValue', v)"
   />
   <div v-else-if="meta.kind === 'roleSet'" role="group" :aria-label="label">
     <div class="text-caption text-muted">{{ label }}</div>

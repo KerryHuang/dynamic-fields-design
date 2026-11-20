@@ -1,6 +1,6 @@
 import { joinList } from 'src/i18n/translate';
 
-export type PolicyKind = 'integer' | 'boolean' | 'choice' | 'roleSet' | 'codeList' | 'recipients';
+export type PolicyKind = 'integer' | 'boolean' | 'choice' | 'roleSet' | 'codeList' | 'recipients' | 'utcOffset';
 export type PolicyValue = number | boolean | string | string[];
 
 export interface PolicyMeta {
@@ -58,6 +58,8 @@ export function policyValueText(meta: PolicyMeta, v: PolicyValue, t: Translate, 
   switch (meta.kind) {
     case 'boolean': return t(v ? 'policies.on' : 'policies.off');
     case 'choice': return t(`policies.choices.${String(v)}`);
+    // 固定 UTC 偏移不翻譯（計畫判斷 2）
+    case 'utcOffset': return `UTC${String(v)}`;
     case 'roleSet': {
       const list = v as string[];
       return list.length ? joinList(list.map((o) => t(`policies.choices.${o}`))) : t('policies.none');

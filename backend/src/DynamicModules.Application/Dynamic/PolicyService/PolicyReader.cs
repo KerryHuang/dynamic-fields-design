@@ -67,7 +67,7 @@ public sealed class PolicyReader(
 
     public async Task<string> ChoiceAsync(PolicyDefinition def, long? moduleId, CancellationToken ct)
     {
-        Expect(def, PolicyKind.Choice);
+        Expect(def, PolicyKind.Choice, PolicyKind.UtcOffset);
         return (await ResolveAsync(def, moduleId, ct)).Effective;
     }
 

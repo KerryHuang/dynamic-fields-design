@@ -14,6 +14,10 @@ describe('policy-types', () => {
     expect(samePolicyValue(20, 20)).toBe(true);
   });
 
+  it('utcOffset：policyValueText 顯示 UTC 前綴', () => {
+    expect(policyValueText({ code: 'locale.timeZone', category: 'locale', kind: 'utcOffset' }, '+08:00', t)).toBe('UTC+08:00');
+  });
+
   it('policyRangeText', () => {
     expect(policyRangeText({ code: 'x', category: 'task', kind: 'integer', min: 1, max: 100 }, t)).toBe('1 到 100');
     expect(policyRangeText({ code: 'x', category: 'task', kind: 'codeList', min: 1, max: 40 }, t)).toBe('1 到 40 個');

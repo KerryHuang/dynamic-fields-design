@@ -10,12 +10,12 @@ public enum PolicyScope { System, Module }
 public enum PolicyModuleTarget { Main, Detail, Any }
 
 /// <summary>政策值的型別；值一律以標準字串存放，由型別解析。</summary>
-public enum PolicyKind { Integer, Boolean, Choice, RoleSet, CodeList, Recipients }
+public enum PolicyKind { Integer, Boolean, Choice, RoleSet, CodeList, Recipients, UtcOffset }
 
 /// <summary>
 /// 一個業務政策的登記項。<see cref="Min"/>／<see cref="Max"/> 是寫死的技術上下限（Integer 是數值，CodeList 是項目數）。
 /// 標準字串：Integer 不帶符號的十進位；Boolean <c>true</c>／<c>false</c>；Choice 選項原字；
-/// RoleSet 依選項順序、逗號分隔、可為空字串；CodeList 小寫、去前導點、去重保留首次順序、逗號分隔。
+/// RoleSet 依選項順序、逗號分隔、可為空字串；UtcOffset 是 <c>+08:00</c> 這種固定偏移，必須是選項之一；CodeList 小寫、去前導點、去重保留首次順序、逗號分隔。
 /// Recipients 是 <c>admins</c>、<c>group:&lt;id&gt;</c>、<c>user:&lt;userId&gt;</c> 的組合（逗號分隔、去重保留首次順序、項數 Min 到 Max），只檢查語法，存在與否由 Application 驗。
 /// <see cref="Forbidden"/> 是 CodeList 的寫死黑名單（安全檢查）：含黑名單項目的值一律不合法。
 /// <see cref="DynamicRecipients"/> 是 Recipients 另外允許的動態項目（維運設計 §17.2.5、O2-T15；例如 <c>ruleEditor</c>＝該規則的最後修改者），
@@ -58,6 +58,7 @@ public sealed partial record PolicyDefinition(
             case PolicyKind.Boolean:
                 return bool.TryParse(raw, out var b) && raw.Trim() == raw ? (b ? "true" : "false") : null;
             case PolicyKind.Choice:
+            case PolicyKind.UtcOffset:
                 return Options is not null && Options.Contains(raw, StringComparer.Ordinal) ? raw : null;
             case PolicyKind.RoleSet:
             {

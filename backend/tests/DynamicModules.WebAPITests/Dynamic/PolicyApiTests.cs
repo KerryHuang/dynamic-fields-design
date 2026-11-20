@@ -94,6 +94,29 @@ public class PolicyApiTests : IDisposable
     }
 
     [Fact]
+    public async Task System_TimeZone_RoundTrip()
+    {
+        var admin = _app.AsUser();
+        var item = Item(await JsonOf(await admin.GetAsync($"{Base}/system/policies")), "locale.timeZone");
+        item.GetProperty("kind").GetString().Should().Be("utcOffset");
+        item.GetProperty("factory").GetString().Should().Be("+08:00");
+        var options = item.GetProperty("options").EnumerateArray().Select(e => e.GetString()).ToList();
+        options.Should().HaveCount(38).And.Contain("+05:45");
+
+        var ok = await PutSystem(admin, "locale.timeZone", new { value = "+07:00" });
+        ok.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await JsonOf(ok)).GetProperty("value").GetString().Should().Be("+07:00");
+
+        var bad = await PutSystem(admin, "locale.timeZone", new { value = "+07:15" });
+        bad.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await FirstError(bad, "value")).Should().Be("必須是 UTC 偏移，例如 +08:00");
+        (await PutSystem(admin, "locale.timeZone", new { value = 7 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        Item(await JsonOf(await admin.GetAsync($"{Base}/system/policies")), "organization.maxDepth")
+            .GetProperty("factory").GetInt32().Should().Be(10);
+    }
+
+    [Fact]
     public async Task System_Put_ThenNull_BackToFactory()
     {
         var admin = _app.AsUser();
