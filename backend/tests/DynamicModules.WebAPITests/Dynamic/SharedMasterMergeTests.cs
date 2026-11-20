@@ -262,6 +262,34 @@ public class SharedMasterMergeTests : IDisposable
         await _rig.AssertIntegrityAsync();
     }
 
+    /// <summary>
+    /// 上一條的邊界另一側：設計器先加 1 欄、匯入再多 1 欄，資料庫最終剛好等於上限時要放行，而且落庫：
+    /// 資料庫有新欄位、設計器加的欄位還在、存下的主檔套件已更新。避免重驗寫成「大於等於」或誤擋。
+    /// </summary>
+    [Fact]
+    public async Task MergingExactlyToTheFieldLimitInTheDatabase_IsAccepted_AndPersisted()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        var (exported, _) = await _rig.ExportAsync("bp");
+        var bp = Node(exported.GetRawText());
+        var baseCount = MainFields(bp).Count;
+        (await _rig.Admin.PutAsJsonAsync($"{Base}/system/policies/design.maxFieldsPerModule", new { value = baseCount + 2 }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        await _rig.AddDesignerFieldAsync(Partner, _rig.BlockId("bp", "partner.main"), "text", "官網");
+        MainFields(bp).Add(Field("grade", "enum", "等級", null, ("gold", "金牌")));
+        var before = (FieldNames(_rig, "bp"), _rig.Db(db => db.Set<AppPackage>().Single(p => p.Key == "bp").Json));
+        FieldNames(_rig, "bp").Should().NotContain("partner.grade");
+
+        await _rig.ImportMergeOkAsync(bp.ToJsonString());
+
+        var fields = FieldNames(_rig, "bp");
+        fields.Should().Contain("partner.grade").And.Contain(before.Item1, "設計器先加的欄位沒被合併蓋掉");
+        fields.Count.Should().Be(baseCount + 2, "資料庫最終剛好在上限");
+        _rig.Db(db => db.Set<AppPackage>().Single(p => p.Key == "bp").Json).Should().NotBe(before.Item2, "存下的主檔已更新成資料庫的結果");
+        await _rig.AssertIntegrityAsync();
+    }
+
     /// <summary>匯入的選項代號已是同模組另一個欄位的基本選項時不合併，但要列在警告裡，不靜默略過。</summary>
     [Fact]
     public async Task AnImportedOptionCodeTakenByAnotherBaseField_IsSkippedWithAWarning()
