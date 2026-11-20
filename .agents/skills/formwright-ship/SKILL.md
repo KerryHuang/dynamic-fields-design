@@ -48,7 +48,7 @@ LEAK_DENYLIST=<repo 外的清單檔> bash scripts/unattended/leak-scan.sh origin
 git fetch -q && git merge-base --is-ancestor origin/main HEAD && git push -q origin HEAD:main
 ```
 
-- 不成立就 rebase 到 origin/main；rebase 後 `backend/`、`frontend/`、`shared/` 有變，推上分支讓 CI 重跑，只有文件衝突就不重跑。
+- 不成立就 rebase 到 origin/main；rebase 後 `backend/`、`frontend/`、`shared/` 有變，推上分支讓 CI 重跑，只有文件衝突就不重跑。已推過遠端的分支 rebase 後推到新分支名（例 `feature/<段>-r2`），不 force push。
 - 不用 merge commit、不 force push。推完 `git rev-parse origin/main` 確認等於 HEAD。
 - 推進 main 的 commit 必須就是 CI 通過的那個 sha（fast-forward 保證這點）。沒動到 `backend/`、`frontend/`、`shared/`、Dockerfile 或 workflow 的變更 CI 會略過測試，外洩掃描照跑。
 
