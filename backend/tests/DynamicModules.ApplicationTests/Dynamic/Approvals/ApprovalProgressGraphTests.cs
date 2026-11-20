@@ -322,6 +322,7 @@ public class ApprovalProgressGraphTests : ApprovalTestBase
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
     public async Task Progress_Fallback_Ja_SnapshotHasInstalledLocales_GraphSameAsTimelineAfterChainChange()
     {
         // 裝了 ja（上層 en-US）才建的備援實例：名稱快照有 ja（英文），沒有未安裝的 ko；之後把 ja 的上層改成 th，圖與時間軸仍是建立當時的快照
