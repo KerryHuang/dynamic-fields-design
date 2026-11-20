@@ -8,7 +8,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.CreateGroup;
 
-public class CreateGroupHandler(IAccountRepository accounts, IUnitOfWork uow) : IRequestHandler<CreateGroupRequest, ServiceResult>
+public class CreateGroupHandler(IAccountRepository accounts, IUnitOfWork uow, RequiredTextGuard requiredText) : IRequestHandler<CreateGroupRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(CreateGroupRequest request, CancellationToken ct)
     {
@@ -18,8 +18,8 @@ public class CreateGroupHandler(IAccountRepository accounts, IUnitOfWork uow) : 
 
         var text = new I18nText();
         text.Set(request.Locale, name);
-        // zh-TW 是 fallback 語系，非 zh-TW 建立時也要有值，否則其他語系看到空白名稱
-        if (request.Locale != I18nText.FallbackLocale) text.Set(I18nText.FallbackLocale, name);
+        // 每個必填語系也寫同一個名稱（D5，使用者 2026-11-20 裁決），否則其他語系看到空白名稱
+        foreach (var locale in requiredText.RequiredLocales) text.Set(locale, name);
         var group = new PermissionGroup
         {
             Key = "g-" + RandomNumberGenerator.GetString("abcdefghijklmnopqrstuvwxyz0123456789", 8),

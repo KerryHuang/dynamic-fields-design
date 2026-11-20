@@ -175,7 +175,9 @@ public static partial class AppPackageValidator
     private static void CheckText(I18nText? text, string at, List<string> errors)
     {
         if (text is null) { errors.Add($"{at}: 缺少名稱"); return; }
-        if (!text.IsValid(out var error)) errors.Add($"{at}: {error}");
+        // 套件仍要求繁中，不跟政策 locale.requiredText（判斷 12）
+        if (!text.HasText(I18nText.FallbackLocale)) errors.Add($"{at}: {I18nText.FallbackLocale} 為必填");
+        else if (!text.IsWellFormed(out var error)) errors.Add($"{at}: {error}");
         foreach (var (locale, value) in text.Values)
             if (value.Length is 0 or > 200) errors.Add($"{at}: {locale} 必須是 1 到 200 字");
     }

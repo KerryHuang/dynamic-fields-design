@@ -19,7 +19,7 @@ namespace DynamicModules.Application.Dynamic.EventService;
 /// <summary>事件定義的結構驗證（設計 §4.3）；錯誤鍵用 definition.* 路徑。</summary>
 public class EventValidator(
     IModuleRepository modules, IEventRepository events, ILedgerRepository ledgers, IPermissionRepository permissions,
-    IEffectHandlerRegistry handlers, FieldTypeRegistry registry, IPolicyReader policies)
+    IEffectHandlerRegistry handlers, FieldTypeRegistry registry, IPolicyReader policies, RequiredTextGuard requiredText)
 {
     /// <summary>每個效果的 set 對應數：技術限制（保護套件解析），維持寫死，見政策設計 §10。</summary>
     public const int MaxSets = 50;
@@ -30,14 +30,15 @@ public class EventValidator(
         (await ValidateCoreAsync(input, ct)).Result;
 
     /// <summary>驗證並回傳警告（不擋的提醒）。通過時 Result 為 null。</summary>
-    public async Task<(ServiceResult? Result, List<string> Warnings)> ValidateCoreAsync(EventInput input, CancellationToken ct)
+    /// <param name="storedName">修改時資料庫裡的名稱：沒改就不檢查新增的必填語系（§3.5）；新增為 null。</param>
+    public async Task<(ServiceResult? Result, List<string> Warnings)> ValidateCoreAsync(EventInput input, CancellationToken ct, I18nText? storedName = null)
     {
         var errors = new Dictionary<string, string[]>();
         var warnings = new List<string>();
         void Err(string key, string message) => errors.TryAdd(key, [message]);
 
         if (!Regex.IsMatch(input.Key ?? "", ModuleRules.ModuleKeyPattern)) Err("key", BadKey);
-        if (input.Name is null || !input.Name.IsValid(out _)) Err("name", "名稱必須有繁體中文");
+        if (requiredText.Check(input.Name, storedName, "名稱") is { } nameError) Err("name", nameError);
         if (input.Definition?.Trigger is null || input.Definition.Effects is null)
             return (ServiceResult.Invalid(new Dictionary<string, string[]> { ["definition"] = ["缺少事件定義"] }), warnings);
 

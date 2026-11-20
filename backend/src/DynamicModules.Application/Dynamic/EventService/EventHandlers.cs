@@ -47,7 +47,7 @@ public class UpdateEventHandler(
         var source = (await modules.GetByIdAsync(e.SourceModuleId, includeChildren: false, ct))!;
         if (input.SourceModuleKey != source.Key)
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["sourceModuleKey"] = ["來源模組不能更改"] });
-        var (invalid, warnings) = await validator.ValidateCoreAsync(input, ct);
+        var (invalid, warnings) = await validator.ValidateCoreAsync(input, ct, e.NameI18n);
         if (invalid is not null) return invalid;
 
         e.NameI18n = input.Name;

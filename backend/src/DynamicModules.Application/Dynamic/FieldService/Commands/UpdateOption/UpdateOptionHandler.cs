@@ -12,7 +12,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.UpdateOption;
 public class UpdateOptionHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
     Dynamic.LedgerService.ImmutableDataGuard immutable, Dynamic.ModuleService.TitleRewriteGuard fixedRecords,
-    Dynamic.ApprovalService.PendingApprovalGuard pending)
+    Dynamic.ApprovalService.PendingApprovalGuard pending, RequiredTextGuard requiredText)
     : IRequestHandler<UpdateOptionRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateOptionRequest request, CancellationToken ct)
@@ -23,6 +23,7 @@ public class UpdateOptionHandler(
         var now = time.Now;
         var field = module.Blocks.SelectMany(b => b.Fields).Single(f => f.Options.Any(o => o.Id == request.OptionId));
         var option = field.Options.Single(o => o.Id == request.OptionId);
+        if (requiredText.Check(request.Label, option.LabelI18n, "名稱") is { } labelError) return Data.FieldRules.Invalid("Label", labelError);
         if (option.Active && !request.Active && await pending.RejectOptionDeactivateAsync(module, option.Id, ct) is { } optionInUse) return optionInUse;
         // 標題樣板用到這個下拉欄位時，改名會重寫既有記錄的 Title（跟換標題欄位一樣受 Closed、帳本凍結與已固定的記錄限制）
         var retitle = module.TitleTemplate is not null && module.TitleFieldIds().Contains(field.Id)

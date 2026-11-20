@@ -113,6 +113,24 @@ public class AppFormat7Tests : IDisposable
     }
 
     [Fact]
+    public async Task OpenPackage_IgnoresRequiredTextPolicy()
+    {
+        // 套件仍要求繁中，不跟必填語系政策（判斷 12）：必填改成繁中＋英文後，只有繁中名稱的套件照常開啟
+        (await _rig.Admin.PutAsJsonAsync($"{Base}/system/policies/locale.requiredText", new { value = new[] { "zh-TW", "en-US" } }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        await OpenCrm7Async();
+
+        // 套件缺繁中仍擋
+        var root = JsonNode.Parse(Crm7())!.AsObject();
+        root["manifest"]!["id"] = "crmy";
+        root["manifest"]!["name"] = JsonNode.Parse("""{ "en-US": "CRM Y" }""");
+        var res = await _rig.Admin.PostAsync($"{Base}/apps/packages/import", new StringContent(root.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await JsonOf(res)).GetProperty("errors").EnumerateObject().SelectMany(e => e.Value.EnumerateArray()).Select(e => e.GetString())
+            .Should().Contain(m => m!.Contains("manifest.name: zh-TW 為必填"));
+    }
+
+    [Fact]
     public async Task OpenApp_RuleHasAppId()
     {
         await OpenCrm7Async();

@@ -28,11 +28,16 @@ public static class ApprovalMessages
     public const string DraftOnlyUseDelete = "這條流程從未發布過，沒有可以回到的版本，請改用刪除流程";
     public const string FlowKeyTaken = "流程代碼已存在";
     public const string FlowNotInModule = "這條流程不屬於這個模組";
-    public const string NodeNameRequired = "節點名稱必須有繁體中文";
-    public const string EdgeLabelInvalid = "連線標籤必須有繁體中文";
+    // 名稱類的主詞；實際訊息由 RequiredTextGuard 依政策 locale.requiredText 組出。下面 *Required／EdgeLabelInvalid 是必填只有繁中（出廠值）時的訊息
+    public const string NodeName = "節點名稱";
+    public const string EdgeLabel = "連線標籤";
+    public const string TemplateSubject = "通知範本的標題與內文都";
+    public const string StageName = "關卡名稱";
+    public static readonly string NodeNameRequired = Common.RequiredTextGuard.Message(NodeName, Common.PackageTextScope.RequiredLocales);
+    public static readonly string EdgeLabelInvalid = Common.RequiredTextGuard.Message(EdgeLabel, Common.PackageTextScope.RequiredLocales);
     public static string NotifyRecipientsCount(int max) => $"通知收件人設定必須有 1 到 {max} 項";
     public const string NotifyRecipientInvalid = "通知收件人的種類只能是 users、group、initiator、initiatorManager，而且只能帶該種類的參數";
-    public const string TemplateRequired = "通知範本的標題與內文都必須有繁體中文";
+    public static readonly string TemplateRequired = Common.RequiredTextGuard.Message(TemplateSubject, Common.PackageTextScope.RequiredLocales);
     public static string TemplateTooLong(int max) => $"通知範本每個語系的文字不能超過 {max} 字";
     public static string TemplatePlaceholderUnknown(string text) => $"通知範本有不認得的佔位符 {text}，可用的是 {{title}}、{{flow}}、{{initiator}}、{{node}}、{{f:欄位編號}}";
     public const string TemplateFieldInvalid = "通知範本引用的欄位必須是本模組表頭、啟用中的欄位";
@@ -95,7 +100,7 @@ public static class ApprovalMessages
     public static string StagesCount(int max, bool existing = false) => $"關卡必須有 1 到 {max} 關{KeepOld(existing)}";
     public const string StageCodeInvalid = "關卡代號只能用小寫英文、數字、連字號，英文開頭，最多 40 字";
     public const string StageCodeDuplicate = "關卡代號不能重複";
-    public const string StageNameRequired = "關卡名稱必須有繁體中文";
+    public static readonly string StageNameRequired = Common.RequiredTextGuard.Message(StageName, Common.PackageTextScope.RequiredLocales);
     public const string ModeInvalid = "簽核模式只能是 all 或 any";
     public const string SourceInvalid = "簽核人來源只能是 users、group、manager、userField、initiatorPick";
     public static string UsersCount(int max, bool existing = false) => $"指定使用者必須有 1 到 {max} 位{KeepOld(existing)}";

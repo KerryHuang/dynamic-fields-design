@@ -18,7 +18,8 @@ namespace DynamicModules.Application.Dynamic.TaskRuleService;
 /// 任務規則定義的驗證（設計 §5）。錯誤鍵是欄位路徑，例如 tasks[0].code、trigger.field。
 /// 每模組規則數、每條任務數讀模組生效政策（A1）；上限調低後只擋「這次增加數量」（政策設計 §3.5）。
 /// </summary>
-public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleRepository rules, FieldTypeRegistry registry, IPolicyReader policies)
+public sealed class TaskRuleValidator(
+    IModuleRepository modules, ITaskRuleRepository rules, FieldTypeRegistry registry, IPolicyReader policies, RequiredTextGuard requiredText)
 {
     public const int MaxOffsetDays = 3650;
     private static readonly string[] TriggerKinds = ["onCreate", "onUpdateMatch", "onFieldBecomes", "manual"];
@@ -37,7 +38,7 @@ public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleReposi
         void Err(string key, string message) => errors.TryAdd(key, [message]);
 
         if (!Regex.IsMatch(input.Key ?? "", ModuleRules.ModuleKeyPattern)) Err("key", TaskRuleMessages.BadKey);
-        if (input.Name is null || !input.Name.IsValid(out _)) Err("name", TaskRuleMessages.NameInvalid);
+        if (requiredText.Check(input.Name, existing?.NameI18n, "名稱") is { } nameError) Err("name", nameError);
         else if (input.Name.Values.Values.Any(v => v is null || v.Length is 0 or > 200)) Err("name", TaskRuleMessages.NameLength);
         if (input.Trigger is null) Err("trigger", TaskRuleMessages.BadTriggerOn);
         if (input.Tasks is null || input.Tasks.Count == 0
@@ -57,8 +58,9 @@ public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleReposi
             var at = $"tasks[{i}]";
             if (!TaskCodePattern.IsMatch(t.Code ?? "")) Err($"{at}.code", TaskRuleMessages.BadTaskCode);
             else if (!codes.Add(t.Code!)) Err($"{at}.code", TaskRuleMessages.DuplicateTaskCode);
-            CheckText(t.Title, $"{at}.title", required: true, TaskEditParser.TitleMax, TaskMessages.TitleTooLong, Err);
-            CheckText(t.Description, $"{at}.description", required: false, TaskEditParser.DescriptionMax, TaskMessages.DescriptionTooLong, Err);
+            var storedTitle = existing?.Tasks.FirstOrDefault(o => o.Code == t.Code)?.TitleI18n;
+            CheckText(t.Title, storedTitle, $"{at}.title", required: true, TaskEditParser.TitleMax, TaskMessages.TitleTooLong, Err);
+            CheckText(t.Description, null, $"{at}.description", required: false, TaskEditParser.DescriptionMax, TaskMessages.DescriptionTooLong, Err);
             if (!fields.TryGetValue(t.AssigneeFieldId, out var assignee) || assignee.Type != FieldType.User || assignee.Status != FieldStatus.Active)
                 Err($"{at}.assigneeFieldId", TaskRuleMessages.AssigneeField);
             if (t.DueFieldId is { } dueId
@@ -108,15 +110,18 @@ public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleReposi
         if (!ok) err("trigger.value", TaskRuleMessages.TriggerValueInvalid);
     }
 
-    /// <summary>多語系文字：每個語系的值不超過上限、不能有不支援的語系；必填時 zh-TW 解析後不能是空的。</summary>
-    private static void CheckText(I18nText? text, string key, bool required, int max, string tooLong, Action<string, string> err)
+    /// <summary>
+    /// 多語系文字：每個語系的值不超過上限、不能有不支援的語系；必填時要有政策 locale.requiredText 的每個語系
+    /// （<paramref name="stored"/> 是同代碼舊任務的值，沒改不重驗，§3.5）。
+    /// </summary>
+    private void CheckText(I18nText? text, I18nText? stored, string key, bool required, int max, string tooLong, Action<string, string> err)
     {
         if (text is null || text.Values.Count == 0)
         {
             if (required) err(key, TaskMessages.TitleRequired);
             return;
         }
-        if (text.Values.Keys.FirstOrDefault(k => !I18nText.SupportedLocales.Contains(k)) is { } unknown)
+        if (I18nText.UnknownLocale(text.Values.Keys) is { } unknown)
         {
             err(key, $"不支援的語系：{unknown}");
             return;
@@ -127,6 +132,6 @@ public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleReposi
             return;
         }
         if (text.Values.Values.Any(v => v.Trim().Length > max)) { err(key, tooLong); return; }
-        if (required && string.IsNullOrWhiteSpace(text.Resolve(I18nText.FallbackLocale))) err(key, TaskMessages.TitleRequired);
+        if (required && requiredText.Check(text, stored, "標題") is not null) err(key, TaskMessages.TitleRequired);
     }
 }

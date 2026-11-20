@@ -48,6 +48,8 @@ public sealed class TemplateInstantiator(
         TemplatePackage p, IReadOnlyDictionary<string, InstantiateModuleInput> overrides, IReadOnlySet<string> exclude,
         CancellationToken ct, AppInstantiation? app = null)
     {
+        // 樣板內容只要求繁中，不跟政策 locale.requiredText（判斷 12）
+        using var packageText = Common.PackageTextScope.Begin();
         var unknownModule = overrides.Keys.FirstOrDefault(c => p.Modules.All(m => m.Code != c));
         if (unknownModule is not null) return Invalid("modules", $"範本沒有模組「{unknownModule}」");
         var graph = TemplateGraph.Build(p);

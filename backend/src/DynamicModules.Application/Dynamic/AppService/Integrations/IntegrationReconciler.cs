@@ -28,6 +28,8 @@ public class IntegrationReconciler(
     /// <summary>調和全部整合；<paramref name="only"/> 指定時只調和那一個；<paramref name="retry"/> 為真時缺的項目補建（管理員確認過）。回傳要給使用者看的警告。</summary>
     public async Task<List<string>> ReconcileAsync(CancellationToken ct, (string AppKey, string Code)? only = null, bool retry = false)
     {
+        // 整合補的欄位與事件來自套件宣告，只要求繁中（判斷 12）
+        using var packageText = Common.PackageTextScope.Begin();
         var warnings = new List<string>();
         var keys = (await apps.ListIntegrationsAsync(ct)).Select(r => (r.AppId, r.Code)).ToList();
         if (keys.Count == 0) return warnings;

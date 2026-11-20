@@ -12,7 +12,7 @@ using DynamicModules.Domain.ValueObjects;
 namespace DynamicModules.Application.Dynamic.CheckService;
 
 /// <summary>跨記錄驗證定義的結構驗證（設計 §5.1）；錯誤鍵用 definition.* 路徑。</summary>
-public class CheckValidator(IModuleRepository modules, FieldTypeRegistry registry)
+public class CheckValidator(IModuleRepository modules, FieldTypeRegistry registry, RequiredTextGuard requiredText)
 {
     public const string BadKey = "檢查代碼只能用小寫英文、數字、連字號，2 到 40 字，英文開頭";
 
@@ -21,13 +21,14 @@ public class CheckValidator(IModuleRepository modules, FieldTypeRegistry registr
     public static readonly FieldType[] NumericTypes = [FieldType.Integer, FieldType.Decimal, FieldType.Currency];
     private static readonly string[] Ops = ["gte", "gt", "lte", "lt", "eq"];
 
-    public async Task<ServiceResult?> ValidateAsync(CheckInput input, CancellationToken ct)
+    /// <param name="stored">修改時資料庫裡的檢查（名稱與訊息沒改就不檢查新增的必填語系，§3.5）；新增為 null。</param>
+    public async Task<ServiceResult?> ValidateAsync(CheckInput input, CancellationToken ct, (I18nText? Name, I18nText? Message)? stored = null)
     {
         var errors = new Dictionary<string, string[]>();
         void Err(string key, string message) => errors.TryAdd(key, [message]);
 
         if (!Regex.IsMatch(input.Key ?? "", ModuleRules.ModuleKeyPattern)) Err("key", BadKey);
-        if (input.Name is null || !input.Name.IsValid(out _)) Err("name", "名稱必須有繁體中文");
+        if (requiredText.Check(input.Name, stored?.Name, "名稱") is { } nameError) Err("name", nameError);
         if (input.Definition?.Assert?.Limit is null) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["definition"] = ["缺少檢查定義"] });
 
         var module = await modules.GetByKeyAsync(input.ModuleKey ?? "", includeChildren: true, ct);
@@ -66,7 +67,7 @@ public class CheckValidator(IModuleRepository modules, FieldTypeRegistry registr
         if (!Ops.Contains(def.Assert.Op)) Err("definition.assert.op", "運算子必須是 gte、gt、lte、lt 或 eq");
         await CheckLimitAsync(def.Assert.Limit, fields, errors, ct);
 
-        if (def.Message is null || !def.Message.IsValid(out _)) Err("definition.message", "訊息必須有繁體中文");
+        if (requiredText.Check(def.Message, stored?.Message, "訊息") is { } messageError) Err("definition.message", messageError);
         return errors.Count > 0 ? ServiceResult.Invalid(errors) : null;
     }
 

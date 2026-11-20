@@ -13,7 +13,7 @@ namespace DynamicModules.Application.Dynamic.ViewService.Commands.UpdateView;
 
 public class UpdateViewHandler(
     IModuleRepository modules, IListViewRepository views, IUnitOfWork uow, FieldTypeRegistry registry,
-    ICurrentUser user, IBusinessTime time, IDynamicAccessGuard guard) : IRequestHandler<UpdateViewRequest, ServiceResult>
+    ICurrentUser user, IBusinessTime time, IDynamicAccessGuard guard, RequiredTextGuard requiredText) : IRequestHandler<UpdateViewRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateViewRequest request, CancellationToken ct)
     {
@@ -33,6 +33,8 @@ public class UpdateViewHandler(
         if (view.OwnerUserId is null && ViewRules.ReferencesHiddenField(view, module, p.CanSee))
             return ServiceResult.Forbidden();
 
+        if (requiredText.Check(request.Name, view.NameI18n, "名稱") is { } nameError)
+            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["Name"] = [nameError] });
         var errors = ViewRules.Check(module, registry, await modules.ListUserIdsAsync(ct),
             request.Columns, request.Filter, request.Sort, p.CanSee);
         if (errors.Count > 0) return ServiceResult.Invalid(errors);

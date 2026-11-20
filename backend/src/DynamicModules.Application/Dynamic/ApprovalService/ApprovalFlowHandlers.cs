@@ -14,7 +14,8 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>流程增改共用的驗證：模組、代碼、名稱、目標狀態、優先序、結構驗證、入口約束（設計 §4.4、§5.2）。</summary>
-public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDefinitionValidator validator, IPermissionRepository permissions)
+public sealed class ApprovalFlowEditor(
+    IApprovalFlowRepository flows, ApprovalDefinitionValidator validator, IPermissionRepository permissions, Common.RequiredTextGuard requiredText)
 {
     public const string UsedCannotDelete = "流程已被使用，只能停用";
     public const string UsedCannotRetarget = "被使用過的流程不能改目標狀態，請另建流程";
@@ -38,7 +39,7 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
     public async Task<FlowCheck> CheckAsync(Module module, ApprovalFlowInput input, ApprovalFlow? self, CancellationToken ct)
     {
         var wf = module.Workflow!;
-        var errors = RowErrors(wf, input.Key, input.Name, input.ToOptionId, input.Priority);
+        var errors = RowErrors(wf, input.Key, input.Name, self?.NameI18n, input.ToOptionId, input.Priority);
         if (input.Definition is null) errors.TryAdd("definition", [ApprovalMessages.DefinitionMissing]);
         if (errors.Count > 0) return Fail(ServiceResult.Invalid(errors));
 
@@ -74,7 +75,7 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
     /// </summary>
     public async Task<ServiceResult?> ValidateRowAsync(Module module, ApprovalFlowInput input, ApprovalFlow? self, CancellationToken ct)
     {
-        var errors = RowErrors(module.Workflow!, input.Key, input.Name, input.ToOptionId, input.Priority);
+        var errors = RowErrors(module.Workflow!, input.Key, input.Name, self?.NameI18n, input.ToOptionId, input.Priority);
         return errors.Count > 0 ? ServiceResult.Invalid(errors) : await PriorityTakenAsync(module, input.ToOptionId, input.Priority, self, ct);
     }
 
@@ -86,13 +87,13 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
 
     private static FlowCheck Fail(ServiceResult failure) => new(failure, []);
 
-    private static Dictionary<string, string[]> RowErrors(Workflow wf, string? key, I18nText? name, long toOptionId, int priority)
+    private Dictionary<string, string[]> RowErrors(Workflow wf, string? key, I18nText? name, I18nText? storedName, long toOptionId, int priority)
     {
         var errors = new Dictionary<string, string[]>();
         void Err(string k, string message) => errors.TryAdd(k, [message]);
         if (!Regex.IsMatch(key ?? "", ModuleRules.ModuleKeyPattern)) Err("key", "流程代碼只能用小寫英文、數字、連字號，2 到 40 字，英文開頭");
         else if (ReservedKeys.Contains(key!)) Err("key", ApprovalMessages.FlowKeyReserved);
-        if (name is null || !name.IsValid(out _)) Err("name", "名稱必須有繁體中文");
+        if (requiredText.Check(name, storedName, "名稱") is { } nameError) Err("name", nameError);
         if (toOptionId == wf.InitialOptionId || wf.States.All(s => s.OptionId != toOptionId))
             Err("toOptionId", ApprovalMessages.TargetStateInvalid);
         if (priority < 0) Err("priority", "優先序不能是負數");

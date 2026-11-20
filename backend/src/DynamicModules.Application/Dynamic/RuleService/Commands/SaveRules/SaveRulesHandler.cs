@@ -15,7 +15,7 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.RuleService.Commands.SaveRules;
 
 public class SaveRulesHandler(IModuleRepository modules, IUnitOfWork uow, FieldTypeRegistry registry,
-    ICurrentUser user, IBusinessTime time, IPolicyReader policies)
+    ICurrentUser user, IBusinessTime time, IPolicyReader policies, RequiredTextGuard requiredText)
     : IRequestHandler<SaveRulesRequest, ServiceResult>
 {
     private const string BadTargets = "規則目標不正確";
@@ -73,7 +73,9 @@ public class SaveRulesHandler(IModuleRepository modules, IUnitOfWork uow, FieldT
             if (parsed.Error is not null) Err("condition", $"規則條件不正確：{parsed.Error}");
         }
 
-        if (r.Kind == RuleKind.Validation && (r.Message is null || !r.Message.IsValid(out _)))
+        // 規則整批替換、沒有穩定的識別：訊息與既有任一條規則的訊息相同就視為沒改（§3.5）
+        if (r.Kind == RuleKind.Validation
+            && requiredText.Check(r.Message, module.Rules.Select(x => x.MessageI18n).FirstOrDefault(m => r.Message?.SameAs(m) == true), "訊息") is not null)
             Err("message", "驗證規則必須有訊息");
 
         if (r.Kind == RuleKind.OptionFilter && optionTarget is not null

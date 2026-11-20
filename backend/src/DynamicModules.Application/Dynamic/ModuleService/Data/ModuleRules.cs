@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common;
 using DynamicModules.Domain.ValueObjects;
 using FluentValidation;
 
@@ -12,18 +13,21 @@ public static class ModuleRules
         rule.Matches(ModuleKeyPattern)
             .WithMessage("模組代碼只能用小寫英文、數字、連字號，2 到 40 字，英文開頭");
 
-    public static IRuleBuilderOptions<T, I18nText> ValidModuleName<T>(this IRuleBuilder<T, I18nText> rule) =>
-        rule.Must(n => n is not null && n.IsValid(out _)).WithMessage("名稱必須有繁體中文");
+    /// <summary>新增時依政策 locale.requiredText 檢查必填語系；修改時只檢查格式，必填語系由 handler 載入舊值後檢查（§3.5）。</summary>
+    public static void ValidModuleName<T>(this IRuleBuilder<T, I18nText> rule, RequiredTextGuard guard, bool isNew) =>
+        rule.Custom((v, ctx) =>
+        {
+            if ((isNew ? guard.Check(v, null, "名稱") : guard.CheckWellFormed(v, "名稱")) is { } error) ctx.AddFailure(error);
+        });
 
     public const int SectionMaxLength = 100;
 
-    /// <summary>選單分區：可省略；語系鍵同 <see cref="I18nText.IsValid"/>；每個語系值不超過 100 字。繁中空白不算錯，視同不分區。</summary>
+    /// <summary>選單分區：可省略；語系鍵同 <see cref="I18nText.IsWellFormed"/>；每個語系值不超過 100 字。繁中空白不算錯，視同不分區。</summary>
     public static IRuleBuilderOptions<T, I18nText?> ValidModuleSection<T>(this IRuleBuilder<T, I18nText?> rule) =>
         rule.Must(s => UnsupportedLocale(s) is null)
             .WithMessage((_, s) => $"不支援的語系：{UnsupportedLocale(s)}")
             .Must(s => s is null || s.Values.Values.All(v => (v?.Length ?? 0) <= SectionMaxLength))
             .WithMessage($"選單分區不能超過 {SectionMaxLength} 字");
 
-    private static string? UnsupportedLocale(I18nText? s) =>
-        s?.Values.Keys.FirstOrDefault(k => !I18nText.SupportedLocales.Contains(k));
+    private static string? UnsupportedLocale(I18nText? s) => s is null ? null : I18nText.UnknownLocale(s.Values.Keys);
 }

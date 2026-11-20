@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.PolicyService.IPolicyReader, Dynamic.PolicyService.PolicyReader>();
         services.TryAddSingleton<Common.IInstalledLocales, Common.FactoryInstalledLocales>();
         services.AddSingleton<Dynamic.PolicyService.PolicyOptionSource>();
+        services.AddSingleton<Common.RequiredTextGuard>();
         services.AddSingleton<Dynamic.PolicyService.CachedSystemPolicy>();
         // 改營運時區時同一交易內平移日期時間索引
         services.AddScoped<Dynamic.PolicyService.IPolicyChangeHook, Dynamic.RecordService.TimeZoneChangeHook>();

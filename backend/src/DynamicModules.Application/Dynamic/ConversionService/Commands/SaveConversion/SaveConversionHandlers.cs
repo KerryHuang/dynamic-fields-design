@@ -47,7 +47,7 @@ public class UpdateConversionHandler(
         // 設計器畫面不編輯固定值（套件的 header.set）：沒帶 set 時保留原本的，帶空陣列才是清掉
         if (input.Definition is { Header: { Set: null } header } definition && conversion.Definition.Header.Set is { } kept)
             input = input with { Definition = definition with { Header = header with { Set = kept } } };
-        if (await validator.ValidateAsync(input, ct) is { } invalid) return invalid;
+        if (await validator.ValidateAsync(input, ct, conversion.NameI18n) is { } invalid) return invalid;
 
         var modules = await validator.ModulesOfAsync(input, ct);
         if (modules.Source.Id != conversion.SourceModuleId || modules.Target.Id != conversion.TargetModuleId)

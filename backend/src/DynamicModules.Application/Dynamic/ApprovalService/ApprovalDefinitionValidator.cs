@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// </summary>
 public sealed partial class ApprovalDefinitionValidator(
     IPermissionRepository permissions, FieldTypeRegistry registry, ApprovalEditableFields editableFields,
-    ISharedMasterRepository shared, ApprovalPolicies approvalPolicies)
+    ISharedMasterRepository shared, ApprovalPolicies approvalPolicies, Common.RequiredTextGuard requiredText)
 {
     /// <summary>
     /// previous 是這個流程目前版本的定義（新流程為 null）：數值上限「改嚴只管之後」，超過上限而且比舊版大才擋（政策設計 §3.5）。
@@ -45,7 +45,7 @@ public sealed partial class ApprovalDefinitionValidator(
         var grants = restricted.Count == 0 ? [] : (await shared.ListFieldGrantsAsync(restricted.Select(f => f.Id).ToList(), ct))
             .GroupBy(g => g.FieldId).ToDictionary(g => g.Key, g => g.Select(x => x.GroupId).ToHashSet());
         var groupsOf = (await permissions.ListMembershipsAsync(ct)).ToLookup(m => m.UserId, m => m.GroupId);
-        var x = new Run(module, d, previous, limits, registry, errors, allUserIds, activeUsers, groupIds, fields, nonEditable, hiddenRows, grants, groupsOf, restricted, warnings);
+        var x = new Run(module, d, previous, limits, registry, errors, allUserIds, activeUsers, groupIds, fields, nonEditable, hiddenRows, grants, groupsOf, restricted, warnings, requiredText);
 
         if (d.Shape is not (ApprovalShapes.Sequence or ApprovalShapes.Graph)) x.Err("shape", ApprovalMessages.ShapeInvalid);
         if (x.ConditionError(d.When) is { } we) x.Err("when", ApprovalMessages.WhenInvalid(we));
@@ -75,7 +75,7 @@ public sealed partial class ApprovalDefinitionValidator(
             var p = $"stages[{i}]";
             var before = s.Code is null ? null : previous?.Stages?.FirstOrDefault(y => y.Code == s.Code);
             if (!ApprovalCodes.IsValid(s.Code)) x.Err($"{p}.code", ApprovalMessages.StageCodeInvalid);
-            if (s.Name is null || !s.Name.IsValid(out _)) x.Err($"{p}.name", ApprovalMessages.StageNameRequired);
+            if (x.Text(s.Name, before?.Name, ApprovalMessages.StageName) is { } nameError) x.Err($"{p}.name", nameError);
             x.StageErrors(s, p, before);
         }
     }
@@ -85,8 +85,13 @@ public sealed partial class ApprovalDefinitionValidator(
         Module module, ApprovalDefinition d, ApprovalDefinition? previous, ApprovalLimitSet limits, FieldTypeRegistry registry,
         Dictionary<string, string[]> errors, HashSet<string> allUserIds, HashSet<string> activeUsers, HashSet<long> groupIds,
         Dictionary<long, Field> fields, HashSet<long> nonEditable, List<FieldPermission> hiddenRows,
-        Dictionary<long, HashSet<long>> grants, ILookup<string, long> groupsOf, List<Field> restricted, List<ApprovalFlowWarning> warnings)
+        Dictionary<long, HashSet<long>> grants, ILookup<string, long> groupsOf, List<Field> restricted, List<ApprovalFlowWarning> warnings,
+        Common.RequiredTextGuard requiredText)
     {
+        /// <summary>必填的多語文字（政策 locale.requiredText）；stored 是舊版同一節點或關卡的值，沒改就不檢查新增的必填語系（§3.5）。</summary>
+        public string? Text(Domain.ValueObjects.I18nText? incoming, Domain.ValueObjects.I18nText? stored, string subject) =>
+            requiredText.Check(incoming, stored, subject);
+
         public ApprovalDefinition D => d;
         public ApprovalDefinition? Previous => previous;
         public ApprovalLimitSet Limits => limits;

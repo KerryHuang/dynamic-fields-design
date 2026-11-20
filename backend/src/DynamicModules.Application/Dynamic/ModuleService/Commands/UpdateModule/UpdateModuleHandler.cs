@@ -15,13 +15,15 @@ namespace DynamicModules.Application.Dynamic.ModuleService.Commands.UpdateModule
 public class UpdateModuleHandler(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
     Dynamic.LedgerService.ImmutableDataGuard immutable, TitleRewriteGuard fixedRecords,
-    Dynamic.ApprovalService.PendingApprovalGuard pending)
+    Dynamic.ApprovalService.PendingApprovalGuard pending, RequiredTextGuard requiredText)
     : IRequestHandler<UpdateModuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateModuleRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.Key, includeChildren: true, ct);
         if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
+        if (requiredText.Check(request.Name, module.NameI18n, "名稱") is { } nameError)
+            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["Name"] = [nameError] });
 
         // 換標題欄位或標題樣板會重寫全部既有記錄的 Title；Closed 的資料唯讀、已固定的記錄不能改，其餘欄位（名稱、圖示、區段）照常可改
         var titleChanged = module.TitleFieldId != request.TitleFieldId || module.TitleTemplate != request.TitleTemplate;

@@ -56,6 +56,8 @@ public class AppOpener(
 
     private async Task<ServiceResult> OpenCoreAsync(string packageId, OpenAppBody body, bool asMaster, Action<TemplateIdMap> onIds, CancellationToken ct)
     {
+        // 套件內容只要求繁中，不跟政策 locale.requiredText（判斷 12）
+        using var packageText = PackageTextScope.Begin();
         var plan = await planner.PlanAsync(packageId, body, ct, asMaster);
         if (plan.Failure is { } failure) return failure;
         var preview = plan.Preview;

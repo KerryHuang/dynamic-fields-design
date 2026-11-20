@@ -49,8 +49,18 @@ public static class FieldRules
         FieldType.Url, FieldType.User
     ];
 
-    public static IRuleBuilderOptions<T, I18nText> ValidLabel<T>(this IRuleBuilder<T, I18nText> rule) =>
-        rule.Must(n => n is not null && n.IsValid(out _)).WithMessage("名稱必須有繁體中文");
+    /// <summary>
+    /// 名稱或標籤：新增時依政策 locale.requiredText 檢查必填語系；修改時只檢查格式，必填語系由 handler 載入舊值後檢查（改了才檢查，§3.5）。
+    /// <paramref name="guard"/> 為 null（樣板建立檢視）時沿用套件規則：必須有繁體中文（判斷 12）。
+    /// </summary>
+    public static void ValidLabel<T>(this IRuleBuilder<T, I18nText> rule, RequiredTextGuard? guard, bool isNew) =>
+        rule.Custom((v, ctx) =>
+        {
+            var error = guard is null
+                ? (v is not null && v.IsWellFormed(out _) && v.HasText(I18nText.FallbackLocale) ? null : "名稱必須有繁體中文")
+                : isNew ? guard.Check(v, null, "名稱") : guard.CheckWellFormed(v, "名稱");
+            if (error is not null) ctx.AddFailure(error);
+        });
 
     /// <summary>系統計算欄位：公式、自動編號與彙總，值由系統產生、不接受輸入。</summary>
     public const string AttachmentInDetailError = "明細模組不支援附件欄位，請放在表頭模組";

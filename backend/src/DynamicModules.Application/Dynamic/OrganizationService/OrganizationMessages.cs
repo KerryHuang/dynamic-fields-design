@@ -4,7 +4,6 @@ public static class OrganizationMessages
 {
     public const string CodeInvalid = "部門代號只能用小寫英文、數字、連字號，英文開頭，最多 40 字";
     public const string CodeExists = "部門代號已存在";
-    public const string NameRequired = "名稱必須有繁體中文";
     public const string Cycle = "上級部門不能是自己或自己的下級部門";
     public static string TooDeep(int max) => $"部門最多 {max} 層";
     public static string HasDependents(int children, int members) => $"部門還有 {children} 個子部門、{members} 位成員，請先搬移";

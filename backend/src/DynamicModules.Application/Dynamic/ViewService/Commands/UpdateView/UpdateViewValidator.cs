@@ -5,5 +5,5 @@ namespace DynamicModules.Application.Dynamic.ViewService.Commands.UpdateView;
 
 public class UpdateViewValidator : AbstractValidator<UpdateViewRequest>
 {
-    public UpdateViewValidator() => this.ValidateShape(x => x.Name, x => x.Columns, x => x.Sort);
+    public UpdateViewValidator(Common.RequiredTextGuard guard) => this.ValidateShape(x => x.Name, x => x.Columns, x => x.Sort, guard, isNew: false);
 }

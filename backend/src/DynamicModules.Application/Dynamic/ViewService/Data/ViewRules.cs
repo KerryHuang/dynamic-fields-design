@@ -19,9 +19,9 @@ public static class ViewRules
     public static void ValidateShape<T>(
         this AbstractValidator<T> v, System.Linq.Expressions.Expression<Func<T, I18nText>> name,
         System.Linq.Expressions.Expression<Func<T, List<long>>> columns,
-        System.Linq.Expressions.Expression<Func<T, List<ViewSort>>> sort)
+        System.Linq.Expressions.Expression<Func<T, List<ViewSort>>> sort, Common.RequiredTextGuard? guard, bool isNew)
     {
-        v.RuleFor(name).ValidLabel();
+        v.RuleFor(name).ValidLabel(guard, isNew);
         v.RuleFor(columns).Must(c => c is { Count: >= 1 and <= MaxColumns }).WithMessage("欄位數量必須是 1 到 50 個");
         v.RuleFor(sort).Must(s => s is { Count: <= MaxSorts }).WithMessage("排序欄位最多 3 個")
             .Must(s => s is null || s.All(x => x is { Order: "asc" or "desc" })).WithMessage("排序方向只能是 asc 或 desc");

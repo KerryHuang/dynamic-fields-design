@@ -22,25 +22,43 @@ public class I18nTextTests
         Make(("zh-TW", "訂單"), ("en-US", "Order")).Resolve("en-US").Should().Be("Order");
 
     [Fact]
-    public void IsValid_EmptyZhTw_ReturnsFalse()
+    public void IsWellFormed_NeedsSomeTextAndKnownLocales()
     {
-        Make(("zh-TW", " ")).IsValid(out var error).Should().BeFalse();
-        error.Should().NotBeNull();
-        new I18nText().IsValid(out _).Should().BeFalse();
+        new I18nText().IsWellFormed(out var empty).Should().BeFalse();
+        empty.Should().Be("至少要有一種語系的文字");
+        Make(("zh-TW", " ")).IsWellFormed(out _).Should().BeFalse();
+        Make(("en-US", "Order")).IsWellFormed(out var ok).Should().BeTrue();
+        ok.Should().BeNull();
+        Make(("zh-TW", "a"), ("en-US", "b"), ("th", "c"), ("vi", "d")).IsWellFormed(out _).Should().BeTrue();
+        Make(("jp", "x")).IsWellFormed(out var unknown).Should().BeFalse();
+        unknown.Should().Be("不支援的語系：jp");
+        I18nText.UnknownLocale(["zh-TW", "ja"]).Should().Be("ja");
+        I18nText.UnknownLocale(["zh-TW", "en-US"]).Should().BeNull();
     }
 
     [Fact]
-    public void IsValid_UnknownLocale_ReturnsFalse()
+    public void Resolve_FallbackChain()
     {
-        Make(("zh-TW", "a"), ("ja", "b")).IsValid(out var error).Should().BeFalse();
-        error.Should().Contain("ja");
+        // 判斷 13：要求的語系 → 退回鏈（沒傳時是繁中）→ 支援語系順序中第一個有值的
+        Make(("en-US", "Order")).Resolve("th").Should().Be("Order");
+        var both = Make(("zh-TW", "訂單"), ("en-US", "Order"));
+        both.Resolve("th", ["en-US", "zh-TW"]).Should().Be("Order");
+        both.Resolve("th").Should().Be("訂單");
+        Make(("vi", "Đơn"), ("th", "ใบ")).Resolve("en-US", ["zh-TW"]).Should().Be("ใบ");
+        new I18nText().Resolve("th").Should().Be("");
     }
 
     [Fact]
-    public void IsValid_SupportedLocales_ReturnsTrue()
+    public void HasText_MissingLocales_SameAs()
     {
-        Make(("zh-TW", "a"), ("en-US", "b"), ("th", "c"), ("vi", "d")).IsValid(out var error).Should().BeTrue();
-        error.Should().BeNull();
+        var t = Make(("zh-TW", "訂單"), ("en-US", " "));
+        t.HasText("zh-TW").Should().BeTrue();
+        t.HasText("en-US").Should().BeFalse();
+        t.MissingLocales(["zh-TW", "en-US", "th"]).Should().Equal("en-US", "th");
+        t.SameAs(Make(("zh-TW", " 訂單 "))).Should().BeTrue();
+        t.SameAs(Make(("zh-TW", "訂單"), ("th", "ใบ"))).Should().BeFalse();
+        t.SameAs(Make(("zh-TW", "訂單2"))).Should().BeFalse();
+        t.SameAs(null).Should().BeFalse();
     }
 
     [Fact]

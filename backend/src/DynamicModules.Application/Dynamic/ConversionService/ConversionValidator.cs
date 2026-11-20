@@ -11,17 +11,18 @@ using DynamicModules.Domain.ValueObjects;
 namespace DynamicModules.Application.Dynamic.ConversionService;
 
 /// <summary>轉換定義的結構驗證（設計器儲存時）；錯誤鍵用 definition.* 路徑。</summary>
-public class ConversionValidator(IModuleRepository modules)
+public class ConversionValidator(IModuleRepository modules, RequiredTextGuard requiredText)
 {
     public const string BadKey = "轉換代碼只能用小寫英文、數字、連字號，2 到 40 字，英文開頭";
 
-    public async Task<ServiceResult?> ValidateAsync(ConversionInput input, CancellationToken ct)
+    /// <param name="storedName">修改時資料庫裡的名稱（沒改就不檢查新增的必填語系，§3.5）；新增為 null。</param>
+    public async Task<ServiceResult?> ValidateAsync(ConversionInput input, CancellationToken ct, I18nText? storedName = null)
     {
         var errors = new Dictionary<string, string[]>();
         void Err(string key, string message) => errors.TryAdd(key, [message]);
 
         if (!Regex.IsMatch(input.Key ?? "", ModuleRules.ModuleKeyPattern)) Err("key", BadKey);
-        if (input.Name is null || !input.Name.IsValid(out _)) Err("name", "名稱必須有繁體中文");
+        if (requiredText.Check(input.Name, storedName, "名稱") is { } nameError) Err("name", nameError);
         if (input.Definition is null) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["definition"] = ["缺少轉換定義"] });
 
         var source = await modules.GetByKeyAsync(input.SourceModuleKey, includeChildren: true, ct);

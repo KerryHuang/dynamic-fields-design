@@ -36,7 +36,7 @@ public sealed partial class ApprovalDefinitionValidator
             switch (n.Kind)
             {
                 case ApprovalNodeKinds.Approval:
-                    if (n.Name is null || !n.Name.IsValid(out _)) x.Err($"{p}.name", ApprovalMessages.NodeNameRequired);
+                    if (x.Text(n.Name, before?.Name, ApprovalMessages.NodeName) is { } nameError) x.Err($"{p}.name", nameError);
                     x.StageErrors(n.AsStage(), p, before is { Kind: ApprovalNodeKinds.Approval } ? before.AsStage() : null);
                     break;
                 case ApprovalNodeKinds.Notify:
@@ -46,7 +46,7 @@ public sealed partial class ApprovalDefinitionValidator
                     break;
                 default:
                     // 條件、分支、匯合、開始、結束：名稱選填，有填才驗（U6）
-                    if (n.Name is not null && !n.Name.IsValid(out _)) x.Err($"{p}.name", ApprovalMessages.NodeNameRequired);
+                    if (n.Name is not null && x.Text(n.Name, before?.Name, ApprovalMessages.NodeName) is { } optionalError) x.Err($"{p}.name", optionalError);
                     break;
             }
         }
@@ -57,7 +57,8 @@ public sealed partial class ApprovalDefinitionValidator
         {
             if (edges[i] is not { } e) continue;
             var k = ApprovalCodes.IsValid(e.Id) && seenEdges.Add(e.Id) ? $"edges.{e.Id}" : $"edges[{i}]";
-            if (e.Label is not null && !e.Label.IsValid(out _)) x.Err($"{k}.label", ApprovalMessages.EdgeLabelInvalid);
+            var beforeEdge = k.StartsWith("edges.", StringComparison.Ordinal) ? old?.Edges?.FirstOrDefault(o => o?.Id == e.Id) : null;
+            if (e.Label is not null && x.Text(e.Label, beforeEdge?.Label, ApprovalMessages.EdgeLabel) is { } labelError) x.Err($"{k}.label", labelError);
             // 只有條件節點的出線有條件；其他節點出線帶條件是 Domain 的 conditionAttrNotAllowed
             if (e.When is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } w
                 && e.From is not null && kindOf.GetValueOrDefault(e.From) == ApprovalNodeKinds.Condition
@@ -69,7 +70,7 @@ public sealed partial class ApprovalDefinitionValidator
     /// <summary>通知節點（G10）：名稱必填、收件人 1 到 20 項且參數合法、範本標題與內文語法正確並只引用本模組啟用中的欄位。</summary>
     private static void NotifyErrors(Run x, ApprovalNodeDef n, string p, ApprovalNodeDef? before)
     {
-        if (n.Name is null || !n.Name.IsValid(out _)) x.Err($"{p}.name", ApprovalMessages.NodeNameRequired);
+        if (x.Text(n.Name, before?.Name, ApprovalMessages.NodeName) is { } nameError) x.Err($"{p}.name", nameError);
 
         var recipients = n.Recipients;
         if (recipients is null || recipients.Count == 0 || recipients.Count > ApprovalGraphLimits.MaxNotifyRecipients)
@@ -79,8 +80,8 @@ public sealed partial class ApprovalDefinitionValidator
         foreach (var r in recipients ?? [])
             if (RecipientError(x, r, oldLevel) is { } re) x.Err($"{p}.recipients", re);
 
-        TemplateText(x, n.Template?.Title, ApprovalGraphLimits.MaxTemplateTitleLength, $"{p}.template.title");
-        TemplateText(x, n.Template?.Body, ApprovalGraphLimits.MaxTemplateBodyLength, $"{p}.template.body");
+        TemplateText(x, n.Template?.Title, before?.Template?.Title, ApprovalGraphLimits.MaxTemplateTitleLength, $"{p}.template.title");
+        TemplateText(x, n.Template?.Body, before?.Template?.Body, ApprovalGraphLimits.MaxTemplateBodyLength, $"{p}.template.body");
     }
 
     private static string? RecipientError(Run x, NotifyRecipientDef? r, int oldLevel)
@@ -107,11 +108,11 @@ public sealed partial class ApprovalDefinitionValidator
         }
     }
 
-    /// <summary>範本一段文字（標題或內文）：繁中必填、每個語系不超過上限、佔位符語法正確（U8）、{f:Id} 是本模組啟用中的欄位。</summary>
-    private static void TemplateText(Run x, Domain.ValueObjects.I18nText? text, int max, string key)
+    /// <summary>範本一段文字（標題或內文）：必填語系（政策 locale.requiredText，沒改不重驗）、每個語系不超過上限、佔位符語法正確（U8）、{f:Id} 是本模組啟用中的欄位。</summary>
+    private static void TemplateText(Run x, Domain.ValueObjects.I18nText? text, Domain.ValueObjects.I18nText? stored, int max, string key)
     {
-        if (text is null || !text.IsValid(out _)) { x.Err(key, ApprovalMessages.TemplateRequired); return; }
-        foreach (var s in text.Values.Values.Select(v => v ?? ""))
+        if (x.Text(text, stored, ApprovalMessages.TemplateSubject) is { } required) { x.Err(key, required); return; }
+        foreach (var s in text!.Values.Values.Select(v => v ?? ""))
         {
             if (s.Length > max) { x.Err(key, ApprovalMessages.TemplateTooLong(max)); return; }
             var (_, error) = ApprovalNotifyTemplate.Parse(s);

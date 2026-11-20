@@ -60,16 +60,18 @@ public static partial class DepartmentRules
 /// 新增與修改共用的驗證；selfId 為 null 是新增；currentManager 是修改前資料庫裡的主管（主管沒變就不重驗，停用後仍可改其他欄位）。
 /// currentParentId 是修改前的上級：層數上限（政策 organization.maxDepth）只在新增或改上級時檢查，調低後已超過的部門照常可改其他欄位；循環每次都檢查。
 /// </summary>
-public sealed class DepartmentValidator(IOrganizationRepository org, IPermissionRepository permissions, IPolicyReader policies)
+public sealed class DepartmentValidator(
+    IOrganizationRepository org, IPermissionRepository permissions, IPolicyReader policies, RequiredTextGuard requiredText)
 {
     public async Task<Dictionary<string, string[]>> ValidateAsync(
-        long? selfId, DepartmentInput input, CancellationToken ct, string? currentManager = null, long? currentParentId = null)
+        long? selfId, DepartmentInput input, CancellationToken ct, string? currentManager = null, long? currentParentId = null,
+        DynamicModules.Domain.ValueObjects.I18nText? currentName = null)
     {
         var errors = new Dictionary<string, string[]>();
         var code = input.Code?.Trim();
         if (!DepartmentRules.IsValidCode(code)) errors["code"] = [OrganizationMessages.CodeInvalid];
         else if (await org.CodeExistsAsync(code!, selfId, ct)) errors["code"] = [OrganizationMessages.CodeExists];
-        if (input.Name is null || !input.Name.IsValid(out _)) errors["name"] = [OrganizationMessages.NameRequired];
+        if (requiredText.Check(input.Name, currentName, "名稱") is { } nameError) errors["name"] = [nameError];
         var checkDepth = selfId is null || input.ParentId != currentParentId;
         if (await ParentErrorAsync(selfId, input.ParentId, checkDepth, ct) is { } parent) errors["parentId"] = [parent];
         if (CreateDepartmentHandler.NullIfBlank(input.ManagerUserId) is { } manager && manager != currentManager
@@ -137,7 +139,7 @@ public class UpdateDepartmentHandler(
         var d = await org.GetTrackedAsync(request.Id, ct);
         if (d is null) return ServiceResult.NotFound(OrganizationMessages.NotFound);
         var input = request.Input;
-        if (await validator.ValidateAsync(d.Id, input, ct, d.ManagerUserId, d.ParentId) is { Count: > 0 } errors) return ServiceResult.Invalid(errors);
+        if (await validator.ValidateAsync(d.Id, input, ct, d.ManagerUserId, d.ParentId, d.NameI18n) is { Count: > 0 } errors) return ServiceResult.Invalid(errors);
         d.Code = input.Code.Trim();
         d.NameI18n = input.Name;   // 整個重新指派，EF 才偵測得到 JSON 欄位變更
         d.ParentId = input.ParentId;

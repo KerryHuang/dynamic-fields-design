@@ -20,7 +20,7 @@ public class UpdateFieldHandler(
     Dynamic.ApprovalService.PendingApprovalGuard pending, Dynamic.ApprovalService.ApprovalClosureRecheck closureRecheck,
     Dynamic.CheckService.CheckFieldGuard checkGuard, Common.Security.FieldLocks locks,
     Dynamic.EventService.EventValidator eventValidator, Dynamic.EventService.EventHiddenGuard hiddenGuard,
-    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
+    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner, RequiredTextGuard requiredText)
     : IRequestHandler<UpdateFieldRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateFieldRequest request, CancellationToken ct)
@@ -31,6 +31,7 @@ public class UpdateFieldHandler(
         var field = oldBlock.Fields.Single(f => f.Id == request.FieldId);
 
         if (request.Type != field.Type) return FieldRules.Invalid("Type", "欄位型別建立後不能更改");
+        if (requiredText.Check(request.Label, field.LabelI18n, "名稱") is { } labelError) return FieldRules.Invalid("Label", labelError);
         var newBlock = module.Blocks.FirstOrDefault(b => b.Id == request.BlockId);
         if (newBlock is null) return FieldRules.Invalid("BlockId", "區塊不屬於此模組");
         // 共用主檔模組：歸屬在建立時決定，跨歸屬、拖進孤兒區塊、拖出孤兒欄位都不行（共用主檔 §5.4）

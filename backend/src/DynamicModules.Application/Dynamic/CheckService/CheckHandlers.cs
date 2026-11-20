@@ -41,7 +41,7 @@ public class UpdateCheckHandler(
         if (input.Key != c.Key) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["key"] = ["檢查代碼不能更改"] });
         var module = (await modules.GetByIdAsync(c.ModuleId, includeChildren: true, ct))!;
         if (input.ModuleKey != module.Key) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["moduleKey"] = ["模組不能更改"] });
-        if (await validator.ValidateAsync(input, ct) is { } invalid) return invalid;
+        if (await validator.ValidateAsync(input, ct, (c.NameI18n, c.Definition.Message)) is { } invalid) return invalid;
         var (indexFailure, notices) = await indexer.PrepareAsync(module, input.Definition, ct);
         if (indexFailure is not null) return indexFailure;
         c.NameI18n = input.Name;
