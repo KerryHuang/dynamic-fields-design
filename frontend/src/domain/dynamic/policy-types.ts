@@ -1,3 +1,4 @@
+import { LOCALES } from 'src/i18n/locale';
 import { joinList } from 'src/i18n/translate';
 
 export type PolicyKind = 'integer' | 'boolean' | 'choice' | 'roleSet' | 'codeList' | 'recipients' | 'utcOffset';
@@ -54,15 +55,24 @@ function formatBytes(n: number): string {
 /** 收件人項目（admins、group:<id>、user:<userId>）→ 顯示名稱；對不到的項目由呼叫端以 missing 顯示。 */
 export type RecipientNames = ReadonlyMap<string, string>;
 
+/** 語系類政策（locale.default、enabled、requiredText）：選項全是語系代碼，顯示各語言自稱、不進翻譯（判斷 24）。calendar.weekStart 同分類但不是語系。 */
+export const isLocalePolicy = (meta: PolicyMeta): boolean =>
+  meta.category === 'locale' && (meta.kind === 'choice' || meta.kind === 'roleSet')
+  && !!meta.options?.length && meta.options.every((o) => LOCALES.some((l) => l.code === o));
+
+/** 選項顯示文字：語系類用各語言自稱，其餘取 policies.choices。 */
+export const choiceLabel = (meta: PolicyMeta, o: string, t: Translate): string =>
+  isLocalePolicy(meta) ? LOCALES.find((l) => l.code === o)?.label ?? o : t(`policies.choices.${o}`);
+
 export function policyValueText(meta: PolicyMeta, v: PolicyValue, t: Translate, names?: RecipientNames | undefined): string {
   switch (meta.kind) {
     case 'boolean': return t(v ? 'policies.on' : 'policies.off');
-    case 'choice': return t(`policies.choices.${String(v)}`);
+    case 'choice': return choiceLabel(meta, String(v), t);
     // 固定 UTC 偏移不翻譯（計畫判斷 2）
     case 'utcOffset': return `UTC${String(v)}`;
     case 'roleSet': {
       const list = v as string[];
-      return list.length ? joinList(list.map((o) => t(`policies.choices.${o}`))) : t('policies.none');
+      return list.length ? joinList(list.map((o) => choiceLabel(meta, o, t))) : t('policies.none');
     }
     case 'codeList': return joinList(v as string[]);
     // 名稱還沒載入（names 為 undefined）時顯示原始項目，不誤報找不到

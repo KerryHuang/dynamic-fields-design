@@ -1,3 +1,4 @@
+import { LOCALES } from 'src/i18n/locale';
 import { resolveI18n } from './i18n-text';
 import type { MenuItem, Me } from './types';
 
@@ -22,7 +23,7 @@ export function groupMenu(items: MenuItem[], locale: string): MenuGroup[] {
   for (const m of items) {
     if (m.closed) { closed.push(m); continue; }
     // 分組鍵：繁中，沒有繁中就用第一個有值的語系（必填語系可能不含繁中）
-    const key = m.section?.['zh-TW'] || Object.values(m.section ?? {}).find((v) => !!v) || undefined;
+    const key = m.section?.['zh-TW'] || LOCALES.map((l) => m.section?.[l.code]).find((v) => !!v) || undefined;
     const g = groups.get(key);
     if (g) g.push(m); else groups.set(key, [m]);
   }

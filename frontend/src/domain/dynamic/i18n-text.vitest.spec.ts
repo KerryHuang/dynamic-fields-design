@@ -52,3 +52,11 @@ describe('missingRequired', () => {
     expect(sameI18n({ 'zh-TW': 'a' }, { 'zh-TW': 'b' })).toBe(false);
   });
 });
+
+describe('resolveI18n 最後一層固定照支援語系順序', () => {
+  it('預設英文、要求繁中、只有 vi 與 th：不論插入順序都是 th', () => {
+    setLocaleSettings({ defaultLocale: 'en-US' });
+    expect(resolveI18n({ vi: '越', th: '泰' }, 'zh-TW')).toBe('泰');
+    expect(resolveI18n({ th: '泰', vi: '越' }, 'zh-TW')).toBe('泰');
+  });
+});

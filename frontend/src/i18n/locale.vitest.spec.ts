@@ -94,3 +94,19 @@ describe('LocaleSwitcher', () => {
     w.unmount();
   });
 });
+
+describe('LocaleSwitcher 掛載後政策更新', () => {
+  it('啟用語系變了，已掛載的選單跟著列新的', async () => {
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const w = mount(LocaleSwitcher, { attachTo: document.body, global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], i18n] } });
+    (document.body.querySelector('[data-testid="locale-open"]') as HTMLElement).click();
+    await flushPromises();
+    expect(document.body.querySelectorAll('[data-testid^="locale-option-"]')).toHaveLength(4);
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US'] });
+    await flushPromises();
+    expect(document.body.querySelectorAll('[data-testid^="locale-option-"]')).toHaveLength(2);
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] });
+    w.unmount();
+  });
+});

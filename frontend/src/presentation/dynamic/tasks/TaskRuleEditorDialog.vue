@@ -10,6 +10,7 @@ import {
   validateDraft, type TaskRule, type TaskRuleDraft, type TaskRuleOn,
 } from 'src/domain/dynamic/task-rule-draft';
 import type { ConditionNode, I18nText, SchemaField } from 'src/domain/dynamic/types';
+import { requiredTextLocales } from 'src/i18n/locale-settings';
 import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
 import ConditionEditor from 'src/presentation/dynamic/list/ConditionEditor.vue';
 import { joinList } from 'src/i18n/translate';
@@ -83,7 +84,7 @@ const setWhen = (target: { when?: ConditionNode | null }, v: ConditionNode | und
 
 function submit() {
   const problems = validateDraft(draft.value, props.fields, { maxTasks: props.maxTasks, originalTaskCount: props.rule?.tasks.length ?? 0 }, original.value);
-  errors.value = problems.map((k) => t(k, { max: props.maxTasks }));
+  errors.value = problems.map((k) => t(k, { max: props.maxTasks, locales: requiredTextLocales().join(', ') }));
   if (problems.length) return;
   save.mutate({ ruleKey: props.rule?.key, body: toTaskRuleBody(draft.value) }, {
     onSuccess: () => { emit('saved'); emit('update:modelValue', false); },

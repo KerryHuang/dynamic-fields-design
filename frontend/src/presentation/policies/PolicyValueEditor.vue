@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { dynamicRecipientKey, policyValueText, type PolicyMeta, type PolicyValue } from 'src/domain/dynamic/policy-types';
+import { choiceLabel, dynamicRecipientKey, policyValueText, type PolicyMeta, type PolicyValue } from 'src/domain/dynamic/policy-types';
 import type { RecipientOption } from './useRecipientNames';
 
 const props = defineProps<{ meta: PolicyMeta; modelValue: PolicyValue; label: string; disable?: boolean; recipientOptions?: RecipientOption[]; recipientsReady?: boolean }>();
@@ -22,7 +22,7 @@ function onNumber(v: string | number | null) {
 }
 
 const offsetOptions = computed(() => (props.meta.options ?? []).map((o) => ({ value: o, label: `UTC${o}` })));
-const choiceOptions = computed(() => (props.meta.options ?? []).map((o) => ({ value: o, label: t(`policies.choices.${o}`) })));
+const choiceOptions = computed(() => (props.meta.options ?? []).map((o) => ({ value: o, label: choiceLabel(props.meta, o, t) })));
 
 // 收件人：選項＝呼叫端給的清單，加上已選但清單裡找不到的項目（已停用或不存在），標「找不到或已停用」；
 // 名稱還沒載入完（recipientsReady 為 false）時清單是空的，已選項目顯示原始代碼，不誤報

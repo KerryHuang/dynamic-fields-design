@@ -49,3 +49,14 @@ describe('policy-types', () => {
     expect(groupByCategory(items).map((g) => [g.category, g.items.map((i) => i.code)])).toEqual([['task', ['a', 'c']], ['attachment', ['b']]]);
   });
 });
+
+describe('語系類政策顯示各語言自稱（不走 policies.choices 翻譯）', () => {
+  const meta = (code: string, kind: 'choice' | 'roleSet') => ({ code, category: 'locale', kind, options: ['zh-TW', 'en-US', 'th', 'vi'] });
+  it('choice 與 roleSet 的現值', () => {
+    expect(policyValueText(meta('locale.default', 'choice'), 'en-US', t)).toBe('English');
+    expect(policyValueText(meta('locale.enabled', 'roleSet'), ['zh-TW', 'th'], t)).toBe('繁體中文、ไทย');
+  });
+  it('calendar.weekStart 這種非語系的 locale 類 choice 仍走翻譯', () => {
+    expect(policyValueText({ code: 'calendar.weekStart', category: 'locale', kind: 'choice', options: ['monday', 'sunday'] }, 'monday', t)).toBe(t('policies.choices.monday'));
+  });
+});

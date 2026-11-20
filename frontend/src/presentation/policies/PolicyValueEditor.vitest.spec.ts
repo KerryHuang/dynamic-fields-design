@@ -173,3 +173,11 @@ describe('PolicyValueEditor', () => {
     });
   });
 });
+
+describe('PolicyValueEditor 語系類', () => {
+  it('Choice 的選項標籤是各語言自稱', () => {
+    const m = make({ code: 'locale.default', category: 'locale', kind: 'choice', options: ['zh-TW', 'en-US', 'th', 'vi'] }, 'en-US');
+    const sel = m.findComponent(quasar.QSelect);
+    expect((sel.props('options') as { label: string }[]).map((o) => o.label)).toEqual(['繁體中文', 'English', 'ไทย', 'Tiếng Việt']);
+  });
+});

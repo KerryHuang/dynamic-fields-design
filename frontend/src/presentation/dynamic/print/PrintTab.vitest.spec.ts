@@ -28,8 +28,8 @@ const mod = (extra: Partial<ModuleDetail> = {}): ModuleDetail => ({
 });
 const tpl: PrintTemplateDefinition = { key: 'sheet', name: { 'zh-TW': '報價單' }, body: '<p>{{f_7}}</p>', active: true };
 
-async function mountTab(m: ModuleDetail, canEdit = true) {
-  api.getPrintTemplateDefinitions.mockResolvedValue([tpl]);
+async function mountTab(m: ModuleDetail, canEdit = true, templates: PrintTemplateDefinition[] = [tpl]) {
+  api.getPrintTemplateDefinitions.mockResolvedValue(templates);
   api.getMe.mockResolvedValue({ designer: { read: true, add: canEdit, edit: canEdit, delete: canEdit } } as never);
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const w = mount(PrintTab, {
@@ -46,15 +46,17 @@ describe('PrintTab', () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
 
-  it('範本名稱只列啟用語系，停用語系已存的名稱保留不刪', async () => {
+  it('範本名稱只列啟用語系，停用語系已存的名稱保留不刪（儲存 payload 仍帶泰文）', async () => {
     setLocaleSettings({ enabled: ['zh-TW', 'en-US'] });
     api.updatePrintTemplate.mockResolvedValue(tpl);
-    api.getPrintTemplateDefinitions.mockResolvedValue([{ ...tpl, name: { 'zh-TW': '報價單', th: 'ใบเสนอราคา' } }]);
-    const w = await mountTab(mod());
-    api.getPrintTemplateDefinitions.mockResolvedValue([{ ...tpl, name: { 'zh-TW': '報價單', th: 'ใบเสนอราคา' } }]);
+    const w = await mountTab(mod(), true, [{ ...tpl, name: { 'zh-TW': '報價單', th: 'ใบเสนอราคา' } }]);
     await w.find('[data-testid="print-item-sheet"]').trigger('click');
     expect(w.find('[data-testid="print-name-en-US"]').exists()).toBe(true);
     expect(w.find('[data-testid="print-name-th"]').exists()).toBe(false);
+    await w.find('[data-testid="print-name-en-US"]').setValue('Quote');
+    await w.find('[data-testid="print-save"]').trigger('click');
+    await flushPromises();
+    expect(api.updatePrintTemplate.mock.calls[0]![1].name).toEqual({ 'zh-TW': '報價單', th: 'ใบเสนอราคา', 'en-US': 'Quote' });
     setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] });
   });
 
