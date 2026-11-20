@@ -4,16 +4,15 @@ Formwright 的 Demo 站與容器部署做法。本機開發與測試見 [CONTRIB
 
 ## Demo 部署（GHCR 映像＋託管平台拉映像）
 
-`Dockerfile.demo` 把前端建置結果、後端與建置時產生的 Demo 資料打包成一個容器，API 與畫面在同一個網址。Render 免費方案每月的建置額度不夠用，所以改成由 GitHub Actions 建好映像推上 GHCR，託管平台只拉現成映像、不自己建置（使用者 2026-11-20 裁決）。先用 Render 拉映像，不行就換 Koyeb。
+`Dockerfile.demo` 把前端建置結果、後端與建置時產生的 Demo 資料打包成一個容器，API 與畫面在同一個網址。Render 免費方案每月的建置額度不夠用，所以改成由 GitHub Actions 建好映像推上 GHCR，託管平台只拉現成映像、不自己建置（使用者 2026-11-20 裁決）。目前 Render（公開 Demo）與 Azure Container Apps（內部備案）同步部署。
 
 1. 映像：`ghcr.io/kerryhuang/formwright-demo`，標籤有 `latest` 和 commit sha。託管平台要能拉得到：把 GHCR package 設成公開，或在平台設定 registry 認證。
 2. 託管平台：建一個「從映像部署」的服務，映像填 `ghcr.io/kerryhuang/formwright-demo:latest`、健康檢查路徑 `/api/health/ready`，關掉 Auto-Deploy；把平台的 Deploy Hook 網址設成 GitHub secret `DEMO_DEPLOY_HOOK`。
-3. `render.yaml` 是舊的 git 建置 Blueprint，只留作備案。
 
 目前的 Demo：<https://formwright-demo.onrender.com>，Render 與 Azure 同步部署（2026-11-20 run 44700316887 起）。
 
-- **Render 服務 `formwright-demo`**：Existing Image 服務（拉 `ghcr.io/kerryhuang/formwright-demo:latest`），Free 方案、Singapore 區，健康檢查 `/api/health/ready`。環境變數三個，同 `render.yaml`：`Demo__LoginEnabled=true`、`Auth__TrustForwardedHeaders=true`、`Auth__ClientIpHeader=True-Client-IP`。拉映像不耗 Render 的建置分鐘：2026-11-20 本月建置額度用完時仍部署成功。
-- **舊服務** `https://dynamic-modules-demo.onrender.com`：舊的 git 建置服務，停在 2026-11-20 08:59 的版本，待使用者決定去留。
+- **Render 服務 `formwright-demo`**：Existing Image 服務（拉 `ghcr.io/kerryhuang/formwright-demo:latest`），Free 方案、Singapore 區，健康檢查 `/api/health/ready`。環境變數三個：`Demo__LoginEnabled=true`、`Auth__TrustForwardedHeaders=true`、`Auth__ClientIpHeader=True-Client-IP`（登入限流讀 Cloudflare 填的來源 IP）。2026-11-20 本月建置額度已用完，拉映像部署仍成功；尚未在 Render 用量頁確認是否計入建置分鐘。
+- **舊服務** `dynamic-modules-demo`（舊的 git 建置服務）：已在 Render 暫停（Suspend，使用者 2026-11-20 裁決），舊網址回 503；要恢復到該服務的 Settings 按 Resume。
 
 限制：免費方案閒置 15 分鐘會休眠，下次開啟要等約 1 分鐘；沒有永久磁碟，休眠重啟後資料回到映像建置時的 Demo 資料（`Dockerfile.demo` 在建置時就產生好，喚醒後不用等），日期停在建置那天，每天的排程部署會更新。Demo 站開了一鍵登入（`Demo__LoginEnabled`），任何人點一下就能以任何 Demo 帳號含 `admin` 登入，所以站上只放虛構的示範資料，請勿輸入真實資料。Render 上 cookie 帶 `secure; samesite=lax; httponly`（2026-11-05 實測）。
 
@@ -39,13 +38,17 @@ Formwright 的 Demo 站與容器部署做法。本機開發與測試見 [CONTRIB
 
 - 資源：資源群組 `formwright-demo-rg`、Container App `formwright-demo`，區域 `eastasia`，0.25 vCPU／0.5Gi，最少 0、最多 1 個副本，不接 Log Analytics。縮到 0 後第一個請求冷啟動約 27 秒。
 - 費用：用 Container Apps 的每月免費額度，以這個規格約可運作 200 小時；閒置時縮到 0 不計費。
-- 身分：GitHub OIDC（不存 client secret），聯合憑證只允許本 repo 的 `main` 分支，角色只授予這個 Container App。
+- 費用保護：預算 `monthly-1usd`（每月 1 美元）。實際花費達 80% 寄信、預估超過 100% 寄信；實際達 100% 時，預算觸發動作群組 `formwright-demo-stop`，由 Logic App `formwright-demo-stop` 以受控識別 POST Container App 的 `/stop` 停機（受控識別只授權到這個 app）。
+  - 費用資料約延遲一天，可能小幅超過預算。
+  - 停機後備案就沒了，要手動重開（az 2.90 沒有 `containerapp start` 子指令）：`az rest --method post --url "https://management.azure.com/subscriptions/<訂閱 ID>/resourceGroups/formwright-demo-rg/providers/Microsoft.App/containerApps/formwright-demo/start?api-version=2024-03-01"`。
+  - 2026-11-20 實測：Logic App 觸發後 20 秒內停機，重開正常；預算到 100% 的整條鏈還沒真的觸發過。
+- 身分：GitHub OIDC（不存 client secret），聯合憑證只允許本 repo 的 `main` 分支，角色只授予這個 Container App。聯合憑證的 subject 要用 GitHub 的新格式 `repo:<owner>@<owner-id>/<repo>@<repo-id>:ref:refs/heads/main`；用舊格式 `repo:<owner>/<repo>:ref:...` 會登入失敗（AADSTS700213）。
 - job 步驟：`azure/login` 登入 → `az containerapp update` 把映像換成 `ghcr.io/kerryhuang/formwright-demo:<sha>` → 每 20 秒讀一次 `<DEMO_AZURE_URL>/api/version`，`commit` 等於這次的 sha 才算成功，最多 10 分鐘，逾時讓 job 失敗。
 
 設定（GitHub repo → Settings → Secrets and variables → Actions）：
 
 - secrets `AZURE_CLIENT_ID`、`AZURE_TENANT_ID`、`AZURE_SUBSCRIPTION_ID`：OIDC 身分的識別碼。`AZURE_CLIENT_ID` 沒設定時 job 印警告、略過部署、照樣成功結束。
-- variable `DEMO_AZURE_URL`：備案站網址（不含結尾斜線）。
+- variable `DEMO_AZURE_URL`：備案站網址（不含結尾斜線）；網址不公開，只存在這個 variable。
 
 ## 環境變數
 
@@ -86,7 +89,7 @@ Formwright 的 Demo 站與容器部署做法。本機開發與測試見 [CONTRIB
 
 - **log**：非開發環境輸出 JSON 到 stdout（`appsettings.json` 的 `Logging:Console`），由 Docker、systemd 或 Windows 服務包裝程式收集；開發環境維持純文字。4xx、5xx 與超過慢請求門檻的請求結束時記一行（只用路由樣板，不記查詢字串）；一般成功的請求是 Debug，預設不輸出，要看時設 `Logging__LogLevel__DynamicModules.WebAPI.Ops=Debug`，同一個請求的所有 log 都帶 `requestId` 欄位，回應標頭 `X-Request-Id` 與錯誤回應主體的 `traceId` 是同一個值。框架自帶的 `RequestId` 欄位（連線序號格式）是另一個東西，查同一請求請用 `requestId`。慢請求門檻在「系統管理 → 政策設定」。
 - ⚠️ **產品 log 可能含例外原文**：框架的例外訊息可能帶輸入值，前端錯誤回報也會把原始訊息與 stack 記進 log，所以 log 視同敏感資料控管存取。
-- **健康檢查**：`/api/health/live`（程序活著）、`/api/health/ready`（資料庫可連線，逾時 2 秒回 503）、`/api/health`（同 live，相容舊設定）。`render.yaml` 的 `healthCheckPath` 已改成 `/api/health/ready`；⚠️ 上線時請在 Render 後台確認免費方案真的使用 `healthCheckPath`、Blueprint 有同步。
+- **健康檢查**：`/api/health/live`（程序活著）、`/api/health/ready`（資料庫可連線，逾時 2 秒回 503）、`/api/health`（同 live，相容舊設定）。Render 與 Azure 的健康檢查都設 `/api/health/ready`。
 - **版本**：`GET /api/version` 回 `version`、`commit`、`builtAt`。Docker build-arg `APP_VERSION`、`GIT_COMMIT`（沒給時退回 Render 的 `RENDER_GIT_COMMIT`）、`BUILD_TIME`（沒給時用建置當下）注入；沒注入的欄位顯示 `dev`。原始碼沒變時 Docker 沿用快取層，`builtAt` 可能停在舊時間。
 - **自訂指標**：目前沒有匯出端；要看用 `dotnet-counters monitor --counters Formwright`（執行次數、前端錯誤收件數、規則失敗數）。
 
