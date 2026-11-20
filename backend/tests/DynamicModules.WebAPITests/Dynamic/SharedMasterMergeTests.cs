@@ -89,6 +89,21 @@ public class SharedMasterMergeTests : IDisposable
         await _rig.AssertIntegrityAsync();
     }
 
+    /// <summary>重匯已開啟的主檔替既有欄位加選項：套件文字只要求繁中（判斷 12），不受必填語系政策影響（審查修正 2）。</summary>
+    [Fact]
+    public async Task ReimportingAnOpenMaster_WithRequiredEnglish_AddsZhOnlyOption()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        (await _rig.Admin.PutAsJsonAsync($"{Base}/system/policies/locale.requiredText", new { value = new[] { "zh-TW", "en-US" } }))
+            .EnsureSuccessStatusCode();
+        var (exported, _) = await _rig.ExportAsync("bp");
+        var bp = Node(exported.GetRawText());
+        AddOption(FieldNode(bp, "role"), "agent", "代理商");
+        await _rig.ImportMergeOkAsync(bp.ToJsonString());
+        OptionNames(_rig, "bp").Should().Contain("partner.agent");
+    }
+
     [Fact]
     public async Task ReimportingAMasterAlreadyOpen_OnlyAddsByPersistentCode_AvoidsContributorCodes_AndNeverDeletesOrOverwrites()
     {

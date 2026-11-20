@@ -111,6 +111,8 @@ public sealed class MasterMerger(
     /// <summary>補進已存在的主檔；失敗回傳錯誤（呼叫端在交易內，整個匯入回滾），成功回 null。會提交。</summary>
     public async Task<ServiceResult?> MergeIntoDatabaseAsync(App master, AppPackageData incoming, List<string> warnings, CancellationToken ct)
     {
+        // 合併寫入走一般的新增請求（欄位、選項、區塊）：套件文字只要求繁中，不套必填語系政策（判斷 12）
+        using var packageText = Common.PackageTextScope.Begin();
         var bindings = await apps.GetBindingsAsync(master.Id, ct);
         var others = new List<AppBindings>();
         foreach (var other in (await apps.ListAsync(ct)).Where(a => a.Id != master.Id)) others.Add(await apps.GetBindingsAsync(other.Id, ct));
