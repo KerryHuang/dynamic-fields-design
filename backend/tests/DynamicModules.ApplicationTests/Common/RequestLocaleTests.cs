@@ -24,6 +24,18 @@ public class RequestLocaleTests
         return new RequestLocale(new Header("zh-TW"), cache);
     }
 
+    /// <summary>裝了 ja（上層 en-US）、預設 th；<paramref name="enabled"/> 是啟用語系；請求標頭 ja（標頭是否啟用由 HeaderCurrentLocale 判斷，這裡直接給）。</summary>
+    private static async Task<RequestLocale> Japanese(string enabled)
+    {
+        var registry = new FakeLocaleRepository().WithBuiltin().Add("ja", "日本語", fallback: "en-US").Registry(TimeProvider.System);
+        await registry.EnsureFreshAsync(default);
+        var scopes = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        var cache = new CachedSystemPolicy(scopes, TimeProvider.System, PolicyEnvironmentDefaults.Empty, registry, NullLogger<CachedSystemPolicy>.Instance);
+        cache.Apply(PolicyCatalog.LocaleDefault, "th", cache.NextSequence());
+        cache.Apply(PolicyCatalog.LocaleEnabled, enabled, cache.NextSequence());
+        return new RequestLocale(new Header("ja"), cache);
+    }
+
     [Theory]
     [InlineData(null, "zh-TW")]
     [InlineData("", "zh-TW")]
@@ -36,7 +48,7 @@ public class RequestLocaleTests
     {
         var lc = Create().For(requested);
         lc.Locale.Should().Be(expected);
-        lc.Fallbacks.Should().Equal("en-US", "zh-TW");
+        lc.Fallbacks.Should().Equal("en-US", "zh-TW", "th", "vi");
     }
 
     [Fact]
@@ -44,7 +56,28 @@ public class RequestLocaleTests
     {
         var r = Create();
         r.SystemDefault.Locale.Should().Be("en-US");
-        r.SystemDefault.Fallbacks.Should().Equal("en-US", "zh-TW");
+        r.SystemDefault.Fallbacks.Should().Equal("en-US", "zh-TW", "th", "vi");
         r.Current.Locale.Should().Be("zh-TW");
+        r.Current.Fallbacks.Should().Equal("en-US", "zh-TW", "th", "vi");
+    }
+
+    [Fact]
+    public async Task InstalledJapanese_ChainHasParentThenDefault()
+    {
+        var r = await Japanese("zh-TW,en-US,th,ja");
+        r.Current.Locale.Should().Be("ja");
+        r.Current.Fallbacks.Should().Equal("en-US", "th", "zh-TW", "vi", "ja");
+        r.For("ja").Locale.Should().Be("ja");
+        r.For("ja").Fallbacks.Should().Equal("en-US", "th", "zh-TW", "vi", "ja");
+        r.SystemDefault.Fallbacks.Should().Equal("th", "zh-TW", "en-US", "vi", "ja");
+    }
+
+    [Fact]
+    public async Task InstalledJapanese_NotEnabled_ForFallsToSystemDefault()
+    {
+        var r = await Japanese("zh-TW,en-US,th");
+        var lc = r.For("ja");
+        lc.Locale.Should().Be("th");
+        lc.Fallbacks.Should().Equal(r.SystemDefault.Fallbacks);
     }
 }

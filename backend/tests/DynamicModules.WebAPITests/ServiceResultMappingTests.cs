@@ -1,5 +1,7 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.PolicyService;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using DynamicModules.WebAPI.Controllers;
 using FluentAssertions;
@@ -16,7 +18,7 @@ public class ServiceResultMappingTests
         {
             var http = new DefaultHttpContext { TraceIdentifier = "trace-1" };
             if (locale is not null)
-                http.RequestServices = new ServiceCollection().AddSingleton<ICurrentLocale>(new FixedLocale(locale)).BuildServiceProvider();
+                http.RequestServices = new ServiceCollection().AddSingleton(new RequestLocale(new FixedLocale(locale), FactoryPolicy())).BuildServiceProvider();
             ControllerContext = new ControllerContext { HttpContext = http };
         }
 
@@ -25,6 +27,14 @@ public class ServiceResultMappingTests
     }
 
     private sealed record FixedLocale(string Locale) : ICurrentLocale;
+
+    /// <summary>沒載入過的政策快照＝出廠值（預設繁中、四語啟用）；訊息解析點經 RequestLocale 取語系與退回鏈。</summary>
+    private static CachedSystemPolicy FactoryPolicy()
+    {
+        var scopes = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        return new(scopes, TimeProvider.System, PolicyEnvironmentDefaults.Empty,
+            new LocaleRegistry(scopes, TimeProvider.System, NullLogger<LocaleRegistry>.Instance), NullLogger<CachedSystemPolicy>.Instance);
+    }
 
     private static readonly TestController C = new();
     private static readonly TestController En = new("en-US");

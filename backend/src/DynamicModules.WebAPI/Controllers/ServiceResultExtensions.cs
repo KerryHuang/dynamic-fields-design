@@ -11,8 +11,9 @@ public static class ServiceResultExtensions
         this ServiceResult r, ControllerBase c, string? createdAtAction = null, object? routeValues = null)
     {
         // 訊息在這裡才依請求語系（X-Locale）解析；單元測試的 HttpContext 沒有 RequestServices 時是繁中
-        var locale = c.HttpContext.RequestServices?.GetService<ICurrentLocale>()?.Locale;
-        var fallbacks = c.HttpContext.RequestServices?.GetService<Application.Dynamic.PolicyService.CachedSystemPolicy>()?.LocaleFallbacks;
+        var lc = c.HttpContext.RequestServices?.GetService<RequestLocale>()?.Current;
+        var locale = lc?.Locale;
+        var fallbacks = lc?.Fallbacks;
         if (r.IsUnauthorized) return c.Unauthorized(Body(r, locale, fallbacks));
         if (r.IsForbidden) return c.StatusCode(StatusCodes.Status403Forbidden, Body(r, locale, fallbacks));
         if (r.IsUnprocessable) return c.StatusCode(StatusCodes.Status422UnprocessableEntity, Body(r, locale, fallbacks));
