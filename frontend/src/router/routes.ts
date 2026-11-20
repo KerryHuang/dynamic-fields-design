@@ -38,6 +38,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'system/organization', component: () => import('src/pages/system/OrganizationPage.vue') },
       { path: 'system/appearance', component: () => import('src/pages/system/AppearancePage.vue') },
       { path: 'system/policies', component: () => import('src/pages/system/PoliciesPage.vue') },
+      { path: 'system/locales', component: () => import('src/pages/system/LocalesPage.vue') },
       { path: 'system/ops', component: () => import('src/pages/system/OpsPage.vue') },
       { path: 'system/audit', component: () => import('src/pages/system/AuditPage.vue') },
       { path: 'system/mail', component: () => import('src/pages/system/MailSettingsPage.vue') },

@@ -54,3 +54,9 @@ describe('approvals route', () => {
     expect(loaderOf('/approvals').source).toContain('ApprovalCenterPage');
   });
 });
+
+describe('locales route', () => {
+  it('/system/locales 開啟 LocalesPage', () => {
+    expect(loaderOf('/system/locales').source).toContain('LocalesPage');
+  });
+});
