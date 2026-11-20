@@ -2,7 +2,7 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import * as quasar from 'quasar';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
@@ -11,9 +11,19 @@ import { HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import LocalesPage from './LocalesPage.vue';
 
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+const switchLocale = vi.hoisted(() => vi.fn());
+vi.mock('src/i18n/ui-messages', async (orig) => ({ ...(await orig<typeof import('src/i18n/ui-messages')>()), switchLocale }));
 
-const base = { enabled: true, isDefault: false, required: false, overrides: { ui: 0, server: 0 }, current: null, hasPrevious: false, fallbackCode: null };
-const locale = (o: Record<string, unknown>) => ({ ...base, ...o });
+const section = (o: Record<string, unknown> = {}) => ({
+  baseChanged: 0, paramsChanged: 0, runtimeFallback: 0, orphaned: 0,
+  baseChangedKeys: [], paramsChangedKeys: [], runtimeFallbackKeys: [], orphanedKeys: [], ...o,
+});
+const base = {
+  enabled: true, isDefault: false, required: false, overrides: { ui: 0, server: 0 }, current: null, hasPrevious: false, fallbackCode: null,
+  completeness: { ui: { have: 10, total: 10 }, server: { have: 5, total: 5 }, topMissing: [] },
+  review: { ui: section(), server: section() }, builtFor: null,
+};
+const locale = (o: Record<string, unknown>): Record<string, unknown> => ({ ...base, ...o });
 const LOCALES = [
   locale({ code: 'zh-TW', nativeName: '繁體中文', origin: 'builtin', isDefault: true, required: true }),
   locale({ code: 'th', nativeName: 'ไทย', origin: 'builtin', overrides: { ui: 30, server: 4 }, hasPrevious: true,
@@ -24,9 +34,32 @@ const LOCALES = [
     current: { packVersion: '0.9.0', fileName: 'ja.langpack.json', importedUtc: '2026-11-21T02:00:00Z', importedBy: 'admin' } }),
 ];
 
+// 第二輪必修 2：既有案例的四列 fixture 不換；完整版的案例另用五列（四張內建加一張匯入的 ja）
+const FULL = [
+  locale({ code: 'zh-TW', nativeName: '繁體中文', origin: 'builtin', isDefault: true, required: true }),
+  locale({ code: 'en-US', nativeName: 'English', origin: 'builtin' }),
+  locale({ code: 'th', nativeName: 'ไทย', origin: 'builtin' }),
+  locale({ code: 'vi', nativeName: 'Tiếng Việt', origin: 'builtin', enabled: false }),
+  locale({
+    code: 'ja', nativeName: '日本語', origin: 'installed', enabled: false, fallbackCode: 'en-US', overrides: { ui: 1790, server: 160 }, builtFor: '2026.10',
+    current: { packVersion: '0.9.0', fileName: 'ja.langpack.json', importedUtc: '2026-11-21T02:00:00Z', importedBy: 'admin' },
+    completeness: {
+      ui: { have: 1790, total: 2701 }, server: { have: 160, total: 300 },
+      topMissing: [{ segment: 'ui', category: 'approval', missing: 120 }, { segment: 'server', category: 'report', missing: 7 }],
+    },
+    review: {
+      ui: section({ baseChanged: 12, baseChangedKeys: ['approval.stage', 'approval.panel.title'] }),
+      server: section({
+        paramsChanged: 2, paramsChangedKeys: ['report.Sent', 'Forbidden'], runtimeFallback: 1, runtimeFallbackKeys: ['report.Sent'],
+        orphaned: 60, orphanedKeys: Array.from({ length: 50 }, (_, i) => `old.key${String(i).padStart(2, '0')}`),
+      }),
+    },
+  }),
+];
+
 let calls: Call[];
 let qc: QueryClient;
-async function mountPage(opts: { importEnabled?: boolean; forbidden?: boolean; reply?: (c: Call) => unknown } = {}) {
+async function mountPage(opts: { importEnabled?: boolean; forbidden?: boolean; locales?: unknown[]; reply?: (c: Call) => unknown } = {}) {
   window.innerWidth = 1366;
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -34,7 +67,7 @@ async function mountPage(opts: { importEnabled?: boolean; forbidden?: boolean; r
     const custom = opts.reply?.(c);
     if (custom !== undefined) return custom;
     if (c.url === '/i18n/locales' && c.method === 'get') {
-      return opts.forbidden ? new HttpFail(403) : { importEnabled: opts.importEnabled ?? true, packMaxBytes: 5242880, maxInstalled: 10, locales: LOCALES };
+      return opts.forbidden ? new HttpFail(403) : { importEnabled: opts.importEnabled ?? true, packMaxBytes: 5242880, maxInstalled: 10, locales: opts.locales ?? LOCALES };
     }
     return {};
   });
@@ -189,5 +222,81 @@ describe('LocalesPage 動作', () => {
     expect(document.body.textContent).toContain('請先在政策設定停用這個語系');
     expect(invalidated(spy)).not.toContain('["locale-admin"]');
     w.unmount();
+  });
+});
+
+describe('LocalesPage 完整版卡片', () => {
+  afterEach(() => { switchLocale.mockReset(); });
+
+  it('五列 fixture 顯示五張卡片；完整度文字與四捨五入的百分比', async () => {
+    const w = await mountPage({ locales: FULL });
+    expect(document.querySelectorAll('[data-testid^="locale-row-"]')).toHaveLength(5);
+    expect(q('locale-completeness-ui-ja')!.textContent).toContain('介面 1790／2701（66%）');
+    expect(q('locale-completeness-server-ja')!.textContent).toContain('系統訊息 160／300（53%）');
+    expect(q('locale-completeness-ui-th')!.textContent).toContain('介面 10／10（100%）');
+    w.unmount();
+  });
+
+  it('review 全 0 時不顯示檢視行', async () => {
+    const w = await mountPage({ locales: FULL });
+    for (const kind of ['base-changed', 'params', 'orphaned']) expect(q(`locale-review-${kind}-th`)).toBeNull();
+    w.unmount();
+  });
+
+  it('原文已更新、參數不符、已失效各一行；執行期退回 > 0 才有括號', async () => {
+    const w = await mountPage({ locales: FULL });
+    expect(q('locale-review-base-changed-ja')!.textContent).toContain('12 句覆寫的原文已更新');
+    expect(q('locale-review-params-ja')!.textContent).toContain('2 句覆寫的參數和現在的原文不符，需要重翻');
+    expect(q('locale-review-params-ja')!.textContent).toContain('（其中 1 句目前顯示內建翻譯）');
+    expect(q('locale-review-orphaned-ja')!.textContent).toContain('60 句覆寫已失效（鍵已不存在），下次匯入這個語系時會清掉');
+    w.unmount();
+    const noFallback = FULL.map((l) => (l.code === 'ja'
+      ? { ...l, review: { ui: section(), server: section({ paramsChanged: 2, paramsChangedKeys: ['Forbidden'] }) } } : l));
+    const w2 = await mountPage({ locales: noFallback });
+    expect(q('locale-review-params-ja')!.textContent).toContain('2 句覆寫的參數和現在的原文不符');
+    expect(q('locale-review-params-ja')!.textContent).not.toContain('其中');
+    w2.unmount();
+  });
+
+  it('「查看明細」展開：缺最多的分類、鍵名清單、超過清單筆數註明總數；builtFor', async () => {
+    const w = await mountPage({ locales: FULL });
+    expect(q('locale-built-for-ja')!.textContent).toContain('2026.10');
+    q('locale-details-ja')!.querySelector<HTMLElement>('.q-item')!.click();
+    await tick();
+    const text = q('locale-details-ja')!.textContent!;
+    expect(text).toContain('approval 缺 120 句');
+    expect(text).toContain('report 缺 7 句');
+    expect(text).toContain('approval.stage');
+    expect(text).toContain('Forbidden');
+    expect(text).toContain('old.key00');
+    expect(text).toContain('共 60 筆，完整清單請匯出樣板');
+    w.unmount();
+  });
+
+  it('「以此語系預覽」只有未啟用的卡片有；按下呼叫 switchLocale(…, code, { preview: true })', async () => {
+    const w = await mountPage({ locales: FULL });
+    expect(q('locale-preview-th')).toBeNull();
+    expect(q('locale-preview-zh-TW')).toBeNull();
+    q('locale-preview-vi')!.click();
+    await tick();
+    expect(switchLocale).toHaveBeenCalledTimes(1);
+    expect(switchLocale.mock.calls[0]![1]).toBe('vi');
+    expect(switchLocale.mock.calls[0]![2]).toEqual({ preview: true });
+    w.unmount();
+  });
+
+  it('「匯出樣板」開對話框且目標是該語系；「新語系樣板」開對話框且代碼可輸入', async () => {
+    const w = await mountPage({ locales: FULL });
+    q('locale-export-ja')!.click();
+    await tick();
+    expect(q('export-target')!.textContent).toContain('日本語');
+    expect(q('export-code')).toBeNull();
+    w.unmount();
+    const w2 = await mountPage({ locales: FULL });
+    q('locales-new-template')!.click();
+    await tick();
+    expect(q('export-code')).not.toBeNull();
+    expect(q('export-target')).toBeNull();
+    w2.unmount();
   });
 });
