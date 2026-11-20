@@ -424,3 +424,62 @@ describe('LocalePackImportDialog 以此語系預覽（i4d2）', () => {
     w.unmount();
   });
 });
+
+describe('LocalePackImportDialog 關閉重開後舊流程不寫回（#71）', () => {
+  const deferred = <T>() => {
+    let resolve!: (v: T) => void; let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+  };
+
+  it('#71-1 套用送出後關閉重開並選了另一個檔，舊套用才回 409：新對話框不顯示舊錯誤、沒有「重新預覽」', async () => {
+    const wait = deferred<unknown>();
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/apply' ? wait.promise : undefined));
+    await pick();
+    q('pack-apply')!.click();
+    await tick();
+    await w.setProps({ modelValue: false });
+    await w.setProps({ modelValue: true });
+    await pick(new Uint8Array([9]), 'other.langpack.json');
+    // 直接丟 ApiError 的形狀（deferred 繞過 axios interceptor）
+    wait.reject({ status: 409, code: 'localePackStale', message: '語系在預覽之後被變更了' });
+    await tick();
+    expect(q('pack-error')).toBeNull();
+    expect(q('pack-repreview')).toBeNull();
+    expect(document.body.textContent).not.toContain('語系在預覽之後被變更了');
+    w.unmount();
+  });
+
+  it('#71-1 「現在啟用」才回 400：關閉重開並選了另一個檔後，不顯示在新對話框', async () => {
+    const wait = deferred<unknown>();
+    const w = await mountDialog((c) => (c.url === '/system/policies' ? wait.promise : undefined));
+    await pick();
+    q('pack-apply')!.click();
+    await tick();
+    q('pack-enable')!.click();
+    await tick();
+    await w.setProps({ modelValue: false });
+    await w.setProps({ modelValue: true });
+    await pick(new Uint8Array([9]), 'other.langpack.json');
+    wait.reject({ status: 400, code: 'localeEnableInvalid', message: '政策不允許啟用這個語系' });
+    await tick();
+    expect(q('pack-error')).toBeNull();
+    expect(document.body.textContent).not.toContain('政策不允許啟用這個語系');
+    w.unmount();
+  });
+
+  it('#71-2 多餘的鍵含 HTML 與腳本字串：以文字節點呈現，不產生元素', async () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    const script = '<script>window.__pwned = 1</script>';
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/preview'
+      ? report({ ui: section({ extra: 2, extraKeys: [evil, script] }) }) : undefined));
+    await pick();
+    const box = q('report-extra')!;
+    expect(box.querySelector('img')).toBeNull();
+    expect(box.querySelector('script')).toBeNull();
+    expect(box.textContent).toContain(evil);
+    expect(box.textContent).toContain(script);
+    expect((window as unknown as { __pwned?: number }).__pwned).toBeUndefined();
+    w.unmount();
+  });
+});
