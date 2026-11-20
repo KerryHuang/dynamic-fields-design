@@ -20,7 +20,7 @@ public class UpdateRecordHandler(
     ICurrentUser user, IBusinessTime time, IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ReferenceResolver resolver,
     DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordHistoryWriter history, WorkflowEnforcer workflow,
     Dynamic.LedgerService.LedgerGate ledgerGate, Dynamic.EventService.EventFactLock factLock, Dynamic.ApprovalService.ApprovalGate approvalGate,
-    RequestLocale locale, Dynamic.ApprovalService.ApprovalLockService approvalLock)
+    RequestLocale locale, Dynamic.ApprovalService.ApprovalLockService approvalLock, Common.Localization.IMessageCatalog messages)
     : IRequestHandler<UpdateRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateRecordRequest request, CancellationToken ct)
@@ -63,11 +63,11 @@ public class UpdateRecordHandler(
         var (keepComputed, keepDetailRows) = await KeptComputedAsync(module, previous, input, ct);
         var plan = await details.PrepareAsync(module, record, PermissionAction.Edit, request.Details, perms, ct,
             () => Task.FromResult<IReadOnlyDictionary<string, JsonElement?>>(RecordValueProcessor.Process(
-                module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Current, locale.SystemDefault), validRefKeys, systemKeys: systemKeys,
+                module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Current, messages, locale.SystemDefault), validRefKeys, systemKeys: systemKeys,
                 keepComputed: keepComputed).values), keepDetailRows);
         if (plan.Failure is { } failure) return failure;
         var (values, errors) = RecordValueProcessor.Process(
-            module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Current, locale.SystemDefault), validRefKeys, plan.RollupValues, systemKeys: systemKeys, frozen: frozen, keepComputed: keepComputed);
+            module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Current, messages, locale.SystemDefault), validRefKeys, plan.RollupValues, systemKeys: systemKeys, frozen: frozen, keepComputed: keepComputed);
         foreach (var (key, messages) in plan.Errors) errors[key] = messages;
         if (errors.Count == 0)
             foreach (var (key, messages) in await workflow.CheckAsync(module, previous, values, ct)) errors[key] = messages;

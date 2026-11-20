@@ -133,6 +133,130 @@ public sealed class ServerMessageChainApiTests : IDisposable
         status.GetProperty("options").EnumerateArray().Select(o => o.GetProperty("label").GetString()).Should().Equal("To do", "In progress", "Done", "Cancelled");
     }
 
+    // ---- 記錄寫入路徑（i4c 計畫 Task 5）----
+
+    private static async Task<JsonElement> Errors(HttpResponseMessage res)
+    {
+        var body = await res.Content.ReadAsStringAsync();
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, body);
+        return JsonDocument.Parse(body).RootElement.GetProperty("errors");
+    }
+
+    private static string En(string key, params object[] args) =>
+        string.Format(System.Globalization.CultureInfo.InvariantCulture, Texts[key]["en-US"], args);
+
+    [Fact]
+    public async Task RecordRequired_Ja_English()
+    {
+        await Japanese();
+        var key = await CreateModule(_admin);
+        await Activate(_admin, key);
+        var title = await TitleKey(_admin, key);
+
+        var errors = await Errors(await Client("ja").PostAsJsonAsync($"{Base}/modules/{key}/records", new { values = new Dictionary<string, object>() }));
+        errors.GetProperty(title)[0].GetString().Should().Be(En(MessageText.Required));
+    }
+
+    [Fact]
+    public async Task FieldValue_Ja_English()
+    {
+        await Japanese();
+        var key = await CreateModule(_admin);
+        var qty = await AddField(_admin, key, "decimal");
+        await Activate(_admin, key);
+        var title = await TitleKey(_admin, key);
+
+        var errors = await Errors(await Client("ja").PostAsJsonAsync($"{Base}/modules/{key}/records",
+            new { values = new Dictionary<string, object> { [title] = "A", [qty.Key] = "abc" } }));
+        errors.GetProperty(qty.Key)[0].GetString().Should().Be(En(MessageText.MustBeNumber));
+    }
+
+    [Fact]
+    public async Task DetailTooMany_Ja_English()
+    {
+        await Japanese();
+        var parent = await CreateModule(_admin);
+        var child = await CreateModule(_admin);
+        await AddField(_admin, child, "reference", new { refTarget = new { kind = "module", key = parent }, relation = "detail" });
+        await Activate(_admin, parent);
+        await Activate(_admin, child);
+        (await _admin.PutAsJsonAsync($"{Base}/modules/{child}/policies/record.maxDetailRows", new { value = 1 })).EnsureSuccessStatusCode();
+        var (parentTitle, childTitle) = (await TitleKey(_admin, parent), await TitleKey(_admin, child));
+
+        object Row(string t) => new { values = new Dictionary<string, object> { [childTitle] = t } };
+        var errors = await Errors(await Client("ja").PostAsJsonAsync($"{Base}/modules/{parent}/records", new
+        {
+            values = new Dictionary<string, object> { [parentTitle] = "H" },
+            details = new Dictionary<string, object[]> { [child] = [Row("a"), Row("b")] }
+        }));
+        errors.GetProperty($"details.{child}")[0].GetString().Should().Be(En(MessageText.TooManyDetailRows, 1));
+    }
+
+    [Fact]
+    public async Task WorkflowNotAllowed_Ja_English()
+    {
+        await Japanese();
+        var key = await CreateModule(_admin);
+        var status = await AddField(_admin, key, "enum");
+        async Task<long> Option(string label) => (await JsonOf(await _admin.PostAsJsonAsync($"{Base}/fields/{status.Id}/options",
+            new { label = new Dictionary<string, string> { ["zh-TW"] = label }, color = (string?)null }))).GetProperty("id").GetInt64();
+        var (draft, done, cancelled) = (await Option("草稿"), await Option("完成"), await Option("作廢"));
+        (await _admin.PutAsJsonAsync($"{Base}/modules/{key}/workflow", new
+        {
+            statusFieldId = status.Id, initialOptionId = draft,
+            states = new object[] { new { optionId = draft }, new { optionId = done }, new { optionId = cancelled } },
+            transitions = new[] { new { from = draft, to = done, groupIds = Array.Empty<long>() } }
+        })).EnsureSuccessStatusCode();
+        await Activate(_admin, key);
+        var title = await TitleKey(_admin, key);
+        var created = await JsonOf(await _admin.PostAsJsonAsync($"{Base}/modules/{key}/records", new { values = new Dictionary<string, object> { [title] = "A" } }));
+
+        var errors = await Errors(await Client("ja").PutAsJsonAsync($"{Base}/records/{created.GetProperty("id").GetInt64()}", new
+        {
+            values = new Dictionary<string, object> { [status.Key] = $"opt_{cancelled}" },
+            rowVersion = created.GetProperty("rowVersion").GetString()
+        }));
+        errors.GetProperty(status.Key)[0].GetString().Should().Be(En(MessageText.WorkflowNotAllowed));
+    }
+
+    [Fact]
+    public async Task ConversionInputs_Ja_StillDetectsRequired()
+    {
+        await Japanese();
+        var src = await CreateModule(_admin);
+        var dst = await CreateModule(_admin);
+        var from = await AddField(_admin, dst, "reference", new { refTarget = new { kind = "module", key = src }, readOnly = true });
+        var must = await AddField(_admin, dst, "text", new { required = true });
+        await Activate(_admin, src);
+        await Activate(_admin, dst);
+        var (srcTitle, dstTitle) = (await TitleKey(_admin, src), await TitleKey(_admin, dst));
+        var conversion = "cv-" + Guid.NewGuid().ToString("N")[..8];
+        var defined = await _admin.PostAsJsonAsync($"{Base}/conversions", new
+        {
+            key = conversion, name = new Dictionary<string, string> { ["zh-TW"] = "轉換" }, sourceModuleKey = src, targetModuleKey = dst, active = true,
+            definition = new
+            {
+                sourceStates = Array.Empty<long>(),
+                header = new { sourceFieldId = from.Id, copy = new[] { new { from = long.Parse(srcTitle[2..]), to = long.Parse(dstTitle[2..]) } } },
+                lines = (object?)null
+            }
+        });
+        defined.StatusCode.Should().Be(HttpStatusCode.Created, await defined.Content.ReadAsStringAsync());
+        var record = await JsonOf(await _admin.PostAsJsonAsync($"{Base}/modules/{src}/records", new { values = new Dictionary<string, object> { [srcTitle] = "S" } }));
+        var url = $"{Base}/records/{record.GetProperty("id").GetInt64()}/conversions/{conversion}/inputs";
+
+        async Task<string[]> Inputs(string locale)
+        {
+            var res = await Client(locale).GetAsync(url);
+            var body = await res.Content.ReadAsStringAsync();
+            res.StatusCode.Should().Be(HttpStatusCode.OK, body);
+            return JsonDocument.Parse(body).RootElement.EnumerateArray().Select(e => e.GetString()!).ToArray();
+        }
+        var zh = await Inputs("zh-TW");
+        zh.Should().Equal(must.Key);
+        (await Inputs("ja")).Should().Equal(zh);
+    }
+
     [Fact]
     public async Task Factory_FourLocales_Unchanged()
     {

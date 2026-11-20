@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.FieldService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -12,8 +13,8 @@ using DynamicModules.Domain.ValueObjects;
 namespace DynamicModules.Application.Dynamic.RecordService;
 
 /// <summary>規則求值需要的環境；today 取自 IBusinessTime，locale 是規則訊息要解析的請求語系（ICurrentLocale）。</summary>
-/// <summary>Locale：回給使用者的訊息語系（請求語系＋退回鏈）。SystemLocale：寫進記錄或記錄檔的文字（標題樣板的選項標籤、凍結例外的 Message）用的系統預設語系（N1）；null 為繁中。</summary>
-public sealed record RuleContext(DateOnly Today, LocaleContext Locale, LocaleContext? SystemLocale = null);
+/// <summary>Locale：回給使用者的訊息語系（請求語系＋退回鏈），Messages 沿它的鏈取句子（語系包 i4c 計畫判斷 7）。SystemLocale：寫進記錄或記錄檔的文字（標題樣板的選項標籤、凍結例外的 Message）用的系統預設語系（N1）；null 為繁中。</summary>
+public sealed record RuleContext(DateOnly Today, LocaleContext Locale, IMessageCatalog Messages, LocaleContext? SystemLocale = null);
 
 /// <summary>把輸入值依欄位型別正規化、套預設值、算公式，再套規則（必填、下拉連動、驗證），並與舊值合併。</summary>
 public static class RecordValueProcessor
@@ -56,7 +57,7 @@ public static class RecordValueProcessor
         var stored = previous is null ? null : RuleEngine.Evaluate(module, previous, previous, registry, userIds, rules.Today);
         if (stored is { ReadOnlyAll: true })
         {
-            errors[RecordErrorKey] = [MessageText.Get(rules.Locale.Locale, MessageText.RecordReadOnly)];
+            errors[RecordErrorKey] = [rules.Messages.Get(rules.Locale, MessageText.RecordReadOnly)];
             return (values, errors);
         }
 
@@ -88,7 +89,7 @@ public static class RecordValueProcessor
             if (!result.IsValid)
             {
                 // 預設值已不合法（如預設選項被停用）：視同沒有預設值，必填檢查照常
-                if (!fromDefault) errors[field.Key] = [MessageText.Get(rules.Locale.Locale, result.Error!, result.ErrorArgs ?? [])];
+                if (!fromDefault) errors[field.Key] = [rules.Messages.Get(rules.Locale, result.Error!, result.ErrorArgs ?? [])];
             }
             else if (result.Value is null) values.Remove(field.Key);
             else values[field.Key] = result.Value;
@@ -105,7 +106,7 @@ public static class RecordValueProcessor
 
         foreach (var field in fields.Where(f => outcome.RequiredFieldIds.Contains(f.Id) && Writable(f)))
             if (!errors.ContainsKey(field.Key) && IsEmpty(values.GetValueOrDefault(field.Key)))
-                errors[field.Key] = [MessageText.Get(rules.Locale.Locale, MessageText.Required)];
+                errors[field.Key] = [rules.Messages.Get(rules.Locale, MessageText.Required)];
 
         // 無權寫入（含權限隱藏）的欄位不檢查範圍，值不會被這次存檔改動。可選範圍沒變（和舊值求值的結果相同）時，只檢查和舊值不同的選項
         // （multienum 即新加入的），舊的停用／超範圍值不擋存檔；範圍因這次存檔而變了（如上層被改掉），整個值都要重驗。
@@ -116,7 +117,7 @@ public static class RecordValueProcessor
             var rangeChanged = stored is null || !stored.AllowedOptions.TryGetValue(fieldId, out var before) || !before.SetEquals(allowed);
             var checkedIds = OptionIdsOf(values.GetValueOrDefault(field.Key));
             if (!rangeChanged) checkedIds = checkedIds.Except(OptionIdsOf(previous!.GetValueOrDefault(field.Key)));
-            if (checkedIds.Any(id => !allowed.Contains(id))) errors[field.Key] = [MessageText.Get(rules.Locale.Locale, MessageText.OptionOutOfRange)];
+            if (checkedIds.Any(id => !allowed.Contains(id))) errors[field.Key] = [rules.Messages.Get(rules.Locale, MessageText.OptionOutOfRange)];
         }
 
         if (!normalizeFailed)

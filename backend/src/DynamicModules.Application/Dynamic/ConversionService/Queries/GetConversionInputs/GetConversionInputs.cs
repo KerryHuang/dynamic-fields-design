@@ -19,7 +19,7 @@ public record GetConversionInputsRequest(long RecordId, string ConversionKey) : 
 /// </summary>
 public class GetConversionInputsHandler(
     IConversionRepository conversions, IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, RecordCreator creator,
-    ICurrentLocale locale)
+    RequestLocale locale, Common.Localization.IMessageCatalog messages)
     : IRequestHandler<GetConversionInputsRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetConversionInputsRequest request, CancellationToken ct)
@@ -49,7 +49,7 @@ public class GetConversionInputsHandler(
         systemKeys.Add(traceKey);
 
         var (_, errors) = await creator.ValidateAsync(target, addPerms, values, null, ct, systemKeys);
-        var required = MessageText.Get(locale.Locale, MessageText.Required);   // 驗證訊息依請求語系產生，比對也用同一個語系
+        var required = messages.Get(locale.Current, MessageText.Required);   // 驗證訊息依請求語系與鏈產生（RecordCreator 同一個 catalog），比對也用同一句
         var keys = target.Blocks.SelectMany(b => b.Fields).Where(f => errors.TryGetValue(f.Key, out var m) && m.Contains(required))
             .Select(f => f.Key).ToList();
         return ServiceResult.Success(keys);

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -11,7 +12,7 @@ namespace DynamicModules.Application.Dynamic.WorkflowService;
 /// 而且使用者在該轉移的群組內（政策 approval.adminBypassTransitionGroups 開啟時，系統管理員可做任何已定義的轉移；沒有定義的轉移任何人都不行）。
 /// </summary>
 public class WorkflowEnforcer(
-    IPermissionRepository permissions, ICurrentUser user, ISystemIdentity system, ICurrentLocale locale, TransitionAccess access)
+    IPermissionRepository permissions, ICurrentUser user, ISystemIdentity system, RequestLocale locale, TransitionAccess access, IMessageCatalog messages)
 {
     // 繁中文字取自字串表；既有測試還以字串用這兩句（簽核已改走鍵）
     public static readonly string NotAllowedMessage = MessageText.Get(null, MessageText.WorkflowNotAllowed);
@@ -70,7 +71,7 @@ public class WorkflowEnforcer(
 
         if (previous is null)
         {
-            if (now != wf.InitialOptionId) errors[key] = [MessageText.Get(locale.Locale, MessageText.WorkflowNotInitial)];
+            if (now != wf.InitialOptionId) errors[key] = [messages.Get(locale.Current, MessageText.WorkflowNotInitial)];
             return errors;
         }
 
@@ -79,20 +80,20 @@ public class WorkflowEnforcer(
         if (now == before || (now is null && wf.StateOf(previous) is null)) return errors;
         if (now is not { } to || wf.Find(before, to) is not { } transition)
         {
-            errors[key] = [MessageText.Get(locale.Locale, MessageText.WorkflowNotAllowed)];
+            errors[key] = [messages.Get(locale.Current, MessageText.WorkflowNotAllowed)];
             return errors;
         }
         // 需簽核的轉移只能走送出端點（簽核設計 §5.3）；系統身分（事件、簽核完成的轉移）交給簽核後盾判斷
         if (!system.Active && transition.Approval is { Required: true })
         {
-            errors[key] = [MessageText.Get(locale.Locale, MessageText.ApprovalNeedsSubmit)];
+            errors[key] = [messages.Get(locale.Current, MessageText.ApprovalNeedsSubmit)];
             return errors;
         }
         if (transition.GroupIds.Count == 0 || system.Active) return errors;   // 事件效果的轉移必須是已定義的，但不檢查群組
 
         var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
         var permitted = inputs is not null && (await access.BypassGroupsAsync(inputs, ct) || inputs.GroupIds.Any(transition.GroupIds.Contains));
-        if (!permitted) errors[key] = [MessageText.Get(locale.Locale, MessageText.WorkflowNotPermitted)];
+        if (!permitted) errors[key] = [messages.Get(locale.Current, MessageText.WorkflowNotPermitted)];
         return errors;
     }
 }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.PolicyService;
@@ -43,7 +44,7 @@ public sealed class DetailPlan
 public class DetailWriter(
     IModuleRepository modules, IRecordRepository records, INumberSequenceRepository sequences, FieldTypeRegistry registry,
     IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ICurrentUser user, IBusinessTime time, RecordHistoryWriter history,
-    RequestLocale locale, IPolicyReader policies)
+    RequestLocale locale, IPolicyReader policies, IMessageCatalog messages)
 {
 
     /// <param name="parentRecord">null 表示新增表頭（沒有既有列）。</param>
@@ -63,7 +64,7 @@ public class DetailWriter(
         // 寫入只認 Active 的明細模組；Closed 的明細（不會與 Active 表頭並存）一律當成不存在
         var children = (await ReadableDetailModulesAsync(modules, parent, ct)).Where(c => c.IsWritable()).ToList();
         foreach (var key in (details?.Keys ?? Enumerable.Empty<string>()).Where(k => children.All(c => c.Key != k)))
-            plan.Errors[$"details.{key}"] = [MessageText.Get(locale.Current.Locale, MessageText.UnknownDetail)];
+            plan.Errors[$"details.{key}"] = [messages.Get(locale.Current, MessageText.UnknownDetail)];
 
         var userIds = await modules.ListUserIdsAsync(ct);
         IReadOnlyDictionary<string, JsonElement?>? header = null;
@@ -93,7 +94,7 @@ public class DetailWriter(
             // 政策 A23（覆寫設在明細模組上）：調低後只擋這次比原本多的存檔（§3.5）
             var maxRows = await policies.IntAsync(PolicyCatalog.RecordMaxDetailRows, child.Id, ct);
             if (after > maxRows && after > existing.Count)
-                plan.Errors[$"details.{child.Key}"] = [MessageText.Get(locale.Current.Locale, MessageText.TooManyDetailRows, maxRows)];
+                plan.Errors[$"details.{child.Key}"] = [messages.Get(locale.Current, MessageText.TooManyDetailRows, maxRows)];
             ComputeRollups(parent, set, userIds, plan.RollupValues);
             plan.Sets.Add(set);
         }
@@ -123,7 +124,7 @@ public class DetailWriter(
             record = set.Existing.FirstOrDefault(r => r.Id == id);
             if (record is null || set.Changes.Any(c => c.Record == record))
             {
-                errors[prefix + RecordValueProcessor.RecordErrorKey] = [MessageText.Get(locale.Current.Locale, MessageText.DetailRowNotFound)];
+                errors[prefix + RecordValueProcessor.RecordErrorKey] = [messages.Get(locale.Current, MessageText.DetailRowNotFound)];
                 return false;
             }
             if (record.RowVersion != row.RowVersion) return true;
@@ -132,7 +133,7 @@ public class DetailWriter(
             {
                 // 明細列自己的全單唯讀只鎖這一列，刪除也擋
                 if (RuleEngine.Evaluate(set.Child, previous, previous, registry, userIds, time.Today).ReadOnlyAll)
-                    errors[prefix + RecordValueProcessor.RecordErrorKey] = [MessageText.Get(locale.Current.Locale, MessageText.RecordReadOnly)];
+                    errors[prefix + RecordValueProcessor.RecordErrorKey] = [messages.Get(locale.Current, MessageText.RecordReadOnly)];
                 else set.Changes.Add(new DetailRowChange(record, previous, null));
                 return false;
             }
@@ -155,7 +156,7 @@ public class DetailWriter(
             RecordValueProcessor.WritablePredicate(set.Child, previous, set.Permissions, registry, userIds, time.Today), ct));
         if (row.SystemKeys is not null) systemKeys.UnionWith(row.SystemKeys);
         var (values, rowErrors) = RecordValueProcessor.Process(
-            set.Child, input, previous, userIds, registry, set.Permissions, new RuleContext(time.Today, locale.Current, locale.SystemDefault), validRefKeys,
+            set.Child, input, previous, userIds, registry, set.Permissions, new RuleContext(time.Today, locale.Current, messages, locale.SystemDefault), validRefKeys,
             parentValues: parentValues, systemKeys: systemKeys,
             keepComputed: keepComputedRows && previous is not null
                 ? set.Child.Blocks.SelectMany(b => b.Fields).Where(f => f.Type is FieldType.Formula or FieldType.Rollup).Select(f => f.Id).ToHashSet()
