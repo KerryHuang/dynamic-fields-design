@@ -89,8 +89,8 @@ jobs:
   deploy-azure:
     needs: image
     runs-on: ubuntu-latest
-    # 不加 environment：加了之後 OIDC token 的 subject 變成 environment:demo-azure，
-    # 現有聯合憑證只認 ref:refs/heads/main，登入會失敗（見 docs/deploy.md「Demo 每日部署」）
+    # 刻意不加 environment：Azure 是不公開的內部備案，不放進公開的 Deployments（使用者 2026-11-20 裁決）；
+    # 若日後要加，需先在 Azure 新增 subject 為 environment:demo-azure 的聯合憑證，否則 OIDC 登入會失敗
     timeout-minutes: 20
     permissions:
       id-token: write
