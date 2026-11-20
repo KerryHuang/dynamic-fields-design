@@ -51,6 +51,7 @@ public class TestApp : WebApplicationFactory<Program>
     {
         _seedDemoPeople = seedDemoPeople;
         _realAuth = realAuth;
+        Ops.StallDiagnostics.LatencyTrace.EnsureStarted();
         if (TestDatabase.IsPostgres)
         {
             _ownsPostgresDatabase = sharedConnectionString is null;
