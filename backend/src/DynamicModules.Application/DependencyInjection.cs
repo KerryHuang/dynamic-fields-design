@@ -46,7 +46,8 @@ public static class DependencyInjection
         services.TryAddScoped<Common.ICurrentLocale, Common.FallbackCurrentLocale>();
         services.AddScoped<ISystemIdentity, SystemIdentity>();
         services.AddScoped<Dynamic.PolicyService.IPolicyReader, Dynamic.PolicyService.PolicyReader>();
-        services.TryAddSingleton<Common.IInstalledLocales, Common.FactoryInstalledLocales>();
+        services.AddSingleton<Common.LocaleRegistry>();
+        services.AddSingleton<Common.IInstalledLocales>(sp => sp.GetRequiredService<Common.LocaleRegistry>());
         services.AddSingleton<Dynamic.PolicyService.PolicyOptionSource>();
         services.AddSingleton<Common.RequiredTextGuard>();
         services.AddScoped<Common.RequestLocale>();
