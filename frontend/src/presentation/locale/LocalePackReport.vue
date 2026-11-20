@@ -25,10 +25,16 @@ function reasonText(item: LocalePackRejectedItem): string {
 }
 
 function warningText(w: { code: string; args: string[] }): string {
+  if (w.code === 'builtForDiffers') return t('localePacks.warnings.builtForDiffers', { builtFor: w.args[0] ?? '', current: w.args[1] ?? '', missing: w.args[2] ?? '' });
   if (w.code === 'booleanCollisionExisting') return t('localePacks.warnings.booleanCollisionExisting', { word: w.args[0] ?? '', yes: w.args[1] ?? '', no: w.args[2] ?? '' });
   return t('localePacks.warnings.unknown', { code: w.code });
 }
 
+const confirmed = computed(() => props.report.ui.confirmed + props.report.server.confirmed);
+const orphanedDropped = computed(() => props.report.orphanedDropped.ui + props.report.orphanedDropped.server);
+const topMissing = computed(() => props.report.completeness.topMissing.map((m) => t('localePacks.card.missingRow', {
+  section: t(`localePacks.report.sections.${m.segment}`), category: m.category, n: m.missing,
+})));
 const rejectedSections = computed(() => SECTIONS.filter((s) => props.report[s].rejected > 0));
 const extraSections = computed(() => SECTIONS.filter((s) => props.report[s].extra > 0));
 </script>
@@ -67,6 +73,16 @@ const extraSections = computed(() => SECTIONS.filter((s) => props.report[s].extr
           pct: percent(report.completeness[s].have, report.completeness[s].total),
         }) }}
       </div>
+    </div>
+
+    <div v-if="topMissing.length" class="q-mt-sm" data-testid="report-top-missing">
+      <div class="text-weight-medium">{{ t('localePacks.report.topMissing') }}</div>
+      <div v-for="m in topMissing" :key="m" class="text-body2" style="overflow-wrap: anywhere">{{ m }}</div>
+    </div>
+
+    <div v-if="confirmed > 0" class="q-mt-md text-body2" data-testid="report-confirmed">{{ t('localePacks.report.confirmed', { n: confirmed }) }}</div>
+    <div v-if="orphanedDropped > 0" class="q-mt-sm text-warning text-body2" data-testid="report-orphaned-dropped">
+      {{ t('localePacks.report.orphanedDropped', { n: orphanedDropped }) }}
     </div>
 
     <div v-if="rejectedSections.length" class="q-mt-md" data-testid="report-rejected">

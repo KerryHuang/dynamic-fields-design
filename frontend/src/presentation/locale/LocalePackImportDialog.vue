@@ -1,18 +1,24 @@
 <script setup lang="ts">
+import { useQueryClient } from '@tanstack/vue-query';
 import { useQuasar } from 'quasar';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useApplyLocalePack, useEnableLocale, usePreviewLocalePack } from 'src/application/dynamic/queries/locale-packs-queries';
 import type { ApplyLocalePackResult, LocalePackReportData } from 'src/domain/dynamic/locale-pack-types';
+import { applyLocalePolicies, installedLocales, nativeName } from 'src/i18n/locale-settings';
+import { switchLocale } from 'src/i18n/ui-messages';
 import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
+import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
 import LocalePackReport from './LocalePackReport.vue';
 
 // 匯入語系包：選檔 → 預覽（報告）→ 套用 →（新語系未啟用時）現在啟用。預覽過期或被別人改過（409）時用同一個檔重新預覽。
 const props = defineProps<{ modelValue: boolean; importEnabled: boolean; packMaxBytes: number }>();
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>();
-const { t } = useI18n();
+const composer = useI18n({ useScope: 'global' });
+const { t } = composer;
 const $q = useQuasar();
+const qc = useQueryClient();
 
 const preview = usePreviewLocalePack();
 const apply = useApplyLocalePack();
@@ -109,6 +115,27 @@ async function doEnable() {
   }
 }
 
+// 以此語系預覽（判斷 13）：先重取生效值並用同一個函式更新語系資訊（平常由 MainLayout 的 watch 做，非同步、這裡不保證已跑），
+// 確認新代碼已在 installedLocales() 才切；否則顯示載入失敗
+async function doPreview() {
+  if (!result.value) return;
+  const gen = generation;
+  const code = result.value.code;
+  error.value = null;
+  try {
+    const eff = await qc.fetchQuery({ queryKey: ['effective-policies', ''], queryFn: () => dynamicApi.getEffectivePolicies(null), staleTime: 0 });
+    if (!isCurrent(gen)) return;
+    if (eff?.values) applyLocalePolicies(eff.values, eff.locales);
+    if (!installedLocales().includes(code)) {
+      $q.notify({ type: 'negative', message: t('locale.loadFailed', { name: nativeName(code) }) });
+      return;
+    }
+    await switchLocale({ global: composer }, code, { preview: true });
+  } catch (e) {
+    if (isCurrent(gen)) error.value = messageOf(e, 'localePacks.failed');
+  }
+}
+
 const close = () => emit('update:modelValue', false);
 const applyDisabled = computed(() => !report.value?.previewId || !props.importEnabled);
 </script>
@@ -141,6 +168,10 @@ const applyDisabled = computed(() => !report.value?.previewId || !props.importEn
           </div>
           <q-btn v-if="!result.enabled && !enabledNow" class="q-mt-sm" color="primary" no-caps :label="t('localePacks.dialog.enableNow')"
             :loading="enable.isPending.value" data-testid="pack-enable" @click="doEnable" />
+          <template v-if="!result.enabled && !enabledNow">
+            <q-btn class="q-mt-sm q-ml-sm" outline no-caps icon="visibility" :label="t('localePacks.preview.action')" data-testid="pack-preview" @click="doPreview" />
+            <div class="text-caption text-muted q-mt-xs">{{ t('localePacks.preview.hint') }}</div>
+          </template>
         </div>
       </q-card-section>
       <q-card-actions align="right">
