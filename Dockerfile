@@ -20,6 +20,8 @@ RUN export BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" && bunx qu
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS backend
 WORKDIR /src
 COPY backend/ ./
+# 後端內嵌 shared/i18n 與 quasar-langs.json（csproj 的 ..\..\..\shared 在這裡解析成 /shared）；少了這行 dotnet publish 會因建置檢查失敗
+COPY shared/ /shared/
 # 版本資訊：GIT_COMMIT 優先，退回 Render 傳入的 RENDER_GIT_COMMIT；沒給的欄位在 /api/version 顯示 dev
 ARG APP_VERSION=""
 ARG GIT_COMMIT=""

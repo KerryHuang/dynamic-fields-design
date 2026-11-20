@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using DynamicModules.Application;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Acting;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AppService.SharedMasters;
@@ -166,6 +167,13 @@ foreach (var warning in attachmentWarnings.Concat(startupWarnings)) app.Logger.L
 // 內建範本有錯就拒絕啟動（spec §13.1）：在碰資料庫之前先解析 singleton
 app.Services.GetRequiredService<TemplateCatalog>();
 app.Services.GetRequiredService<DynamicModules.Application.Dynamic.AppService.AppCatalog>();
+// 內建語系資源不齊就拒絕啟動（語系包設計 §8.1）：在 --generate-demo-data 之前，Dockerfile.demo 建映像時就會跑到
+var localeProblems = BuiltinLocaleResources.Verify(BuiltinLocaleResources.Load());
+if (localeProblems.Count > 0)
+{
+    foreach (var problem in localeProblems) app.Logger.LogCritical("內建語系資源不齊：{Problem}", problem);
+    throw new InvalidOperationException("內建語系資源不齊：" + string.Join("；", localeProblems));
+}
 await InitializeDatabaseAsync(app, databaseDirectory);
 // 建置 Demo 映像時用（Dockerfile.demo）：產生完 Demo 資料就結束，失敗回非 0 讓建置失敗
 if (args.Contains("--generate-demo-data"))

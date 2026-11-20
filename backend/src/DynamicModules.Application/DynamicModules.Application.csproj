@@ -18,4 +18,27 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- 內建介面文字（語系包設計 §8.1；i4b 計畫判斷 4）：唯一來源是 repo 根目錄的 shared/，內嵌成 i18n/<代碼>/{ui,locale}.json 與 quasar-langs.json。
+       一定要用 **：%(RecursiveDir) 是 ** 比對到的目錄，用單一 * 時是空字串，四份會撞成同一個資源名。兩個屬性可覆寫，供驗證建置檢查。 -->
+  <PropertyGroup>
+    <BuiltinI18nDir Condition="'$(BuiltinI18nDir)' == ''">$(MSBuildThisFileDirectory)..\..\..\shared\i18n</BuiltinI18nDir>
+    <SharedDir Condition="'$(SharedDir)' == ''">$(MSBuildThisFileDirectory)..\..\..\shared</SharedDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="$(BuiltinI18nDir)\**\ui.json;$(BuiltinI18nDir)\**\locale.json" LogicalName="i18n/%(RecursiveDir)%(Filename)%(Extension)" BuiltinI18n="true" />
+    <EmbeddedResource Include="$(SharedDir)\quasar-langs.json" LogicalName="quasar-langs.json" />
+  </ItemGroup>
+
+  <!-- 檢查實際要內嵌的項目：ui.json 少於 4 份、資源名重複、或缺 quasar-langs.json 就讓建置失敗（Docker 漏 COPY shared/ 時在 dotnet publish 就擋下）。 -->
+  <Target Name="CheckBuiltinI18n" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <_BuiltinUiCount>@(EmbeddedResource->WithMetadataValue('BuiltinI18n','true')->WithMetadataValue('Filename','ui')->Count())</_BuiltinUiCount>
+      <_BuiltinI18nCount>@(EmbeddedResource->WithMetadataValue('BuiltinI18n','true')->Count())</_BuiltinI18nCount>
+      <_BuiltinI18nNameCount>@(EmbeddedResource->WithMetadataValue('BuiltinI18n','true')->Metadata('LogicalName')->Distinct()->Count())</_BuiltinI18nNameCount>
+    </PropertyGroup>
+    <Error Condition="$(_BuiltinUiCount) &lt; 4 Or '$(_BuiltinI18nCount)' != '$(_BuiltinI18nNameCount)' Or !Exists('$(SharedDir)\quasar-langs.json')"
+           Text="內建語系檔不齊（shared/i18n/*/ui.json 少於 4 份或資源重名，或缺 shared/quasar-langs.json）：Docker 建置要 COPY shared/" />
+  </Target>
+
 </Project>
