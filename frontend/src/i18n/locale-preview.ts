@@ -14,7 +14,12 @@ export function previewLocale(): LocaleCode | null {
   }
 }
 
+let epoch = 0;
+/** 試看世代：結束試看（含登出、session 失效）就遞增，進行中的試看切換晚到時據此作廢（判斷 17）。 */
+export const previewEpoch = (): number => epoch;
+
 export function setPreviewLocale(code: LocaleCode | null): void {
+  if (!code) epoch++;
   try {
     if (code) sessionStorage.setItem(PREVIEW_KEY, code);
     else sessionStorage.removeItem(PREVIEW_KEY);

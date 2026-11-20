@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import type { AuthUser } from 'src/domain/dynamic/types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import { i18n } from 'src/i18n/instance';
 import { takeStartupAuthOptions } from 'src/i18n/startup';
+import { endPreview } from 'src/i18n/ui-messages';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { resetSessionSettings } from '../session-settings';
 import { SECRET_MUTATION, useSecretMutation } from './secret-mutation';
@@ -57,6 +59,7 @@ export function useLogout() {
       qc.clear();
       identity.clear();
       resetSessionSettings();
+      endPreview(i18n);
     },
   });
 }

@@ -12,6 +12,8 @@ import { dynamicApi } from 'src/services/api/dynamic-api';
 import { http } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { useThemeStore } from 'src/stores/use-theme-store';
+import { BUILTIN_LOCALES } from 'src/i18n/locale';
+import { setLocaleInfos } from 'src/i18n/locale-settings';
 import MainLayout from './MainLayout.vue';
 
 vi.mock('src/services/api/dynamic-api', async (importOriginal) => ({
@@ -80,6 +82,31 @@ describe('MainLayout menu', () => {
     });
     await flushPromises();
     expect(w.find('[data-testid="demo-data-menu"]').exists()).toBe(read);
+  });
+
+  it.each([[true], [false]])('系統管理員（%s）才在語言選單看到試看項目（i4b 判斷 17）', async (isAdmin) => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US', uiHash: 'J' }]);
+    http.defaults.adapter = async (config) => ({
+      data: config.url === '/me' ? adminMe(isAdmin) : config.url === '/users' ? USERS : [],
+      status: 200, statusText: 'OK', headers: {}, config,
+    });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    try {
+      const w = mount(MainLayout, {
+        attachTo: document.body,
+        global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+      });
+      await flushPromises();
+      (document.body.querySelector('[data-testid="locale-open"]') as HTMLElement).click();
+      await flushPromises();
+      expect(document.body.querySelector('[data-testid="locale-preview-ja"]') !== null).toBe(isAdmin);
+      w.unmount();
+    } finally {
+      setLocaleInfos(BUILTIN_LOCALES);
+    }
   });
 
   it('has a language switcher in the top bar', async () => {

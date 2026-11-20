@@ -1,13 +1,15 @@
 import { baseCompile } from '@intlify/message-compiler';
+import { Notify } from 'quasar';
 import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
-import { STARTUP_BUDGET_MS, type LocaleCode } from './locale';
-import { localeInfo, type LocaleInfo } from './locale-settings';
-import { previewLocale } from './locale-preview';
+import { useIdentityStore } from 'src/stores/use-identity-store';
+import { FALLBACK_LOCALE, STARTUP_BUDGET_MS, applyLocale, readLocale, type LocaleCode } from './locale';
+import { defaultLocaleOrNull, localeInfo, nativeName, type LocaleInfo } from './locale-settings';
+import { previewEpoch, previewLocale, setPreviewLocale } from './locale-preview';
 
 // 介面文字執行期載入（語系包設計 §8.2–8.4、i4b 計畫判斷 11、14–16）。前端只打包繁中；其他語系（含繁中的覆寫）從
 // GET i18n/ui/{code} 取得扁平文字，預編譯後轉巢狀再 setLocaleMessage。i18n 實例一律當參數（測試用乾淨實例），
-// 綁 boot 單例的便捷版在 ui-messages-app.ts。
+// 元件與頁面傳 src/i18n/instance 的單例（LocaleSwitcher 傳 useI18n 的 global composer）。
 
 export type I18nLike = {
   global: { setLocaleMessage(code: string, m: object): void; readonly availableLocales: string[]; locale: { value: string } };
@@ -80,6 +82,7 @@ const slot = (code: LocaleCode): Slot => {
 
 export function resetUiMessagesForTests(): void {
   slots.clear();
+  switchSeq = 0;
 }
 
 export function installUiMessages(i18n: I18nLike, code: LocaleCode, flat: Record<string, unknown>, hash: string): void {
@@ -181,6 +184,43 @@ export async function refreshLoadedMessages(i18n: I18nLike, infos: LocaleInfo[])
       return s.loaded === l.uiHash ? undefined : request(i18n, l.code, l.uiHash).catch(() => undefined);
     });
   await Promise.all(jobs);
+}
+
+export type I18nWithT = I18nLike & { global: { t(key: string, named: Record<string, unknown>): string } };
+
+let switchSeq = 0;
+
+/**
+ * 切換語系（判斷 17、19）：先載入文字，成功且沒被作廢才套用；失敗提示「無法載入〇〇」並停在原語系。
+ * 作廢：之後又切了別的語言；試看切換另要試看世代沒變、試看值仍是這個語系、登入的人沒變。
+ * preview：只試看（不記住、不寫瀏覽器快取）；remember: false：套用但不寫 formwright.locale（結束試看時回原語系用）。
+ */
+export async function switchLocale(i18n: I18nWithT, code: LocaleCode, opts: { preview?: boolean; remember?: boolean } = {}): Promise<boolean> {
+  const seq = ++switchSeq;
+  const epoch = previewEpoch();
+  const user = opts.preview ? useIdentityStore().userId : undefined;
+  const stillWanted = () => seq === switchSeq
+    && (!opts.preview || (previewEpoch() === epoch && previewLocale() === code && useIdentityStore().userId === user));
+  try {
+    await ensureCurrentMessages(i18n, code);
+  } catch {
+    if (!stillWanted()) return false;
+    if (opts.preview) setPreviewLocale(null);
+    Notify.create({ type: 'negative', message: i18n.global.t('locale.loadFailed', { name: nativeName(code) }) });
+    return false;
+  }
+  if (!stillWanted()) return false;
+  applyLocale(code, i18n.global.locale, !opts.preview && opts.remember !== false);
+  cacheCurrent(i18n);
+  return true;
+}
+
+/** 結束試看（選回啟用語系以外的情況：登出、session 失效、guard 驗不過）；畫面正是試看語系時切回記住的語系或預設語系。 */
+export function endPreview(i18n: I18nWithT): void {
+  const p = previewLocale();
+  if (!p) return;
+  setPreviewLocale(null);
+  if (p && i18n.global.locale.value === p) void switchLocale(i18n, readLocale() ?? defaultLocaleOrNull() ?? FALLBACK_LOCALE, { remember: false });
 }
 
 export function readUiCache(): { code: LocaleCode; hash: string; messages: Record<string, string> } | null {

@@ -8,6 +8,10 @@ import zhTW from 'shared/i18n/zh-TW/ui.json';
 import LocaleSwitcher from 'src/presentation/locale/LocaleSwitcher.vue';
 import { setLocaleInfos, setLocaleSettings } from './locale-settings';
 import { BUILTIN_LOCALES, LOCALE_KEY, applyDocumentLocale, applyLocale, quasarPacks, readLocale } from './locale';
+import { PREVIEW_KEY } from './locale-preview';
+import { readUiCache, resetUiMessagesForTests } from './ui-messages';
+import { dynamicApi } from 'src/services/api/dynamic-api';
+import { createPinia, setActivePinia } from 'pinia';
 
 const NAME = { 'zh-TW': '訂單', 'en-US': 'Orders', th: 'คำสั่งซื้อ' };
 
@@ -149,6 +153,8 @@ describe('LocaleSwitcher 新裝的語系', () => {
   it('裝了 ja 且啟用：多一項「日本語」，點選後切換', async () => {
     setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US', uiHash: '' }]);
     setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi', 'ja'] });
+    // i4b 起切換前先載入文字（前端只打包繁中）
+    vi.spyOn(dynamicApi, 'getUiMessages').mockResolvedValue({ hash: '', messages: { 'menu.home': 'ホーム' } });
     const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
     const w = mount(LocaleSwitcher, { attachTo: document.body, global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], i18n] } });
     (document.body.querySelector('[data-testid="locale-open"]') as HTMLElement).click();
@@ -177,6 +183,88 @@ describe('LocaleSwitcher 掛載後政策更新', () => {
     expect(document.body.querySelectorAll('[data-testid^="locale-option-"]')).toHaveLength(2);
     setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] });
     w.unmount();
+  });
+});
+
+describe('LocaleSwitcher 載入文字與試看（i4b 判斷 17、19）', () => {
+  const JA = { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US', uiHash: 'J' };
+  const zhOnly = () => createI18n({ legacy: false, locale: 'zh-TW', fallbackLocale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+  const plugins = (i18n: ReturnType<typeof zhOnly>) => ({ plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], i18n] as never });
+  const el = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+  const open = async () => { el('locale-open')!.click(); await flushPromises(); };
+  beforeEach(() => { resetUiMessagesForTests(); sessionStorage.clear(); setActivePinia(createPinia()); });
+  afterEach(() => {
+    setLocaleInfos(BUILTIN_LOCALES);
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] });
+    document.body.innerHTML = '';
+  });
+
+  it('沒傳 allowPreview：只有啟用語系、沒有試看項目，元件本身不查身分', async () => {
+    const me = vi.spyOn(dynamicApi, 'getMe');
+    mount(LocaleSwitcher, { attachTo: document.body, global: plugins(zhOnly()) });
+    setLocaleInfos([...BUILTIN_LOCALES, JA]);
+    await open();
+    expect([...document.body.querySelectorAll('[data-testid^="locale-option-"]')].map((e) => e.textContent?.trim()))
+      .toEqual(['繁體中文', 'English', 'ไทย', 'Tiếng Việt']);
+    expect(document.body.querySelector('[data-testid^="locale-preview-"]')).toBeNull();
+    expect(me).not.toHaveBeenCalled();
+  });
+
+  it('選 th：載入中有 spinner，完成後切換並記住', async () => {
+    let release!: () => void;
+    vi.spyOn(dynamicApi, 'getUiMessages').mockImplementation(() => new Promise((r) => { release = () => r({ hash: '', messages: { 'menu.home': 'หน้าแรก' } }); }));
+    const i18n = zhOnly();
+    mount(LocaleSwitcher, { attachTo: document.body, global: plugins(i18n) });
+    await open();
+    el('locale-option-th')!.click();
+    await flushPromises();
+    expect(el('locale-option-th')!.querySelector(`[aria-label="${zhTW.locale.loading}"]`)).not.toBeNull();
+    expect(i18n.global.locale.value).toBe('zh-TW');
+    release();
+    await flushPromises();
+    expect(i18n.global.locale.value).toBe('th');
+    expect(localStorage.getItem(LOCALE_KEY)).toBe('th');
+  });
+
+  it('載入失敗：提示「無法載入ไทย」，停在原語系、不記住', async () => {
+    vi.spyOn(dynamicApi, 'getUiMessages').mockRejectedValue(new Error('down'));
+    const i18n = zhOnly();
+    mount(LocaleSwitcher, { attachTo: document.body, global: plugins(i18n) });
+    const notify = vi.spyOn(quasar.Notify, 'create').mockImplementation(() => () => {});
+    await open();
+    el('locale-option-th')!.click();
+    await flushPromises();
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ message: '無法載入ไทย，請稍後再試' }));
+    expect(i18n.global.locale.value).toBe('zh-TW');
+    expect(localStorage.getItem(LOCALE_KEY)).toBeNull();
+  });
+
+  it('allowPreview：已安裝未啟用的 ja 列在分隔線後；選它只試看，再選 English 結束試看並記住', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, JA]);
+    vi.spyOn(dynamicApi, 'getUiMessages').mockImplementation(async (code) => ({ hash: code === 'ja' ? 'J' : '', messages: { 'menu.home': code } }));
+    const i18n = zhOnly();
+    mount(LocaleSwitcher, { attachTo: document.body, props: { allowPreview: true }, global: plugins(i18n) });
+    await open();
+    expect(el('locale-preview-separator')).not.toBeNull();
+    expect(el('locale-preview-ja')!.textContent?.trim()).toBe(`日本語（${zhTW.locale.notEnabled}）`);
+    el('locale-preview-ja')!.click();
+    await flushPromises();
+    expect(i18n.global.locale.value).toBe('ja');
+    expect(sessionStorage.getItem(PREVIEW_KEY)).toBe('ja');
+    expect(localStorage.getItem(LOCALE_KEY)).toBeNull();
+    expect(readUiCache()?.code).not.toBe('ja');
+    await open();
+    el('locale-option-en-US')!.click();
+    await flushPromises();
+    expect(i18n.global.locale.value).toBe('en-US');
+    expect(sessionStorage.getItem(PREVIEW_KEY)).toBeNull();
+    expect(localStorage.getItem(LOCALE_KEY)).toBe('en-US');
+  });
+
+  it('allowPreview 但沒有未啟用語系：沒有分隔線', async () => {
+    mount(LocaleSwitcher, { attachTo: document.body, props: { allowPreview: true }, global: plugins(zhOnly()) });
+    await open();
+    expect(el('locale-preview-separator')).toBeNull();
   });
 });
 

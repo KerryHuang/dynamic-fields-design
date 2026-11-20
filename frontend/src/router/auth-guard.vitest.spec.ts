@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/vue-query';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
+import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { http } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { useThemeStore } from 'src/stores/use-theme-store';
@@ -13,6 +14,15 @@ import { defaultLocale, enabledLocales, installedLocales, nativeName, setLocaleI
 import { resetStartupForTests, startLocale } from 'src/i18n/startup';
 import { createI18n } from 'vue-i18n';
 import zhTW from 'shared/i18n/zh-TW/ui.json';
+import enJson from 'shared/i18n/en-US/ui.json';
+import { i18n as appI18n } from 'src/i18n/instance';
+import { PREVIEW_KEY, setPreviewLocale } from 'src/i18n/locale-preview';
+import { resetUiMessagesForTests, switchLocale } from 'src/i18n/ui-messages';
+import { useLogout } from 'src/application/dynamic/queries/auth-queries';
+import { VueQueryPlugin } from '@tanstack/vue-query';
+import { mount } from '@vue/test-utils';
+import { defineComponent, h } from 'vue';
+import { LOCALE_KEY } from 'src/i18n/locale';
 import { handleUnauthorized, installAuthGuard, safeRedirect } from './auth-guard';
 
 const page = { template: '<i/>' };
@@ -387,5 +397,164 @@ describe('auth guard 語系政策', () => {
     await router.push('/');
     expect(defaultLocale()).toBe('en-US');
     expect(enabledLocales()).toEqual(['zh-TW', 'en-US']);
+  });
+});
+
+describe('auth guard 試看（i4b 判斷 17）', () => {
+  // ja 已安裝但未啟用：auth/options 的 locales 不含它，登入後生效值的 locales 才有
+  const JA = { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US', uiHash: 'J' };
+  const admin = (isSystemAdmin: boolean, userId = 'admin') => ({ status: 200, data: { userId, mustChangePassword: false, isSystemAdmin } });
+  const withJa = { status: 200, data: { values: { 'locale.timeZone': '+08:00' }, locales: [...BUILTIN_LOCALES, JA] } };
+  const flat = (o: unknown, p = ''): Record<string, string> => (typeof o === 'string' ? { [p]: o }
+    : Object.entries(o as object).reduce((a, [k, v]) => ({ ...a, ...flat(v, p ? `${p}.${k}` : k) }), {}));
+  let release: (() => void) | undefined;
+  let slowJa = false;
+  let uiCalls: string[];
+
+  function previewSetup() {
+    const router = setup();
+    uiCalls = [];
+    const base = http.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<AxiosResponse>;
+    http.defaults.adapter = async (config) => {
+      if (config.url?.startsWith('/i18n/ui/')) {
+        const code = config.url.slice('/i18n/ui/'.length);
+        uiCalls.push(code);
+        const ok = { data: { ...flat(enJson), 'menu.home': `home-${code}` }, status: 200, statusText: 'OK', headers: { 'x-ui-hash': code === 'ja' ? 'J' : code }, config };
+        if (code === 'ja' && slowJa) return new Promise((r) => { release = () => r(ok); });
+        if (code === 'th') return new Promise((r) => setTimeout(() => r(ok), 30));
+        return ok;
+      }
+      return base(config);
+    };
+    return router;
+  }
+
+  beforeEach(() => {
+    resetUiMessagesForTests();
+    sessionStorage.clear();
+    sessionStorage.setItem(PREVIEW_KEY, 'ja');
+    appI18n.global.locale.value = 'zh-TW';
+    slowJa = false;
+    release = undefined;
+    effResponse = withJa;
+    meResponse = { status: 401, data: { message: '請先登入' } };
+  });
+  afterEach(() => {
+    appI18n.global.locale.value = 'zh-TW';
+    sessionStorage.clear();
+  });
+
+  it('匿名：清除', async () => {
+    const router = previewSetup();
+    await router.push('/login');
+    expect(sessionStorage.getItem(PREVIEW_KEY)).toBeNull();
+  });
+
+  it('強制改密碼：清除', async () => {
+    meResponse = { status: 200, data: { userId: 'admin', mustChangePassword: true, isSystemAdmin: true } };
+    const router = previewSetup();
+    await router.push('/');
+    expect(sessionStorage.getItem(PREVIEW_KEY)).toBeNull();
+  });
+
+  it('不是系統管理員：清除，畫面是記住的語系', async () => {
+    meResponse = admin(false);
+    localStorage.setItem(LOCALE_KEY, 'zh-TW');
+    const router = previewSetup();
+    await router.push('/');
+    expect(sessionStorage.getItem(PREVIEW_KEY)).toBeNull();
+    expect(appI18n.global.locale.value).toBe('zh-TW');
+    expect(uiCalls).not.toContain('ja');
+  });
+
+  it('系統管理員、ja 已安裝：生效值載入後才判斷，背景載入並套用，不記住', async () => {
+    meResponse = admin(true);
+    const router = previewSetup();
+    await router.push('/');
+    expect(effCalls).toBe(1);
+    await vi.waitFor(() => expect(appI18n.global.locale.value).toBe('ja'));
+    expect(appI18n.global.t('menu.home')).toBe('home-ja');
+    expect(localStorage.getItem(LOCALE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(PREVIEW_KEY)).toBe('ja');
+  });
+
+  it('系統管理員但 ja 不在生效值的已安裝清單：清除', async () => {
+    meResponse = admin(true);
+    effResponse = { status: 200, data: { values: { 'locale.timeZone': '+08:00' }, locales: BUILTIN_LOCALES } };
+    const router = previewSetup();
+    await router.push('/');
+    expect(sessionStorage.getItem(PREVIEW_KEY)).toBeNull();
+    expect(uiCalls).not.toContain('ja');
+  });
+
+  it('取生效值失敗：保留，下次成功時再驗', async () => {
+    meResponse = admin(true);
+    effResponse = { status: 500, data: { message: 'x' } };
+    const router = previewSetup();
+    await router.push('/');
+    expect(router.currentRoute.value.path).toBe('/service-unavailable');
+    expect(sessionStorage.getItem(PREVIEW_KEY)).toBe('ja');
+  });
+
+  it('handleUnauthorized：清除', async () => {
+    meResponse = admin(true);
+    const router = previewSetup();
+    await router.push('/');
+    await vi.waitFor(() => expect(appI18n.global.locale.value).toBe('ja'));
+    handleUnauthorized(router, new QueryClient());
+    expect(sessionStorage.getItem(PREVIEW_KEY)).toBeNull();
+    await vi.waitFor(() => expect(appI18n.global.locale.value).toBe('zh-TW'));
+  });
+
+  describe('晚到的回應不套用', () => {
+    beforeEach(() => { slowJa = true; meResponse = admin(true); });
+
+    it('(a) 載入中登出（useLogout 成功）', async () => {
+      const router = previewSetup();
+      await router.push('/');
+      await vi.waitFor(() => expect(release).toBeDefined());
+      const base = http.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<AxiosResponse>;
+      http.defaults.adapter = async (config) => (config.url === '/auth/logout'
+        ? { data: null, status: 204, statusText: 'OK', headers: {}, config } : base(config));
+      let logout!: ReturnType<typeof useLogout>;
+      mount(defineComponent({ setup() { logout = useLogout(); return () => h('i'); } }), { global: { plugins: [[VueQueryPlugin, { queryClient: new QueryClient() }]] } });
+      await logout.mutateAsync();
+      expect(sessionStorage.getItem(PREVIEW_KEY)).toBeNull();
+      release!();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(appI18n.global.locale.value).toBe('zh-TW');
+    });
+
+    it('(b) 載入中 session 失效（handleUnauthorized）：留在預設語系', async () => {
+      const router = previewSetup();
+      await router.push('/');
+      await vi.waitFor(() => expect(release).toBeDefined());
+      handleUnauthorized(router, new QueryClient());
+      release!();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(appI18n.global.locale.value).toBe('zh-TW');
+    });
+
+    it('(c) 載入中在選單選回 English', async () => {
+      const router = previewSetup();
+      await router.push('/');
+      await vi.waitFor(() => expect(release).toBeDefined());
+      // LocaleSwitcher 的做法：結束試看再切換
+      setPreviewLocale(null);
+      await switchLocale(appI18n, 'en-US');
+      release!();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(appI18n.global.locale.value).toBe('en-US');
+    });
+  });
+
+  it('(d) 一般切換：選 th（慢）後立刻選 vi（快），最後是 vi', async () => {
+    sessionStorage.clear();
+    previewSetup();
+    setLocaleInfos(BUILTIN_LOCALES.map((l) => ({ ...l, uiHash: l.code })));
+    const slow = switchLocale(appI18n, 'th');
+    const fast = switchLocale(appI18n, 'vi');
+    await Promise.all([slow, fast]);
+    expect(appI18n.global.locale.value).toBe('vi');
   });
 });

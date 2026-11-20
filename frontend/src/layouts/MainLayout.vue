@@ -14,7 +14,7 @@
           data-testid="theme-open" @click="themeOpen = true"
         />
         <NotificationBell />
-        <LocaleSwitcher class="q-mr-sm" />
+        <LocaleSwitcher class="q-mr-sm" :allow-preview="me?.isSystemAdmin === true" />
         <q-btn
           v-if="!identity.isDemoAccount" flat dense no-caps class="q-mr-sm" icon="key" :label="$q.screen.lt.sm ? undefined : t('auth.changePassword')"
           :aria-label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link"
