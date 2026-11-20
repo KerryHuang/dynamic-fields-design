@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
+using DynamicModules.Application.Dynamic.LocaleService.Packs;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.LocaleService.Queries.GetLocales;
@@ -13,13 +14,18 @@ public sealed record GetLocalesRequest : IRequest<ServiceResult>, ISystemAdminRe
 
 public sealed record LocaleAdminList(bool ImportEnabled, int PackMaxBytes, int MaxInstalled, IReadOnlyList<LocaleAdminItem> Locales);
 
-/// <summary><see cref="Origin"/> 是 <c>builtin</c> 或 <c>installed</c>；<see cref="Overrides"/> 是目前版的鍵數；沒有任何版本時 <see cref="Current"/> 是 null（明示輸出）。</summary>
+/// <summary>
+/// <see cref="Origin"/> 是 <c>builtin</c> 或 <c>installed</c>；<see cref="Overrides"/> 是目前版的鍵數；沒有任何版本時 <see cref="Current"/> 是 null（明示輸出）。
+/// i4d2（計畫判斷 6）：<see cref="Completeness"/> 用濾過基準鍵的覆寫層（含缺最多的分類）；<see cref="Review"/> 從目前版原始列算（沒有版本時全 0）；
+/// <see cref="BuiltFor"/> 是目前版的 <c>pack.builtFor</c>（沒有時明示 null）。
+/// </summary>
 public sealed record LocaleAdminItem(
     string Code, string NativeName, string Origin,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? FallbackCode,
     bool Enabled, bool IsDefault, bool Required, LocaleOverrideCounts Overrides,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] LocalePackSummary? Current,
-    bool HasPrevious);
+    bool HasPrevious, CompletenessReport Completeness, OverlayReview Review,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? BuiltFor);
 
 public sealed record LocaleOverrideCounts(int Ui, int Server);
 
