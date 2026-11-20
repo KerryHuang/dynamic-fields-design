@@ -128,7 +128,7 @@ public class AppPackageFormatTests
         var modules = string.Join(",", Enumerable.Range(0, 31).Select(i => module.Replace("{0}", $"{i}")));
         var json = $$"""{ "format": "formwright-app", "formatVersion": 2, "manifest": { "id": "many", "version": "1.0.0", "name": { "zh-TW": "多" } }, "modules": [ {{modules}} ] }""";
         Check(json).Errors.Should().NotContain(e => e.StartsWith("modules:") && e.Contains("30"));
-        AppPackageValidator.DesignLimitErrors(AppJson.Parse(json).V2!, new DesignLimits(20, 30, 300, 200, 100, 20, 20))
+        AppPackageValidator.DesignLimitErrors(AppJson.Parse(json).V2!, new DesignLimits(20, 30, 300, 200, 100, 20, 20, 50))
             .Should().Contain(e => e.StartsWith("modules:") && e.Contains("30"));
     }
 

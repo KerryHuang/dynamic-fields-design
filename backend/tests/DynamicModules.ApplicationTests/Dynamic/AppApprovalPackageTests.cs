@@ -281,12 +281,16 @@ public class AppApprovalPackageTests
             .Should().Contain("approvalFlows[t8-po-large].stages[board].approvers: 群組至少要有一個");
     }
 
+    /// <summary>流程數是政策 A16（design.maxApprovalFlowsPerPackage，出廠 50）：靜態層不擋，由 DesignLimitErrors 帶入生效值。</summary>
     [Fact]
-    public void TooManyFlows_Rejected()
+    public void TooManyFlows_RejectedByDesignLimit_NotByStructure()
     {
-        var flows = Enumerable.Range(1, AppPackageValidator.MaxApprovalFlows + 1)
+        var flows = Enumerable.Range(1, 51)
             .Select(i => With(With(MidFlow, "\"code\": \"t8-po-mid\"", $"\"code\": \"t8-po-{i}\""), "\"priority\": 2", $"\"priority\": {i}"));
-        Errors(Package(string.Join(", ", flows))).Should().Contain($"approvalFlows: 最多 {AppPackageValidator.MaxApprovalFlows} 個");
+        var json = Package(string.Join(", ", flows));
+        Errors(json).Should().NotContain(e => e.StartsWith("approvalFlows: 最多"));
+        AppPackageValidator.DesignLimitErrors(AppJson.Parse(json).V2!, new DesignLimits(20, 30, 300, 200, 100, 20, 20, 50))
+            .Should().Contain("approvalFlows: 最多 50 個");
     }
 
     [Fact]

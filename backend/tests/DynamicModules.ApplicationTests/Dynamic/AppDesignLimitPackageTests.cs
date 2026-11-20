@@ -31,7 +31,7 @@ public class AppDesignLimitPackageTests
     private static readonly DesignLimits Factory = new(
         F(PolicyCatalog.DesignMaxGroupsPerPackage), F(PolicyCatalog.DesignMaxModulesPerPackage), F(PolicyCatalog.DesignMaxFieldsPerModule),
         F(PolicyCatalog.DesignMaxOptionsPerField), F(PolicyCatalog.DesignMaxRulesPerModule), F(PolicyCatalog.DesignMaxViewsPerModule),
-        F(PolicyCatalog.DesignMaxIntegrationsPerPackage));
+        F(PolicyCatalog.DesignMaxIntegrationsPerPackage), F(PolicyCatalog.DesignMaxApprovalFlowsPerPackage));
 
     private static AppPackageData Base()
     {
@@ -58,6 +58,7 @@ public class AppDesignLimitPackageTests
             case "rules": mod.Rules.AddRange(Enumerable.Repeat<TemplateRule>(null!, 101)); break;
             case "views": mod.Views.AddRange(Enumerable.Repeat<TemplateView>(null!, 21)); break;
             case "integrations": p.Integrations.AddRange(Enumerable.Repeat<AppIntegrationDecl>(null!, 21)); break;
+            case "approvalFlows": p.ApprovalFlows.AddRange(Enumerable.Repeat<AppApprovalFlow>(null!, 51)); break;
             case "contributionOptions":
                 var field = kindField with { Code = "tier", Options = Enumerable.Range(0, 201).Select(i => new TemplateOption($"o{i}", Text($"選{i}"), null)).ToList() };
                 p.Contributions.Add(new AppContribution("bp", "partner", null!, [field], null, null));
@@ -75,6 +76,7 @@ public class AppDesignLimitPackageTests
     [InlineData("rules", "doc: 規則最多 100 條")]
     [InlineData("views", "doc: 檢視最多 20 個")]
     [InlineData("integrations", "integrations: 最多 20 個")]
+    [InlineData("approvalFlows", "approvalFlows: 最多 50 個")]
     [InlineData("contributionOptions", "contributions[0].fields[tier]: 選項最多 200 個")]
     public void DesignLimitErrors_FactoryValues_MatchOldMessages(string kind, string expected)
     {
@@ -102,7 +104,7 @@ public class AppDesignLimitPackageTests
             AppPackageValidator.Validate(p, catalog.BuiltIns.Where(b => b.Manifest.IsMaster && b.Manifest.Id != p.Manifest.Id)
                 .GroupBy(b => b.Manifest.Id).ToDictionary(g => g.Key, g => g.First())).Errors.Should().BeEmpty(p.Manifest.Id);
         // 上限調到 1 時內建套件會超過：證明數量檢查只在帶入政策值的 DesignLimitErrors，靜態層沒有搬回來
-        var ones = new DesignLimits(1, 1, 1, 1, 1, 1, 1);
+        var ones = new DesignLimits(1, 1, 1, 1, 1, 1, 1, 1);
         catalog.BuiltIns.Should().Contain(p => AppPackageValidator.DesignLimitErrors(p, ones).Count > 0);
     }
 }

@@ -14,7 +14,7 @@ public record AppValidation(IReadOnlyList<string> Errors, IReadOnlyList<string> 
 
 /// <summary>設計上限（政策 A16）的全系統生效值；<see cref="MaxModules"/> 也管 workflows 數。</summary>
 public sealed record DesignLimits(int MaxGroups, int MaxModules, int MaxFieldsPerModule, int MaxOptionsPerField,
-    int MaxRulesPerModule, int MaxViewsPerModule, int MaxIntegrations);
+    int MaxRulesPerModule, int MaxViewsPerModule, int MaxIntegrations, int MaxApprovalFlows);
 
 /// <summary>
 /// v2 套件的結構層與引用層（純函式，啟動、匯入、開啟共用）。前一層有錯就不跑下一層。
@@ -23,7 +23,7 @@ public sealed record DesignLimits(int MaxGroups, int MaxModules, int MaxFieldsPe
 /// </summary>
 public static partial class AppPackageValidator
 {
-    // 技術限制，見設計 §10（保護套件解析）；群組、模組、欄位、選項、規則、檢視、整合數是政策 A16，由 DesignLimitErrors 檢查
+    // 技術限制，見設計 §10（保護套件解析）；群組、模組、欄位、選項、規則、檢視、整合、簽核流程數是政策 A16，由 DesignLimitErrors 檢查
     public const int MaxConversions = 50, MaxReports = 50, MaxPrintTemplates = 100;
     public const int MaxAccessEntries = 2000;
 
@@ -71,6 +71,7 @@ public static partial class AppPackageValidator
         if (p.Modules.Count > l.MaxModules) errors.Add($"modules: 最多 {l.MaxModules} 個");
         if (p.Workflows.Count > l.MaxModules) errors.Add($"workflows: 最多 {l.MaxModules} 個");
         if (p.Integrations.Count > l.MaxIntegrations) errors.Add($"integrations: 最多 {l.MaxIntegrations} 個");
+        if (p.ApprovalFlows.Count > l.MaxApprovalFlows) errors.Add($"approvalFlows: 最多 {l.MaxApprovalFlows} 個");
         foreach (var mod in p.Modules.Where(x => x is not null))
         {
             var at = mod.Code ?? "?";

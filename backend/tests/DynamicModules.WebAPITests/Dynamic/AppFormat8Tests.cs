@@ -315,6 +315,26 @@ public class AppFormat8Tests : IDisposable
     }
 
     [Fact]
+    public async Task Import_FlowsOverDesignPolicy_400()
+    {
+        (await _rig.Admin.PutAsJsonAsync($"{Base}/system/policies/design.maxApprovalFlowsPerPackage", new { value = 1 })).EnsureSuccessStatusCode();
+        var res = await _rig.Admin.PostAsync($"{SharedMasterRig.Apps}/packages/import", new StringContent(Package(), System.Text.Encoding.UTF8, "application/json"));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("approvalFlows: 最多 1 個");
+    }
+
+    [Fact]
+    public async Task Open_FlowsLimitLoweredAfterImport_400AndNothingCreated()
+    {
+        await _rig.ImportAsync(Package());
+        (await _rig.Admin.PutAsJsonAsync($"{Base}/system/policies/design.maxApprovalFlowsPerPackage", new { value = 1 })).EnsureSuccessStatusCode();
+        var res = await _rig.OpenAsync(AppId, Body());
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("approvalFlows: 最多 1 個");
+        AssertNothingCreated();
+    }
+
+    [Fact]
     public async Task Open_SkippedGroup_OnEmptySkip_StoredAsFallback()
     {
         await ImportOpenAsync(null, "board");

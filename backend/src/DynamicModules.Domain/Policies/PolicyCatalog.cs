@@ -262,6 +262,10 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition DesignMaxIntegrationsPerPackage =
         new("design.maxIntegrationsPerPackage", "design", PolicyKind.Integer, PolicyScope.System, "20", 1, 100, Unit: "count");
 
+    /// <summary>A16：套件內簽核流程數（只在匯入與開啟套件時檢查；使用者 2026-11-20 裁決改成政策）。</summary>
+    public static readonly PolicyDefinition DesignMaxApprovalFlowsPerPackage =
+        new("design.maxApprovalFlowsPerPackage", "design", PolicyKind.Integer, PolicyScope.System, "50", 1, 100, Unit: "count");
+
     /// <summary>A19：新模組是否自動建「名稱」欄位並設為標題欄位；「基本資料」區塊一律建立（從範本建立固定不建）。</summary>
     public static readonly PolicyDefinition ModuleCreateTitleField =
         new("module.createTitleField", "design", PolicyKind.Boolean, PolicyScope.System, "true");
@@ -370,7 +374,7 @@ public static class PolicyCatalog
          ApprovalOverdueReminderHours, ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients,
          DesignMaxWorkflowStates, DesignMaxWorkflowTransitions, DesignMaxRulesPerModule, DesignMaxGroupsPerPackage,
          DesignMaxModulesPerPackage, DesignMaxFieldsPerModule, DesignMaxOptionsPerField, DesignMaxViewsPerModule,
-         DesignMaxIntegrationsPerPackage, ModuleCreateTitleField, FormDefaultColumns, FormMaxColumns,
+         DesignMaxIntegrationsPerPackage, DesignMaxApprovalFlowsPerPackage, ModuleCreateTitleField, FormDefaultColumns, FormMaxColumns,
          ImportMaxRows, ImportMaxFileBytes, EventMaxEventsPerModule, EventMaxEffects, EventMaxDepth, EventMaxWritesPerRequest,
          EventMaxEachRows, RecordMaxDetailRows, ReportDrillLimit, ReportDetailLimit, ReportMaxRangeDays, DashboardMaxCards,
          MaintenanceIdempotencyRetentionDays, MaintenanceOrphanSweepGraceMinutes, CheckScanMaxViolations, CheckScanMaxGroups,
