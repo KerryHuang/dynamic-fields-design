@@ -36,6 +36,7 @@ GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0
 - 清單檔在 plugharbor repo 根目錄（已 gitignore），路徑用 `$HOME` 起頭，不寫展開後的絕對路徑。
 
 - 三項筆數（diff、log、names）都要是 0。
+- 掃描指令後面不接管線（`| tail` 等）再 `&& git push`：管線的結束碼是最後一個指令的，掃描命中也會照推（2026-11-20 b2c2e7c4 因此推出 blog 網域，已 revert）。單獨跑、看結束碼與三個數字再推。
 - 清單檔不進 repo；掃描只印筆數，不印字串。
 
 ## 合併
