@@ -118,9 +118,9 @@ public sealed partial class AppOpenPlanner(
                     else errors.Add($"groupMap.{code}: 對應的群組不存在");
                     break;
                 case "create":
-                    var locale = requestLocale.For(body.Locale).Locale;
-                    if (await accounts.GroupNameExistsAsync(locale, group.Name.Resolve(locale).Trim(), null, ct))
-                        errors.Add($"groupMap.{code}: 已有同名的群組「{group.Name.Resolve(locale)}」");
+                    var lc = requestLocale.For(body.Locale);
+                    if (await accounts.GroupNameExistsAsync(lc.Locale, group.Name.Resolve(lc).Trim(), null, ct))
+                        errors.Add($"groupMap.{code}: 已有同名的群組「{group.Name.Resolve(lc)}」");
                     break;
                 case "skip":
                     break;
@@ -231,7 +231,7 @@ public sealed partial class AppOpenPlanner(
             else if (package.Modules.FirstOrDefault(m => m.Code == target) is { } local)
                 state = (local.TasksEnabled != false, local.Name);
             if (state is { Enabled: false } off && seen.Add(target))
-                result.Add(AppFlowInstaller.TaskRuleWillAutoEnable(r.Code, off.Name.Resolve(I18nText.FallbackLocale)));
+                result.Add(AppFlowInstaller.TaskRuleWillAutoEnable(r.Code, off.Name.Resolve(requestLocale.Current)));
         }
         return result;
     }
@@ -246,7 +246,7 @@ public sealed partial class AppOpenPlanner(
     /// 被簽核流程引用的欄位（條件、使用者欄位、可編輯欄位）與掛流程的模組的狀態欄位不能排除（§14.4 第一點）：
     /// 排除會讓流程裝不起來，而流程一律保留、不略過。開啟精靈沒有欄位勾選畫面，這條只在 API 生效。
     /// </summary>
-    private static IEnumerable<string> ApprovalExcludeErrors(AppPackageData package, IReadOnlySet<string> exclude)
+    private IEnumerable<string> ApprovalExcludeErrors(AppPackageData package, IReadOnlySet<string> exclude)
     {
         if (exclude.Count == 0 || package.ApprovalFlows.Count == 0) yield break;
         var fields = TemplateService.TemplateGraph.AllFields(AppPackageAdapter.ToTemplate(package));
@@ -256,8 +256,8 @@ public sealed partial class AppOpenPlanner(
             var status = package.Workflows.FirstOrDefault(w => w.Module == f.Module) is { } w ? TemplateService.TemplateGraph.Qualify(w.Module, w.StatusField) : null;
             foreach (var name in AppApprovalFlowCodec.ReferencedFields(f).Append(status).OfType<string>().Where(exclude.Contains))
                 if (seen.Add(name))
-                    yield return AppMessages.FlowFieldExcluded(fields.TryGetValue(name, out var field) ? field.Label.Resolve(I18nText.FallbackLocale) : name,
-                        f.Name.Resolve(I18nText.FallbackLocale));
+                    yield return AppMessages.FlowFieldExcluded(fields.TryGetValue(name, out var field) ? field.Label.Resolve(requestLocale.Current) : name,
+                        f.Name.Resolve(requestLocale.Current));
         }
     }
 
@@ -265,7 +265,7 @@ public sealed partial class AppOpenPlanner(
     /// 退回用的轉移（需簽核入口的 from → rejectTo）在開啟時因群組都沒對應而整條略過，第二趟存狀態機會被入口約束擋下（審查 S1）；
     /// 預覽用與安裝相同的規則（<see cref="AppFlowInstaller.TransitionSkipped"/>）先報出，預覽講的就是開啟會遇到的。
     /// </summary>
-    private static IEnumerable<string> RejectTransitionErrors(AppPackageData package, IReadOnlySet<string> mappedCodes)
+    private IEnumerable<string> RejectTransitionErrors(AppPackageData package, IReadOnlySet<string> mappedCodes)
     {
         var fields = TemplateService.TemplateGraph.AllFields(AppPackageAdapter.ToTemplate(package));
         var seen = new HashSet<string>();
@@ -274,7 +274,7 @@ public sealed partial class AppOpenPlanner(
             if (package.Workflows.FirstOrDefault(w => w.Module == f.Module) is not { } w) continue;
             string Label(string option) =>
                 fields.GetValueOrDefault(TemplateService.TemplateGraph.Qualify(w.Module, w.StatusField))?.Options.FirstOrDefault(o => o.Code == option)
-                    ?.Label.Resolve(I18nText.FallbackLocale) ?? option;
+                    ?.Label.Resolve(requestLocale.Current) ?? option;
             var entries = w.Transitions.Where(t => t.To == f.To && t.From != f.RejectTo && t.Approval is { Required: true }
                 && !AppFlowInstaller.TransitionSkipped(t, mappedCodes.Contains));
             foreach (var e in entries)
@@ -282,7 +282,7 @@ public sealed partial class AppOpenPlanner(
                     && AppFlowInstaller.TransitionSkipped(back, mappedCodes.Contains))
                     foreach (var g in back.Groups.Distinct())
                     {
-                        var message = AppMessages.RejectTransitionSkipped(g, Label(back.From), Label(back.To), f.Name.Resolve(I18nText.FallbackLocale));
+                        var message = AppMessages.RejectTransitionSkipped(g, Label(back.From), Label(back.To), f.Name.Resolve(requestLocale.Current));
                         if (seen.Add(message)) yield return message;
                     }
         }

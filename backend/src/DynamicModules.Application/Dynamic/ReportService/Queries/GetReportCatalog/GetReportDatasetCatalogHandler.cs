@@ -16,7 +16,7 @@ public class GetReportDatasetCatalogHandler(TaskReportSource source, RequestLoca
         var selectable = TaskReportFields.Selectable(request.Dataset);
         var module = await source.CatalogAsync(request.Dataset, ct);
         var fields = module.Blocks.SelectMany(b => b.Fields).Where(f => selectable.Contains(f.Id)).OrderByDescending(f => f.Id)
-            .Select(f => GetReportCatalogHandler.ToField(f, requestLocale.For(request.Locale).Locale)).ToList();
+            .Select(f => GetReportCatalogHandler.ToField(f, requestLocale.For(request.Locale))).ToList();
         return ServiceResult.Success(new ModuleCatalog(fields, [], []));
     }
 }

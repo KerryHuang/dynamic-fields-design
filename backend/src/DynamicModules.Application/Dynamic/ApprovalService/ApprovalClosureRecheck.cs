@@ -11,7 +11,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// 改公式、彙總、帶值或重新啟用欄位後，重檢「可編輯欄位不落在流程條件上游閉包」（設計 §9.2）。
 /// 只報這次改動新增的違規（和改動前相比），既有的違規不連坐；模組沒有需簽核轉移時一律略過、不查資料庫。
 /// </summary>
-public sealed class ApprovalClosureRecheck(IApprovalFlowRepository flows)
+public sealed class ApprovalClosureRecheck(IApprovalFlowRepository flows, RequestLocale requestLocale)
 {
     /// <summary>
     /// 暫時把 field 換成 candidate 設定與狀態，重算閉包交集，和換之前的錯誤相比，有新增就回 400（鍵為 flows[流程鍵]）。
@@ -22,12 +22,12 @@ public sealed class ApprovalClosureRecheck(IApprovalFlowRepository flows)
         if (!HasApproval(module)) return null;
         var current = await flows.ListCurrentByModuleAsync(module.Id, ct);
         if (current.Count == 0) return null;
-        var seen = ApprovalConstraints.ClosureViolations(module, module.Workflow!, current).Select(v => (v.FlowKey, v.FieldId)).ToHashSet();
+        var seen = ApprovalConstraints.ClosureViolations(module, module.Workflow!, current, requestLocale.Current).Select(v => (v.FlowKey, v.FieldId)).ToHashSet();
         var (config, oldStatus) = (field.Config, field.Status);
         IReadOnlyList<ApprovalConstraints.ClosureViolation> after;
         field.Config = candidate;
         field.Status = status;
-        try { after = ApprovalConstraints.ClosureViolations(module, module.Workflow!, current); }
+        try { after = ApprovalConstraints.ClosureViolations(module, module.Workflow!, current, requestLocale.Current); }
         finally { (field.Config, field.Status) = (config, oldStatus); }
 
         // 以（流程鍵、可編輯欄位）識別違規，路徑改變不算新增
@@ -43,7 +43,7 @@ public sealed class ApprovalClosureRecheck(IApprovalFlowRepository flows)
         var editable = (await flows.ListCurrentByModuleAsync(module.Id, ct))
             .SelectMany(f => ApprovalDefinitionRefs.Steps(f.Definition)).SelectMany(s => s.EditableFields ?? []).ToHashSet();
         if (fill.Map.FirstOrDefault(m => editable.Contains(m.To)) is not { } hit) return null;
-        var label = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == hit.To)?.LabelI18n.Resolve(I18nText.FallbackLocale) ?? hit.To.ToString();
+        var label = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == hit.To)?.LabelI18n.Resolve(requestLocale.Current) ?? hit.To.ToString();
         return ServiceResult.Invalid(new Dictionary<string, string[]> { [FieldRules.FillKey] = [ApprovalMessages.FillTargetEditable(label)] });
     }
 

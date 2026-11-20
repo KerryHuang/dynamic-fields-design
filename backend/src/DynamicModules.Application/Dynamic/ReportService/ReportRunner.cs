@@ -65,10 +65,11 @@ public partial class ReportRunner(
     /// 以及營運時區偏移（執行開始時取一次，SQL 路徑與記憶體路徑用同一個值）。
     /// </summary>
     private sealed record RunContext(
-        string Locale, IReadOnlyDictionary<string, string> UserNames, Dictionary<(string, string), string> Titles,
+        LocaleContext Lc, IReadOnlyDictionary<string, string> UserNames, Dictionary<(string, string), string> Titles,
         IReadOnlyDictionary<string, string> Buckets, IReadOnlyDictionary<string, string> BlankLabels, TimeSpan BusinessOffset)
     {
-        public FieldDisplayContext Display => new(Locale, BusinessOffset);
+        public string Locale => Lc.Locale;
+        public FieldDisplayContext Display => new(Lc.Locale, BusinessOffset, Lc.Fallbacks);
     }
 
     /// <summary>
@@ -103,26 +104,25 @@ public partial class ReportRunner(
         var frozen = basis != time.Today;
         // 沒指定語系用請求語系、指定了停用或不認得的用預設語系（D4）
         var lc = requestLocale.For(o.Locale);
-        var locale = lc.Locale;
         // 同一次執行只取一次營運時區偏移
         var offset = systemPolicy.BusinessOffset;
 
         // 1–6 由資料來源載入、組格子、套條件；不認得的資料來源 fail closed
-        var load = ReportDatasets.IsModule(d.Dataset) ? await LoadModuleAsync(d, o, basis, frozen, locale, offset, ct)
-            : ReportDatasets.IsTask(d.Dataset) ? await LoadTasksAsync(d, o, basis, frozen, locale, offset, ct)
-            : new SourceLoad(FailResult(ModuleDisabledState, ReportText.Get(locale, ReportText.ModuleDisabled), basis, frozen), null);
+        var load = ReportDatasets.IsModule(d.Dataset) ? await LoadModuleAsync(d, o, basis, frozen, lc, offset, ct)
+            : ReportDatasets.IsTask(d.Dataset) ? await LoadTasksAsync(d, o, basis, frozen, lc, offset, ct)
+            : new SourceLoad(FailResult(ModuleDisabledState, ReportText.Get(lc.Locale, ReportText.ModuleDisabled), basis, frozen), null);
         if (load.Done is { } done) return done;
-        return Finish(d, o, basis, frozen, locale, load.Rows!);
+        return Finish(d, o, basis, frozen, lc, load.Rows!);
     }
 
     /// <summary>模組來源：步驟 1–6（授權、綁欄位、SQL 路徑、載入、組格子、套條件）。</summary>
     private async Task<SourceLoad> LoadModuleAsync(
-        ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, TimeSpan offset, CancellationToken ct)
+        ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, LocaleContext lc, TimeSpan offset, CancellationToken ct)
     {
         SourceLoad Fail(string state, string message) => new(FailResult(state, message, basis, frozen), null);
-        string T(string key, params object[] args) => ReportText.Get(locale, key, args);
+        string T(string key, params object[] args) => ReportText.Get(lc.Locale, key, args);
         var disabled = () => Fail(ModuleDisabledState, T(ReportText.ModuleDisabled));
-        var hiddenField = () => Fail(Restricted, HiddenMessage(locale));
+        var hiddenField = () => Fail(Restricted, HiddenMessage(lc));
 
         // 1. 模組存在且啟用；明細模組不能當主模組（它的權限來自表頭，單獨跑會繞過表頭範圍）
         var main = await ActiveModuleAsync(d.MainModuleKey, ct);
@@ -176,14 +176,14 @@ public partial class ReportRunner(
         // 3. 欄位存在且啟用
         var link = d.Child is null ? null : childSide!.Active(d.Child.LinkFieldId);
         if (d.Child is not null && link is not { Type: FieldType.Reference, Config.RefTarget: { Kind: ReferenceTarget.ModuleKind } } || (link is not null && link.Config.RefTarget!.Key != main.Key))
-            return Fail(FieldMissingState, MissingMessage(childSide!, d.Child!.LinkFieldId, locale));
+            return Fail(FieldMissingState, MissingMessage(childSide!, d.Child!.LinkFieldId, lc));
 
         var bound = new Dictionary<string, Bound>();
         foreach (var r in refs)
         {
             var key = ReportCalculator.KeyOf(r);
             if (bound.ContainsKey(key)) continue;
-            var (b, problem) = Bind(r, key, mainSide, childSide, targetSides, locale);
+            var (b, problem) = Bind(r, key, mainSide, childSide, targetSides, lc);
             if (b is null) return Fail(FieldMissingState, problem!);
             bound[key] = b;
         }
@@ -191,7 +191,7 @@ public partial class ReportRunner(
         // 4. 看不到或不能用的欄位：任何位置都整張擋下，訊息只寫看得到的名稱
         if (link is not null && !childSide!.Perms!.CanSee(link)) return hiddenField();
         foreach (var b in bound.Values)
-            if (UnusableMessage(b, locale) is { } message) return Fail(Restricted, message);
+            if (UnusableMessage(b, lc) is { } message) return Fail(Restricted, message);
 
         // 條件與量值用到不可讀模組的帶出欄位，結果會是假的 empty、0% 或 null，整張擋下（spec §7、§13.2）；
         // 欄位與分組位置照常，值標無權限。範圍內單筆看不到的目標仍是逐列不符合，見 Matches。
@@ -213,11 +213,11 @@ public partial class ReportRunner(
 
         // 權限都過了才重驗型別，訊息只會帶看得到的名稱；公式的結果型別在存檔後可能變，對不上就明講，不回假的 empty、0% 或日期序號加總
         if (FieldWithChangedType(d, bound, offset) is { } changed)
-            return Fail(FieldMissingState, T(ReportText.TypeChanged, ColumnLabel(changed, locale)));
+            return Fail(FieldMissingState, T(ReportText.TypeChanged, ColumnLabel(changed, lc)));
 
         // 日期區間與執行上下文在載入前就定好：SQL 路徑與記憶體路徑共用
         var (_, resolved, applied) = await ResolveRangeAsync(d, o, basis, ct);
-        var ctx = new RunContext(locale, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), new Dictionary<string, string>(), offset);
+        var ctx = new RunContext(lc, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), new Dictionary<string, string>(), offset);
 
         // 5a. 能在資料庫端聚合就不載入記錄；不能（或證明不了與記憶體路徑相同）就帶著原因走記憶體路徑
         var fallbackReasons = new List<string>();
@@ -234,7 +234,7 @@ public partial class ReportRunner(
         // 縮小：只載入符合主模組精確條件的記錄（設計 §8.1）；MemoryOnly 是對照用的純記憶體路徑，不縮小
         var narrowed = options.Engine == ReportEngineMode.MemoryOnly ? null
             : await TryNarrowAsync(d, o, bound, mainSide, childSide, link, basis, offset, resolved, fallbackReasons, ct);
-        if (narrowed?.FallbackReason == ReportSqlOutcome.TimeoutReason) return new SourceLoad(SqlTimeoutResult(locale, basis, frozen), null);
+        if (narrowed?.FallbackReason == ReportSqlOutcome.TimeoutReason) return new SourceLoad(SqlTimeoutResult(lc, basis, frozen), null);
         IReadOnlyList<Record> mainRows = narrowed?.Main
             ?? await records.ListForReportAsync(main.Id, mainSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
         if (mainRows.Count > options.MaxLoadRows) return tooManyToLoad();
@@ -281,10 +281,10 @@ public partial class ReportRunner(
     }
 
     /// <summary>共用尾段（步驟 7 以後）：下鑽、計算、欄位與分組標籤。資料來源只要交出套完條件的列。</summary>
-    private static ReportResult Finish(ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, SourceRows source)
+    private static ReportResult Finish(ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, LocaleContext lc, SourceRows source)
     {
         var (bound, rows, mainSide, childSide, rowModule, ctx, applied, fallbackReasons, taskIdOf) = source;
-        string T(string key, params object[] args) => ReportText.Get(locale, key, args);
+        string T(string key, params object[] args) => ReportText.Get(lc.Locale, key, args);
 
         // 7. 下鑽只留該分組的列；各欄位值的 key 判斷與分組相同
         var drilling = o.DrillGroupKeys is not null;
@@ -305,16 +305,16 @@ public partial class ReportRunner(
             columns.AddRange(d.Groups.Select(g =>
             {
                 var b = bound[ReportCalculator.KeyOf(g.Field)];
-                return new ReportColumn(b.Key, ColumnLabel(b, locale), "group", g.Bucket is null ? ValueTypeOf(b.Field) : "text");
+                return new ReportColumn(b.Key, ColumnLabel(b, lc), "group", g.Bucket is null ? ValueTypeOf(b.Field) : "text");
             }));
             columns.AddRange(d.Measures.Select(m => MeasureColumn(m, bound, mainSide, childSide, ctx.Display)));
         }
-        columns.AddRange(fieldColumns.Select(b => new ReportColumn(b.Key, ColumnLabel(b, locale), "field", ValueTypeOf(b.Field))));
+        columns.AddRange(fieldColumns.Select(b => new ReportColumn(b.Key, ColumnLabel(b, lc), "field", ValueTypeOf(b.Field))));
 
         IReadOnlyList<ReportGroupResult>? groups = drilling ? null : LabeledGroups(calc.Groups, d, bound, ctx);
         var (detail, ordered) = fieldColumns.Count == 0 ? (null, null) : DetailRows(rows, fieldColumns, d, bound, ctx);
         IReadOnlyList<long>? taskIds = taskIdOf is null || ordered is null ? null : ordered.Select(r => taskIdOf(r.MainId)).ToList();
-        return new ReportResult(rows.Count == 0 ? Empty : Ok, null, T(ReportText.RowMeaning, rowModule.NameI18n.Resolve(locale)), columns,
+        return new ReportResult(rows.Count == 0 ? Empty : Ok, null, T(ReportText.RowMeaning, rowModule.NameI18n.Resolve(lc)), columns,
             groups, calc.Total, detail, calc.DedupedNote, basis, applied, frozen, detail?.Count,
             Engine: "memory", FallbackReasons: fallbackReasons, TaskIds: taskIds);
     }
@@ -361,37 +361,37 @@ public partial class ReportRunner(
     }
 
     private static (Bound?, string?) Bind(
-        ReportFieldRef r, string key, Side main, Side? child, IReadOnlyDictionary<string, Side> targets, string locale)
+        ReportFieldRef r, string key, Side main, Side? child, IReadOnlyDictionary<string, Side> targets, LocaleContext lc)
     {
         var source = r.Source == "main" ? main : r.Source == "child" ? child : null;
-        if (source is null) return (null, ReportText.Get(locale, ReportText.FieldGone));
+        if (source is null) return (null, ReportText.Get(lc.Locale, ReportText.FieldGone));
         if (r.ViaFieldId is null)
             return source.Active(r.FieldId) is { } direct
                 ? (new Bound(r, key, source, direct, null, null), null)
-                : (null, MissingMessage(source, r.FieldId, locale));
+                : (null, MissingMessage(source, r.FieldId, lc));
 
         if (source.Active(r.ViaFieldId) is not { Type: FieldType.Reference, Config.RefTarget: { } refTarget } via)
-            return (null, MissingMessage(source, r.ViaFieldId.Value, locale));
+            return (null, MissingMessage(source, r.ViaFieldId.Value, lc));
         if (refTarget.Kind == ReferenceTarget.EntityKind)
-            return r.FieldId == EntityTitleFieldId ? (new Bound(r, key, source, via, null, null), null) : (null, ReportText.Get(locale, ReportText.FieldGone));
+            return r.FieldId == EntityTitleFieldId ? (new Bound(r, key, source, via, null, null), null) : (null, ReportText.Get(lc.Locale, ReportText.FieldGone));
         var target = targets[refTarget.Key];
         return target.Active(r.FieldId) is { } field
             ? (new Bound(r, key, source, field, via, target), null)
-            : (null, MissingMessage(target, r.FieldId, locale));
+            : (null, MissingMessage(target, r.FieldId, lc));
     }
 
-    private static string MissingMessage(Side side, long fieldId, string locale) =>
+    private static string MissingMessage(Side side, long fieldId, LocaleContext lc) =>
         side.Perms is { } p && side.Fields.TryGetValue(fieldId, out var f) && p.CanSee(f)
-            ? ReportText.Get(locale, ReportText.FieldGoneNamed, f.LabelI18n.Resolve(locale))
-            : ReportText.Get(locale, ReportText.FieldGone);
+            ? ReportText.Get(lc.Locale, ReportText.FieldGoneNamed, f.LabelI18n.Resolve(lc))
+            : ReportText.Get(lc.Locale, ReportText.FieldGone);
 
-    private static string HiddenMessage(string locale) =>
-        ReportText.Get(locale, ReportText.NoPermissionTo, ReportText.Get(locale, ReportText.HiddenField));
+    private static string HiddenMessage(LocaleContext lc) =>
+        ReportText.Get(lc.Locale, ReportText.NoPermissionTo, ReportText.Get(lc.Locale, ReportText.HiddenField));
 
-    private static string? UnusableMessage(Bound b, string locale)
+    private static string? UnusableMessage(Bound b, LocaleContext lc)
     {
-        var hidden = HiddenMessage(locale);
-        string NotUsable() => ReportText.Get(locale, ReportText.NotUsable, b.Field.LabelI18n.Resolve(locale));
+        var hidden = HiddenMessage(lc);
+        string NotUsable() => ReportText.Get(lc.Locale, ReportText.NotUsable, b.Field.LabelI18n.Resolve(lc));
         var sourcePerms = b.Source.Perms!;
         if (b.Target is null)
         {

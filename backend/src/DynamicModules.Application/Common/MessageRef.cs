@@ -34,8 +34,9 @@ public sealed class MessageRef
     /// <summary>
     /// 有鍵就依語系取字串表的文字；字面值原樣回傳。<paramref name="translateLiteral"/> 為 true 時，字面值剛好是字串表某一句（無參數）
     /// 的繁中原文也翻譯，給還沒改成鍵的 <see cref="ServiceResult"/> 訊息用；欄位錯誤不用，免得設計者自己寫的文字被系統譯文取代。
+    /// <paramref name="fallbacks"/> 是 <see cref="I18nText"/> 參數的語系退回鏈（政策 locale.default → 繁中）；null 時退回繁中。
     /// </summary>
-    public string Resolve(string? locale, bool translateLiteral = false) =>
-        Key is not null ? MessageText.Get(locale, Key, Args.Select(a => a is I18nText t ? t.Resolve(locale ?? I18nText.FallbackLocale) : a).ToArray())
+    public string Resolve(string? locale, bool translateLiteral = false, IReadOnlyList<string>? fallbacks = null) =>
+        Key is not null ? MessageText.Get(locale, Key, Args.Select(a => a is I18nText t ? t.Resolve(locale ?? I18nText.FallbackLocale, fallbacks) : a).ToArray())
         : translateLiteral ? MessageText.TranslateLiteral(locale, _literal ?? "") : _literal ?? "";
 }

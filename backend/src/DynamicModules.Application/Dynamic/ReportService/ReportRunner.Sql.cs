@@ -1,3 +1,4 @@
+using DynamicModules.Domain.ValueObjects;
 using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Dynamic.RecordService;
@@ -334,7 +335,7 @@ public partial class ReportRunner
             return null;
         }
         var outcome = await queries.AggregateAsync(query, ct);
-        if (outcome.FallbackReason == ReportSqlOutcome.TimeoutReason) return SqlTimeoutResult(ctx.Locale, basis, frozen);
+        if (outcome.FallbackReason == ReportSqlOutcome.TimeoutReason) return SqlTimeoutResult(ctx.Lc, basis, frozen);
         if (outcome.FallbackReason is { } reason)
         {
             reasons.Add(reason);
@@ -372,8 +373,8 @@ public partial class ReportRunner
         return result;
     }
 
-    private static ReportResult SqlTimeoutResult(string locale, DateOnly basis, bool frozen) =>
-        new(TooManyState, ReportText.Get(locale, ReportText.SqlTimeout), "", [], null, null, null, false, basis, null, frozen,
+    private static ReportResult SqlTimeoutResult(LocaleContext lc, DateOnly basis, bool frozen) =>
+        new(TooManyState, ReportText.Get(lc.Locale, ReportText.SqlTimeout), "", [], null, null, null, false, basis, null, frozen,
             Engine: "sql", FallbackReasons: []);
 
     // ---- 結果：SQL 的原始列 → 與記憶體路徑相同的計算結果 ----
@@ -414,7 +415,7 @@ public partial class ReportRunner
         ReportDefinition d, ReportSqlQuery query, ReportSqlOutcome outcome, IReadOnlyDictionary<string, Bound> bound,
         Side mainSide, Side? childSide, RunContext ctx, DateOnly basis, bool frozen, ReportAppliedRange? applied)
     {
-        var locale = ctx.Locale;
+        var lc = ctx.Lc;
         var groups = outcome.Groups.Select(row =>
         {
             var keys = new List<string>(query.Groups.Count);
@@ -436,11 +437,11 @@ public partial class ReportRunner
         columns.AddRange(d.Groups.Select(g =>
         {
             var b = bound[ReportCalculator.KeyOf(g.Field)];
-            return new ReportColumn(b.Key, ColumnLabel(b, locale), "group", g.Bucket is null ? ValueTypeOf(b.Field) : "text");
+            return new ReportColumn(b.Key, ColumnLabel(b, lc), "group", g.Bucket is null ? ValueTypeOf(b.Field) : "text");
         }));
         columns.AddRange(d.Measures.Select(m => MeasureColumn(m, bound, mainSide, childSide, ctx.Display)));
         var labeled = LabeledGroups(calc.Groups, d, bound, ctx);
-        return new ReportResult(calc.RowCount == 0 ? Empty : Ok, null, ReportText.Get(locale, ReportText.RowMeaning, mainSide.Module.NameI18n.Resolve(locale)),
+        return new ReportResult(calc.RowCount == 0 ? Empty : Ok, null, ReportText.Get(lc.Locale, ReportText.RowMeaning, mainSide.Module.NameI18n.Resolve(lc)),
             columns, labeled, calc.Total, null, calc.DedupedNote, basis, applied, frozen, null, false, null, null, false, "sql", []);
     }
 }

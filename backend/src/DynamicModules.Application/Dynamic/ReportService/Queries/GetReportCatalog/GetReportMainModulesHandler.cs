@@ -19,7 +19,7 @@ public class GetReportMainModulesHandler(IModuleRepository modules, IDynamicAcce
         {
             if (ModuleRelations.IsDetail(m)) continue;
             if ((await guard.AuthorizeAsync(m, PermissionAction.Read, ct)).Permissions is null) continue;
-            result.Add(new CatalogModule(m.Key, m.NameI18n.Resolve(requestLocale.For(request.Locale).Locale)));
+            result.Add(new CatalogModule(m.Key, m.NameI18n.Resolve(requestLocale.For(request.Locale))));
         }
         return ServiceResult.Success(result);
     }

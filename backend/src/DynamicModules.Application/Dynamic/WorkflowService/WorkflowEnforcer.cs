@@ -85,7 +85,7 @@ public class WorkflowEnforcer(
         // 需簽核的轉移只能走送出端點（簽核設計 §5.3）；系統身分（事件、簽核完成的轉移）交給簽核後盾判斷
         if (!system.Active && transition.Approval is { Required: true })
         {
-            errors[key] = [ApprovalService.ApprovalMessages.NeedsSubmit.Resolve(locale.Locale)];
+            errors[key] = [MessageText.Get(locale.Locale, MessageText.ApprovalNeedsSubmit)];
             return errors;
         }
         if (transition.GroupIds.Count == 0 || system.Active) return errors;   // 事件效果的轉移必須是已定義的，但不檢查群組

@@ -17,7 +17,7 @@ namespace DynamicModules.Application.Dynamic.WorkflowService.Commands.SaveWorkfl
 public class SaveWorkflowHandler(
     IModuleRepository modules, IPermissionRepository permissions, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
     IApprovalFlowRepository flows, IEventRepository events, WorkflowApprovals approvals, PendingApprovalGuard pending,
-    LockedDataGuard lockedData, IPolicyReader policies)
+    LockedDataGuard lockedData, IPolicyReader policies, RequestLocale requestLocale)
     : IRequestHandler<SaveWorkflowRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SaveWorkflowRequest request, CancellationToken ct)
@@ -100,9 +100,9 @@ public class SaveWorkflowHandler(
         if (candidate.Transitions.Any(t => t.Approval is { NoMatch: not (ApprovalNoMatch.Block or ApprovalNoMatch.Direct) }))
             return new() { ["transitions"] = ["沒有流程符合時的處理只能是 block 或 direct"] };
 
-        var errors = ApprovalConstraints.Validate(module, candidate, await flows.ListCurrentByModuleAsync(module.Id, ct));
+        var errors = ApprovalConstraints.Validate(module, candidate, await flows.ListCurrentByModuleAsync(module.Id, ct), requestLocale.Current);
         var labels = module.Blocks.SelectMany(b => b.Fields).Single(f => f.Id == input.StatusFieldId).Options
-            .ToDictionary(o => o.Id, o => o.LabelI18n.Resolve("zh-TW"));
+            .ToDictionary(o => o.Id, o => o.LabelI18n.Resolve(requestLocale.Current));
         var active = (await events.ListAsync(ct)).Where(e => e.Active);
         foreach (var (key, to) in ApprovalEventCrossCheck.Find(module, candidate, active))
             errors.TryAdd($"events[{key}]", [ApprovalMessages.EventPushes(key, labels.GetValueOrDefault(to) ?? to.ToString())]);

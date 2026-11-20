@@ -25,7 +25,7 @@ public sealed record ImportPlan(Module Module, List<ImportColumn> Columns, List<
 /// </summary>
 public class ImportPlanner(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IDynamicAccessGuard guard,
-    ReferenceProviderRegistry providers, RecordCreator creator, IPolicyReader policies, CachedSystemPolicy systemPolicy)
+    ReferenceProviderRegistry providers, RecordCreator creator, IPolicyReader policies, CachedSystemPolicy systemPolicy, DynamicModules.Application.Common.RequestLocale requestLocale)
 {
     public const string FileKey = "file";
     public const string ComputedColumn = "系統計算的欄位";
@@ -75,7 +75,7 @@ public class ImportPlanner(
                 columns.Add(new ImportColumn(header, null, UnknownColumn));
                 continue;
             }
-            if (!seen.Add(field.Id)) return FileError($"欄位「{field.LabelI18n.Resolve(I18nText.FallbackLocale)}」重複");
+            if (!seen.Add(field.Id)) return FileError($"欄位「{field.LabelI18n.Resolve(requestLocale.Current)}」重複");
             if (FieldRules.IsComputed(field.Type)) columns.Add(new ImportColumn(header, null, ComputedColumn));
             // 凍結的貢獻欄位不當成一般唯讀而略過：照樣帶進去，有值時由寫入管線整批 409（共用主檔設計 §7）
             else if ((!perms.CanWrite(field) || field.Config.ReadOnly) && !perms.Frozen.ContainsKey(field.Id))

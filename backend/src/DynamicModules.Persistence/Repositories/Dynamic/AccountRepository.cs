@@ -83,13 +83,12 @@ public class AccountRepository(DynamicDbContext db) : IAccountRepository
         return [.. old.Select(m => m.UserId).Distinct().Order(StringComparer.Ordinal)];
     }
 
-    public async Task<GroupImpact> GetGroupImpactAsync(long groupId, CancellationToken ct)
+    public async Task<GroupImpact> GetGroupImpactAsync(long groupId, LocaleContext lc, CancellationToken ct)
     {
-        var locale = I18nText.FallbackLocale;
         var members = await db.Set<UserGroupMapping>().CountAsync(m => m.GroupId == groupId, ct);
         var codes = db.Set<GroupProgramPrivilege>().Where(p => p.GroupId == groupId).Select(p => p.ProgramCode);
         var modules = (await db.Set<Module>().AsNoTracking().Where(m => codes.Contains(m.ProgramCode)).OrderBy(m => m.Id).ToListAsync(ct))
-            .Select(m => m.NameI18n.Resolve(locale)).ToList();
+            .Select(m => m.NameI18n.Resolve(lc)).ToList();
         var fieldPerms = await db.Set<FieldPermission>().CountAsync(p => p.GroupId == groupId, ct);
         var scopes = await db.Set<ModuleDataScope>().CountAsync(s => s.GroupId == groupId, ct);
 
@@ -100,7 +99,7 @@ public class AccountRepository(DynamicDbContext db) : IAccountRepository
                           orderby m.Id, f.Sequence, o.Sequence
                           select new { Module = m.NameI18n, Field = f.LabelI18n, Option = o.LabelI18n })
             .AsNoTracking().ToListAsync(ct);
-        var blocking = rows.Select(r => new BlockingOption(r.Module.Resolve(locale), r.Field.Resolve(locale), r.Option.Resolve(locale))).ToList();
+        var blocking = rows.Select(r => new BlockingOption(r.Module.Resolve(lc), r.Field.Resolve(lc), r.Option.Resolve(lc))).ToList();
         var reports = await db.Set<Report>().AsNoTracking()
             .Where(r => r.Shares.Any(s => s.GroupId == groupId)).OrderBy(r => r.Id).Select(r => r.Name).ToListAsync(ct);
         var dashboards = await db.Set<Dashboard>().AsNoTracking()

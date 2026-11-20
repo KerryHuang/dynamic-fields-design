@@ -19,7 +19,7 @@ public sealed partial class AppExporter(
     TemplateExporter templates, IModuleRepository modules, IAppRepository apps, IPermissionRepository permissions,
     IConversionRepository conversions, IReportRepository reports, IPrintTemplateRepository printTemplates,
     IEventRepository events, ICheckRepository checks, ILedgerRepository ledgers, ISharedMasterRepository shared,
-    AppPackageSource packages, ITaskRuleRepository taskRules, IApprovalFlowRepository approvalFlows)
+    AppPackageSource packages, ITaskRuleRepository taskRules, IApprovalFlowRepository approvalFlows, DynamicModules.Application.Common.RequestLocale requestLocale)
 {
     [GeneratedRegex("[^a-zA-Z0-9_]")]
     private static partial Regex NotCode();
@@ -96,7 +96,7 @@ public sealed partial class AppExporter(
                 foreach (var f in m.Blocks.SelectMany(b => b.Fields).Where(f => orphans.Any(o => o.FieldId == f.Id)))
                 {
                     excludedFields.Add(f.Id);
-                    warnings.Add($"{m.NameI18n.Resolve(I18nText.FallbackLocale)}的「{f.LabelI18n.Resolve(I18nText.FallbackLocale)}」是已刪除應用程式留下的停用欄位，未匯出，資料仍保留在資料庫");
+                    warnings.Add($"{m.NameI18n.Resolve(requestLocale.Current)}的「{f.LabelI18n.Resolve(requestLocale.Current)}」是已刪除應用程式留下的停用欄位，未匯出，資料仍保留在資料庫");
                 }
             }
         }
@@ -259,7 +259,7 @@ public sealed partial class AppExporter(
             var module = codeOf[m.Id];
             if (m.Workflow is not { } w || !exportedWorkflows.Contains(module))
             {
-                errors.Add(AppMessages.ExportWorkflowMissing(m.NameI18n.Resolve(I18nText.FallbackLocale)));
+                errors.Add(AppMessages.ExportWorkflowMissing(m.NameI18n.Resolve(requestLocale.Current)));
                 continue;
             }
             var order = m.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == w.StatusFieldId)?.Options
@@ -269,7 +269,7 @@ public sealed partial class AppExporter(
                 // 停用的流程圖格式流程略過並提示（略過不會讓重新匯入後少簽；啟用中的仍由 ToPackage 擋下，使用者 11-16 確認）
                 if (!s.Flow.Active && s.Definition.Shape == ApprovalShapes.Graph)
                 {
-                    warnings.Add($"簽核流程「{s.Flow.NameI18n.Resolve(I18nText.FallbackLocale)}」使用流程圖格式，套件格式升版前不能匯出，已略過（流程已停用）");
+                    warnings.Add($"簽核流程「{s.Flow.NameI18n.Resolve(requestLocale.Current)}」使用流程圖格式，套件格式升版前不能匯出，已略過（流程已停用）");
                     continue;
                 }
                 var (flow, flowErrors) = AppApprovalFlowCodec.ToPackage(s.Flow, s.Definition, module, w.StatusFieldId, names, groupCode);
@@ -345,7 +345,7 @@ public sealed partial class AppExporter(
         var fields = view.Module.Blocks.SelectMany(b => b.Fields).Where(f => ownCodes.Contains(f.Code)).ToList();
         foreach (var f in view.Source.Blocks.SelectMany(b => b.Fields)
                      .Where(f => view.OwnFields.ContainsKey(f.Id) && fields.All(x => x.Code != view.OwnFields[f.Id])))
-            warnings.Add($"貢獻欄位「{f.LabelI18n.Resolve(I18nText.FallbackLocale)}」引用了停用、未匯出或別的應用程式的欄位，未匯出");
+            warnings.Add($"貢獻欄位「{f.LabelI18n.Resolve(requestLocale.Current)}」引用了停用、未匯出或別的應用程式的欄位，未匯出");
         var (blockId, blockCode) = view.OwnBlocks.Count > 0 ? (view.OwnBlocks.First().Key, view.OwnBlocks.First().Value) : (0L, "main");
         var block = view.Source.Blocks.FirstOrDefault(b => b.Id == blockId);
         var groups = grants.Select(g => g.GroupId).ToHashSet();

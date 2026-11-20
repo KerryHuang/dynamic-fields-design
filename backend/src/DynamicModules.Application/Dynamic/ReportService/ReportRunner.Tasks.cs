@@ -1,3 +1,4 @@
+using DynamicModules.Domain.ValueObjects;
 using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Dynamic.ReportService.Data;
@@ -17,12 +18,12 @@ public partial class ReportRunner
     private const string DatasetMemoryOnly = "datasetMemoryOnly";
 
     private async Task<SourceLoad> LoadTasksAsync(
-        ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, TimeSpan offset, CancellationToken ct)
+        ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, LocaleContext lc, TimeSpan offset, CancellationToken ct)
     {
         SourceLoad Fail(string state, string message) => new(FailResult(state, message, basis, frozen), null);
         var dataset = d.Dataset!;
         // 存檔驗證擋掉的子模組出現在這裡代表定義被直接改壞；不擋的話尾段會用 d.Child 算去重，數字沒有定義（審查 G2）
-        if (d.Child is not null) return Fail(FieldMissingState, ReportText.Get(locale, ReportText.FieldGone));
+        if (d.Child is not null) return Fail(FieldMissingState, ReportText.Get(lc.Locale, ReportText.FieldGone));
         var side = new Side(await taskReports.CatalogAsync(dataset, ct), TaskReportSource.Permissions);
 
         var selectable = F.Selectable(dataset);
@@ -33,8 +34,8 @@ public partial class ReportRunner
             if (bound.ContainsKey(key)) continue;
             // 存檔驗證擋掉的形狀（子模組、帶出、不可選的欄位）出現在這裡代表定義被直接改壞，fail closed
             if (r.Source != "main" || r.ViaFieldId is not null || !selectable.Contains(r.FieldId))
-                return Fail(FieldMissingState, ReportText.Get(locale, ReportText.FieldGone));
-            var (b, problem) = Bind(r, key, side, null, new Dictionary<string, Side>(), locale);
+                return Fail(FieldMissingState, ReportText.Get(lc.Locale, ReportText.FieldGone));
+            var (b, problem) = Bind(r, key, side, null, new Dictionary<string, Side>(), lc);
             if (b is null) return Fail(FieldMissingState, problem!);
             bound[key] = b with { Restrictable = F.Restrictable.Contains(r.FieldId) };
         }
@@ -44,14 +45,14 @@ public partial class ReportRunner
             {
                 var key = ReportCalculator.KeyOf(r);
                 if (bound.ContainsKey(key)) continue;
-                var (b, problem) = Bind(r, key, side, null, new Dictionary<string, Side>(), locale);
+                var (b, problem) = Bind(r, key, side, null, new Dictionary<string, Side>(), lc);
                 if (b is null) return Fail(FieldMissingState, problem!);
                 bound[key] = b with { Restrictable = F.Restrictable.Contains(r.FieldId) };
             }
         foreach (var b in bound.Values)
-            if (UnusableMessage(b, locale) is { } message) return Fail(Restricted, message);
+            if (UnusableMessage(b, lc) is { } message) return Fail(Restricted, message);
         if (FieldWithChangedType(d, bound, offset) is { } changed)
-            return Fail(FieldMissingState, ReportText.Get(locale, ReportText.TypeChanged, ColumnLabel(changed, locale)));
+            return Fail(FieldMissingState, ReportText.Get(lc.Locale, ReportText.TypeChanged, ColumnLabel(changed, lc)));
 
         var (_, resolved, applied) = await ResolveRangeAsync(d, o, basis, ct);
         // 多取一筆才分得出是否超過上限；資料庫端只用證明精確的條件縮小，載入後照舊重套全部條件（J7）。
@@ -59,7 +60,7 @@ public partial class ReportRunner
         var narrowing = options.Engine == ReportEngineMode.MemoryOnly ? new TaskReportNarrowing(null, null, null, null) : Narrowing(d, resolved);
         var (items, overLimit) = await taskReports.LoadAsync(narrowing, options.MaxLoadRows + 1, ct);
         // 部門篩選在這道上限判斷之後才套用（記憶體過濾），所以選部門救不了載入量，訊息提示改縮小期間（kr2 審查）
-        if (overLimit) return Fail(TooManyState, ReportText.Get(locale, ReportText.TooManyTasks));
+        if (overLimit) return Fail(TooManyState, ReportText.Get(lc.Locale, ReportText.TooManyTasks));
 
         // 部門暫時篩選（§8.2）：只算負責人目前部門在所選範圍內的任務，未指派的排除；作用在列，總計、下鑽、匯出跟著列走
         var departmentScope = o.DepartmentIds is { Count: > 0 } selected
@@ -67,8 +68,8 @@ public partial class ReportRunner
         if (departmentScope is not null) items = [.. items.Where(i => i.AssigneeDepartmentId is { } dept && departmentScope.Contains(dept))];
 
         var blanks = bound.Values.Where(b => F.BlankLabels.ContainsKey(b.Field.Id))
-            .ToDictionary(b => b.Key, b => F.BlankLabels[b.Field.Id].Resolve(locale));
-        var ctx = new RunContext(locale, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), blanks, offset);
+            .ToDictionary(b => b.Key, b => F.BlankLabels[b.Field.Id].Resolve(lc));
+        var ctx = new RunContext(lc, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), blanks, offset);
         // tasks 一個任務一列；taskEvents 每個任務一列「建立」，完成（且有完成時間，J15）再一列「完成」。
         // 事件列的 MainId 是 taskId*2（建立）、taskId*2+1（完成），每列不重複、去重照舊；TaskIdOf 對回任務 Id
         var events = dataset == ReportDatasets.TaskEvents;
@@ -92,7 +93,7 @@ public partial class ReportRunner
             Add(t.Id * 2, item, new TaskEvent(F.EventCreated, t.CreatedTime));
             if (t.Status == TaskItemStatus.Done && t.CompletedTime is { } done) Add(t.Id * 2 + 1, item, new TaskEvent(F.EventCompleted, done));
         }
-        if (rows.Count > options.MaxRows) return Fail(TooManyState, ReportText.Get(locale, ReportText.TooMany));
+        if (rows.Count > options.MaxRows) return Fail(TooManyState, ReportText.Get(lc.Locale, ReportText.TooMany));
         Func<long, long> taskIdOf = events ? id => id / 2 : id => id;
         return new SourceLoad(null, new SourceRows(bound, rows, side, null, side.Module, ctx, applied, [DatasetMemoryOnly], taskIdOf));
     }

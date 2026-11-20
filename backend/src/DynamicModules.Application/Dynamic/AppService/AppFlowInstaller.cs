@@ -29,7 +29,7 @@ namespace DynamicModules.Application.Dynamic.AppService;
 /// 代號用實例化回傳的 id 對照換成 id。呼叫端在交易內，任一步失敗回傳失敗，由外層回滾。
 /// 欄位被使用者取消勾選（沒有 id）的項目整個略過並警告，不是失敗。
 /// </summary>
-public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, ICurrentUser user, IBusinessTime time)
+public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, ICurrentUser user, IBusinessTime time, DynamicModules.Application.Common.RequestLocale requestLocale)
 {
     /// <param name="ApprovalSubstitutions">開啟時被略過的群組由備援頂替的來源（簽核設計 §14.4）；警告由預覽帶入，這裡不重複加。</param>
     public sealed record Result(
@@ -38,9 +38,9 @@ public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, 
         public List<AppApprovalFlowCodec.Substitution> ApprovalSubstitutions { get; init; } = ApprovalSubstitutions ?? [];
     }
 
-    /// <param name="locale">開啟請求的語系；被略過的群組以這個語系的名稱記進對不上的來源單位（計畫 J7）。</param>
+    /// <param name="lc">開啟請求的語系（含退回鏈）；被略過的群組以這個語系的名稱記進對不上的來源單位（計畫 J7）。</param>
     public async Task<Result> InstallAsync(
-        AppPackageData p, TemplateIdMap ids, IReadOnlyDictionary<string, long> groupIds, string locale, CancellationToken ct)
+        AppPackageData p, TemplateIdMap ids, IReadOnlyDictionary<string, long> groupIds, LocaleContext lc, CancellationToken ct)
     {
         var warnings = new List<string>();
         var reports = new List<AppReport>();
@@ -83,7 +83,7 @@ public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, 
         if (failure is not null) return new Result(failure, reports, warnings);
 
         var substitutions = new List<AppApprovalFlowCodec.Substitution>();
-        failure = await InstallApprovalFlowsAsync(p, ids, groupIds, locale, substitutions, ct);
+        failure = await InstallApprovalFlowsAsync(p, ids, groupIds, lc, substitutions, ct);
         if (failure is not null) return new Result(failure, reports, warnings);
         // 第二趟：帶 approval 再存，入口約束、事件交叉檢查、鎖定規則都照設計器規則跑；任何一項失敗整批回滾
         foreach (var (w, input, approvals) in firstPass.Where(x => x.Approvals.Any(a => a is { Required: true })))
@@ -157,7 +157,7 @@ public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, 
     /// 引用的欄位在開啟前置檢查已禁止排除，這裡解析不到是防禦，同樣整批回滾，不略過流程。
     /// </summary>
     private async Task<ServiceResult?> InstallApprovalFlowsAsync(
-        AppPackageData p, TemplateIdMap ids, IReadOnlyDictionary<string, long> groupIds, string locale,
+        AppPackageData p, TemplateIdMap ids, IReadOnlyDictionary<string, long> groupIds, LocaleContext lc,
         List<AppApprovalFlowCodec.Substitution> substitutions, CancellationToken ct)
     {
         if (p.ApprovalFlows.Count == 0) return null;
@@ -166,7 +166,7 @@ public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, 
             name => ids.FieldIds.TryGetValue(name, out var id) ? id : null,
             name => ids.OptionIds.TryGetValue(name, out var id) ? id : null,
             AppReportCodec.TypesOf(p.Modules));
-        string GroupName(string code) => p.Groups.FirstOrDefault(g => g.Code == code)?.Name.Resolve(locale) ?? code;
+        string GroupName(string code) => p.Groups.FirstOrDefault(g => g.Code == code)?.Name.Resolve(lc) ?? code;
         var mapped = groupIds.Keys.ToHashSet();
         foreach (var f in p.ApprovalFlows.OrderBy(f => f.Module, StringComparer.Ordinal).ThenBy(f => f.To, StringComparer.Ordinal).ThenBy(f => f.Priority))
         {
@@ -262,7 +262,7 @@ public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, 
             {
                 off.TasksEnabled = true;
                 off.TouchVersion(user.UserId, time.Now);
-                warnings.Add(TaskRuleAutoEnabled(r.Code, off.NameI18n.Resolve(I18nText.FallbackLocale)));
+                warnings.Add(TaskRuleAutoEnabled(r.Code, off.NameI18n.Resolve(requestLocale.Current)));
             }
             var created = await sender.Send(new CreateTaskRuleRequest(moduleKey, input, AppId: appId), ct);
             if (!created.IsSuccess) return Prefixed(created, $"taskRules.{r.Code}");

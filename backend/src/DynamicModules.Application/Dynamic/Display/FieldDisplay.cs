@@ -9,10 +9,10 @@ using DynamicModules.Domain.FieldTypes.Handlers;
 namespace DynamicModules.Application.Dynamic.Display;
 
 /// <summary>
-/// 顯示用的環境：輸出語系與營運時區偏移（同一次輸出用同一份）。由 <c>CachedSystemPolicy.Display</c> 建立；
-/// 之後加語系退回鏈時只改這裡，不改呼叫端。
+/// 顯示用的環境：輸出語系、營運時區偏移與語系退回鏈（同一次輸出用同一份）。由 <c>CachedSystemPolicy.Display</c> 建立；
+/// LocaleFallbacks 為 null 時退回繁中（同 I18nText.Resolve）。
 /// </summary>
-public sealed record FieldDisplayContext(string Locale, TimeSpan BusinessOffset);
+public sealed record FieldDisplayContext(string Locale, TimeSpan BusinessOffset, IReadOnlyList<string>? LocaleFallbacks = null);
 
 /// <summary>欄位值的顯示文字（歷程與匯出共用），純函式。</summary>
 public static class FieldDisplay
@@ -30,8 +30,8 @@ public static class FieldDisplay
             FieldType.Percent => Number(v, field.Config.Scale ?? 2) + "%",
             FieldType.DateTime => DateTimeText(v, display.BusinessOffset),
             FieldType.Boolean => Boolean(v, locale),
-            FieldType.Enum => OptionLabel(field, v.GetString()!, locale),
-            FieldType.MultiEnum => MultiEnum(field, v, locale),
+            FieldType.Enum => OptionLabel(field, v.GetString()!, display),
+            FieldType.MultiEnum => MultiEnum(field, v, display),
             FieldType.User => userNames.GetValueOrDefault(v.GetString()!, v.GetString()!),
             FieldType.Reference => ReferenceText(ReferenceHandler.KeyOf(v) ?? v.GetRawText(), reference, locale),
             FieldType.Formula or FieldType.Rollup => Computed(field, v),
@@ -69,18 +69,18 @@ public static class FieldDisplay
         return ReportText.Get(locale, v.GetBoolean() ? ReportText.Yes : ReportText.No);
     }
 
-    private static string OptionLabel(Field field, string id, string locale)
+    private static string OptionLabel(Field field, string id, FieldDisplayContext display)
     {
         var option = field.Options.FirstOrDefault(o => $"opt_{o.Id}" == id);
-        return option?.LabelI18n.Resolve(locale) ?? id;
+        return option?.LabelI18n.Resolve(display.Locale, display.LocaleFallbacks) ?? id;
     }
 
-    private static string MultiEnum(Field field, JsonElement v, string locale)
+    private static string MultiEnum(Field field, JsonElement v, FieldDisplayContext display)
     {
         var ids = v.EnumerateArray().Select(e => e.GetString()!).ToList();
         // 依選項的排序；不在選項裡的 id 排最後，保持原順序
         var ordered = ids.OrderBy(id => field.Options.FirstOrDefault(o => $"opt_{o.Id}" == id)?.Sequence ?? int.MaxValue);
-        return string.Join("; ", ordered.Select(id => OptionLabel(field, id, locale)));
+        return string.Join("; ", ordered.Select(id => OptionLabel(field, id, display)));
     }
 
     private static string ReferenceText(string key, ReferenceInfo? reference, string locale) => reference?.State switch

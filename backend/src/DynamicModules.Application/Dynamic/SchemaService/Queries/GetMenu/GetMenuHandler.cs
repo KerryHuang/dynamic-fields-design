@@ -8,7 +8,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.SchemaService.Queries.GetMenu;
 
-public class GetMenuHandler(IModuleRepository modules, IDynamicAccessGuard guard)
+public class GetMenuHandler(IModuleRepository modules, IDynamicAccessGuard guard, DynamicModules.Application.Common.RequestLocale requestLocale)
     : IRequestHandler<GetMenuRequest, List<MenuItem>>
 {
     public async Task<List<MenuItem>> Handle(GetMenuRequest request, CancellationToken ct)
@@ -19,7 +19,7 @@ public class GetMenuHandler(IModuleRepository modules, IDynamicAccessGuard guard
             if ((await guard.AuthorizeAsync(m, PermissionAction.Read, ct)).Permissions is not null)
                 readable.Add(new MenuItem(m.Key, m.NameI18n, m.Icon, m.SectionText(), m.Status == ModuleStatus.Closed));
         return readable
-            .OrderBy(m => m.Name.Resolve(I18nText.FallbackLocale), StringComparer.Ordinal)
+            .OrderBy(m => m.Name.Resolve(requestLocale.Current), StringComparer.Ordinal)
             .ThenBy(m => m.Key, StringComparer.Ordinal)
             .ToList();
     }

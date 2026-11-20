@@ -9,7 +9,7 @@ namespace DynamicModules.Application.Dynamic.EventService;
 /// 儲存欄位權限時的守衛（設計 §4.2「事後隱藏」）：要設為隱藏的欄位若被某個事件的 from／formula 引用，
 /// 而該對應沒有 allowHiddenSource，拒絕儲存（fail-closed）。
 /// </summary>
-public partial class EventHiddenGuard(IEventRepository events, IModuleRepository modules)
+public partial class EventHiddenGuard(IEventRepository events, IModuleRepository modules, Common.RequestLocale requestLocale)
 {
     [GeneratedRegex(@"\{(\d+)\}")]
     private static partial Regex FieldRefPattern();
@@ -33,7 +33,7 @@ public partial class EventHiddenGuard(IEventRepository events, IModuleRepository
                     foreach (var (usedModule, fieldId) in used)
                         if (usedModule.Id == module.Id && hiding.Contains(fieldId))
                         {
-                            var name = module.Blocks.SelectMany(b => b.Fields).First(f => f.Id == fieldId).LabelI18n.Resolve("zh-TW");
+                            var name = module.Blocks.SelectMany(b => b.Fields).First(f => f.Id == fieldId).LabelI18n.Resolve(requestLocale.Current);
                             return $"事件「{e.Key}」的效果「{fx.Code}」複製了欄位「{name}」；請先到該事件的對應項明確允許複製被隱藏的值（allowHiddenSource），或移除這個引用";
                         }
                 }

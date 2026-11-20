@@ -12,7 +12,7 @@ namespace DynamicModules.ApplicationTests.Dynamic;
 public class RecordValueProcessorFrozenTests
 {
     private static readonly FieldTypeRegistry Registry = FieldTypeRegistry.CreateDefault();
-    private static readonly RuleContext Ctx = new(new DateOnly(2026, 11, 9));
+    private static readonly RuleContext Ctx = new(new DateOnly(2026, 11, 9), new Domain.ValueObjects.LocaleContext("zh-TW", ["zh-TW"]));
     private static readonly HashSet<string> NoUsers = [];
 
     private static JsonElement J(string json) => JsonDocument.Parse(json).RootElement.Clone();

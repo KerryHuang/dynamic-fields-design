@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.TaskRuleService;
 /// 只把變更交給 <see cref="TaskWriter"/>，由呼叫端 Flush；不保留跨呼叫的狀態。
 /// </summary>
 public sealed class TaskRuleApplier(ITaskRuleRepository rules, ITaskRepository tasks, TaskWriter writer, FieldTypeRegistry registry,
-    IBusinessTime time, ICurrentUser user, ICurrentLocale locale, CachedSystemPolicy systemPolicy)
+    IBusinessTime time, ICurrentUser user, RequestLocale locale, CachedSystemPolicy systemPolicy)
 {
     /// <summary>寫 TaskRuleRun(occurrence)，並為條件成立的每個任務範本建立任務；標題與說明依觸發者語系解析。</summary>
     public Task GenerateAsync(TaskRule rule, Module module, long recordId, int occurrence, string recordTitle,
@@ -75,8 +75,8 @@ public sealed class TaskRuleApplier(ITaskRuleRepository rules, ITaskRepository t
     private void Create(TaskRule rule, TaskRuleTask def, Module module, long recordId, int occurrence, string recordTitle,
         IReadOnlyDictionary<string, JsonElement?> values, IReadOnlySet<string> activeUsers)
     {
-        var description = def.DescriptionI18n?.Resolve(locale.Locale);
-        writer.Create(new NewTask(def.TitleI18n.Resolve(locale.Locale), string.IsNullOrWhiteSpace(description) ? null : description,
+        var description = def.DescriptionI18n?.Resolve(locale.Current);
+        writer.Create(new NewTask(def.TitleI18n.Resolve(locale.Current), string.IsNullOrWhiteSpace(description) ? null : description,
             TaskRuleEvaluator.Assignee(def, values, activeUsers), TaskRuleEvaluator.DueDate(def, module, values, systemPolicy.BusinessOffset),
             module.Id, recordId, recordTitle, rule.Id, occurrence, def.Code, null));
     }

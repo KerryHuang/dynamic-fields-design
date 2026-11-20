@@ -11,5 +11,5 @@ public class GetReportDatasetsHandler(RequestLocale requestLocale) : IRequestHan
 {
     public Task<ServiceResult> Handle(GetReportDatasetsRequest request, CancellationToken ct) =>
         Task.FromResult(ServiceResult.Success(new[] { ReportDatasets.Tasks, ReportDatasets.TaskEvents }
-            .Select(d => new CatalogDataset(d, TaskReportFields.DatasetNames[d].Resolve(requestLocale.For(request.Locale).Locale))).ToList()));
+            .Select(d => new CatalogDataset(d, TaskReportFields.DatasetNames[d].Resolve(requestLocale.For(request.Locale)))).ToList()));
 }

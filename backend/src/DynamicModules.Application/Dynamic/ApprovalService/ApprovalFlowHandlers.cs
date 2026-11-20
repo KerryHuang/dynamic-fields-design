@@ -15,7 +15,8 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>流程增改共用的驗證：模組、代碼、名稱、目標狀態、優先序、結構驗證、入口約束（設計 §4.4、§5.2）。</summary>
 public sealed class ApprovalFlowEditor(
-    IApprovalFlowRepository flows, ApprovalDefinitionValidator validator, IPermissionRepository permissions, Common.RequiredTextGuard requiredText)
+    IApprovalFlowRepository flows, ApprovalDefinitionValidator validator, IPermissionRepository permissions, Common.RequiredTextGuard requiredText,
+    Common.RequestLocale requestLocale)
 {
     public const string UsedCannotDelete = "流程已被使用，只能停用";
     public const string UsedCannotRetarget = "被使用過的流程不能改目標狀態，請另建流程";
@@ -67,7 +68,7 @@ public sealed class ApprovalFlowEditor(
             Priority = input.Priority, Active = input.Active
         };
         var set = current.Where(f => f.Flow.Id != self?.Id).Append(new FlowState(proposed, input.Definition!, 0)).ToList();
-        return Constraints(module, set) is { } violation ? Fail(violation) : new FlowCheck(null, warnings);
+        return Constraints(module, set, requestLocale.Current) is { } violation ? Fail(violation) : new FlowCheck(null, warnings);
     }
 
     /// <summary>
@@ -107,9 +108,9 @@ public sealed class ApprovalFlowEditor(
             : null;
 
     /// <summary>流程集合改變後（例如刪除）重算入口約束。</summary>
-    public static ServiceResult? Constraints(Module module, IReadOnlyList<FlowState> set)
+    public static ServiceResult? Constraints(Module module, IReadOnlyList<FlowState> set, LocaleContext lc)
     {
-        var errors = ApprovalConstraints.Validate(module, module.Workflow!, set);
+        var errors = ApprovalConstraints.Validate(module, module.Workflow!, set, lc);
         return errors.Count > 0 ? ServiceResult.Invalid(errors) : null;
     }
 
@@ -223,7 +224,7 @@ public class UpdateApprovalFlowHandler(
     }
 }
 
-public class DeleteApprovalFlowHandler(IModuleRepository modules, IApprovalFlowRepository flows, IUnitOfWork uow)
+public class DeleteApprovalFlowHandler(IModuleRepository modules, IApprovalFlowRepository flows, IUnitOfWork uow, Common.RequestLocale requestLocale)
     : IRequestHandler<DeleteApprovalFlowRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteApprovalFlowRequest request, CancellationToken ct)
@@ -235,7 +236,7 @@ public class DeleteApprovalFlowHandler(IModuleRepository modules, IApprovalFlowR
         if (module.Workflow is not null)
         {
             var remaining = (await flows.ListCurrentByModuleAsync(module.Id, ct)).Where(f => f.Flow.Id != flow.Id).ToList();
-            if (ApprovalFlowEditor.Constraints(module, remaining) is { } invalid) return invalid;
+            if (ApprovalFlowEditor.Constraints(module, remaining, requestLocale.Current) is { } invalid) return invalid;
         }
         await flows.RemoveAsync(flow, ct);
         await uow.CommitAsync(ct);

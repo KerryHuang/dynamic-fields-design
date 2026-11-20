@@ -19,7 +19,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 public sealed class ApprovalEngine(
     IApprovalInstanceRepository repo, ApproverResolver resolver, ApprovalTaskFactory tasks, ApprovalNotifier notifier,
     ApprovalTransitionRunner runner, FieldTypeRegistry registry, IModuleRepository modules, IBusinessTime time, ICurrentUser user,
-    IOperationContext op, IUnitOfWork uow, ApprovalWriteContext context, ApprovalAlert alert, ApprovalGraphEngine graph) : IApprovalStageSteps
+    IOperationContext op, IUnitOfWork uow, ApprovalWriteContext context, ApprovalAlert alert, ApprovalGraphEngine graph, DynamicModules.Application.Common.RequestLocale requestLocale) : IApprovalStageSteps
 {
     public const string SystemActor = "system";
 
@@ -188,7 +188,7 @@ public sealed class ApprovalEngine(
         old.CompletedTime = now;
         old.CurrentStageRunId = null;
         context.Touch(old.RecordId);
-        var name = check.NewFlow?.Name.Resolve(I18nText.FallbackLocale);
+        var name = check.NewFlow?.Name.Resolve(requestLocale.SystemDefault);
         // 畫面依 kind 用使用者語系組文字；comment 是固定繁中，只留給資料庫與稽核
         var rerouteKind = check.NewFlow is null ? "fallback" : check.NeedsPick ? "pick" : "flow";
         Log(old, ApprovalActions.Reroute, SystemActor, comment: check.NewFlow is null ? ApprovalMessages.RerouteFallbackNote

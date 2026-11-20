@@ -95,19 +95,20 @@ public static class TitleTemplate
     /// 依 module.TitleTemplate 組出標題：文字類取值、日期取存的 yyyy-MM-dd、下拉取選項的繁中名稱；沒值或找不到的欄位是空字串，
     /// 結果去掉頭尾空白（長度由呼叫端截斷）。
     /// </summary>
-    public static string Render(Module module, IReadOnlyDictionary<string, JsonElement?> values)
+    /// <param name="lc">選項標籤的語系（呼叫端傳系統預設語系，N1）；null 為繁中。改選項名稱時的重寫判斷（UpdateOptionHandler）要用同一個值。</param>
+    public static string Render(Module module, IReadOnlyDictionary<string, JsonElement?> values, LocaleContext? lc = null)
     {
         var fields = module.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Id.ToString(CultureInfo.InvariantCulture));
         var sb = new StringBuilder();
         foreach (var p in Parse(module.TitleTemplate).Parts)
         {
             if (p.Text is not null) { sb.Append(p.Text); continue; }
-            if (fields.TryGetValue(p.Token!, out var field)) sb.Append(ValueText(field, values));
+            if (fields.TryGetValue(p.Token!, out var field)) sb.Append(ValueText(field, values, lc));
         }
         return sb.ToString().Trim();
     }
 
-    private static string ValueText(Field field, IReadOnlyDictionary<string, JsonElement?> values)
+    private static string ValueText(Field field, IReadOnlyDictionary<string, JsonElement?> values, LocaleContext? lc)
     {
         if (!values.TryGetValue(field.Key, out var v) || v is not { ValueKind: JsonValueKind.String } s) return "";
         var text = s.GetString()!;
@@ -115,7 +116,7 @@ public static class TitleTemplate
         return text.StartsWith("opt_", StringComparison.Ordinal)
             && long.TryParse(text.AsSpan(4), NumberStyles.None, CultureInfo.InvariantCulture, out var id)
             && field.Options.FirstOrDefault(o => o.Id == id) is { } option
-                ? option.LabelI18n.Resolve(I18nText.FallbackLocale)
+                ? (lc is null ? option.LabelI18n.Resolve(I18nText.FallbackLocale, null) : option.LabelI18n.Resolve(lc))
                 : "";
     }
 }

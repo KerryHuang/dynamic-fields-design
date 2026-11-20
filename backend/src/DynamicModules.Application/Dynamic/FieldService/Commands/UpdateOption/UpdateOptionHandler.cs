@@ -12,7 +12,8 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.UpdateOption;
 public class UpdateOptionHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
     Dynamic.LedgerService.ImmutableDataGuard immutable, Dynamic.ModuleService.TitleRewriteGuard fixedRecords,
-    Dynamic.ApprovalService.PendingApprovalGuard pending, RequiredTextGuard requiredText)
+    Dynamic.ApprovalService.PendingApprovalGuard pending, RequiredTextGuard requiredText,
+    RequestLocale requestLocale)
     : IRequestHandler<UpdateOptionRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateOptionRequest request, CancellationToken ct)
@@ -27,7 +28,8 @@ public class UpdateOptionHandler(
         if (option.Active && !request.Active && await pending.RejectOptionDeactivateAsync(module, option.Id, ct) is { } optionInUse) return optionInUse;
         // 標題樣板用到這個下拉欄位時，改名會重寫既有記錄的 Title（跟換標題欄位一樣受 Closed、帳本凍結與已固定的記錄限制）
         var retitle = module.TitleTemplate is not null && module.TitleFieldIds().Contains(field.Id)
-            && option.LabelI18n.Resolve(I18nText.FallbackLocale) != request.Label.Resolve(I18nText.FallbackLocale);
+            // 與 TitleTemplate.Render 用同一個語系（系統預設語系，N1），否則改名判斷會錯
+            && option.LabelI18n.Resolve(requestLocale.SystemDefault) != request.Label.Resolve(requestLocale.SystemDefault);
         if (retitle && ClosedDataGuard.Reject(module) is { } closed) return closed;
         if (retitle && await immutable.RejectAsync(module, ct) is { } frozen) return frozen;
         if (retitle && await pending.RejectValueRewriteAsync(module, ct) is { } pendingApproval) return pendingApproval;
@@ -39,7 +41,7 @@ public class UpdateOptionHandler(
         option.StampModified(user.UserId, now);
         if (retitle)
             foreach (var record in rows)
-                record.Title = RecordValueProcessor.TitleOf(module, RecordValueProcessor.Parse(record.ValuesJson));
+                record.Title = RecordValueProcessor.TitleOf(module, RecordValueProcessor.Parse(record.ValuesJson), requestLocale.SystemDefault);
         module.TouchVersion(user.UserId, now);
         await uow.CommitAsync(ct);
         return ServiceResult.Success(option.ToResponse());

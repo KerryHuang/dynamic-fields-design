@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.ModuleService.Commands.UpdateModule
 public class UpdateModuleHandler(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
     Dynamic.LedgerService.ImmutableDataGuard immutable, TitleRewriteGuard fixedRecords,
-    Dynamic.ApprovalService.PendingApprovalGuard pending, RequiredTextGuard requiredText)
+    Dynamic.ApprovalService.PendingApprovalGuard pending, RequiredTextGuard requiredText, DynamicModules.Application.Common.RequestLocale requestLocale)
     : IRequestHandler<UpdateModuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateModuleRequest request, CancellationToken ct)
@@ -63,7 +63,7 @@ public class UpdateModuleHandler(
         module.TitleTemplate = request.TitleTemplate;
         if (titleChanged)
             foreach (var record in rows)
-                record.Title = RecordValueProcessor.TitleOf(module, RecordValueProcessor.Parse(record.ValuesJson));
+                record.Title = RecordValueProcessor.TitleOf(module, RecordValueProcessor.Parse(record.ValuesJson), requestLocale.SystemDefault);
         if (request.TasksEnabled is { } on) module.TasksEnabled = on;
         module.TouchVersion(user.UserId, time.Now);
         await uow.CommitAsync(ct);
@@ -80,7 +80,7 @@ public class UpdateModuleHandler(
         foreach (var token in parts.Where(p => p.Token is not null).Select(p => p.Token!).Distinct())
         {
             if (!fields.TryGetValue(token, out var f)) return $"標題樣板引用了不存在的欄位 {token}";
-            var label = f.LabelI18n.Resolve(I18nText.FallbackLocale);
+            var label = f.LabelI18n.Resolve(requestLocale.Current);
             if (f.Status != FieldStatus.Active) return $"標題樣板不能引用已停用的欄位 {label}";
             if (!TitleTemplate.AllowedTypes.Contains(f.Type)) return $"標題樣板不能引用 {label}（{TitleTemplate.AllowedTypesText}）";
             used.Add(f);
@@ -88,7 +88,7 @@ public class UpdateModuleHandler(
         var hidden = (await permissions.LoadModuleRowsAsync(module, ct)).FieldPermissions
             .Where(p => p.Access == FieldAccess.Hidden).Select(p => p.FieldId).ToHashSet();
         return used.FirstOrDefault(f => hidden.Contains(f.Id)) is { } h
-            ? $"標題樣板不能引用有隱藏例外的欄位 {h.LabelI18n.Resolve(I18nText.FallbackLocale)}"
+            ? $"標題樣板不能引用有隱藏例外的欄位 {h.LabelI18n.Resolve(requestLocale.Current)}"
             : null;
     }
 

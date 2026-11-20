@@ -59,7 +59,7 @@ public class ExportRecordsHandler(
         var userNames = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => u.DisplayName);
         var refs = await resolver.ResolveAsync(module, perms, items, ct);
 
-        var header = fields.Select(f => f.LabelI18n.Resolve(locale)).ToList();
+        var header = fields.Select(f => f.LabelI18n.Resolve(lc)).ToList();
         var parsed = items.Select(r => (Record: r, Values: RecordValueProcessor.Parse(r.ValuesJson))).ToList();
         var stamp = time.Now.ToString("yyyyMMdd-HHmm");
 
@@ -81,7 +81,7 @@ public class ExportRecordsHandler(
                 System.Globalization.CultureInfo.InvariantCulture, out var d) ? (object)d : text;
         }).ToList());
         return ServiceResult.Success(new ExportFile(
-            $"{module.Key}-{stamp}.xlsx", XlsxType, XlsxWriter.Write(module.NameI18n.Resolve(locale), header, xRows)));
+            $"{module.Key}-{stamp}.xlsx", XlsxType, XlsxWriter.Write(module.NameI18n.Resolve(lc), header, xRows)));
     }
 
     private static string Text(Field f, IReadOnlyDictionary<string, System.Text.Json.JsonElement?> values, FieldDisplayContext display,

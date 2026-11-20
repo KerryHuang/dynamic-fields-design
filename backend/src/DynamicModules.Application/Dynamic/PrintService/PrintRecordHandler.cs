@@ -94,7 +94,7 @@ public class PrintRecordHandler(
 
         // 以最終輸出為準：展開後再淨化一次（縱深防禦，即使展開拼出了奇怪的結構也只會輸出白名單內的東西）
         var html = PrintTemplateSanitizer.Sanitize(PrintTemplateEngine.Render(body, Header, key => loops.GetValueOrDefault(key) ?? []));
-        var title = WebUtility.HtmlEncode(template.NameI18n.Resolve(locale));
+        var title = WebUtility.HtmlEncode(template.NameI18n.Resolve(lc));
         return ServiceResult.Success(new PrintedDocument(PrintDocument.Wrap(title, html, locale)));
     }
 

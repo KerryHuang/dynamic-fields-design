@@ -43,7 +43,7 @@ public class DeleteAppHandler(
     AppDependencyChecker dependencies, IReportRepository reports, IDashboardRepository dashboards, IUnitOfWork uow,
     Integrations.IntegrationReconciler integrations, ISharedMasterRepository shared, IDeletionRepository deletion,
     SharedMasters.MasterLifecycle lifecycle, ICurrentUser user, Common.Time.IBusinessTime time, ITaskRuleRepository taskRules,
-    OpsService.RulePause.RulePauseCleanup rulePause)
+    OpsService.RulePause.RulePauseCleanup rulePause, DynamicModules.Application.Common.RequestLocale requestLocale)
     : IRequestHandler<DeleteAppRequest, ServiceResult>
 {
     public const string DependentKind = "appDependent";
@@ -109,8 +109,8 @@ public class DeleteAppHandler(
 
         var purge = new PurgeCounts(records, indexRows, historyRows);
         var cleared = contributions.Where(c => c.Fate == Fate.Purge).Sum(c => c.Values);
-        static List<ClearedField> List(IEnumerable<Contribution> xs) =>
-            xs.Select(c => new ClearedField(c.Module.Key, c.Field.LabelI18n.Resolve(Domain.ValueObjects.I18nText.FallbackLocale), c.Values)).ToList();
+        List<ClearedField> List(IEnumerable<Contribution> xs) =>
+            xs.Select(c => new ClearedField(c.Module.Key, c.Field.LabelI18n.Resolve(requestLocale.Current), c.Values)).ToList();
         var check = new DeleteAppCheck(blockers.Count == 0, blockers.DistinctBy(b => (b.Kind, b.ModuleKey, b.Id, b.Name)).ToList(), purge,
             cleared, records + cleared, List(contributions.Where(c => c.Fate == Fate.Purge)), List(contributions.Where(c => c.Fate == Fate.Orphan)));
         if (!check.CanDelete) return ServiceResult.ConflictWith(DeleteMessages.Blocked, check);
@@ -147,7 +147,7 @@ public class DeleteAppHandler(
         {
             var count = 0;
             foreach (var member in master.Modules) count += await deletion.CountRecordsAsync(member.ModuleId, deleted: false, ct);
-            warnings.Add($"共用主檔「{master.NameI18n.Resolve(Domain.ValueObjects.I18nText.FallbackLocale)}」已沒有應用程式使用，仍有 {count} 筆資料，已保留");
+            warnings.Add($"共用主檔「{master.NameI18n.Resolve(requestLocale.Current)}」已沒有應用程式使用，仍有 {count} 筆資料，已保留");
         }
         return ServiceResult.Success(new DeleteAppResponse(warnings));
     }

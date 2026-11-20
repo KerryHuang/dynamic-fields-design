@@ -10,10 +10,13 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// </summary>
 public static class ApprovalConstraints
 {
-    private const string Locale = "zh-TW";
+    /// <summary>沒給語系時（套件驗證：套件文字以繁中為準，判斷 12）用的繁中。</summary>
+    private static readonly LocaleContext PackageLocale = new(I18nText.FallbackLocale, [I18nText.FallbackLocale]);
 
-    public static Dictionary<string, string[]> Validate(Module module, Workflow wf, IReadOnlyList<FlowState> flows)
+    /// <param name="lc">訊息內插標籤用的語系（請求語系＋退回鏈）；null 為繁中。</param>
+    public static Dictionary<string, string[]> Validate(Module module, Workflow wf, IReadOnlyList<FlowState> flows, LocaleContext? lc = null)
     {
+        var Locale = lc ?? PackageLocale;
         var errors = new Dictionary<string, List<string>>();
         void Err(string key, string message)
         {
@@ -64,7 +67,7 @@ public static class ApprovalConstraints
                     Err(key, ApprovalMessages.EditableFromLocked(name));
             }
 
-            foreach (var v in ClosureViolationsOf(module, wf, onTarget, F)) Err(v.Key, v.Message);
+            foreach (var v in ClosureViolationsOf(module, wf, onTarget, F, Locale)) Err(v.Key, v.Message);
         }
 
         // 進入鎖定狀態一律要簽（§5.2）：從非鎖定狀態進入任何鎖定狀態的轉移都必須需簽核。
@@ -83,16 +86,17 @@ public static class ApprovalConstraints
     }
 
     /// <summary>只算「可編輯欄位不落在條件或簽核人來源上游閉包」這一項（§9.2），供改欄位設定後重檢新增的違規。</summary>
-    public static IReadOnlyList<ClosureViolation> ClosureViolations(Module module, Workflow wf, IReadOnlyList<FlowState> flows)
+    public static IReadOnlyList<ClosureViolation> ClosureViolations(Module module, Workflow wf, IReadOnlyList<FlowState> flows, LocaleContext? lc = null)
     {
+        var Locale = lc ?? PackageLocale;
         var fields = module.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Id);
         string F(long id) => fields.TryGetValue(id, out var f) ? f.LabelI18n.Resolve(Locale) : id.ToString();
         return [.. ApprovalTopology.ApprovalTargets(wf).Order()
-            .SelectMany(to => ClosureViolationsOf(module, wf, flows.Where(f => f.Flow.ToOptionId == to).ToList(), F))];
+            .SelectMany(to => ClosureViolationsOf(module, wf, flows.Where(f => f.Flow.ToOptionId == to).ToList(), F, Locale))];
     }
 
     /// <summary>可編輯欄位不能落在同一目標狀態上任何流程的條件或簽核人來源的上游閉包裡（§9.2）。</summary>
-    private static IEnumerable<ClosureViolation> ClosureViolationsOf(Module module, Workflow wf, List<FlowState> onTarget, Func<long, string> F)
+    private static IEnumerable<ClosureViolation> ClosureViolationsOf(Module module, Workflow wf, List<FlowState> onTarget, Func<long, string> F, LocaleContext Locale)
     {
         var seedOwner = new Dictionary<long, FlowState>();
         foreach (var fs in onTarget)

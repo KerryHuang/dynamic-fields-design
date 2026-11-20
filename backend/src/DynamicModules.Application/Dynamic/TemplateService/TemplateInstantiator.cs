@@ -36,7 +36,7 @@ namespace DynamicModules.Application.Dynamic.TemplateService;
 public sealed class TemplateInstantiator(
     ISender sender, IModuleRepository modules, IPermissionRepository permissions, IListViewRepository views,
     IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
-    Common.Security.PermissionAdminGate permissionAdmin, Common.Audit.AuditContext audit, FieldService.BlockColumns blockColumns)
+    Common.Security.PermissionAdminGate permissionAdmin, Common.Audit.AuditContext audit, FieldService.BlockColumns blockColumns, DynamicModules.Application.Common.RequestLocale requestLocale)
 {
     /// <summary>從範本建立而沒有權限設定時的提示（權限軸設計 M3）；照其他 warnings 寫繁中字面值，四語化不在這段。</summary>
     internal const string PermissionsSkippedWarning = "你沒有「權限設定」權限，已略過範本的權限建議；請洽權限設定者到權限分頁授權";
@@ -348,10 +348,10 @@ public sealed class TemplateInstantiator(
     }
 
     /// <summary>鎖定的欄位不能排除；保留的欄位依賴被排除的欄位時要一起排除。</summary>
-    private static List<string> CheckExclude(TemplatePackage p, TemplateGraph graph, IReadOnlySet<string> exclude)
+    private List<string> CheckExclude(TemplatePackage p, TemplateGraph graph, IReadOnlySet<string> exclude)
     {
         var fields = TemplateGraph.AllFields(p);
-        string Label(string name) => fields[name].Label.Resolve(I18nText.FallbackLocale);
+        string Label(string name) => fields[name].Label.Resolve(requestLocale.Current);
         var errors = new List<string>();
         foreach (var name in exclude)
         {

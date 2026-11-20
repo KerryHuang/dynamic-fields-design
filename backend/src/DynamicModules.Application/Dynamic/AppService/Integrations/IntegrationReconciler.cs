@@ -23,7 +23,7 @@ namespace DynamicModules.Application.Dynamic.AppService.Integrations;
 /// </summary>
 public class IntegrationReconciler(
     IAppRepository apps, IModuleRepository modules, IEventRepository events, ICheckRepository checks, ISender sender,
-    IUnitOfWork uow, IWorkSavepoints savepoints, ICurrentUser user, IBusinessTime time)
+    IUnitOfWork uow, IWorkSavepoints savepoints, ICurrentUser user, IBusinessTime time, RequestLocale requestLocale)
 {
     /// <summary>調和全部整合；<paramref name="only"/> 指定時只調和那一個；<paramref name="retry"/> 為真時缺的項目補建（管理員確認過）。回傳要給使用者看的警告。</summary>
     public async Task<List<string>> ReconcileAsync(CancellationToken ct, (string AppKey, string Code)? only = null, bool retry = false)
@@ -96,7 +96,7 @@ public class IntegrationReconciler(
         row.Reason = $"approval: 事件 {string.Join("、", pushing)} 會把狀態改成需簽核的狀態";
         await uow.CommitAsync(ct);
         await SetActiveAsync(items, decl, false, ct);   // 和 EnsureInSavepointAsync 的 Blocked 路徑一致：全部項目停用
-        return $"整合「{decl.Name.Resolve("zh-TW")}」無法啟用：{row.Reason}，已維持停用";
+        return $"整合「{decl.Name.Resolve(requestLocale.Current)}」無法啟用：{row.Reason}，已維持停用";
     }
 
     private async Task<string?> SetStatusAsync(AppIntegration row, string status, string? reason, string previous, AppIntegrationDecl decl, CancellationToken ct)
@@ -105,7 +105,7 @@ public class IntegrationReconciler(
         row.Reason = reason;
         await uow.CommitAsync(ct);
         return status == IntegrationStatus.Suspended && previous is IntegrationStatus.Active or IntegrationStatus.Held
-            ? $"整合「{decl.Name.Resolve("zh-TW")}」已暫停，暫停期間的來源記錄不會補入"
+            ? $"整合「{decl.Name.Resolve(requestLocale.Current)}」已暫停，暫停期間的來源記錄不會補入"
             : null;
     }
 
@@ -211,7 +211,7 @@ public class IntegrationReconciler(
         fresh.Reason = failure;
         await uow.CommitAsync(ct);
         await SetActiveAsync(IntegrationItems.Parse(fresh.ItemsJson), decl, false, ct);
-        return $"整合「{decl.Name.Resolve("zh-TW")}」無法啟用：{failure}";
+        return $"整合「{decl.Name.Resolve(requestLocale.Current)}」無法啟用：{failure}";
     }
 
     /// <summary>回 null 代表成功（已寫入 ItemsJson、Installed、Status），否則是失敗原因（呼叫端負責回滾）。</summary>

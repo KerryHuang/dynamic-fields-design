@@ -28,14 +28,14 @@ public partial class ReportRunner
             .DistinctBy(ReportCalculator.KeyOf);
     }
 
-    private static string ColumnLabel(Bound b, string locale)
+    private static string ColumnLabel(Bound b, LocaleContext lc)
     {
-        var field = b.Field.LabelI18n.Resolve(locale);
+        var field = b.Field.LabelI18n.Resolve(lc);
         if (b.Via is not null)
             return b.Target!.Perms is null
-                ? ReportText.Get(locale, ReportText.HiddenField)
-                : ReportText.Get(locale, ReportText.FieldPath, b.Via.LabelI18n.Resolve(locale), field);
-        return b.Ref.ViaFieldId is not null ? ReportText.Get(locale, ReportText.FieldPath, field, ReportText.Get(locale, ReportText.Title)) : field;
+                ? ReportText.Get(lc.Locale, ReportText.HiddenField)
+                : ReportText.Get(lc.Locale, ReportText.FieldPath, b.Via.LabelI18n.Resolve(lc), field);
+        return b.Ref.ViaFieldId is not null ? ReportText.Get(lc.Locale, ReportText.FieldPath, field, ReportText.Get(lc.Locale, ReportText.Title)) : field;
     }
 
     private static string ValueTypeOf(Field f) => f.Type switch
@@ -51,32 +51,32 @@ public partial class ReportRunner
     private static ReportColumn MeasureColumn(
         ReportMeasure m, IReadOnlyDictionary<string, Bound> bound, Side main, Side? child, FieldDisplayContext display)
     {
-        var locale = display.Locale;
-        string FieldLabel(ReportFieldRef r) => ColumnLabel(bound[ReportCalculator.KeyOf(r)], locale);
+        var lc = new LocaleContext(display.Locale, display.LocaleFallbacks ?? [I18nText.FallbackLocale]);
+        string FieldLabel(ReportFieldRef r) => ColumnLabel(bound[ReportCalculator.KeyOf(r)], lc);
         var (label, type) = m.Kind switch
         {
-            "countMain" => (ReportText.Get(locale, ReportText.Count, main.Module.NameI18n.Resolve(locale)), "number"),
-            "countChild" => (ReportText.Get(locale, ReportText.Count, (child ?? main).Module.NameI18n.Resolve(locale)), "number"),
-            "ratio" => (ReportText.Get(locale, ReportText.Ratio, m.Condition is null ? "" : FieldLabel(m.Condition.Field)), "ratio"),
+            "countMain" => (ReportText.Get(lc.Locale, ReportText.Count, main.Module.NameI18n.Resolve(lc)), "number"),
+            "countChild" => (ReportText.Get(lc.Locale, ReportText.Count, (child ?? main).Module.NameI18n.Resolve(lc)), "number"),
+            "ratio" => (ReportText.Get(lc.Locale, ReportText.Ratio, m.Condition is null ? "" : FieldLabel(m.Condition.Field)), "ratio"),
             "countIf" => (CountIfLabel(m.Condition, bound, display, FieldLabel), "number"),
-            _ => (ReportText.Get(locale, m.Kind switch { "sum" => ReportText.Sum, "avg" => ReportText.Avg, "median" => ReportText.Median, "min" => ReportText.Min, _ => ReportText.Max }, m.Field is null ? "" : FieldLabel(m.Field)),
+            _ => (ReportText.Get(lc.Locale, m.Kind switch { "sum" => ReportText.Sum, "avg" => ReportText.Avg, "median" => ReportText.Median, "min" => ReportText.Min, _ => ReportText.Max }, m.Field is null ? "" : FieldLabel(m.Field)),
                 m.Field is not null && m.Kind is "min" or "max" && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field!)].Field) is "date" or "dateTime" ? "dayNumber"
                 : m.Field is not null && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field)].Field) == "percent" ? "percent" : "number"),
         };
         if (m.Condition is { } cond && m.Kind is "sum" or "avg" or "median")
             label = EqLabel(cond, bound, display) is { } v
-                ? ReportText.Get(locale, ReportText.ConditionalEq, label, FieldLabel(cond.Field), v)
-                : ReportText.Get(locale, ReportText.Conditional, label);
+                ? ReportText.Get(lc.Locale, ReportText.ConditionalEq, label, FieldLabel(cond.Field), v)
+                : ReportText.Get(lc.Locale, ReportText.Conditional, label);
         return new ReportColumn(m.Id, label, "measure", type);
     }
 
     private static string CountIfLabel(ReportFilter? cond, IReadOnlyDictionary<string, Bound> bound, FieldDisplayContext display, Func<ReportFieldRef, string> fieldLabel)
     {
-        var locale = display.Locale;
-        if (cond is null) return ReportText.Get(locale, ReportText.CountIf, "");
+        var lc = new LocaleContext(display.Locale, display.LocaleFallbacks ?? [I18nText.FallbackLocale]);
+        if (cond is null) return ReportText.Get(lc.Locale, ReportText.CountIf, "");
         return EqLabel(cond, bound, display) is { } v
-            ? ReportText.Get(locale, ReportText.CountIfEq, fieldLabel(cond.Field), v)
-            : ReportText.Get(locale, ReportText.CountIf, fieldLabel(cond.Field));
+            ? ReportText.Get(lc.Locale, ReportText.CountIfEq, fieldLabel(cond.Field), v)
+            : ReportText.Get(lc.Locale, ReportText.CountIf, fieldLabel(cond.Field));
     }
 
     /// <summary>

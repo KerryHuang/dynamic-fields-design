@@ -42,7 +42,6 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
         if (access.Permissions is not { } perms) return access.Denied!;
 
         var lc = requestLocale.For(request.Locale);
-        var locale = lc.Locale;
         var targets = new Dictionary<string, Side?>();
         async Task<Side?> TargetAsync(string key)
         {
@@ -61,21 +60,21 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
             var excluded = ReportFieldEligibility.ExcludedFieldIds(side.Module);
             foreach (var f in Visible(side, excluded))
             {
-                if (f.Type != FieldType.Reference) { fields.Add(ToField(f, locale)); continue; }
+                if (f.Type != FieldType.Reference) { fields.Add(ToField(f, lc)); continue; }
                 if (f.Config.RefTarget is not { } target) continue;
                 if (target.Kind == ReferenceTarget.EntityKind)
                 {
-                    fields.Add(ToField(f, locale));
-                    via.Add(new CatalogVia(f.Id, f.LabelI18n.Resolve(locale), target.Key, [EntityTitle(target.Key, locale)]));
+                    fields.Add(ToField(f, lc));
+                    via.Add(new CatalogVia(f.Id, f.LabelI18n.Resolve(lc), target.Key, [EntityTitle(target.Key, lc)]));
                     continue;
                 }
                 // 目標模組不可讀（或未啟用）時存檔其實允許，但每個值都會是（無權限）、分組只有一組，放進條件還會整張擋下，選了沒有意義，所以直接參照與帶出都不列
                 if (await TargetAsync(target.Key) is not { } t) continue;
-                fields.Add(ToField(f, locale));
+                fields.Add(ToField(f, lc));
                 // 帶出只走一層：目標模組的參照欄位不列
                 var targetFields = Visible(t, ReportFieldEligibility.ExcludedFieldIds(t.Module))
-                    .Where(x => x.Type != FieldType.Reference).Select(x => ToField(x, locale)).ToList();
-                if (targetFields.Count > 0) via.Add(new CatalogVia(f.Id, f.LabelI18n.Resolve(locale), target.Key, targetFields));
+                    .Where(x => x.Type != FieldType.Reference).Select(x => ToField(x, lc)).ToList();
+                if (targetFields.Count > 0) via.Add(new CatalogVia(f.Id, f.LabelI18n.Resolve(lc), target.Key, targetFields));
             }
             return (fields, via);
         }
@@ -97,7 +96,7 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
                 : await guard.AuthorizeAsync(child, PermissionAction.Read, ct);
             if (childAccess.Permissions is not { } childPerms || !childPerms.CanSee(link)) continue;
             var (fields, via) = await ListAsync(new Side(child, childPerms));
-            children.Add(new CatalogChild(child.Key, child.NameI18n.Resolve(locale), link.Id, link.LabelI18n.Resolve(locale), isDetail, fields, via));
+            children.Add(new CatalogChild(child.Key, child.NameI18n.Resolve(lc), link.Id, link.LabelI18n.Resolve(lc), isDetail, fields, via));
         }
         return ServiceResult.Success(new ModuleCatalog(mainFields, mainVia, children));
     }
@@ -110,15 +109,15 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
     /// 既有實體目標只有標題可帶，FieldId 固定為 <see cref="ReportRunner.EntityTitleFieldId"/>。
     /// 顯示的是標題，但存的與比對的是鍵，所以標成參照：設計器用記錄挑選器，運算子與條件值都是鍵。
     /// </summary>
-    private static CatalogField EntityTitle(string entityKey, string locale) =>
-        new(ReportRunner.EntityTitleFieldId, ReportText.Get(locale, ReportText.Title), FieldType.Reference, true, false, false, false, null, ReferenceTarget.EntityKind, entityKey);
+    private static CatalogField EntityTitle(string entityKey, LocaleContext lc) =>
+        new(ReportRunner.EntityTitleFieldId, ReportText.Get(lc.Locale, ReportText.Title), FieldType.Reference, true, false, false, false, null, ReferenceTarget.EntityKind, entityKey);
 
-    internal static CatalogField ToField(Field f, string locale) =>
-        new(f.Id, f.LabelI18n.Resolve(locale), f.Type, ReportFieldEligibility.CanGroup(f), ReportFieldEligibility.CanSum(f),
+    internal static CatalogField ToField(Field f, LocaleContext lc) =>
+        new(f.Id, f.LabelI18n.Resolve(lc), f.Type, ReportFieldEligibility.CanGroup(f), ReportFieldEligibility.CanSum(f),
             ReportFieldEligibility.CanMinMax(f),
             f.Type is FieldType.Date or FieldType.DateTime || (f.Type == FieldType.Formula && f.Config.ResultType == "date"),
             f.Type is FieldType.Enum or FieldType.MultiEnum
-                ? f.Options.OrderBy(o => o.Sequence).Select(o => new CatalogOption($"opt_{o.Id}", o.LabelI18n.Resolve(locale), o.Active)).ToList()
+                ? f.Options.OrderBy(o => o.Sequence).Select(o => new CatalogOption($"opt_{o.Id}", o.LabelI18n.Resolve(lc), o.Active)).ToList()
                 : null,
             f.Type == FieldType.Reference ? f.Config.RefTarget?.Kind : null,
             f.Type == FieldType.Reference ? f.Config.RefTarget?.Key : null);

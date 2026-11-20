@@ -97,8 +97,8 @@ public sealed class CachedSystemPolicy(IServiceScopeFactory scopes, TimeProvider
     /// <summary>多語文字的退回鏈（要求的語系之後依序試）：預設語系 → 繁中，去重。</summary>
     public IReadOnlyList<string> LocaleFallbacks => Volatile.Read(ref _current).Locales.Fallbacks;
 
-    /// <summary>欄位值顯示用的環境（語系＋目前的營運時區偏移）。</summary>
-    public Display.FieldDisplayContext Display(string locale) => new(locale, BusinessOffset);
+    /// <summary>欄位值顯示用的環境（語系＋目前的營運時區偏移＋語系退回鏈）。</summary>
+    public Display.FieldDisplayContext Display(string locale) => new(locale, BusinessOffset, LocaleFallbacks);
 
     public async Task<int> IntAsync(PolicyDefinition def, CancellationToken ct)
     {

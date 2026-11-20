@@ -25,7 +25,7 @@ public sealed class LocaleDefaultApiTests : IDisposable
 
     public void Dispose() => _app.Dispose();
 
-    private static Dictionary<string, string> Two(string zh, string en) => new() { ["zh-TW"] = zh, ["en-US"] = en };
+    internal static Dictionary<string, string> Two(string zh, string en) => new() { ["zh-TW"] = zh, ["en-US"] = en };
 
     /// <summary>預設 en-US；只有 zh-TW、en-US 啟用（th 停用）。</summary>
     private async Task EnglishDefault()
@@ -34,34 +34,37 @@ public sealed class LocaleDefaultApiTests : IDisposable
         (await _admin.PutAsJsonAsync($"{Base}/system/policies/locale.enabled", new { value = new[] { "zh-TW", "en-US" } })).EnsureSuccessStatusCode();
     }
 
-    private sealed record World(string Module, long RecordId, long Status, string High, long ReportId);
+    internal sealed record World(string Module, long RecordId, long Status, string High, long ReportId);
 
     /// <summary>模組含選項欄位「優先」（Priority），選項「高／低」（High／Low）；一筆記錄、一張依優先分組的報表。</summary>
-    private async Task<World> MakeWorld()
+    private Task<World> MakeWorld() => MakeWorld(_app, _admin);
+
+    /// <summary>LocaleChainApiTests 共用。</summary>
+    internal static async Task<World> MakeWorld(TestApp app, HttpClient admin)
     {
         var key = NewKey();
-        (await _admin.PostAsJsonAsync($"{Base}/modules", new { key, name = Two("訂單", "Order") })).EnsureSuccessStatusCode();
-        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"));
+        (await admin.PostAsJsonAsync($"{Base}/modules", new { key, name = Two("訂單", "Order") })).EnsureSuccessStatusCode();
+        var module = await JsonOf(await admin.GetAsync($"{Base}/modules/{key}"));
         var blockId = module.GetProperty("blocks")[0].GetProperty("id").GetInt64();
-        var field = await JsonOf(await _admin.PostAsJsonAsync($"{Base}/modules/{key}/fields",
+        var field = await JsonOf(await admin.PostAsJsonAsync($"{Base}/modules/{key}/fields",
             new { blockId, type = "enum", label = Two("優先", "Priority"), config = new { } }));
         var status = field.GetProperty("id").GetInt64();
         var options = new List<string>();
         foreach (var (zh, en) in new[] { ("高", "High"), ("低", "Low") })
         {
-            var res = await _admin.PostAsJsonAsync($"{Base}/fields/{status}/options", new { label = Two(zh, en) });
+            var res = await admin.PostAsJsonAsync($"{Base}/fields/{status}/options", new { label = Two(zh, en) });
             res.EnsureSuccessStatusCode();
             options.Add($"opt_{(await JsonOf(res)).GetProperty("id").GetInt64()}");
         }
-        await Activate(_admin, key);
-        _app.GrantBusinessGroups(key);
-        var title = await TitleKey(_admin, key);
-        var rec = await _admin.PostAsJsonAsync($"{Base}/modules/{key}/records",
+        await Activate(admin, key);
+        app.GrantBusinessGroups(key);
+        var title = await TitleKey(admin, key);
+        var rec = await admin.PostAsJsonAsync($"{Base}/modules/{key}/records",
             new { values = new Dictionary<string, object> { [title] = "t1", [$"f_{status}"] = options[1] } });
         rec.EnsureSuccessStatusCode();
         var created = await JsonOf(rec);
         var recordId = created.GetProperty("id").GetInt64();
-        var put = await _admin.PutAsJsonAsync($"{Base}/records/{recordId}", new
+        var put = await admin.PutAsJsonAsync($"{Base}/records/{recordId}", new
         {
             values = new Dictionary<string, object> { [title] = "t1", [$"f_{status}"] = options[0] },
             rowVersion = created.GetProperty("rowVersion").GetString()
@@ -75,7 +78,7 @@ public sealed class LocaleDefaultApiTests : IDisposable
             ["filters"] = Array.Empty<object>(), ["primaryDateField"] = null, ["dateRange"] = null,
             ["sort"] = Array.Empty<object>(), ["viz"] = "bar"
         };
-        var report = await JsonOf(await _admin.PostAsJsonAsync($"{Base}/reports", new { name = "r", definition }));
+        var report = await JsonOf(await admin.PostAsJsonAsync($"{Base}/reports", new { name = "r", definition }));
         return new World(key, recordId, status, options[0], report.GetProperty("id").GetInt64());
     }
 

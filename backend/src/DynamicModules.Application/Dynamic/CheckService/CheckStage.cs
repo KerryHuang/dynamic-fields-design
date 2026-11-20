@@ -17,7 +17,7 @@ namespace DynamicModules.Application.Dynamic.CheckService;
 /// </summary>
 public class CheckStage(
     IWriteJournal journal, IModuleRepository modules, ICheckRepository checks, IUnitOfWork uow, CheckEvaluator evaluator, RuleFailureNote notes,
-    IPolicyReader policies)
+    IPolicyReader policies, RequestLocale requestLocale)
     : IWriteStage
 {
     public const string TooBig = "數值太大，無法精確加總（此欄位被跨記錄驗證引用）";
@@ -100,7 +100,7 @@ public class CheckStage(
     }
 
     /// <summary>被加總的欄位放大後超出 64 位元整數：寫入時就擋（fail-closed），不悄悄少算。</summary>
-    private static string? TooLarge(CheckEvaluator.Prepared p, IEnumerable<JournalEntry> entries)
+    private string? TooLarge(CheckEvaluator.Prepared p, IEnumerable<JournalEntry> entries)
     {
         if (p.Check.Definition is not { Function: "sum", FieldId: { } fid } || !p.Fields.TryGetValue(fid, out var field)) return null;
         foreach (var entry in entries.Where(e => !e.AfterDeleted))
@@ -108,7 +108,7 @@ public class CheckStage(
             var values = RecordValueProcessor.Parse(entry.AfterValues);
             if (values.TryGetValue(field.Key, out var v) && v is { ValueKind: System.Text.Json.JsonValueKind.Number }
                 && ScaledNumber.Of(field, v.Value) is null)
-                return $"{field.LabelI18n.Resolve("zh-TW")}：{TooBig}";
+                return $"{field.LabelI18n.Resolve(requestLocale.Current)}：{TooBig}";
         }
         return null;
     }

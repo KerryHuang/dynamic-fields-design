@@ -19,7 +19,8 @@ namespace DynamicModules.Application.Dynamic.EventService;
 /// <summary>事件定義的結構驗證（設計 §4.3）；錯誤鍵用 definition.* 路徑。</summary>
 public class EventValidator(
     IModuleRepository modules, IEventRepository events, ILedgerRepository ledgers, IPermissionRepository permissions,
-    IEffectHandlerRegistry handlers, FieldTypeRegistry registry, IPolicyReader policies, RequiredTextGuard requiredText)
+    IEffectHandlerRegistry handlers, FieldTypeRegistry registry, IPolicyReader policies, RequiredTextGuard requiredText,
+    RequestLocale requestLocale)
 {
     /// <summary>每個效果的 set 對應數：技術限制（保護套件解析），維持寫死，見政策設計 §10。</summary>
     public const int MaxSets = 50;
@@ -228,15 +229,15 @@ public class EventValidator(
         {
             var covered = sets.Select(s => s.To).ToHashSet();
             foreach (var f in targetFields.Values.Where(f => f.Config is { Required: true, DefaultValue: null, DefaultToday: false } && !FieldRules.IsComputed(f.Type) && !covered.Contains(f.Id)))
-                warnings.Add($"效果 {fx.Code}：目標模組的必填欄位「{f.LabelI18n.Resolve("zh-TW")}」沒有對應也沒有預設值");
+                warnings.Add($"效果 {fx.Code}：目標模組的必填欄位「{f.LabelI18n.Resolve(requestLocale.Current)}」沒有對應也沒有預設值");
         }
     }
 
-    private static string RollupMessage(Field f) =>
-        $"來源欄位「{f.LabelI18n.Resolve("zh-TW")}」是彙總欄位或依賴彙總的公式；彙總會隨子記錄變動，複製後與已記帳的帳務失配，不能當來源";
+    private string RollupMessage(Field f) =>
+        $"來源欄位「{f.LabelI18n.Resolve(requestLocale.Current)}」是彙總欄位或依賴彙總的公式；彙總會隨子記錄變動，複製後與已記帳的帳務失配，不能當來源";
 
-    private static string HiddenMessage(Field f) =>
-        $"來源欄位「{f.LabelI18n.Resolve("zh-TW")}」對某些群組設為隱藏或限定可見；複製會把看不到的值帶到目標模組，必須在該對應明確允許（allowHiddenSource）";
+    private string HiddenMessage(Field f) =>
+        $"來源欄位「{f.LabelI18n.Resolve(requestLocale.Current)}」對某些群組設為隱藏或限定可見；複製會把看不到的值帶到目標模組，必須在該對應明確允許（allowHiddenSource）";
 
     private static Dictionary<long, Field>? SideFields(
         string side, EventEffect fx, Dictionary<long, Field> sourceFields, Dictionary<long, Field>? lineFields,
@@ -258,7 +259,7 @@ public class EventValidator(
             var target = await modules.GetByKeyAsync(fx.TargetModuleKey ?? "", includeChildren: true, ct);
             if (target?.Workflow is not { } wf) continue;
             var labels = target.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == wf.StatusFieldId)?.Options
-                .ToDictionary(o => o.Id, o => o.LabelI18n.Resolve("zh-TW")) ?? [];
+                .ToDictionary(o => o.Id, o => o.LabelI18n.Resolve(requestLocale.Current)) ?? [];
             var single = new ModuleEvent { Key = ev.Key, Definition = ev.Definition with { Effects = [fx] } };
             if (ApprovalEventCrossCheck.Find(target, wf, [single]).FirstOrDefault() is { EventKey: not null } hit)
                 errors.TryAdd($"definition.effects[{i}]", [ApprovalMessages.EventPushes(hit.EventKey, labels.GetValueOrDefault(hit.To) ?? hit.To.ToString())]);

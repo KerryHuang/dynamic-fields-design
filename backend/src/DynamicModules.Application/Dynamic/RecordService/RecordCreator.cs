@@ -17,7 +17,7 @@ namespace DynamicModules.Application.Dynamic.RecordService;
 public class RecordCreator(
     IModuleRepository modules, IRecordRepository records, INumberSequenceRepository sequences, FieldTypeRegistry registry,
     ICurrentUser user, ISystemIdentity system, IBusinessTime time, ReferenceValidator refs, ReferenceFill fill, WorkflowEnforcer workflow, RollupRecalc rollups, RecordHistoryWriter history,
-    FieldLocks locks, Common.ICurrentLocale locale)
+    FieldLocks locks, Common.RequestLocale locale)
 {
     /// <param name="rollupValues">這次存檔在記憶體算好的彙總值（明細彙總）；沒給的一般參照彙總取空集合的值（第 6 階段 R13）。</param>
     public async Task<(Dictionary<string, JsonElement?> Values, Dictionary<string, string[]> Errors)> ValidateAsync(
@@ -29,14 +29,14 @@ public class RecordCreator(
         foreach (var (key, value) in await rollups.EmptyValuesAsync(module, time.Today, ct)) allRollups.TryAdd(key, value);
         var userIds = await modules.ListUserIdsAsync(ct);
         var validRefKeys = await refs.ValidKeysAsync(module, input, null, ct);
-        RecordValueProcessor.RejectFrozenInput(module, input, null, userIds, registry, perms, validRefKeys, extraSystemKeys);
+        RecordValueProcessor.RejectFrozenInput(module, input, null, userIds, registry, perms, validRefKeys, extraSystemKeys, locale.SystemDefault);
         var filled = new Dictionary<string, JsonElement?>(input);
         var systemKeys = new HashSet<string>(await fill.ApplyAsync(
             module, filled, null, validRefKeys, RecordValueProcessor.WritablePredicate(module, null, perms, registry, userIds, time.Today), ct));
         if (extraSystemKeys is not null) systemKeys.UnionWith(extraSystemKeys);
         WorkflowEnforcer.SeedInitial(module, filled, systemKeys);
         var result = RecordValueProcessor.Process(
-            module, filled, null, userIds, registry, perms, new RuleContext(time.Today, locale.Locale), validRefKeys, allRollups, systemKeys: systemKeys);
+            module, filled, null, userIds, registry, perms, new RuleContext(time.Today, locale.Current, locale.SystemDefault), validRefKeys, allRollups, systemKeys: systemKeys);
         foreach (var (key, messages) in await workflow.CheckAsync(module, null, result.values, ct)) result.errors[key] = messages;
         return result;
     }
@@ -50,7 +50,7 @@ public class RecordCreator(
         var record = new Record
         {
             ModuleId = module.Id,
-            Title = hostTitle ?? RecordValueProcessor.TitleOf(module, values),
+            Title = hostTitle ?? RecordValueProcessor.TitleOf(module, values, locale.SystemDefault),
             HostKey = hostKey,
             OwnerUserId = system.OwnerUserId ?? user.UserId,
             ValuesJson = RecordValueProcessor.Serialize(values),

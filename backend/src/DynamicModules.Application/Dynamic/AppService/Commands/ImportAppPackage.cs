@@ -27,7 +27,7 @@ public record ImportAppPackageRequest(byte[] Content) : IRequest<ServiceResult>,
 /// </summary>
 public class ImportAppPackageHandler(
     AppCatalog catalog, AppPackageSource packages, IAppPackageRepository repository, IAppRepository apps,
-    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, MasterMerger merger, AppExporter exporter, PackageLimitReader limits, AuditContext audit)
+    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, MasterMerger merger, AppExporter exporter, PackageLimitReader limits, AuditContext audit, DynamicModules.Application.Common.RequestLocale requestLocale)
     : IRequestHandler<ImportAppPackageRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ImportAppPackageRequest request, CancellationToken ct)
@@ -43,7 +43,7 @@ public class ImportAppPackageHandler(
         var validation = AppPackageValidator.Validate(package, masters);
         if (validation.Errors.Count > 0) return Invalid(validation.Errors);
         // 驗證過才補稽核目標：缺名稱的本文（例如 v1 的 {"formatVersion":1}）要回 400，不能在這裡遇到 null
-        audit.Target(package.Manifest.Id, package.Manifest.Name.Resolve(I18nText.FallbackLocale));
+        audit.Target(package.Manifest.Id, package.Manifest.Name.Resolve(requestLocale.SystemDefault));
         var limitErrors = await limits.ErrorsAsync(package, ct);
         if (limitErrors.Count > 0) return Invalid(limitErrors);
 

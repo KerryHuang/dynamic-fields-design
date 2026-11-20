@@ -20,7 +20,7 @@ public class UpdateRecordHandler(
     ICurrentUser user, IBusinessTime time, IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ReferenceResolver resolver,
     DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordHistoryWriter history, WorkflowEnforcer workflow,
     Dynamic.LedgerService.LedgerGate ledgerGate, Dynamic.EventService.EventFactLock factLock, Dynamic.ApprovalService.ApprovalGate approvalGate,
-    ICurrentLocale locale, Dynamic.ApprovalService.ApprovalLockService approvalLock)
+    RequestLocale locale, Dynamic.ApprovalService.ApprovalLockService approvalLock)
     : IRequestHandler<UpdateRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateRecordRequest request, CancellationToken ct)
@@ -53,7 +53,7 @@ public class UpdateRecordHandler(
             return ServiceResult.Invalid(RecordValueProcessor.RecordErrorKey, MessageRef.Of(MessageText.WorkflowLockedDetails));
 
         var validRefKeys = await refs.ValidKeysAsync(module, request.Values, previous, ct);
-        RecordValueProcessor.RejectFrozenInput(module, request.Values, previous, userIds, registry, perms, validRefKeys, request.SystemKeys);
+        RecordValueProcessor.RejectFrozenInput(module, request.Values, previous, userIds, registry, perms, validRefKeys, request.SystemKeys, locale.SystemDefault);
         var input = new Dictionary<string, JsonElement?>(request.Values);
         var systemKeys = new HashSet<string>(await fill.ApplyAsync(module, input, previous, validRefKeys,
             RecordValueProcessor.WritablePredicate(module, previous, perms, registry, userIds, time.Today), ct));
@@ -63,18 +63,18 @@ public class UpdateRecordHandler(
         var (keepComputed, keepDetailRows) = await KeptComputedAsync(module, previous, input, ct);
         var plan = await details.PrepareAsync(module, record, PermissionAction.Edit, request.Details, perms, ct,
             () => Task.FromResult<IReadOnlyDictionary<string, JsonElement?>>(RecordValueProcessor.Process(
-                module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Locale), validRefKeys, systemKeys: systemKeys,
+                module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Current, locale.SystemDefault), validRefKeys, systemKeys: systemKeys,
                 keepComputed: keepComputed).values), keepDetailRows);
         if (plan.Failure is { } failure) return failure;
         var (values, errors) = RecordValueProcessor.Process(
-            module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Locale), validRefKeys, plan.RollupValues, systemKeys: systemKeys, frozen: frozen, keepComputed: keepComputed);
+            module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Current, locale.SystemDefault), validRefKeys, plan.RollupValues, systemKeys: systemKeys, frozen: frozen, keepComputed: keepComputed);
         foreach (var (key, messages) in plan.Errors) errors[key] = messages;
         if (errors.Count == 0)
             foreach (var (key, messages) in await workflow.CheckAsync(module, previous, values, ct)) errors[key] = messages;
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
         FieldLocks.Restore(module, perms.Frozen, previous, values);   // 生命週期鎖第二道：凍結欄位落地時蓋回舊值
-        if (module.Kind != ModuleKind.Extension) record.Title = RecordValueProcessor.TitleOf(module, values);
+        if (module.Kind != ModuleKind.Extension) record.Title = RecordValueProcessor.TitleOf(module, values, locale.SystemDefault);
         record.ValuesJson = RecordValueProcessor.Serialize(values);
         history.Updated(record, module, previous, values);
         record.RowVersion = Guid.NewGuid().ToString();

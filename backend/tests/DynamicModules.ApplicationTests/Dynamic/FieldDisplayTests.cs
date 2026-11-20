@@ -32,6 +32,15 @@ public class FieldDisplayTests
         FieldDisplay.Format(f, v is null ? null : J(v), new FieldDisplayContext(locale, offset ?? Taipei), r, users ?? NoUsers);
 
     [Fact]
+    public void Option_UsesLocaleFallbacks()
+    {
+        // 選項只有繁中與英文，要求 th、退回鏈預設 en-US → 英文；沒給退回鏈時退回繁中
+        var f = F(FieldType.Enum, null, Opt(1, "高", "High"));
+        FieldDisplay.Format(f, J("opt_1"), new FieldDisplayContext("th", Taipei, ["en-US", "zh-TW"]), null, NoUsers).Should().Be("High");
+        FieldDisplay.Format(f, J("opt_1"), new FieldDisplayContext("th", Taipei), null, NoUsers).Should().Be("高");
+    }
+
+    [Fact]
     public void Null_IsEmpty() => FieldDisplay.Format(F(FieldType.Text), null, new FieldDisplayContext("zh-TW", Taipei), null, NoUsers).Should().Be("");
 
     [Theory]

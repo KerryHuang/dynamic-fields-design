@@ -31,10 +31,11 @@ public sealed class ServiceResult
     /// <summary>驗證失敗（400）：沒有其他狀態旗標，但帶有欄位錯誤。</summary>
     public bool IsInvalid => ErrorRefs.Count > 0;
 
-    public string? MessageIn(string? locale) => MessageSource?.Resolve(locale, translateLiteral: true);
+    public string? MessageIn(string? locale, IReadOnlyList<string>? fallbacks = null) =>
+        MessageSource?.Resolve(locale, translateLiteral: true, fallbacks);
 
-    public IReadOnlyDictionary<string, string[]> ErrorsIn(string? locale) =>
-        ErrorRefs.ToDictionary(kv => kv.Key, kv => kv.Value.Select(m => m.Resolve(locale)).ToArray());
+    public IReadOnlyDictionary<string, string[]> ErrorsIn(string? locale, IReadOnlyList<string>? fallbacks = null) =>
+        ErrorRefs.ToDictionary(kv => kv.Key, kv => kv.Value.Select(m => m.Resolve(locale, fallbacks: fallbacks)).ToArray());
 
     public static ServiceResult Success(object? data = null) => new() { IsSuccess = true, Data = data };
 

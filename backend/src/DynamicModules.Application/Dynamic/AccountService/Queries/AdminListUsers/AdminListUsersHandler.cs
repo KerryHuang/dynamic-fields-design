@@ -6,7 +6,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Queries.AdminListUsers;
 
-public class AdminListUsersHandler(IPermissionRepository permissions, IOrganizationRepository org, TimeProvider time, Common.ICurrentLocale locale)
+public class AdminListUsersHandler(IPermissionRepository permissions, IOrganizationRepository org, TimeProvider time, Common.RequestLocale locale)
     : IRequestHandler<AdminListUsersRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(AdminListUsersRequest request, CancellationToken ct)
@@ -26,7 +26,7 @@ public class AdminListUsersHandler(IPermissionRepository permissions, IOrganizat
             var sources = groupList.Where(g => mine.Contains(g.Id))
                 .Select(g => (Group: g, Direct: Common.Security.SystemPrivilegeRules.Direct(fromGroups.Where(r => r.GroupId == g.Id))))
                 .Where(x => x.Direct.Any)
-                .Select(x => new SystemPrivilegeSourceResponse("group", x.Group.Id, x.Group.NameI18n.Resolve(locale.Locale), x.Direct.Designer, x.Direct.PermissionAdmin))
+                .Select(x => new SystemPrivilegeSourceResponse("group", x.Group.Id, x.Group.NameI18n.Resolve(locale.Current), x.Direct.Designer, x.Direct.PermissionAdmin))
                 .ToList();
             if (u.IsSystemAdmin) sources.Add(new SystemPrivilegeSourceResponse("systemAdmin"));
             return new AdminUserResponse(

@@ -11,7 +11,8 @@ public class FrozenFieldExceptionHandler : IExceptionHandler
     {
         if (exception is not FrozenFieldException frozen) return false;
         context.Response.StatusCode = StatusCodes.Status409Conflict;
-        var message = frozen.Text.Resolve(context.RequestServices.GetService<ICurrentLocale>()?.Locale);
+        var message = frozen.Text.Resolve(context.RequestServices.GetService<ICurrentLocale>()?.Locale,
+            fallbacks: context.RequestServices.GetService<Application.Dynamic.PolicyService.CachedSystemPolicy>()?.LocaleFallbacks);
         if (!frozen.Visible) await context.Response.WriteAsJsonAsync(new { traceId = context.TraceIdentifier, message }, ct);
         else
             await context.Response.WriteAsJsonAsync(

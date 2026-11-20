@@ -25,7 +25,7 @@ public record CloseAppRequest(string Key, bool Cascade)
 /// </summary>
 public class CloseAppHandler(
     IAppRepository apps, IModuleRepository modules, AppDependencyChecker dependencies, AppResponseBuilder builder,
-    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, IntegrationReconciler integrations, MasterLifecycle lifecycle)
+    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, IntegrationReconciler integrations, MasterLifecycle lifecycle, DynamicModules.Application.Common.RequestLocale requestLocale)
     : IRequestHandler<CloseAppRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(CloseAppRequest request, CancellationToken ct)
@@ -60,7 +60,7 @@ public class CloseAppHandler(
         await uow.CommitAsync(ct);
         // 共用主檔跟著使用者：沒有 Open 的使用者就一起關閉；關閉的應用程式授予的寫入動作從主檔模組收回（§6、§7）
         foreach (var master in await lifecycle.RecomputeAsync(ct))
-            warnings.Add($"共用主檔「{master.NameI18n.Resolve(I18nText.FallbackLocale)}」已沒有開啟中的應用程式使用，一起關閉（資料唯讀保留）");
+            warnings.Add($"共用主檔「{master.NameI18n.Resolve(requestLocale.Current)}」已沒有開啟中的應用程式使用，一起關閉（資料唯讀保留）");
         warnings.AddRange(await integrations.ReconcileAsync(ct));
         return ServiceResult.Success(new CloseAppResponse(await builder.BuildAsync(app, true, null, ct),
             toClose.Select(a => a.Key).ToList(), warnings));

@@ -18,7 +18,7 @@ namespace DynamicModules.Application.Dynamic.CheckService;
 /// </summary>
 public class CheckIndexer(
     IRecordRepository records, IModuleRepository modules, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
-    IPolicyReader policies)
+    IPolicyReader policies, RequestLocale requestLocale)
 {
     public const int BatchSize = 1000;
 
@@ -44,13 +44,13 @@ public class CheckIndexer(
         {
             if (!FieldTypeCapabilities.SupportsFilter(field.Type))
                 return (ServiceResult.Invalid(new Dictionary<string, string[]>
-                    { ["definition"] = [$"欄位「{field.LabelI18n.Resolve("zh-TW")}」的型別不支援建立索引，不能用在檢查"] }), notices);
+                    { ["definition"] = [$"欄位「{field.LabelI18n.Resolve(requestLocale.Current)}」的型別不支援建立索引，不能用在檢查"] }), notices);
             var needsIndex = !RecordIndexer.ShouldIndex(field);
             // where 走列表篩選的條件規則，欄位一定要可篩選；只可排序的欄位雖然有索引，不開可篩選的話條件之後永遠解析失敗
             if (!field.Config.IsFilterable && (needsIndex || whereIds.Contains(field.Id)))
             {
                 field.Config = field.Config with { IsFilterable = true };
-                notices.Add($"已自動啟用欄位「{field.LabelI18n.Resolve("zh-TW")}」的可篩選");
+                notices.Add($"已自動啟用欄位「{field.LabelI18n.Resolve(requestLocale.Current)}」的可篩選");
                 enabled.Add(field);
                 if (needsIndex) toBackfill.Add(field);
             }
@@ -88,9 +88,9 @@ public class CheckIndexer(
     /// ScaledValue 為 NULL 有兩種原因：放大後超出 64 位元整數，或原值的小數位比欄位目前的設定多（Scale 被調低後留下的舊值）。
     /// 四捨五入後放得下就是後者，訊息要指出真正的原因與出路。
     /// </summary>
-    private static string NotExactMessage(long recordId, Field field, System.Text.Json.JsonElement value)
+    private string NotExactMessage(long recordId, Field field, System.Text.Json.JsonElement value)
     {
-        var label = field.LabelI18n.Resolve("zh-TW");
+        var label = field.LabelI18n.Resolve(requestLocale.Current);
         return ScaledNumber.Of(field, value) is null
             ? $"記錄 {recordId} 的「{label}」數值太大，無法精確加總；請先修正這筆記錄"
             : $"記錄 {recordId} 的「{label}」數值的小數位超過欄位設定（目前 {ScaledNumber.ScaleOf(field)} 位），無法精確加總；請先修正這筆記錄，或把欄位的小數位調回原值";

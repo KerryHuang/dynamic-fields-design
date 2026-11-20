@@ -7,7 +7,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.DeleteGroup;
 
-public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowRepository approvalFlows, ISystemSettingRepository settings, IModulePolicyRepository modulePolicies, IModuleRepository modules, IUnitOfWork uow, SystemPrivilegeHolders holders) : IRequestHandler<DeleteGroupRequest, ServiceResult>
+public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowRepository approvalFlows, ISystemSettingRepository settings, IModulePolicyRepository modulePolicies, IModuleRepository modules, IUnitOfWork uow, SystemPrivilegeHolders holders, DynamicModules.Application.Common.RequestLocale requestLocale) : IRequestHandler<DeleteGroupRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteGroupRequest request, CancellationToken ct)
     {
@@ -15,7 +15,7 @@ public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowReposi
         if (group is null) return ServiceResult.NotFound("群組不存在");
 
         // 選項範圍移除後該選項可能變成所有人可選，等於放寬權限，所以擋下
-        var impact = await accounts.GetGroupImpactAsync(group.Id, ct);
+        var impact = await accounts.GetGroupImpactAsync(group.Id, requestLocale.Current, ct);
         if (impact.BlockingOptions.Count > 0)
             return ServiceResult.ConflictWith("有欄位選項範圍還指定這個群組，請先到模組權限移除", new { impact.BlockingOptions });
 

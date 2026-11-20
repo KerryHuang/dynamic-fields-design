@@ -14,7 +14,8 @@ namespace DynamicModules.Application.Dynamic.AppService.Integrations;
 /// 沒有已安裝的整合時只多一次小查詢。
 /// </summary>
 public class IntegrationGuardStage(
-    IWriteJournal journal, IAppRepository apps, IModuleRepository modules, IEventFactRepository facts, IntegrationReconciler reconciler) : IWriteStage
+    IWriteJournal journal, IAppRepository apps, IModuleRepository modules, IEventFactRepository facts, IntegrationReconciler reconciler,
+    RequestLocale requestLocale) : IWriteStage
 {
     public int Order => 7;
 
@@ -41,7 +42,7 @@ public class IntegrationGuardStage(
             if (!forward && !reverse) continue;
 
             var partners = await reconciler.PartnersAsync(decl, appList, ct);
-            var name = decl.Name.Resolve("zh-TW");
+            var name = decl.Name.Resolve(requestLocale.Current);
             var target = IntegrationState.Derive(row.Enabled, true, owner.Status == AppStatus.Open, partners.Present, decl.OnPartnerClosed == "block");
             if (target == IntegrationTarget.Disabled)
             {

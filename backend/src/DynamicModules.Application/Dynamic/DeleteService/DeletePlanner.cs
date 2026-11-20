@@ -25,7 +25,7 @@ public record DeletePlan(DeleteCheckResponse Check, long ModuleId, IReadOnlyList
 /// 盤點模組、欄位、區塊能不能刪（未啟用、無資料、未被引用，規則見設計文件）並算出清除筆數。
 /// 只讀取，不修改；命令與預檢共用，確保預告與實際行為一致。
 /// </summary>
-public class DeletePlanner(IDeletionRepository data, IApprovalFlowRepository approvalFlows)
+public class DeletePlanner(IDeletionRepository data, IApprovalFlowRepository approvalFlows, DynamicModules.Application.Common.RequestLocale requestLocale)
 {
     /// <param name="alsoDeleting">
     /// 同一個動作一起刪除的模組鍵（刪除整個應用程式時是全部成員）。集合內的模組彼此的引用不算被引用，
@@ -159,7 +159,7 @@ public class DeletePlanner(IDeletionRepository data, IApprovalFlowRepository app
     /// <summary>
     /// 轉換在一起刪除的集合內：引用的模組全在集合內；或擁有者（來源模組）在集合內、其餘是主檔模組（共用主檔設計 §7 刪除第 2 點）。
     /// </summary>
-    private static bool InsideSet(Conversion c, List<Module> all, IReadOnlySet<string> keys, AppDeleteScope? scope = null)
+    private bool InsideSet(Conversion c, List<Module> all, IReadOnlySet<string> keys, AppDeleteScope? scope = null)
     {
         var d = c.Definition;
         var source = all.FirstOrDefault(m => m.Id == c.SourceModuleId)?.Key;
@@ -278,7 +278,7 @@ public class DeletePlanner(IDeletionRepository data, IApprovalFlowRepository app
     }
 
     /// <summary>f 是否是公式、彙總或預設帶值設定，引用了 targetIds 裡的欄位。</summary>
-    private static void AddFieldSourceBlockers(Module owner, Field f, IReadOnlySet<long> targetIds, List<DeleteBlocker> blockers)
+    private void AddFieldSourceBlockers(Module owner, Field f, IReadOnlySet<long> targetIds, List<DeleteBlocker> blockers)
     {
         if (f.Type == FieldType.Formula && FormulaGraph.RefsOf(f).Overlaps(targetIds))
             blockers.Add(FieldBlocker(DeleteBlockerKind.Formula, owner, f));
@@ -294,7 +294,7 @@ public class DeletePlanner(IDeletionRepository data, IApprovalFlowRepository app
     }
 
     /// <summary>轉換定義引用了這些欄位（對應、追溯、數量、固定值欄位），或引用了這些模組（來源、目標、明細模組）。</summary>
-    private static void AddConversionBlockers(
+    private void AddConversionBlockers(
         List<Conversion> conversions, List<Module> all, IReadOnlySet<long> fieldIds, IReadOnlyCollection<long> moduleIds,
         IReadOnlyCollection<string> moduleKeys, List<DeleteBlocker> blockers)
     {
@@ -335,12 +335,12 @@ public class DeletePlanner(IDeletionRepository data, IApprovalFlowRepository app
         }
     }
 
-    private static DeleteBlocker FieldBlocker(string kind, Module m, Field f) =>
+    private DeleteBlocker FieldBlocker(string kind, Module m, Field f) =>
         new(kind, m.Key, f.Id, Name(f.LabelI18n, f.Key));
 
-    private static string Name(I18nText? text, string fallback)
+    private string Name(I18nText? text, string fallback)
     {
-        var resolved = text?.Resolve(I18nText.FallbackLocale);
+        var resolved = text?.Resolve(requestLocale.Current);
         return string.IsNullOrWhiteSpace(resolved) ? fallback : resolved;
     }
 }

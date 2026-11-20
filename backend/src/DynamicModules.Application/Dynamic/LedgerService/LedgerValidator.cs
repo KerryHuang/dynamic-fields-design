@@ -7,7 +7,7 @@ using DynamicModules.Domain.ValueObjects;
 namespace DynamicModules.Application.Dynamic.LedgerService;
 
 /// <summary>分錄設定的結構驗證（設計 §6.1、§6.4）；錯誤鍵是 LedgerInput 的屬性名（camelCase）與 moduleKey。</summary>
-public class LedgerValidator(IModuleRepository modules)
+public class LedgerValidator(IModuleRepository modules, RequestLocale requestLocale)
 {
     private static readonly FieldType[] Numeric = [FieldType.Integer, FieldType.Decimal, FieldType.Currency];
 
@@ -52,7 +52,7 @@ public class LedgerValidator(IModuleRepository modules)
             foreach (var f in ActiveFields(m).Values.Where(f => f is { Type: FieldType.Reference } && f.Config.Relation != ReferenceRelation.Detail))
                 if (f.Config.OnDelete is not (null or ReferenceOnDelete.Restrict))
                 {
-                    Err("moduleKey", $"參照欄位「{f.LabelI18n.Resolve("zh-TW")}」的刪除行為必須是禁止（restrict）；分錄不能被連帶清空或刪除");
+                    Err("moduleKey", $"參照欄位「{f.LabelI18n.Resolve(requestLocale.Current)}」的刪除行為必須是禁止（restrict）；分錄不能被連帶清空或刪除");
                     break;
                 }
 
@@ -61,7 +61,7 @@ public class LedgerValidator(IModuleRepository modules)
         foreach (var f in own.Values.Where(f => f.Type == FieldType.Rollup && f.Config.Rollup is not null))
             if (await modules.GetByFieldIdAsync(f.Config.Rollup!.SourceFieldId, ct) is { } src && !detailKeys.Contains(src.Key))
             {
-                Err("moduleKey", $"彙總欄位「{f.LabelI18n.Resolve("zh-TW")}」會由其他模組的記錄重算，分錄不能有這類欄位");
+                Err("moduleKey", $"彙總欄位「{f.LabelI18n.Resolve(requestLocale.Current)}」會由其他模組的記錄重算，分錄不能有這類欄位");
                 break;
             }
 

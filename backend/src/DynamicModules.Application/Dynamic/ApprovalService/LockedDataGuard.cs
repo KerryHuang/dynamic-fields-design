@@ -13,7 +13,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// 設計器的定義變更遇到停在簽核鎖定狀態的記錄（設計 §8.6）：不能整批解鎖，也不能把鎖定欄位的值清掉。
 /// 判斷只看記錄目前停在哪個狀態，不看使用者身分；與 <see cref="PendingApprovalGuard"/> 掛在同一組檢查點。
 /// </summary>
-public sealed class LockedDataGuard(ApprovalLockService locks, IRecordRepository records, IModuleRepository modules)
+public sealed class LockedDataGuard(ApprovalLockService locks, IRecordRepository records, IModuleRepository modules, DynamicModules.Application.Common.RequestLocale requestLocale)
 {
     /// <summary>
     /// 存狀態機（candidate）或刪除狀態機（candidate 為 null）。舊鎖定狀態 − 新鎖定狀態＝被解鎖的狀態；有記錄停在其中就回 409。
@@ -82,5 +82,5 @@ public sealed class LockedDataGuard(ApprovalLockService locks, IRecordRepository
         _ => false
     };
 
-    private static string Label(Field f) => f.LabelI18n.Resolve(I18nText.FallbackLocale);
+    private string Label(Field f) => f.LabelI18n.Resolve(requestLocale.Current);
 }

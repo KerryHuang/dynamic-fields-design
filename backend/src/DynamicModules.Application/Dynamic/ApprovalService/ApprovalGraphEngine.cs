@@ -39,7 +39,7 @@ public interface IApprovalStageSteps
 /// 建圖一律用 <see cref="ApprovalGraphMode.SupportedKinds"/>、條件求值用 <see cref="ApprovalGraphMode.Eval"/>；引擎內不引入任何範本、槽位概念（§16）。
 /// </summary>
 public sealed class ApprovalGraphEngine(IApprovalInstanceRepository repo, ApproverResolver resolver, FieldTypeRegistry registry,
-    IModuleRepository modules, IBusinessTime time, ApprovalNotifier notifier, IUnitOfWork uow)
+    IModuleRepository modules, IBusinessTime time, ApprovalNotifier notifier, IUnitOfWork uow, DynamicModules.Application.Common.RequestLocale requestLocale)
 {
     /// <summary>送出或重來後從 start 推進。</summary>
     public Task<(GraphAdvance Result, ServiceResult? Failure)> StartAsync(ApprovalInstance inst, Module module,
@@ -274,13 +274,13 @@ public sealed class ApprovalGraphEngine(IApprovalInstanceRepository repo, Approv
                 && r.Status is ApprovalStageStatus.Approved or ApprovalStageStatus.Skipped && ApprovalGraphRuntime.Within(KeyOf(r), armKey)
                 && !gone.Any(root => ApprovalGraphRuntime.Within(KeyOf(r), root)))
             .MaxBy(r => r.Seq);
-        var name = new[] { last?.NameSnapshot, p.G.Edge(arm).Label }.FirstOrDefault(n => n is not null && n.Resolve(I18nText.FallbackLocale) != "");
+        var name = new[] { last?.NameSnapshot, p.G.Edge(arm).Label }.FirstOrDefault(n => n is not null && n.Resolve(requestLocale.SystemDefault) != "");
         var data = new Dictionary<string, object> { ["forkId"] = fork.Id, ["joinId"] = join.Id, ["arrived"] = armKey, ["cancelled"] = cancelledKeys };
         if (name is not null) data["name"] = name;
 
         await uow.CommitAsync(p.Ct);   // 歷程要掛到達列的 Id
         p.Steps.Log(p.Inst, ApprovalActions.BranchCancelled, ApprovalEngine.SystemActor, arrival.Id,
-            comment: ApprovalMessages.BranchCancelledNote(name?.Resolve(I18nText.FallbackLocale) ?? "（未命名分支）"), data: JsonSerializer.Serialize(data));
+            comment: ApprovalMessages.BranchCancelledNote(name?.Resolve(requestLocale.SystemDefault) ?? "（未命名分支）"), data: JsonSerializer.Serialize(data));
     }
 
     private Task<ServiceResult?> EnterEndAsync(Pass p, ApprovalNodeDef node, string? inEdgeId, string key)

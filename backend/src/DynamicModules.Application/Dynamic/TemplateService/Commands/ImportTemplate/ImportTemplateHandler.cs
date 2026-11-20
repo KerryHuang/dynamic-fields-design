@@ -11,7 +11,7 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.TemplateService.Commands.ImportTemplate;
 
 public class ImportTemplateHandler(
-    TemplateCatalog catalog, IModuleTemplateRepository templates, IUnitOfWork uow, ICurrentUser user, IBusinessTime time, AuditContext audit)
+    TemplateCatalog catalog, IModuleTemplateRepository templates, IUnitOfWork uow, ICurrentUser user, IBusinessTime time, AuditContext audit, DynamicModules.Application.Common.RequestLocale requestLocale)
     : IRequestHandler<ImportTemplateRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ImportTemplateRequest request, CancellationToken ct)
@@ -27,7 +27,7 @@ public class ImportTemplateHandler(
         if (catalog.BuiltIns.Any(p => p.Key == package.Key) || await templates.GetByKeyAsync(package.Key, ct) is not null)
             return ServiceResult.Conflict("範本代碼已存在");
         // 驗證過才補稽核目標：缺名稱的本文要回 400，不能在這裡遇到 null
-        audit.Target(package.Key, package.Name.Resolve(I18nText.FallbackLocale));
+        audit.Target(package.Key, package.Name.Resolve(requestLocale.SystemDefault));
 
         var entity = new ModuleTemplate { Key = package.Key, Json = request.Json };
         entity.StampCreated(user.UserId, time.Now);

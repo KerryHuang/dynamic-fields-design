@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.AppService.SharedMasters;
 /// </summary>
 public sealed class MasterDesigner(
     IAppRepository apps, ISharedMasterRepository shared, IModuleRepository modules, MasterLifecycle lifecycle, IUnitOfWork uow,
-    Domain.Authorization.IAuthorizationChangeProbe authorizationChanges)
+    Domain.Authorization.IAuthorizationChangeProbe authorizationChanges, DynamicModules.Application.Common.RequestLocale requestLocale)
 {
     public const string OrphanBlockMessage = "這個區塊屬於已刪除的應用程式，不能新增或拖入欄位；請改加在主檔的基本區塊";
     public const string OrphanFieldMessage = "這個欄位屬於已刪除的應用程式，不能加選項或移到別的區塊；請改加在主檔的基本區塊";
@@ -69,7 +69,7 @@ public sealed class MasterDesigner(
     {
         if (owner.AppKey is null || await apps.GetByKeyAsync(owner.AppKey, ct) is not { Status: not AppStatus.Open } closed) return null;
         return ServiceResult.Conflict(
-            $"這個區塊屬於已關閉的應用程式「{closed.NameI18n.Resolve(I18nText.FallbackLocale)}」，不能新增欄位或選項；請先重新開啟它");
+            $"這個區塊屬於已關閉的應用程式「{closed.NameI18n.Resolve(requestLocale.Current)}」，不能新增欄位或選項；請先重新開啟它");
     }
 
     /// <summary>和套件驗證相同的貢獻欄位規則（ContributionFieldRules），不合回 409。</summary>
@@ -99,7 +99,7 @@ public sealed class MasterDesigner(
                 var owner = await shared.FieldOwnerAsync(id, ct);
                 var allowed = owner.Contributor is { } c ? c == appId : owner is { Orphan: false, Known: true };
                 if (allowed) continue;
-                var label = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == id)?.LabelI18n.Resolve(I18nText.FallbackLocale);
+                var label = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == id)?.LabelI18n.Resolve(requestLocale.Current);
                 return ServiceResult.Conflict(ContributionFieldRules.FormulaOutOfScope($"「{label ?? id.ToString()}」"));
             }
         return null;

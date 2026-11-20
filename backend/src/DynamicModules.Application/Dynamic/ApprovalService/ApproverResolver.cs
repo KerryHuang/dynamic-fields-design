@@ -18,11 +18,14 @@ public sealed record SeatPlan(string SeatKey, IReadOnlyList<string> UserIds, str
 /// <summary>一關的解析結果；Error 非 null 代表這次請求要回 409（找不到人、超過上限），訊息到 WebAPI 才依請求語系解析。</summary>
 public sealed record StageResolution(IReadOnlyList<SeatPlan> Seats, bool AllUnitsEmpty, MessageRef? Error);
 
-/// <summary>解析的輸入：Picks 是這一關的自選結果；GroupNames 給錯誤與歷程說明用。</summary>
+/// <summary>
+/// 解析的輸入：Picks 是這一關的自選結果；GroupNames 給錯誤與歷程說明用。NoteLocale 是寫進簽核歷程說明（資料庫）的語系＝系統預設語系
+/// （N1，使用者 2026-11-20 裁決）；null 為繁中。
+/// </summary>
 public sealed record ResolveContext(
     Module Module, string InitiatorUserId, IReadOnlyDictionary<string, JsonElement?> Values, IReadOnlyList<string>? Picks, OrgSnapshot Org,
     IReadOnlyDictionary<long, IReadOnlyList<string>> GroupMembers, IReadOnlyList<string> DefaultFallback, int MaxApprovers, bool AllowSelfApproval,
-    IReadOnlyDictionary<long, I18nText>? GroupNames = null);
+    IReadOnlyDictionary<long, I18nText>? GroupNames = null, LocaleContext? NoteLocale = null);
 
 /// <summary>
 /// 簽核人解析（設計 §6.1、§6.4、§6.5）：先依來源切出來源單位，每個單位只留啟用中的人（政策不允許自簽時還要不是發起人）；
@@ -30,7 +33,7 @@ public sealed record ResolveContext(
 /// </summary>
 public sealed class ApproverResolver(
     OrgSnapshotLoader org, IPermissionRepository permissions, ApprovalPolicies approvalPolicies, RecipientResolver recipients,
-    Microsoft.Extensions.Logging.ILogger<ApproverResolver> logger)
+    Microsoft.Extensions.Logging.ILogger<ApproverResolver> logger, DynamicModules.Application.Common.RequestLocale requestLocale)
 {
     public const string AnySeat = "any";
 
@@ -45,7 +48,7 @@ public sealed class ApproverResolver(
         if (fallback.Count == 0) logger.LogDebug("模組 {ModuleKey} 的預設備援對象政策解析為空，需要備援的關卡會回 409", module.Key);
         var limits = await approvalPolicies.LimitsAsync(module.Id, ct);   // 下一關啟動當下的設定（裁決 2）
         return new ResolveContext(module, initiator, values, picks, snapshot, members, fallback, limits.MaxApprovers,
-            await approvalPolicies.AllowSelfApprovalAsync(module.Id, ct), groups);
+            await approvalPolicies.AllowSelfApprovalAsync(module.Id, ct), groups, requestLocale.SystemDefault);
     }
 
     public static StageResolution Resolve(ResolveContext ctx, I18nText stageName, string mode, ApproverSource source, ApproverSource? fallback, string onEmpty)
@@ -59,7 +62,7 @@ public sealed class ApproverResolver(
         if (units.All(u => u.Users.Count == 0) && onEmpty == ApprovalOnEmpty.Skip && !unmatched) return new([], true, null);
 
         var empty = units.Where(u => u.Users.Count == 0).Select(u => u.Label).ToList();
-        var emptyZh = empty.Select(Zh).ToList();
+        var emptyZh = empty.Select(l => Zh(l, ctx.NoteLocale)).ToList();
         var resolved = units.SelectMany(u => u.Users).Distinct(StringComparer.Ordinal).ToList();
         var backups = empty.Count == 0 ? [] : FallbackUsers(ctx, fallback);
         var seats = new List<SeatPlan>();
@@ -175,8 +178,9 @@ public sealed class ApproverResolver(
 
     private static object GroupLabel(ResolveContext ctx, long id) => ctx.GroupNames?.GetValueOrDefault(id) is { } name ? name : $"#{id}";
 
-    /// <summary>寫進簽核歷程的說明（資料庫）固定繁中。</summary>
-    private static string Zh(object label) => label is I18nText t ? t.Resolve(I18nText.FallbackLocale) : (string)label;
+    /// <summary>寫進簽核歷程的說明（資料庫）用系統預設語系＋退回鏈（N1）；沒給時繁中。</summary>
+    private static string Zh(object label, LocaleContext? lc) =>
+        label is I18nText t ? (lc is null ? t.Resolve(I18nText.FallbackLocale, null) : t.Resolve(lc)) : (string)label;
 
     private static List<string> Clean(ResolveContext ctx, IEnumerable<string> users) =>
         users.Where(u => (ctx.AllowSelfApproval || u != ctx.InitiatorUserId) && ctx.Org.ActiveUsers.Contains(u)).Distinct(StringComparer.Ordinal).ToList();

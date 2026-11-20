@@ -69,10 +69,11 @@ public sealed class FieldLocks(ISharedMasterRepository shared)
 /// 對凍結欄位明確給了不同的值：整個請求 409（WebAPI 的例外處理轉成回應），交易回滾。
 /// 使用者看不到的欄位（visible 為 false，例如帶值寫進去的系統寫入）只回通用訊息，不帶欄位名、應用程式名與欄位 id，免得探測隱藏值（第三輪 3）。
 /// </summary>
-public sealed class FrozenFieldException(Field field, FieldLock owner, bool visible = true)
-    : Exception(MessageOf(field, owner, visible).Resolve(I18nText.FallbackLocale))
+/// <paramref name="logLocale"/> 是 <see cref="Exception.Message"/>（給記錄與測試）的語系＝系統預設語系（N1，使用者 2026-11-20 裁決）；null 為繁中。
+public sealed class FrozenFieldException(Field field, FieldLock owner, bool visible = true, LocaleContext? logLocale = null)
+    : Exception(MessageOf(field, owner, visible).Resolve(logLocale?.Locale ?? I18nText.FallbackLocale, fallbacks: logLocale?.Fallbacks))
 {
-    /// <summary>依語系的訊息（欄位標籤與應用程式名稱也依語系挑）；<see cref="Exception.Message"/> 是繁中，給記錄與測試用。</summary>
+    /// <summary>依語系的訊息（欄位標籤與應用程式名稱也依語系挑）；<see cref="Exception.Message"/> 是系統預設語系，給記錄與測試用。</summary>
     public static MessageRef MessageOf(Field field, FieldLock owner, bool visible = true) =>
         visible ? MessageRef.Of(MessageText.FrozenField, field.LabelI18n, owner.AppName) : MessageRef.Of(MessageText.FrozenFieldHidden);
 
