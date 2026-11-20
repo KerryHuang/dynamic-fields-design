@@ -268,6 +268,23 @@ public class AuthApiTests
         (await client.GetAsync($"{Base}/menu")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    /// <summary>前端登入後載入營運時區用的端點：強制改密碼期間被擋（前端要先導到改密碼頁、改完才載入），改完後可讀。</summary>
+    [Fact]
+    public async Task MustChange_BlocksEffectivePoliciesUntilPasswordChanged()
+    {
+        using var app = NewApp();
+        var client = await LoggedIn(app, "admin", AdminPassword);
+        var blocked = await client.GetAsync($"{Base}/policies/effective");
+        blocked.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await Json(blocked)).GetProperty("code").GetString().Should().Be("passwordChangeRequired");
+
+        (await client.PostAsJsonAsync($"{Auth}/change-password",
+            new { oldPassword = AdminPassword, newPassword = "brand-new-pass-1" })).StatusCode.Should().Be(HttpStatusCode.OK);
+        var ok = await client.GetAsync($"{Base}/policies/effective");
+        ok.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Json(ok)).GetProperty("values").GetProperty("locale.timeZone").GetString().Should().Be("+08:00");
+    }
+
     [Theory]
     [InlineData("wrong-old-pass", "brand-new-pass-1")]
     [InlineData(UserPassword, UserPassword)]

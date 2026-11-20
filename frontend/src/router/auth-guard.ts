@@ -41,7 +41,11 @@ export function installAuthGuard(router: Router) {
       }
     }
     if (!identity.userId) return to.meta.public ? true : loginLocation(to.fullPath);
-    // 登入後的頁面才用得到營運時區：每次登入後的第一次導覽載入一次（公開頁面不載）
+    // 強制改密碼優先（Demo 帳號被管理員重設密碼後會同時成立）；只在非強制時擋 Demo 的改密碼入口。
+    // 要在載入營運時區之前：強制改密碼期間後端只放行 /auth/* 與 GET /me，政策 API 會回 403
+    if (identity.mustChangePassword) return to.path === '/change-password' ? true : '/change-password';
+    if (identity.isDemoAccount && to.path === '/change-password') return '/';
+    // 登入後的頁面才用得到營運時區：每次登入後的第一次導覽載入一次（公開頁面與強制改密碼頁不載）
     if (!to.meta.public && !sessionSettingsLoaded()) {
       try {
         await loadSessionSettings();
@@ -49,9 +53,6 @@ export function installAuthGuard(router: Router) {
         return { path: SERVICE_UNAVAILABLE, query: to.fullPath === '/' ? {} : { redirect: to.fullPath } };
       }
     }
-    // 強制改密碼優先（Demo 帳號被管理員重設密碼後會同時成立）；只在非強制時擋 Demo 的改密碼入口
-    if (identity.mustChangePassword) return to.path === '/change-password' ? true : '/change-password';
-    if (identity.isDemoAccount && to.path === '/change-password') return '/';
     return to.meta.public ? '/' : true;
   });
 }

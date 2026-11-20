@@ -192,6 +192,22 @@ describe('auth guard: business time zone (營運時區)', () => {
     expect(freshTime.isBusinessOffsetLoaded()).toBe(false);
   });
 
+  it('強制改密碼時政策 API 回 403 仍進得了改密碼頁，改完才載入', async () => {
+    meResponse = { status: 200, data: { userId: 'admin', mustChangePassword: true } };
+    effResponse = { status: 403, data: { code: 'passwordChangeRequired' } };
+    const router = setup();
+    await router.push('/dynamic/order');
+    expect(router.currentRoute.value.path).toBe('/change-password');
+    expect(effCalls).toBe(0);
+    // 改完密碼（ChangePasswordPage 清旗標後導到首頁）
+    useIdentityStore().mustChangePassword = false;
+    effResponse = effective('+07:00');
+    await router.push('/');
+    expect(router.currentRoute.value.path).toBe('/');
+    expect(effCalls).toBe(1);
+    expect(businessOffset()).toBe('+07:00');
+  });
+
   it('登入後的下一次導覽補載', async () => {
     effResponse = effective('+07:00');
     const router = setup();
