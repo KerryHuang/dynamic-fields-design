@@ -16,6 +16,14 @@
 
 ## 修訂紀錄
 
+### 2026-11-20 第三輪（codex 複核；`.tmp/plans/20261120-p3/plan-recheck.md`）
+
+1. CAS 判斷：`Publish` 迴圈改用 `ReferenceEquals` 判斷交換成敗（`Published` 是 record，`!=` 走值比較）；補 `Publish_UsesReferenceEquality`（換成內容相同、參考不同的物件）→ Task 3。
+2. 重載標序號：改標「已提交的最大序號」`_committedSeq`（只在 `Apply` 裡以 max 更新，先更新再發布），不用已配發的 `_seq`；PUT 的序號仍在交易內配發；補 `Reload_BetweenSeqAndCommit_CallbackStillApplies`（配發後、提交前重載讀到舊值，callback 仍套用），舊的 `Reload_StampsSequence_LateCallbackIgnored` 拆成 `Reload_AfterCallback_StaleCallbackIgnored` 與 `Reload_BeforeCallbacks_ConvergesToNewest`；代價與不採用「序號存資料庫」的理由寫在 Task 3 → 判斷 20、Task 3。
+3. `ServiceResult.Invalid`：改寫成 `new Dictionary<string, string[]> { … }`（`PolicyMessages` 回 `string`，沿用 `UpdateModuleHandler.cs:94` 寫法）；驗收加 `Invalid(new() {` 殘留掃描 → Task 3、4。
+4. 分層：`LocaleContext` 移到 `DynamicModules.Domain/ValueObjects/LocaleContext.cs`，`I18nText.Resolve(LocaleContext)` 是 Domain 實例方法；`RequestLocale` 留在 Application，新增 `SystemDefault`（N1 與 D4 共用）；驗收加 Domain 不引用 Application 的掃描 → Task 10、11b。
+5. D4 規則：`RequestLocale.For` 分三條——沒指定 → 請求語系；啟用中 → 照用；明確指定但停用或不認得 → 系統預設語系；補「標頭繁中、預設英文、`?locale=th` → 英文」與「同設定不帶 `?locale` → 繁中」對照兩案，以及 `RequestLocaleTests` 單元測試 → Task 10。
+
 ### 2026-11-20 第二輪（codex 審查必修 1–5 與建議；`.tmp/plans/20261120-p3/plan-review.md`）
 
 1. 必修 1：系統 PUT 的順序改成「讀舊值 → 寫設定 → `uow.CommitAsync`（SaveChanges）→ resolve 新值 → hooks → 外層提交 → `AfterCommitActions`」（`SystemSettingRepository` 讀取是 `AsNoTracking`）；補首次設定、修改、還原出廠值、hook 拒絕四案，雙資料庫 → Task 3。
@@ -95,7 +103,7 @@
 17. 〔技術〕**新分類 `organization`（組織）**；時區與語系放在 p1c 已有的 `locale`（地區與語系）。
 18. 〔行為〕**改時區後已開著的瀏覽器**：主框架（`MainLayout.vue`）每 60 秒重取一次全系統生效值，發現時區變了就先換偏移，再跳出不能關掉的提示框，只有「重新整理」一個按鈕。**使用者 2026-11-12 確認**（Q9、U1）。代價：開著沒存的表單內容在重新整理時會遺失。
 19. 〔技術〕**營運時區偏移只有一個來源：`CachedSystemPolicy.BusinessOffset`**（審查 p3-M1）。`IBusinessTime` 不加 `Offset`：預設介面成員會被 `ActingBusinessTime`（`Program.cs:103` 的 `AddActingOverrides()`、`TestApp.cs:203`）包一層後吃掉。需要偏移的呼叫端注入 `CachedSystemPolicy`；`DateTimeHandler` 的 Func 也讀它。`ActingBusinessTime` 與測試替身都不用改。
-20. 〔技術〕**系統 PUT 提交後用 `AfterCommitActions` 寫入新值；快照與序號包成一個不可變物件，以 `Interlocked.CompareExchange` 發布**（主控 2026-11-20 決定，審查必修 2）。handler 在交易內（已持有寫入鎖）取一個遞增的更新序號、算好新的生效值，登記 `afterCommit.Add("policy-cache", () => cache.Apply(def, effective, seq))`；`Apply` 只在序號比那一項目前的序號新時才套用。過期重載與讀取失敗也用同一個 CAS 發布，以「發布當下的最新物件」為基礎，不會蓋掉期間的 `Apply`。理由：`AfterCommitActions` 已是「最外層交易提交後才做、回滾丟棄」的現成機制，不必新增 pipeline behavior，也不必在 PUT 全程持鎖；`TransactionBehavior` 在釋放交易後才執行 callback（`TransactionBehavior.cs:16,37`），兩次 PUT 的 callback 可能逆序，靠序號擋；寫入鎖從交易開始就持有（PostgreSQL 全庫寫入鎖、SQLite 經 `WriteGate` 加 `BEGIN IMMEDIATE`，`EfTransactionManager.cs:13`），所以序號順序等於提交順序。代價：提交到 `Apply` 之間有毫秒級窗口，算進判斷 4 的已知限制。
+20. 〔技術〕**系統 PUT 提交後用 `AfterCommitActions` 寫入新值；快照與序號包成一個不可變物件，以 `Interlocked.CompareExchange` 發布**（主控 2026-11-20 決定，審查必修 2）。handler 在交易內（已持有寫入鎖）取一個遞增的更新序號、算好新的生效值，登記 `afterCommit.Add("policy-cache", () => cache.Apply(def, effective, seq))`；`Apply` 只在序號比那一項目前的序號新時才套用。過期重載把每一項的序號標成「已提交的最大序號」`committedSeq`（只在 callback 裡以 max 更新），不用已配發的序號，否則配發後、提交前的重載會讓真正的 callback 被拒絕（第三輪必修 2）。CAS 成敗用 `ReferenceEquals` 判斷（`Published` 是 record）。過期重載與讀取失敗也用同一個 CAS 發布，以「發布當下的最新物件」為基礎，不會蓋掉期間的 `Apply`。理由：`AfterCommitActions` 已是「最外層交易提交後才做、回滾丟棄」的現成機制，不必新增 pipeline behavior，也不必在 PUT 全程持鎖；`TransactionBehavior` 在釋放交易後才執行 callback（`TransactionBehavior.cs:16,37`），兩次 PUT 的 callback 可能逆序，靠序號擋；寫入鎖從交易開始就持有（PostgreSQL 全庫寫入鎖、SQLite 經 `WriteGate` 加 `BEGIN IMMEDIATE`，`EfTransactionManager.cs:13`），所以序號順序等於提交順序。代價：提交到 `Apply` 之間有毫秒級窗口，算進判斷 4 的已知限制。
 21. 〔技術〕**語系類 RoleSet 的錯誤訊息寫「語系」**（審查 p3-S5）：`PolicyMessages.Invalid` 的 RoleSet 分支依 `d.Category == "locale"` 回 `只能從以下語系挑選：…`，其餘照舊。
 22. 〔技術〕**語系類政策的選項由介面提供**（i4 §4.3、§18 第 2 點）：新增 `IInstalledLocales`（Application，singleton；出廠實作回 `I18nText.SupportedLocales`）與 `PolicyOptionSource`（唯一的選項出處：語系類回已安裝語系，其餘回 `def.Options`）。`PolicyDefinition.Normalize` 改收選項參數；`PolicyJson`、`PolicyMessages.Invalid`、`PolicyReader` 的選項都從 `PolicyOptionSource` 來。i4a 只換 `IInstalledLocales` 的實作。
 23. 〔技術〕**`IsWellFormed` 的支援語系檢查集中在一個私有方法**（i4 §10.1、§18 第 5 點），i4a 換成代碼格式檢查；Task 8–12 不新增 `I18nText.SupportedLocales` 的使用點（要用就走 `IInstalledLocales`）。
@@ -242,16 +250,20 @@
 **Interfaces:**
 - `public sealed class CachedSystemPolicy(IServiceScopeFactory scopes, TimeProvider time, PolicyEnvironmentDefaults env, ILogger<CachedSystemPolicy> logger)`（singleton）：
   - 保留 `Ttl`（60 秒）、`FailureTtl`（10 秒）、`ReadTimeout`（2 秒），都列設計 §10 技術限制。
-  - 發布物件 `sealed record Published(FrozenDictionary<string, string> Values, FrozenDictionary<string, long> Seq, long ApplyCount, TimeSpan BusinessOffset, DateTimeOffset LoadedAt, bool Failed, bool Loaded)`（不可變；`Seq` 是每一項最後套用的更新序號，`ApplyCount` 是 `Apply` 成功的累計次數）。欄位 `private Published _current`；讀取端 `Volatile.Read` 一次後只用那一份；所有寫入一律走 `Publish(Func<Published, Published?> next)`：`do { cur = Volatile.Read(ref _current); var n = next(cur); if (n is null) return; } while (Interlocked.CompareExchange(ref _current, n, cur) != cur);`。不用 `Volatile.Write` 直接覆蓋。
-  - `private long _seq`；`public long NextSequence() => Interlocked.Increment(ref _seq)`（只由系統 PUT 在交易內呼叫）。
+  - 發布物件 `sealed record Published(FrozenDictionary<string, string> Values, FrozenDictionary<string, long> Seq, long ApplyCount, TimeSpan BusinessOffset, DateTimeOffset LoadedAt, bool Failed, bool Loaded)`（不可變；`Seq` 是每一項最後套用的更新序號，`ApplyCount` 是 `Apply` 成功的累計次數）。欄位 `private Published _current`；讀取端 `Volatile.Read` 一次後只用那一份；所有寫入一律走 `Publish(Func<Published, Published?> next)`：`do { cur = Volatile.Read(ref _current); var n = next(cur); if (n is null) return; } while (!ReferenceEquals(Interlocked.CompareExchange(ref _current, n, cur), cur));`。不用 `Volatile.Write` 直接覆蓋。**交換成敗一律用 `ReferenceEquals` 判斷**（第三輪必修 1）：`Published` 是 record，`!=` 走值相等比較，期間被換成「內容相同的另一個物件」時會誤判成功、把 `n` 丟掉。類別註解寫明這一點；`grep -n "CompareExchange" CachedSystemPolicy.cs` 的每一行都要包在 `ReferenceEquals` 裡（`long` 的 CAS 除外）。
+  - `private long _seq`；`public long NextSequence() => Interlocked.Increment(ref _seq)`（只由系統 PUT 在交易內呼叫；**已配發**的序號，可能屬於還沒提交的 PUT）。
+  - `private long _committedSeq`（第三輪必修 2）：**已提交**的最大序號，只在 `Apply`（也就是 `AfterCommitActions` 的 callback，提交之後才會執行）裡以 max 更新：`long c; do { c = Volatile.Read(ref _committedSeq); if (seq <= c) break; } while (Interlocked.CompareExchange(ref _committedSeq, seq, c) != c);`（`long` 是值型別，`!=` 正確）。不變式：`_committedSeq >= s` 時，序號 `s` 的 PUT 一定已提交，之後開始的資料庫讀取一定看得到它。
   - `public string Get(PolicyDefinition def)`：只收 `Scope == System`，否則丟 `InvalidOperationException`（同現況）；沒載入過回 `env.FactoryOf(def)`。
   - `public TimeSpan BusinessOffset`（換狀態時一起算好）。
-  - `public Task EnsureFreshAsync(CancellationToken ct)`：沒過期（成功看 `Ttl`、失敗看 `FailureTtl`）直接返回；`_gate.WaitAsync(0)` 拿不到就返回（沿用舊值、不等待）；拿到後再確認一次過期；記下 `start = Volatile.Read(ref _current)` 與 `seqAtStart = Volatile.Read(ref _seq)`；用自己的 `ReadTimeout` token 開 scope、逐項 `IPolicyReader.ResolveAsync(def, null).Effective`（reader 在 scope 內只發一次查詢）。
-    - 成功：`Publish(cur => cur.ApplyCount != start.ApplyCount ? null : new(values, 每一項 Seq = max(cur.Seq[code], seqAtStart), cur.ApplyCount, offset, now, Failed: false, Loaded: true))`。期間有 `Apply` 就整份丟掉（回 null），`LoadedAt` 不動，下一個請求再重載。`Seq` 標到 `seqAtStart`：讀取開始前已取序號的 PUT，callback 晚到時不會把重載讀到的較新值蓋回去。
+  - `public Task EnsureFreshAsync(CancellationToken ct)`：沒過期（成功看 `Ttl`、失敗看 `FailureTtl`）直接返回；`_gate.WaitAsync(0)` 拿不到就返回（沿用舊值、不等待）；拿到後再確認一次過期；記下 `start = Volatile.Read(ref _current)` 與 `committedAtStart = Volatile.Read(ref _committedSeq)`（**讀資料庫之前**取，不用 `_seq`）；用自己的 `ReadTimeout` token 開 scope、逐項 `IPolicyReader.ResolveAsync(def, null).Effective`（reader 在 scope 內只發一次查詢）。
+    - 成功：`Publish(cur => cur.ApplyCount != start.ApplyCount ? null : new(values, 每一項 Seq = max(cur.Seq[code], committedAtStart), cur.ApplyCount, offset, now, Failed: false, Loaded: true))`。期間有 `Apply` 就整份丟掉（回 null），`LoadedAt` 不動，下一個請求再重載。`Seq` 標到 `committedAtStart`：序號不大於它的 PUT 都已提交、重載一定讀到了，它們晚到的 callback 被擋掉不會把舊值蓋回去；序號比它大的 PUT（含「已配發、還沒提交」的那筆），callback 一定比標記新，照常套用。
+      - 為什麼不用已配發的 `_seq`（第二輪的寫法）：PUT 在交易內配發 `s` 之後、提交之前，重載讀到的是舊值，卻標上 `s`；提交後真正的 callback `Apply(新值, s)` 因為 `s <= s` 被拒絕，快照停在舊值，直到下一次重載（最多 60 秒），PUT 回應後立刻讀也拿到舊值。
+      - 代價：兩筆 PUT 都已提交、callback 都還沒跑時重載，標記會比它讀到的值舊；較舊那筆的 callback 晚到時會先套用舊值，等較新那筆的 callback 跑完才收斂到新值。這段落差和「提交到 `Apply` 之間」是同一個毫秒級窗口（判斷 4、20 已列為已知限制），不另外處理。
+      - 考慮過的替代做法：把序號存進資料庫、重載時一起讀回來，可以完全精確，但要改設定表結構與 migration，代價大於這個窗口，不採用。
     - 讀不到（例外或逾時）：記 Warning；`Publish(cur => cur with { Failed = true, LoadedAt = now })`，以發布當下的物件為基礎，期間 `Apply` 的值保留；從沒成功過時 `Values` 是 `env.FactoryOf`。
     - 呼叫端的 token 取消時照現況往外丟 `OperationCanceledException`，其他例外不往外丟。
     - 已知限制（寫進設計 §10 與 `docs/deploy.md`）：資料庫持續讀不到時，沿用上次成功的值沒有時間上限；冷啟動就讀不到時用部署出廠值（營運時區可能不是管理員設的值）。
-  - `public void Apply(PolicyDefinition def, string effective, long seq)`：`Publish(cur => seq <= cur.Seq.GetValueOrDefault(def.Code) ? null : cur with { Values = 換掉那一項, Seq = 那一項設 seq, ApplyCount = cur.ApplyCount + 1, BusinessOffset = 時區時重算 })`；`LoadedAt` 不動。序號不比較新時不套用，並把 `LoadedAt` 設成過期（同樣經 `Publish`），讓下一個請求以資料庫為準重載。
+  - `public void Apply(PolicyDefinition def, string effective, long seq)`：**第一步**以 max 更新 `_committedSeq`（見上；不論之後套不套用都更新），**第二步**才 `Publish(cur => seq <= cur.Seq.GetValueOrDefault(def.Code) ? null : cur with { Values = 換掉那一項, Seq = 那一項設 seq, ApplyCount = cur.ApplyCount + 1, BusinessOffset = 時區時重算 })`；`LoadedAt` 不動。序號不比較新時不套用，並把 `LoadedAt` 設成過期（同樣經 `Publish`），讓下一個請求以資料庫為準重載。先更新 `_committedSeq` 再發布的理由：callback 只在提交後執行，所以這時更新不違反不變式；若在兩步之間有重載開始，它的標記已涵蓋 `s`、讀到的也是新值，第二步被擋下只是多標一次過期，結果仍正確。
   - 保留 `IntAsync`、`BoolAsync`：`await EnsureFreshAsync(ct)` 後回 `Get(def)` 的解析值（既有呼叫端不改）。
   - 與 O1 的差異（寫進類別註解與交付說明）：讀不到時從「回 `def.Factory`」改成「沿用上次成功的值，從沒成功過才用部署出廠值」。理由：時區或語系在資料庫短暫故障時跳回出廠值，會用錯偏移寫入索引。
 - `public interface IPolicyChangeHook { Task<ServiceResult?> BeforeCommitAsync(PolicyDefinition def, string oldEffective, string newEffective, CancellationToken ct); }`；DI 以 `AddScoped<IPolicyChangeHook, …>` 註冊，handler 注入 `IEnumerable<IPolicyChangeHook>`。
@@ -277,11 +289,15 @@
     - `Apply_BetweenCheckAndPublish_NotOverwritten`（必修 2，「檢查後插入」）：用類別內的測試掛點 `internal Action? BeforePublishForTests`，在重載的 CAS 第一次嘗試之前插入 `Apply(+07:00)` → CAS 失敗、重試時看到 `ApplyCount` 變了而放棄 → `BusinessOffset` 仍 7h。
     - `ReloadFails_DuringApply_KeepsAppliedValue`（必修 2，失敗分支）：reader 卡住時 `Apply(+07:00)`，之後 reader 丟例外 → `BusinessOffset` 仍 7h、`Failed`；10 秒內不重讀，前進 11 秒且 reader 恢復回 `+07:00` 後重載成功。
     - `Apply_OutOfOrderCallbacks_NewerWins`（必修 2，callback 逆序）：`s1 = NextSequence()`、`s2 = NextSequence()`；先 `Apply(+07:00, s2)` 再 `Apply(+09:00, s1)` → `BusinessOffset` 是 7h，且狀態被標成過期；不同政策的序號互不影響（`Apply(locale.timeZone, …, s1)` 不擋 `Apply(organization.maxDepth, …, s2)` 之後的 `Apply(organization.maxDepth, …, s3)`）。
-    - `Reload_StampsSequence_LateCallbackIgnored`：`s1` 已取、重載讀到 `+07:00`（`s1` 的值）並發布；之後 `Apply(+08:00, s0)`（更舊的 PUT 的晚到 callback）不套用。
+    - `Publish_UsesReferenceEquality`（第三輪必修 1）：reader 回 `+07:00`；`BeforePublishForTests` 在第一次 CAS 之前用 `internal void ReplaceCurrentForTests(Func<Published, Published>)` 把 `_current` 換成 `cur with { }`（內容相同、參考不同、`ApplyCount` 不變）→ 第一次 CAS 失敗、迴圈重試後發布成功，`BusinessOffset == 7h`。用 `!=` 判斷時這案會停在 8h（誤判成功、`n` 被丟掉），所以它能抓到退化。
+    - `Reload_BetweenSeqAndCommit_CallbackStillApplies`（第三輪必修 2，交錯案例）：`s = NextSequence()`（模擬 PUT 已配發、還沒提交）；過期後重載，reader 回舊值 `+08:00` 並發布；之後 `Apply(LocaleTimeZone, "+07:00", s)`（提交後的 callback）→ `BusinessOffset == 7h`。第二輪的 `seqAtStart` 寫法這案會停在 8h。
+    - `Reload_AfterCallback_StaleCallbackIgnored`（取代第二輪的 `Reload_StampsSequence_LateCallbackIgnored`）：`s0`、`s1` 依序配發；`Apply(+07:00, s1)` 先跑（`_committedSeq == s1`）；過期後重載，reader 回 `+07:00`（資料庫已含兩筆）並發布；之後 `Apply(+08:00, s0)`（較舊 PUT 的晚到 callback）不套用，`BusinessOffset` 仍 7h。
+    - `Reload_BeforeCallbacks_ConvergesToNewest`（記錄已知窗口）：`s0`、`s1` 都配發、兩個 callback 都還沒跑；重載讀到 `+07:00`（`s1` 的值）並發布（標記是更早的 `_committedSeq`）；`Apply(+08:00, s0)` 後暫時是 8h；`Apply(+07:00, s1)` 後是 7h。斷言最後狀態，並在測試註解寫明中間的 8h 是判斷 20 的已知窗口。
     - 既有 5 案（`ReturnsEffectiveValue`、`CachesFor60Seconds_ThenRereads`、`ReaderThrows_ReturnsFactory_CachedFor10Seconds`、`ReaderHangs_ReturnsFactoryWithinReadTimeout`、`ModuleScopedPolicy_Throws`）不改斷言。
   - `SystemPolicyCacheTests`（類別 `Category=Postgres`，經 MediatR 含 `TransactionBehavior`）：
     - `Put_UpdatesCacheAfterCommit`：送 `UpdateSystemPolicyRequest("locale.timeZone", J("\"+07:00\""))` 後 singleton 的 `BusinessOffset == 7h`。
-    - `Put_RolledBack_CacheUnchanged`：註冊測試用 `IPolicyChangeHook` 回 `ServiceResult.Invalid(...)` → 400；`Dynamic_SystemSetting` 沒有 `policy.locale.timeZone`；`BusinessOffset` 仍 8h。
+    - 「配發序號後、提交前重載」的交錯只在 `CachedSystemPolicyTests.Reload_BetweenSeqAndCommit_CallbackStillApplies` 測：要在交易內另開連線讀資料庫，SQLite（`BEGIN IMMEDIATE`）與 PostgreSQL 的讀取行為不同，整合測試的時序無法穩定控制；單元測試直接操作序號與 reader，結果可重現。
+    - `Put_RolledBack_CacheUnchanged`：註冊測試用 `IPolicyChangeHook` 回 `ServiceResult.Invalid(new Dictionary<string, string[]> { ["value"] = ["test"] })`（寫法同 Task 4，避免 overload 不明）→ 400；`Dynamic_SystemSetting` 沒有 `policy.locale.timeZone`；`BusinessOffset` 仍 8h。
     - `Put_SameValue_HooksNotCalled`：PUT `+08:00`（等於生效值）時測試 hook 沒被呼叫。
     - 必修 1 的四個案例（hook 收到的新舊值與快照都要對；SQLite 與 PostgreSQL 雙跑）：
       - `Put_FirstSet_HookSeesNewValue`：沒設過時 PUT `+07:00` → 測試 hook 收到 `("+08:00", "+07:00")`；快照 7h。
@@ -324,7 +340,7 @@
 - `TaskRuleEvaluator.DueDate(TaskRuleTask def, Module module, IReadOnlyDictionary<string, JsonElement?> values, TimeSpan businessOffset)`。已存的任務 `DueDate` 改時區後不重算（設計 §10 已知限制）。
 - `TimeZoneChangeHook(IRecordRepository records) : IPolicyChangeHook`：只處理 `LocaleTimeZone`；`delta = UtcOffsetOf(new) - UtcOffsetOf(old)`。先檢查邊界（審查必修 3）再平移：
   1. 可平移的原值範圍：`delta > 0` 時 `DateValue <= DateTime.MaxValue - delta`；`delta < 0` 時 `DateValue >= DateTime.MinValue - delta`（＝`MinValue` 加上 `|delta|`）。
-  2. `var (count, min, max) = await records.DateTimeIndexOutOfShiftRangeAsync(delta, ct)`；`count > 0` 就回 `ServiceResult.Invalid(new() { ["value"] = [PolicyMessages.TimeZoneShiftOutOfRange(count, min, max)] })`，不發平移的 SQL；`TransactionBehavior` 回滾，設定、索引、快照都不變。
+  2. `var (count, min, max) = await records.DateTimeIndexOutOfShiftRangeAsync(delta, ct)`；`count > 0` 就回 `ServiceResult.Invalid(new Dictionary<string, string[]> { ["value"] = [PolicyMessages.TimeZoneShiftOutOfRange(count, min, max)] })`，不發平移的 SQL（第三輪必修 3：`ServiceResult.cs:72,75` 有 `IDictionary<string, string[]>` 與 `IDictionary<string, MessageRef[]>` 兩個 overload，`new() { … }` 無法推斷型別、編譯不過；`PolicyMessages` 回 `string`，所以明寫 `Dictionary<string, string[]>`，同 `UpdateModuleHandler.cs:94` 與 `PolicyHandlers.cs:60` 的既有寫法）；`TransactionBehavior` 回滾，設定、索引、快照都不變。
   3. 否則 `await records.ShiftDateTimeIndexAsync(delta, ct)`，回 null。
   - 訊息（`PolicyMessages`，原文）：`改成這個時區會讓 {count} 筆日期時間超出可儲存的範圍（{min} ～ {max}），請先修改這些記錄再改時區`，`min`／`max` 以 `yyyy-MM-dd HH:mm` 顯示超界那幾筆索引值的最小與最大值；帶出筆數與範圍（backend 規則「超過上限的錯誤訊息要帶出上限數字」的同類做法）。
   - 為什麼要先查：.NET `DateTime` 的範圍比 PostgreSQL `timestamp` 窄，SQLite 存成文字；平移出界時資料庫可能報錯（交易被標成失效），也可能寫進讀不回來的值，兩種都不能靠事後接例外處理（backend 規則：交易內接住 `ExecuteUpdate` 錯誤後不能再發 SQL）。
@@ -353,7 +369,7 @@
 - [ ] **Step 4: 跑測試確認通過**：同 Step 2；另跑 ApplicationTests `--filter "FullyQualifiedName~Report|FullyQualifiedName~TaskRule|FullyQualifiedName~Import|FullyQualifiedName~RecordIndex|FullyQualifiedName~Export|FullyQualifiedName~Print|FullyQualifiedName~History"`；PostgreSQL：ApplicationTests `(FullyQualifiedName~TimeZoneChangeTests|FullyQualifiedName~RecordIndexTests|FullyQualifiedName~ReportSqlEquivalenceTests)`、WebAPITests `BusinessTimeZoneApiTests`（`AddMinutes` 翻譯錯會在這裡出現，不能只看 SQLite）；殘留掃描：`grep -rnE 'Taipei|BusinessClock\.Offset|FieldDisplay\.BusinessOffset|"\+08:00"' backend/src --include='*.cs' | grep -v "DemoService\|Seed\|PolicyCatalog"` 應無結果；`grep -rn "FromHours(8)" backend/src --include='*.cs'` 只剩 `Program.cs:112` 的 cookie `ExpireTimeSpan`
 - [ ] **Step 5: Commit**（`feat(policy): 後端日期時間改用營運時區政策，改時區時平移索引（A17）`）
 
-**驗收**：Step 4 全過（含 PostgreSQL，`TimeZoneChangeTests` 的上下限三案在兩種資料庫都過）；兩條殘留掃描符合預期；交付說明寫明 `ShiftDateTimeIndexAsync` 是交易內的 `ExecuteUpdate`。
+**驗收**：Step 4 全過（含 PostgreSQL，`TimeZoneChangeTests` 的上下限三案在兩種資料庫都過）；兩條殘留掃描符合預期；`grep -rn "Invalid(new() {" backend/src backend/tests` 無結果（第三輪必修 3；`ShiftOverflows*_Rejected` 斷言 `errors.value[0]` 的原文，證明走的是 `string[]` overload、訊息沒被當成 `MessageRef` 代碼）；交付說明寫明 `ShiftDateTimeIndexAsync` 是交易內的 `ExecuteUpdate`。
 
 ### Task 5: 前端時區改從 API 取
 
@@ -529,20 +545,30 @@ D5 已裁決：名稱補進每個必填語系。
 
 ### Task 10: 請求語系與「沒指定語系」的預設（使用者 2026-11-20 裁決）
 
-D4 已裁決：查詢參數帶停用語系時用預設語系。
+D4 已裁決：查詢參數帶停用語系時用預設語系。規則分兩條（第三輪必修 5）：沒指定 → 請求語系（`current.Locale`）；明確指定但已停用或不認得 → 系統預設語系（不看標頭）。
 
 **Files:**
 - Modify: `backend/src/DynamicModules.WebAPI/Security/HeaderCurrentLocale.cs`、`backend/src/DynamicModules.Application/Common/ICurrentLocale.cs`（`FallbackCurrentLocale` 改取快照）
-- Create: `backend/src/DynamicModules.Application/Common/RequestLocale.cs`（`LocaleContext`、`RequestLocale`，Task 11a、11b 的退回鏈也用它）
+- Create: `backend/src/DynamicModules.Domain/ValueObjects/LocaleContext.cs`（純值型別 `LocaleContext`；第三輪必修 4：Task 11b 的 `IAccountRepository`（Domain）要收它，`DynamicModules.Domain.csproj` 沒有任何 `ProjectReference`，放在 Application 會編譯不過，也違反 Domain 不依賴外層）
+- Modify: `backend/src/DynamicModules.Domain/ValueObjects/I18nText.cs`（加 `Resolve(LocaleContext lc)`）
+- Create: `backend/src/DynamicModules.Application/Common/RequestLocale.cs`（只放 `RequestLocale`；它依賴 `ICurrentLocale` 與 `CachedSystemPolicy`，留在 Application。Task 11a、11b 的退回鏈也用它）
 - Modify（套件開啟的 body 預設）：`AppService/Data/AppResponses.cs:84`（`Locale ?? I18nText.FallbackLocale` → 可空，`AppOpenPlanner`／`OpenApp` 用 `requestLocale.For(body.Locale)`）
 - Modify（查詢參數預設 `"zh-TW"` → `string? locale = null`，request record 的 `Locale` 改可空）：`ReportsController.cs:54,58,63,67,98,102,108,115`、`DashboardsController.cs:66,70`、`AdminDashboardsController.cs:69`、`RecordsController.cs:57`、`ImportExportController.cs:16`
 - Modify（body 預設）：`AdminGroupsController.cs:28,32`（`body.Locale ?? "zh-TW"` → 直接傳 `body.Locale`，handler 決定）
 - Modify（handler 內預設）：`ExportRecordsHandler.cs:51`、`PrintRecordHandler.cs:47`、`GetRecordHistoryHandler.cs:57`、`ReportRunner.cs:97`、報表與儀表板的其他 handler（以 controller 改成可空後的編譯錯誤為準）、`CreateGroupHandler`、`RenameGroupHandler`
-- Test: `backend/tests/DynamicModules.WebAPITests/LocaleApiTests.cs`、`backend/tests/DynamicModules.WebAPITests/Dynamic/LocaleDefaultApiTests.cs`（新，`Category=Postgres`）
+- Test: `backend/tests/DynamicModules.WebAPITests/LocaleApiTests.cs`、`backend/tests/DynamicModules.WebAPITests/Dynamic/LocaleDefaultApiTests.cs`（新，`Category=Postgres`）、`backend/tests/DynamicModules.ApplicationTests/Common/RequestLocaleTests.cs`（新）、`backend/tests/DynamicModules.DomainTests/ValueObjects/I18nTextTests.cs`
 
 **Interfaces:**
 - `HeaderCurrentLocale(IHttpContextAccessor accessor, CachedSystemPolicy cache)`：標頭值在 `cache.EnabledLocales` 內就用它，否則（缺值、不認得、已停用、沒有 HttpContext）`cache.DefaultLocale`。`FallbackCurrentLocale(CachedSystemPolicy cache)`：`Locale => cache.DefaultLocale`。`ICurrentLocale` 的註解改「缺值、不認得或已停用時用預設語系（政策 locale.default）」。
-- `public sealed record LocaleContext(string Locale, IReadOnlyList<string> Fallbacks)`；`RequestLocale(ICurrentLocale current, CachedSystemPolicy cache)`（scoped）：`LocaleContext Current => new(current.Locale, cache.LocaleFallbacks)`；`LocaleContext For(string? requested)`：`requested` 在 `cache.EnabledLocales` 內就用它，否則（null、空字串、不認得、已停用）用 `current.Locale`（D4）。Application 擴充方法 `text.Resolve(LocaleContext lc) => text.Resolve(lc.Locale, lc.Fallbacks)`。
+- Domain（`DynamicModules.Domain.ValueObjects`）：`public sealed record LocaleContext(string Locale, IReadOnlyList<string> Fallbacks)`，不含任何 IO 或政策讀取，只是「要的語系＋退回鏈」兩個值；`I18nText.Resolve(LocaleContext lc) => Resolve(lc.Locale, lc.Fallbacks)`（實例方法，放在 Domain，取代第二輪的 Application 擴充方法）。
+- Application：`RequestLocale(ICurrentLocale current, CachedSystemPolicy cache)`（scoped）：
+  - `LocaleContext Current => new(current.Locale, cache.LocaleFallbacks)`。
+  - `LocaleContext SystemDefault => new(cache.DefaultLocale, cache.LocaleFallbacks)`（下面第 3 條與 Task 11b 的 N1 共用；`TitleTemplate.cs`（Domain）收的就是這個值，這也是 `LocaleContext` 必須放在 Domain 的另一個原因）。
+  - `LocaleContext For(string? requested)`（第三輪必修 5，D4 的兩條規則分開）：
+    1. `requested` 是 null、空字串或空白（**沒指定**）→ `Current`（請求語系，也就是 `X-Locale` 標頭；標頭也沒有時 `HeaderCurrentLocale` 已退回預設語系）。
+    2. `requested` 在 `cache.EnabledLocales` 內 → `new(requested, cache.LocaleFallbacks)`。
+    3. **明確指定但已停用或不認得** → `SystemDefault`（系統預設語系，不是 `current.Locale`）。
+  - 類別註解寫這三條與「D4，使用者 2026-11-20 裁決」。第二輪把第 1、3 條合併成 `current.Locale`，標頭繁中、預設英文、`?locale=th` 時會回繁中，與裁決不符。
 - handler 的語系：`var lc = requestLocale.For(request.Locale);`，之後所有輸出用 `lc`（Task 11a 把這些 handler 內的 `Resolve(locale)` 換成 `Resolve(lc)`）。
 - 群組：`CreateGroupRequest`／`RenameGroupRequest` 的 `Locale` 改 `string?`，handler 用同一行規則；同名檢查用決定後的語系。
 
@@ -553,12 +579,16 @@ D4 已裁決：查詢參數帶停用語系時用預設語系。
     - `Print_UsesDefaultLocale`、`History_UsesDefaultLocale`、`ReportRun_UsesDefaultLocale`、`DashboardCard_UsesDefaultLocale`：標籤是英文。
     - `CreateGroup_NoLocale_WritesDefaultLocale`：名稱寫進 `en-US`。
     - `ExplicitLocale_StillWins`：帶 `?locale=zh-TW` 時是中文。
-    - `DisabledQueryLocale_UsesDefault`（D4）：啟用 `["zh-TW","en-US"]`、預設 `en-US`，匯出與報表帶 `?locale=th` → 英文；帶 `?locale=xx` 也是英文。
+    - `DisabledQueryLocale_UsesDefault`（D4）：啟用 `["zh-TW","en-US"]`、預設 `en-US`、不帶標頭，匯出與報表帶 `?locale=th` → 英文；帶 `?locale=xx` 也是英文。
+    - `DisabledQueryLocale_IgnoresHeader_UsesDefault`（第三輪必修 5）：啟用 `["zh-TW","en-US"]`、預設 `en-US`，帶 `X-Locale: zh-TW` 與 `?locale=th`（已停用）→ 匯出表頭、報表欄名都是**英文**（系統預設語系）；`?locale=xx`（不認得）同樣英文。
+    - `NoQueryLocale_UsesHeader`（第三輪必修 5，和上一案對照）：同樣設定、帶 `X-Locale: zh-TW`、**不帶** `?locale` → **繁中**（請求語系）。兩案只差有沒有 `?locale=th`，結果不同，證明「沒指定」與「指定了但無效」分成兩條規則。
+  - `RequestLocaleTests`（新，`backend/tests/DynamicModules.ApplicationTests/Common/RequestLocaleTests.cs`；用假的 `ICurrentLocale` 回 `zh-TW`、快照預設 `en-US`、啟用 `["zh-TW","en-US"]`）：`For(null)`、`For("")`、`For("  ")` → `zh-TW`；`For("en-US")` → `en-US`；`For("th")`、`For("xx")` → `en-US`；`SystemDefault.Locale` → `en-US`；各情況的 `Fallbacks` 都是 `["en-US","zh-TW"]`。
+  - `I18nTextTests.Resolve_LocaleContext_SameAsTwoArgs`（Domain）：`Resolve(new LocaleContext("th", ["en-US","zh-TW"]))` 與 `Resolve("th", ["en-US","zh-TW"])` 結果相同。
     - `OpenApp_NoLocale_UsesDefault`：開啟套件不給 `locale` 時，群組名稱以預設語系解析與檢查同名。
     - 出廠值時（預設 zh-TW）上述各端點與現在輸出相同（既有測試照過即可，不另寫）。
-- [ ] **Step 2: 跑測試確認失敗**：`cd backend && dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~LocaleApiTests|FullyQualifiedName~LocaleDefaultApiTests"`
+- [ ] **Step 2: 跑測試確認失敗**：`cd backend && dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~LocaleApiTests|FullyQualifiedName~LocaleDefaultApiTests"`；`dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~RequestLocaleTests"`；`dotnet test tests/DynamicModules.DomainTests --filter "FullyQualifiedName~I18nTextTests"`
 - [ ] **Step 3: 實作**
-- [ ] **Step 4: 跑測試確認通過**：同 Step 2；另跑 WebAPITests `--filter "FullyQualifiedName~Locale|FullyQualifiedName~MessageText|FullyQualifiedName~Report|FullyQualifiedName~Dashboard|FullyQualifiedName~Export|FullyQualifiedName~Print|FullyQualifiedName~AdminGroup"`；PostgreSQL：WebAPITests `LocaleDefaultApiTests`；`grep -rn 'string locale = "zh-TW"\|?? "zh-TW"\|? "zh-TW" :' backend/src` 無結果
+- [ ] **Step 4: 跑測試確認通過**：同 Step 2；另跑 WebAPITests `--filter "FullyQualifiedName~Locale|FullyQualifiedName~MessageText|FullyQualifiedName~Report|FullyQualifiedName~Dashboard|FullyQualifiedName~Export|FullyQualifiedName~Print|FullyQualifiedName~AdminGroup"`；PostgreSQL：WebAPITests `LocaleDefaultApiTests`；`grep -rn 'string locale = "zh-TW"\|?? "zh-TW"\|? "zh-TW" :' backend/src` 無結果；`grep -rn "record LocaleContext" backend/src` 只有 `DynamicModules.Domain/ValueObjects/LocaleContext.cs` 一處；`grep -rn "DynamicModules.Application" backend/src/DynamicModules.Domain` 無結果（必修 4）
 - [ ] **Step 5: Commit**（`feat(policy): 請求沒指定語系時用預設語系政策`）
 
 **驗收**：Step 4 全過（含 PostgreSQL）；grep 無結果。
@@ -610,7 +640,7 @@ D4 已裁決：查詢參數帶停用語系時用預設語系。
   - 選單排序：`SchemaService/Queries/GetMenu/GetMenuHandler.cs:22`（依請求語系的名稱排序）。
   - 群組影響：`Persistence/Repositories/Dynamic/AccountRepository.cs:88,92,103`、`Domain/Repositories/Dynamic/IAccountRepository.cs:49`（`GetGroupImpactAsync` 多收 `LocaleContext`，由 handler 傳入；註解同步）。
 - 移到 Task 9（是必填檢查，不是輸出）：`TaskRuleService/TaskRuleValidator.cs:130`（任務標題必填改走 `RequiredTextGuard`）。若 Task 9 已做完，這裡只確認。
-- 寫進資料庫、稽核或 log 的固定繁中文字（N1 已裁決：改用系統預設語系，不是請求語系）：`ApprovalService/ApprovalEngine.cs:191`（改道說明，程式註解寫「comment 是固定繁中，只留給資料庫與稽核」）、`ApprovalService/ApprovalGraphEngine.cs:277,283`（分支取消說明）、`ApprovalService/ApproverResolver.cs:179`（「寫進簽核歷程的說明（資料庫）固定繁中」）、`Common/Security/FieldLocks.cs:73`（`Exception.Message` 給記錄與測試）、`AppService/Commands/ImportAppPackage.cs:46` 與 `TemplateService/Commands/ImportTemplate/ImportTemplateHandler.cs:30`（稽核目標名稱）、`Domain/Modules/TitleTemplate.cs:118` 與 `FieldService/Commands/UpdateOption/UpdateOptionHandler.cs:29`（記錄標題用的選項標籤，兩處要一致，否則改名判斷會錯）。
+- 寫進資料庫、稽核或 log 的固定繁中文字（N1 已裁決：改用系統預設語系，不是請求語系；寫法 `Resolve(requestLocale.SystemDefault)`，Domain 的 `TitleTemplate` 由呼叫端傳入同一個 `LocaleContext`）：`ApprovalService/ApprovalEngine.cs:191`（改道說明，程式註解寫「comment 是固定繁中，只留給資料庫與稽核」）、`ApprovalService/ApprovalGraphEngine.cs:277,283`（分支取消說明）、`ApprovalService/ApproverResolver.cs:179`（「寫進簽核歷程的說明（資料庫）固定繁中」）、`Common/Security/FieldLocks.cs:73`（`Exception.Message` 給記錄與測試）、`AppService/Commands/ImportAppPackage.cs:46` 與 `TemplateService/Commands/ImportTemplate/ImportTemplateHandler.cs:30`（稽核目標名稱）、`Domain/Modules/TitleTemplate.cs:118` 與 `FieldService/Commands/UpdateOption/UpdateOptionHandler.cs:29`（記錄標題用的選項標籤，兩處要一致，否則改名判斷會錯）。
 - 不改：`Module.cs:41,46`、`SectionTextJsonConverter.cs:16,23`（舊資料與套件格式的相容讀法）、`TemplateValidator.cs:276`（套件必有繁中，判斷 12）、`ServiceResult.cs:21,29`（給 log 與測試的繁中 `Message`／`Errors`）。
 - Test: `backend/tests/DynamicModules.ApplicationTests/Dynamic/Policies/LocaleLabelTests.cs`（加案例）、`backend/tests/DynamicModules.WebAPITests/Dynamic/LocaleChainApiTests.cs`（加案例）
 
@@ -713,7 +743,7 @@ D2 已裁決：警示信語言跟啟用與預設語系（`OpsChannelTab`、`Aler
 
 1. **設計覆蓋**：A5 → Task 1、2；A17＋A31（`BusinessClock`、`TaipeiBusinessTime`、`Program.cs:101`、`FieldImportParser`、`ReportRules`、`DateTimeHandler`、`FieldDisplay`、`TaskRuleEvaluator`、`ReportRunner` 各處，前端 `field-type-registry`、`rule-engine`、`DateSelect`、`FilterValueInput`、`rule-state`）→ Task 1、3、4、5；稽核與維運時間（使用者 2026-11-20）→ Task 6；A18 → Task 8、9、12；沒指定語系用預設（使用者 2026-11-20）→ Task 10、11；§3.5 → Task 2、4、5、9、12；§10 → Task 7、13。
 2. **現況檢查 S1–S12 與 i4**：逐條對應見修訂紀錄 2026-11-20。
-3. **型別一致**：`PolicyKind.UtcOffset`／`'utcOffset'`、`UtcOffsetOf`／`FormatUtcOffset`／`FactoryBusinessOffset`、`CachedSystemPolicy`（`Get`、`BusinessOffset`、`EnsureFreshAsync`、`Apply`、`Display`、`DefaultLocale`、`EnabledLocales`、`RequiredTextLocales`、`LocaleFallbacks`）、`IPolicyChangeHook.BeforeCommitAsync`、`ShiftDateTimeIndexAsync`、`FieldDisplayContext`、`IInstalledLocales`、`PolicyOptionSource`、`RequiredTextGuard.Check`、`I18nText.Resolve(locale, fallbacks)`；前端 `setBusinessOffset`、`loadSessionSettings`、`setLocaleSettings`、`missingRequired`、`useBusinessTimeWatch`、`businessDayStartUtc` 在使用處名稱一致。`IBusinessTime` 不加 `Offset`；沒有 `SystemPolicySnapshot`。
+3. **型別一致**：`PolicyKind.UtcOffset`／`'utcOffset'`、`UtcOffsetOf`／`FormatUtcOffset`／`FactoryBusinessOffset`、`CachedSystemPolicy`（`Get`、`BusinessOffset`、`EnsureFreshAsync`、`Apply`、`Display`、`DefaultLocale`、`EnabledLocales`、`RequiredTextLocales`、`LocaleFallbacks`）、`IPolicyChangeHook.BeforeCommitAsync`、`ShiftDateTimeIndexAsync`、`FieldDisplayContext`、`LocaleContext`（Domain）、`RequestLocale`（`Current`、`For`、`SystemDefault`）、`NextSequence`／`_committedSeq`、`IInstalledLocales`、`PolicyOptionSource`、`RequiredTextGuard.Check`、`I18nText.Resolve(locale, fallbacks)`；前端 `setBusinessOffset`、`loadSessionSettings`、`setLocaleSettings`、`missingRequired`、`useBusinessTimeWatch`、`businessDayStartUtc` 在使用處名稱一致。`IBusinessTime` 不加 `Offset`；沒有 `SystemPolicySnapshot`。
 4. **Review Focus**：七條都有指定測試與所屬 Task。
 5. **待決**：D1–D5 已於 2026-11-20 由使用者裁決（見上）；N1–N3 也已裁決，無待決。
 
