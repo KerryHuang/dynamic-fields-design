@@ -114,11 +114,7 @@ public static class LocalePackAnalyzer
         serverRemove.Sort(StringComparer.Ordinal);
 
         var plan = basePlan with { ServerSet = serverSet, ServerRemove = serverRemove, BooleanRejected = rejected };
-        var applied = After(world, plan).Overlays.GetValueOrDefault(code);
-        var completeness = new CompletenessReport(
-            new CompletenessCount(BuiltinLocaleResources.BaseKeys.Count(k => Has(applied?.Ui, k) || Has(uiBuiltin, k)), BuiltinLocaleResources.BaseKeys.Count),
-            new CompletenessCount(BuiltinServerText.BaseKeys.Count(k => Has(applied?.Server, k) || BuiltinServerText.TryGet(code, k, out var t) && t.Length > 0),
-                BuiltinServerText.BaseKeys.Count));
+        var completeness = LocaleCompleteness.Of(code, After(world, plan).Overlays.GetValueOrDefault(code));
         var warnings = collisions.Collisions
             .Select(c => new LocalePackWarning(WarningBooleanCollisionExisting, [c.Word, string.Join(", ", c.YesLocales), string.Join(", ", c.NoLocales)]))
             .ToList();
@@ -145,13 +141,12 @@ public static class LocalePackAnalyzer
 
     public static BooleanCollisionResult BooleanCollisions(LocaleWorld after, string? packCode)
     {
-        var pairs = after.Installed.Select(i => (i.Code, i.FallbackCode)).ToList();
         var words = new List<(string Code, (string Text, bool Own) Yes, (string Text, bool Own) No)>();
         foreach (var info in after.Installed)
         {
-            var chain = LocaleChain.Fallbacks(info.Code, after.DefaultLocale, pairs).Prepend(info.Code).Append(I18nText.FallbackLocale)
-                .Distinct(StringComparer.Ordinal).ToList();
-            words.Add((info.Code, Resolve(after, chain, ReportText.Yes), Resolve(after, chain, ReportText.No)));
+            var chain = LocaleWorldText.ChainOf(after, info.Code);
+            words.Add((info.Code, LocaleWorldText.Resolve(after, chain, LocaleWorldText.Server, ReportText.Yes),
+                LocaleWorldText.Resolve(after, chain, LocaleWorldText.Server, ReportText.No)));
         }
         var ambiguous = BooleanWords.From(words.Select(w => (w.Yes.Text, w.No.Text))).Ambiguous;
         var collisions = new List<BooleanCollision>();
@@ -192,26 +187,12 @@ public static class LocalePackAnalyzer
 
     private static LocalePackAnalysis Fail(MessageRef error) => new(null, null, error);
 
-    private static bool Has(IReadOnlyDictionary<string, string>? layer, string key) => layer is not null && layer.TryGetValue(key, out var t) && t.Length > 0;
-
     private static Dictionary<string, string> Merge(IReadOnlyDictionary<string, string>? current, IReadOnlyDictionary<string, string> set, IReadOnlyList<string> remove)
     {
         var merged = current is null ? new Dictionary<string, string>(StringComparer.Ordinal) : new Dictionary<string, string>(current, StringComparer.Ordinal);
         foreach (var key in remove) merged.Remove(key);
         foreach (var (key, text) in set) merged[key] = text;
         return merged;
-    }
-
-    /// <summary>沿鏈取第一個有值的層（每個語系先覆寫層、再內建層）；<c>Own</c>＝取自語系自己（鏈的第一個）。</summary>
-    private static (string Text, bool Own) Resolve(LocaleWorld world, IReadOnlyList<string> chain, string key)
-    {
-        for (var i = 0; i < chain.Count; i++)
-        {
-            var c = chain[i];
-            if (world.Overlays.GetValueOrDefault(c)?.Server.GetValueOrDefault(key) is { Length: > 0 } o) return (o, i == 0);
-            if (BuiltinServerText.TryGet(c, key, out var t) && t.Length > 0) return (t, i == 0);
-        }
-        return ("", false);
     }
 
     /// <summary>從候選值重跑撞字篩選（判斷 6）：每輪最多拒一句、先拒「否」，直到這份包不再造成撞字；只有兩句可拒，第三輪還要拒就是程式錯。</summary>
@@ -264,7 +245,8 @@ public static class LocalePackAnalyzer
         return pairs;
     }
 
-    private static MessageRef? Graph(IReadOnlyList<(string Code, string? FallbackCode)> installedAfter, string code) =>
+    /// <summary>上層語系圖守衛的訊息對照（匯入與樣板匯出共用，i4d2 計畫判斷 9）。</summary>
+    internal static MessageRef? Graph(IReadOnlyList<(string Code, string? FallbackCode)> installedAfter, string code) =>
         LocaleGraphRules.Check(installedAfter, code) switch
         {
             null => null,
