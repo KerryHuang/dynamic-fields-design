@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { i18n } from 'src/boot/i18n';
 import { BUILTIN_LOCALES } from 'src/i18n/locale';
 import { setLocaleInfos } from 'src/i18n/locale-settings';
+import { hasUiMessages, installUiMessages } from 'src/i18n/ui-messages';
 import type { ApprovalFlow, GraphDefinition } from 'src/domain/dynamic/approval-flow-types';
 import { edgeBendX, layoutLeftToRight, NODE_H, NODE_W } from 'src/domain/dynamic/approval-graph-layout';
 import { mapGraphIssues } from 'src/domain/dynamic/approval-graph-errors';
@@ -141,20 +142,22 @@ describe('designer-graph', () => {
   });
 });
 
-describe('新節點名稱的語系＝已安裝且前端有翻譯包的語系', () => {
+describe('新節點名稱的語系＝已安裝且已載入文字的語系（i4b 判斷 16）', () => {
   afterEach(() => setLocaleInfos(BUILTIN_LOCALES));
-  const ja = { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null, uiHash: '' };
+  const info = (code: string) => ({ code, nativeName: code, quasarLang: code, fallbackCode: 'en-US', uiHash: '' });
   it('出廠四語各一份', () => {
     expect(Object.keys(approvalNames(1))).toEqual(['zh-TW', 'en-US', 'th', 'vi']);
     expect(Object.keys(conditionLabels(1))).toEqual(['zh-TW', 'en-US', 'th', 'vi']);
   });
-  it('裝了 ja 但沒有翻譯包：不產生 ja', () => {
-    setLocaleInfos([...BUILTIN_LOCALES, ja]);
-    expect(approvalNames(1)).not.toHaveProperty('ja');
+  it('裝了 ko 但還沒載入文字：不產生 ko', () => {
+    setLocaleInfos([...BUILTIN_LOCALES, info('ko')]);
+    expect(approvalNames(1)).not.toHaveProperty('ko');
   });
-  it('裝了 ja 且有翻譯包：產生 ja 那句', () => {
-    setLocaleInfos([...BUILTIN_LOCALES, ja]);
-    i18n.global.setLocaleMessage('ja', { approval: { designer: { graph: { newApproval: '承認 {n}', newCondition: '条件 {n}' } } } } as never);
+  it('ja 載入文字（installUiMessages）之後立即產生 ja 那句（沒有快照）', () => {
+    setLocaleInfos([...BUILTIN_LOCALES, info('ja')]);
+    expect(approvalNames(2)).not.toHaveProperty('ja');
+    installUiMessages(i18n, 'ja', { 'approval.designer.graph.newApproval': '承認 {n}', 'approval.designer.graph.newCondition': '条件 {n}' }, 'J');
+    expect(hasUiMessages(i18n, 'ja')).toBe(true);
     expect(approvalNames(2).ja).toBe('承認 2');
     expect(conditionLabels(3).ja).toBe('条件 3');
   });

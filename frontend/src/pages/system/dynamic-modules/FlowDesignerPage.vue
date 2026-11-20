@@ -25,6 +25,9 @@ import type { TrialOverlay } from 'src/presentation/dynamic/approval-designer/gr
 import { useDesignerActions } from 'src/presentation/dynamic/approval-designer/graph/use-designer-actions';
 import { useGraphDesigner } from 'src/presentation/dynamic/approval-designer/graph/use-graph-designer';
 import { isForbidden, type ApiError } from 'src/services/api/http';
+import { i18n } from 'src/i18n/instance';
+import { installedLocales } from 'src/i18n/locale-settings';
+import { ensureLocaleMessages } from 'src/i18n/ui-messages';
 
 // 流程圖設計頁（§10.2）：路由層動態載入的獨立頁面，Vue Flow 只在畫布、節點、線三個檔案。
 const { t, locale } = useI18n();
@@ -53,7 +56,10 @@ const loadFailed = ref(false);
 const notFound = computed(() => (flowQuery.error.value as ApiError | null)?.status === 404);
 /** 沒有權限：讀不到流程或模組（403），或沒有編輯權的人進「新增流程」。 */
 const forbidden = computed(() => isForbidden(flowQuery.error.value) || isForbidden(moduleQuery.error.value) || (isNewRoute.value && !!me.data.value && !canEdit.value));
-watch([() => flowQuery.data.value, flowKey, () => !!me.data.value], ([flow, key, ready]) => {
+// 新節點名稱涵蓋每個已安裝語系：先載入各語系的文字（最多等 STARTUP_BUDGET_MS），建初始圖與允許新增節點都在這之後（i4b 計畫判斷 16）
+const namesReady = ref(false);
+void ensureLocaleMessages(i18n, installedLocales()).finally(() => { namesReady.value = true; });
+watch([() => flowQuery.data.value, flowKey, () => !!me.data.value && namesReady.value], ([flow, key, ready]) => {
   if (!ready) return;
   if (key === null) {
     if (!designer.loaded.value || !designer.server.value.isNew) { designer.load(null, target.value); loadFailed.value = false; }

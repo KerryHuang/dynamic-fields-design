@@ -10,6 +10,7 @@ import { truncateEdgeLabel } from 'src/presentation/dynamic/approval/progress-gr
 import { conditionSummary } from 'src/presentation/dynamic/rules/condition-summary';
 import { i18n } from 'src/i18n/instance';
 import { installedLocales } from 'src/i18n/locale-settings';
+import { hasUiMessages } from 'src/i18n/ui-messages';
 import { joinList, tFor, type Translate } from 'src/i18n/translate';
 import type { EdgeTrialState, NodeTrial, TrialOverlay } from './designer-trial';
 
@@ -66,8 +67,11 @@ export interface GraphContext {
 
 export const kindIcon = (k: ApprovalNodeKind) => KIND_ICON[k] ?? 'help_outline';
 
-/** 流程名稱的 i18n 預設：每個已安裝且前端有翻譯包的語系各一份（新節點「簽核 n」，U51；i4a 計畫判斷 16）。 */
-const nameLocales = () => installedLocales().filter((l) => i18n.global.availableLocales.includes(l));
+/**
+ * 流程名稱的 i18n 預設：每個已安裝且已載入文字的語系各一份（新節點「簽核 n」，U51；i4b 計畫判斷 16）。
+ * 每次呼叫都讀目前的語系清單；設計頁開啟時先 ensureLocaleMessages（FlowDesignerPage）。
+ */
+const nameLocales = () => installedLocales().filter((l) => hasUiMessages(i18n, l));
 export const approvalNames = (n: number) => Object.fromEntries(nameLocales().map((l) => [l, tFor(l)('approval.designer.graph.newApproval', { n })]));
 export const conditionLabels = (n: number) => Object.fromEntries(nameLocales().map((l) => [l, tFor(l)('approval.designer.graph.newCondition', { n })]));
 

@@ -9,13 +9,14 @@ import type { DesignerField, FieldType, ModuleDetail } from 'src/domain/dynamic/
 import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { BUILTIN_LOCALES } from 'src/i18n/locale';
 import { setLocaleInfos } from 'src/i18n/locale-settings';
+import { resetUiMessagesForTests } from 'src/i18n/ui-messages';
 import { findInputByTestId } from 'src/test-utils/find-by-testid';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import LedgerTab from './LedgerTab.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
-    getLedger: vi.fn(), putLedger: vi.fn(), deleteLedger: vi.fn(), getWorkflow: vi.fn(), getModules: vi.fn(), getModule: vi.fn(), getMe: vi.fn(), addField: vi.fn(),
+    getLedger: vi.fn(), putLedger: vi.fn(), deleteLedger: vi.fn(), getWorkflow: vi.fn(), getModules: vi.fn(), getModule: vi.fn(), getMe: vi.fn(), addField: vi.fn(), getUiMessages: vi.fn(),
   },
 }));
 const api = vi.mocked(dynamicApi);
@@ -31,7 +32,7 @@ const mod = (extra: Partial<ModuleDetail> = {}, fields = [field(1, 'text'), fiel
 });
 const saved = (extra: Partial<LedgerConfig> = {}): LedgerConfig => ({ moduleKey: 'journal', reversalFieldId: 4, negate: [2], swap: [], recordCount: 0, ...extra });
 
-async function mountTab(m: ModuleDetail, existing: LedgerConfig | null, workflow = false, extra: Record<string, object> = {}) {
+async function mountTab(m: ModuleDetail, existing: LedgerConfig | null, workflow = false) {
   api.getLedger.mockImplementation(async () => {
     if (existing) return existing;
     throw { status: 404 };
@@ -42,7 +43,7 @@ async function mountTab(m: ModuleDetail, existing: LedgerConfig | null, workflow
   });
   api.getModules.mockResolvedValue([]);
   api.getMe.mockResolvedValue({ designer: { read: true, add: true, edit: true, delete: true } } as never);
-  const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW, ...extra } });
+  const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const w = mount(LedgerTab, {
     props: { module: m },
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createPinia(), i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
@@ -61,6 +62,7 @@ const body = (id: string) => document.body.querySelector(`[data-testid="${id}"]`
 describe('LedgerTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetUiMessagesForTests();
     document.querySelectorAll('.q-dialog').forEach((el) => el.remove());
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
@@ -147,24 +149,32 @@ describe('LedgerTab', () => {
     expect(comp(w, 'ledger-reversal-field').props('modelValue')).toBe(9);
   });
 
-  describe('沖銷欄位標籤的語系＝已安裝且前端有翻譯包的語系', () => {
+  describe('沖銷欄位標籤的語系＝每個已安裝語系（取得到文字的；i4b 判斷 16、M3）', () => {
     afterEach(() => setLocaleInfos(BUILTIN_LOCALES));
-    const create = async (extra: Record<string, object> = {}) => {
+    // 測試的 i18n 只有繁中；其他語系都要從 API 取（前端只打包繁中）
+    const create = async () => {
       api.addField.mockResolvedValue(field(9, 'reference', self));
-      setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null, uiHash: '' }]);
-      const w = await mountTab(mod({}, [field(1, 'text'), field(2, 'decimal')]), null, false, extra);
+      // ja 已安裝但未啟用也要產生（M3）
+      setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US', uiHash: 'J' }]);
+      const w = await mountTab(mod({}, [field(1, 'text'), field(2, 'decimal')]), null);
       await pick(w, 'ledger-enable', true);
       await w.find('[data-testid="ledger-create-reversal"]').trigger('click');
       await flushPromises();
       return api.addField.mock.calls.at(-1)![1].label as Record<string, string>;
     };
-    it('裝了 ja 但沒有翻譯包：不產生 ja', async () => {
-      expect(Object.keys(await create())).not.toContain('ja');
+    const text = (code: string) => ({ hash: code, messages: { 'ledger.reversalFieldLabel': `沖銷-${code}` } });
+    it('取得到 ja：產生 ja 那句，其他語系照常', async () => {
+      api.getUiMessages.mockImplementation(async (code) => text(code));
+      const label = await create();
+      expect(label).toEqual({ 'zh-TW': '沖銷自', 'en-US': '沖銷-en-US', th: '沖銷-th', vi: '沖銷-vi', ja: '沖銷-ja' });
     });
-    it('裝了 ja 且有翻譯包：產生 ja 那句', async () => {
-      const label = await create({ ja: { ledger: { reversalFieldLabel: '取消元' } } });
-      expect(label.ja).toBe('取消元');
-      expect(label['zh-TW']).toBe('沖銷自');
+    it('取不到 ja：沒有 ja 鍵，其他語系照常、不報錯', async () => {
+      api.getUiMessages.mockImplementation(async (code) => { if (code === 'ja') throw new Error('down'); return text(code); });
+      const notify = vi.spyOn(quasar.Notify, 'create');
+      const label = await create();
+      expect(label).not.toHaveProperty('ja');
+      expect(Object.keys(label)).toEqual(['zh-TW', 'en-US', 'th', 'vi']);
+      expect(notify).not.toHaveBeenCalled();
     });
   });
 

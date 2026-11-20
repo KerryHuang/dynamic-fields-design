@@ -15,12 +15,14 @@ import {
 } from 'src/domain/dynamic/ledger-draft';
 import type { DesignerField, I18nText, ModuleDetail } from 'src/domain/dynamic/types';
 import { installedLocales } from 'src/i18n/locale-settings';
+import { ensureLocaleMessages } from 'src/i18n/ui-messages';
 import { errorFor, messagesOutside } from 'src/presentation/dynamic/designer/api-error';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
 
 const props = defineProps<{ module: ModuleDetail }>();
-const { t, locale, availableLocales } = useI18n();
+const composer = useI18n({ useScope: 'global' });
+const { t, locale } = composer;
 const $q = useQuasar();
 
 const key = computed(() => props.module.key);
@@ -85,9 +87,10 @@ const removeSwap = (i: number) => patch({ swap: draft.value.swap.filter((_, j) =
 
 // ---- create the reversal field ----
 const addField = useDesignerMutation(
-  () => {
-    // 標籤帶每個已安裝語系（前端有翻譯包的；沒有包的語系 t() 會拿到繁中，寧可空著，i4a 計畫判斷 16），不論使用者用哪個語言都讀得懂
-    const locales = installedLocales().filter((l) => availableLocales.includes(l));
+  async () => {
+    // 標籤帶每個已安裝語系（含未啟用，M3），不論使用者用哪個語言都讀得懂。先載入各語系的文字（最多等 STARTUP_BUDGET_MS）；
+    // 取不到的語系 t() 會拿到繁中，寧可空著（i4b 計畫判斷 16）
+    const locales = await ensureLocaleMessages({ global: composer }, installedLocales());
     const label = Object.fromEntries(locales.map((l) => [l, t('ledger.reversalFieldLabel', {}, { locale: l })])) as I18nText;
     return dynamicApi.addField(key.value, newReversalField(props.module.blocks[0]!.id, key.value, label));
   },

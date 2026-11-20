@@ -10,10 +10,14 @@ import type { ApprovalFlow, GraphDefinition } from 'src/domain/dynamic/approval-
 import type { DesignerField, ModuleDetail, Workflow } from 'src/domain/dynamic/types';
 import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import { BUILTIN_LOCALES } from 'src/i18n/locale';
+import { setLocaleInfos } from 'src/i18n/locale-settings';
+import { resetUiMessagesForTests } from 'src/i18n/ui-messages';
+import * as uiMessages from 'src/i18n/ui-messages';
 import FlowDesignerPage from './FlowDesignerPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { getModule: vi.fn(), getWorkflow: vi.fn(), getApprovalFlow: vi.fn(), getApprovalFlows: vi.fn(), getMe: vi.fn(), getUsers: vi.fn(), getGroups: vi.fn(), getEffectivePolicies: vi.fn(), getModulePolicies: vi.fn(), validateApprovalFlow: vi.fn(), saveApprovalFlowDraft: vi.fn(), createApprovalFlowDraft: vi.fn(), discardApprovalFlowDraft: vi.fn(), deleteApprovalFlow: vi.fn(), publishApprovalFlow: vi.fn(), previewApprovalDraft: vi.fn(), getPagedRecords: vi.fn() },
+  dynamicApi: { getModule: vi.fn(), getWorkflow: vi.fn(), getApprovalFlow: vi.fn(), getApprovalFlows: vi.fn(), getMe: vi.fn(), getUsers: vi.fn(), getGroups: vi.fn(), getEffectivePolicies: vi.fn(), getModulePolicies: vi.fn(), validateApprovalFlow: vi.fn(), saveApprovalFlowDraft: vi.fn(), createApprovalFlowDraft: vi.fn(), discardApprovalFlowDraft: vi.fn(), deleteApprovalFlow: vi.fn(), publishApprovalFlow: vi.fn(), previewApprovalDraft: vi.fn(), getPagedRecords: vi.fn(), getUiMessages: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
 
@@ -50,7 +54,7 @@ const flow = (p: Partial<ApprovalFlow> = {}): ApprovalFlow => ({
 });
 
 let router: ReturnType<typeof createRouter>;
-async function mountAt(url: string, opts: { flow?: ApprovalFlow | 404; edit?: boolean; width?: number; flowError?: number; moduleError?: number; meError?: boolean } = {}) {
+async function mountAt(url: string, opts: { flow?: ApprovalFlow | 404; edit?: boolean; width?: number; flowError?: number; moduleError?: number; meError?: boolean; locale?: string } = {}) {
   window.innerWidth = opts.width ?? 1366;
   window.dispatchEvent(new Event('resize'));
   if (opts.moduleError) api.getModule.mockRejectedValue({ status: opts.moduleError }); else api.getModule.mockResolvedValue(mod);
@@ -74,7 +78,7 @@ async function mountAt(url: string, opts: { flow?: ApprovalFlow | 404; edit?: bo
     ],
   });
   await router.push(url);
-  const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+  const i18n = createI18n({ legacy: false, locale: opts.locale ?? 'zh-TW', fallbackLocale: 'zh-TW', missingWarn: false, fallbackWarn: false, messages: { 'zh-TW': zhTW } });
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(RouterView))) };
   const w = mount(Host, {
     attachTo: document.body,
@@ -484,6 +488,43 @@ describe('FlowDesignerPage', () => {
       await w.get('[data-testid="de-trial-end"]').trigger('click');
       expect(states(w).a).toBeNull();
       expect(w.find('[data-testid="de-trial-bar"]').exists()).toBe(false);
+      w.unmount();
+    });
+  });
+
+  describe('新流程的初始節點名稱涵蓋每個已安裝語系（i4b 判斷 16）', () => {
+    // 單例 i18n 在測試裡已預載內建四語；用沒有預載的 ja、ko 測「從 API 取」
+    const info = (code: string) => ({ code, nativeName: code, quasarLang: code, fallbackCode: 'zh-TW', uiHash: code.toUpperCase() });
+    const text = (code: string) => ({ hash: code.toUpperCase(), messages: { 'approval.designer.graph.newApproval': `承認-${code} {n}` } });
+    const newUrl = '/system/dynamic-modules/doc/approval-flows/_new?target=12';
+    beforeEach(() => { resetUiMessagesForTests(); });
+    afterEach(() => { setLocaleInfos(BUILTIN_LOCALES); vi.useRealTimers(); });
+
+    it('文字回來前沒有初始節點；回來後初始簽核節點有 ja 名稱，ensureLocaleMessages 只呼叫一次', async () => {
+      setLocaleInfos([...BUILTIN_LOCALES, info('ja')]);
+      let release!: () => void;
+      api.getUiMessages.mockImplementation((code) => new Promise((r) => { release = () => r(text(code)); }));
+      const ensure = vi.spyOn(uiMessages, 'ensureLocaleMessages');
+      const w = await mountAt(newUrl, { locale: 'ja' });
+      expect(w.findAll('[data-testid^="n-"]')).toHaveLength(0);
+      release();
+      await flushPromises();
+      expect(w.get('[data-testid="n-approval-1"]').text()).toBe('承認-ja 1');
+      expect(ensure).toHaveBeenCalledTimes(1);
+      ensure.mockRestore();
+      w.unmount();
+    });
+
+    it('某語系永不回：預算用完後照常載入，初始節點沒有那個語系', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      setLocaleInfos([...BUILTIN_LOCALES, info('ko')]);
+      api.getUiMessages.mockImplementation(() => new Promise(() => {}));
+      const w = await mountAt(newUrl, { locale: 'ko' });
+      expect(w.findAll('[data-testid^="n-"]')).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(3000);
+      await flushPromises();
+      // ko 沒有自己的名稱：畫布依退回鏈顯示繁中
+      expect(w.get('[data-testid="n-approval-1"]').text()).toBe('簽核 1');
       w.unmount();
     });
   });
