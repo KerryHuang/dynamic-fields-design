@@ -3,7 +3,12 @@ using DynamicModules.Application.Dynamic.Display;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.PolicyService;
+using DynamicModules.Domain.Policies;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -34,9 +39,13 @@ public class FieldDisplayTests
     [Fact]
     public void Option_UsesLocaleFallbacks()
     {
-        // 選項只有繁中與英文，要求 th、退回鏈預設 en-US → 英文；沒給退回鏈時退回繁中
+        // 選項只有繁中與英文，要求 th、預設語系 en-US（政策快照組的退回鏈）→ 英文；沒給退回鏈時退回繁中
         var f = F(FieldType.Enum, null, Opt(1, "高", "High"));
-        FieldDisplay.Format(f, J("opt_1"), new FieldDisplayContext("th", Taipei, ["en-US", "zh-TW"]), null, NoUsers).Should().Be("High");
+        var scopes = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        var cache = new CachedSystemPolicy(scopes, TimeProvider.System, PolicyEnvironmentDefaults.Empty,
+            new LocaleRegistry(scopes, TimeProvider.System, NullLogger<LocaleRegistry>.Instance), NullLogger<CachedSystemPolicy>.Instance);
+        cache.Apply(PolicyCatalog.LocaleDefault, "en-US", cache.NextSequence());
+        FieldDisplay.Format(f, J("opt_1"), cache.Display("th"), null, NoUsers).Should().Be("High");
         FieldDisplay.Format(f, J("opt_1"), new FieldDisplayContext("th", Taipei), null, NoUsers).Should().Be("高");
     }
 

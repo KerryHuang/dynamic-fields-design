@@ -123,4 +123,80 @@ public sealed class LocaleChainApiTests : IDisposable
         }
         names.Should().Contain("Order").And.NotContain("訂單");
     }
+    // ── 已安裝的新語系（語系包 i4a 計畫 Task 5，U3）：ja 的上層是 en-US、預設 th ──
+
+    /// <summary>裝 ja（上層 en-US）；<paramref name="enableJa"/> 決定啟用清單含不含 ja；預設 th。回帶 <c>X-Locale: ja</c> 的使用者。</summary>
+    private async Task<HttpClient> Japanese(bool enableJa = true)
+    {
+        await LocaleTestKit.InstallAsync(_app, "ja", "日本語", fallback: "en-US");
+        var enabled = enableJa ? new[] { "zh-TW", "en-US", "th", "ja" } : new[] { "zh-TW", "en-US", "th" };
+        (await _admin.PutAsJsonAsync($"{Base}/system/policies/locale.enabled", new { value = enabled })).EnsureSuccessStatusCode();
+        (await _admin.PutAsJsonAsync($"{Base}/system/policies/locale.default", new { value = "th" })).EnsureSuccessStatusCode();
+        var ja = _app.AsUser();
+        ja.DefaultRequestHeaders.Add("X-Locale", "ja");
+        return ja;
+    }
+
+    /// <summary>模組名只有繁中與泰文、文字欄位「客戶」只有繁中與英文。</summary>
+    private async Task<(string Key, long FieldId)> CustomerModule()
+    {
+        var key = NewKey();
+        (await _admin.PostAsJsonAsync($"{Base}/modules", new { key, name = new Dictionary<string, string> { ["zh-TW"] = "訂單", ["th"] = "คำสั่งซื้อ" } }))
+            .EnsureSuccessStatusCode();
+        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"));
+        var blockId = module.GetProperty("blocks")[0].GetProperty("id").GetInt64();
+        var field = await JsonOf(await _admin.PostAsJsonAsync($"{Base}/modules/{key}/fields",
+            new { blockId, type = "text", label = Two("客戶", "Customer"), config = new { } }));
+        await Activate(_admin, key);
+        _app.GrantBusinessGroups(key);
+        return (key, field.GetProperty("id").GetInt64());
+    }
+
+    [Fact]
+    public async Task Japanese_MissingText_FallsToParentThenDefault()
+    {
+        var ja = await Japanese();
+        var (key, _) = await CustomerModule();
+        (await Text(await ja.GetAsync($"{Base}/modules/{key}/export?format=csv"))).Should().Contain("Customer").And.NotContain("客戶");
+        (await Text(await ja.GetAsync($"{Base}/reports/catalog"))).Should().Contain("\"คำสั่งซื้อ\"").And.NotContain("\"訂單\"");
+    }
+
+    [Fact]
+    public async Task Japanese_ErrorMessageInterpolation_UsesChain()
+    {
+        var ja = await Japanese();
+        var (key, item) = await CustomerModule();
+        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"));
+        var blockId = module.GetProperty("blocks")[0].GetProperty("id").GetInt64();
+        var qty = await JsonOf(await _admin.PostAsJsonAsync($"{Base}/modules/{key}/fields",
+            new { blockId, type = "decimal", label = Two("數量", "Quantity"), config = new { } }));
+        var check = "chk-" + Guid.NewGuid().ToString("N")[..8];
+        var create = await ja.PostAsJsonAsync($"{Base}/checks", new
+        {
+            key = check, name = Two("上限", "Cap"), moduleKey = key, active = true,
+            definition = new
+            {
+                groupBy = new[] { item }, function = "sum", fieldId = qty.GetProperty("id").GetInt64(),
+                assert = new { op = "lte", limit = new { @const = 10 } }, message = Two("太多", "Too many")
+            }
+        });
+        create.StatusCode.Should().Be(HttpStatusCode.Created, await create.Content.ReadAsStringAsync());
+        (await JsonOf(create)).GetProperty("notices").EnumerateArray().Select(n => n.GetString()!)
+            .Should().Contain(n => n.Contains("「Customer」"));
+    }
+
+    [Fact]
+    public async Task JapaneseNotEnabled_HeaderFallsToDefault()
+    {
+        var ja = await Japanese(enableJa: false);
+        var thai = _app.AsUser();
+        thai.DefaultRequestHeaders.Add("X-Locale", "th");
+        var chinese = _app.AsUser();
+        chinese.DefaultRequestHeaders.Add("X-Locale", "zh-TW");
+        var url = $"{Base}/modules/nope-{Guid.NewGuid():N}"[..40];
+        async Task<string> Message(HttpClient c) => (await JsonOf(await c.GetAsync(url))).GetProperty("message").GetString()!;
+        var thaiMessage = await Message(thai);
+        thaiMessage.Should().NotBe(await Message(chinese));
+        (await Message(ja)).Should().Be(thaiMessage);
+    }
 }

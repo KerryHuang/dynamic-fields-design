@@ -42,8 +42,8 @@ public sealed class CachedSystemPolicy(
         FrozenDictionary<string, string> Values, FrozenDictionary<string, long> Seq, long ApplyCount, TimeSpan BusinessOffset,
         DateTimeOffset LoadedAt, bool Failed, bool Loaded, LocaleState Locales, long LocaleGeneration = 0, long? FailedGeneration = null);
 
-    /// <summary>語系三政策換算好的值（換狀態時一起算，計畫 Task 8）；<c>Fallbacks</c> 是退回鏈「預設語系 → 繁中」（去重，判斷 13）。</summary>
-    public sealed record LocaleState(string Default, IReadOnlyList<string> Enabled, IReadOnlyList<string> Required, IReadOnlyList<string> Fallbacks);
+    /// <summary>語系三政策換算好的值（換狀態時一起算，計畫 Task 8）。退回鏈依語系而不同，由 <see cref="FallbacksFor"/> 現組。</summary>
+    public sealed record LocaleState(string Default, IReadOnlyList<string> Enabled, IReadOnlyList<string> Required);
 
     private Published _current = Initial(env);
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -75,8 +75,7 @@ public sealed class CachedSystemPolicy(
         string Of(PolicyDefinition d) => values.GetValueOrDefault(d.Code) ?? env.FactoryOf(d);
         static IReadOnlyList<string> List(string v) => v.Length == 0 ? [] : v.Split(',');
         var def = Of(PolicyCatalog.LocaleDefault);
-        return new LocaleState(def, List(Of(PolicyCatalog.LocaleEnabled)), List(Of(PolicyCatalog.LocaleRequiredText)),
-            new[] { def, Domain.ValueObjects.I18nText.FallbackLocale }.Distinct(StringComparer.Ordinal).ToArray());
+        return new LocaleState(def, List(Of(PolicyCatalog.LocaleEnabled)), List(Of(PolicyCatalog.LocaleRequiredText)));
     }
 
     private static TimeSpan OffsetOf(IReadOnlyDictionary<string, string> values, PolicyEnvironmentDefaults env) =>
@@ -102,11 +101,14 @@ public sealed class CachedSystemPolicy(
     /// <summary>必填語系（政策 locale.requiredText）：必填的多語文字都要有這些語系。</summary>
     public IReadOnlyList<string> RequiredTextLocales => Volatile.Read(ref _current).Locales.Required;
 
-    /// <summary>多語文字的退回鏈（要求的語系之後依序試）：預設語系 → 繁中，去重。</summary>
-    public IReadOnlyList<string> LocaleFallbacks => Volatile.Read(ref _current).Locales.Fallbacks;
+    /// <summary>
+    /// 多語文字的退回鏈（要求的語系之後依序試）：上層語系 → 預設語系 → 繁中 → 全部已安裝語系，去重
+    /// （<see cref="LocaleRegistry.FallbacksFor"/>，語系包 i4a 計畫判斷 6、10）。
+    /// </summary>
+    public IReadOnlyList<string> FallbacksFor(string locale) => registry.FallbacksFor(locale, DefaultLocale);
 
-    /// <summary>欄位值顯示用的環境（語系＋目前的營運時區偏移＋語系退回鏈）。</summary>
-    public Display.FieldDisplayContext Display(string locale) => new(locale, BusinessOffset, LocaleFallbacks);
+    /// <summary>欄位值顯示用的環境（語系＋目前的營運時區偏移＋該語系的退回鏈）。</summary>
+    public Display.FieldDisplayContext Display(string locale) => new(locale, BusinessOffset, FallbacksFor(locale));
 
     public async Task<int> IntAsync(PolicyDefinition def, CancellationToken ct)
     {

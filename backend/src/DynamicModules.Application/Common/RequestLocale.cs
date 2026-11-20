@@ -10,17 +10,19 @@ namespace DynamicModules.Application.Common;
 /// <item>指定的語系啟用中 → 照用。</item>
 /// <item>明確指定但已停用或不認得 → 系統預設語系 <see cref="SystemDefault"/>（不看標頭，比照標頭帶停用語系時的處理）。</item>
 /// </list>
-/// 退回鏈一律是「預設語系 → 繁中」（<see cref="CachedSystemPolicy.LocaleFallbacks"/>）。寫進資料庫、稽核或 log 的系統文字用 <see cref="SystemDefault"/>（N1）。
+/// 退回鏈依輸出的語系組：上層語系 → 預設語系 → 繁中 → 全部已安裝語系（<see cref="CachedSystemPolicy.FallbacksFor"/>，語系包 i4a 計畫判斷 6）。寫進資料庫、稽核或 log 的系統文字用 <see cref="SystemDefault"/>（N1）。
 /// </summary>
 public sealed class RequestLocale(ICurrentLocale current, CachedSystemPolicy cache)
 {
-    public LocaleContext Current => new(current.Locale, cache.LocaleFallbacks);
+    public LocaleContext Current => Of(current.Locale);
 
-    public LocaleContext SystemDefault => new(cache.DefaultLocale, cache.LocaleFallbacks);
+    public LocaleContext SystemDefault => Of(cache.DefaultLocale);
 
     public LocaleContext For(string? requested)
     {
         if (string.IsNullOrWhiteSpace(requested)) return Current;
-        return cache.EnabledLocales.Contains(requested) ? new LocaleContext(requested, cache.LocaleFallbacks) : SystemDefault;
+        return cache.EnabledLocales.Contains(requested) ? Of(requested) : SystemDefault;
     }
+
+    private LocaleContext Of(string locale) => new(locale, cache.FallbacksFor(locale));
 }

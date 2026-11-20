@@ -289,13 +289,13 @@ public class CachedSystemPolicyTests
     }
 
     [Fact]
-    public async Task LocaleFallbacks_DefaultFirst()
+    public async Task FallbacksFor_DefaultThenZhTwThenInstalled()
     {
         var (p, reader, _, _) = Create();
         p.DefaultLocale.Should().Be("zh-TW");
         p.EnabledLocales.Should().Equal("zh-TW", "en-US", "th", "vi");
         p.RequiredTextLocales.Should().Equal("zh-TW");
-        p.LocaleFallbacks.Should().Equal("zh-TW");
+        p.FallbacksFor("th").Should().Equal("zh-TW", "en-US", "th", "vi");
 
         reader.ByCode[PolicyCatalog.LocaleDefault.Code] = "en-US";
         reader.ByCode[PolicyCatalog.LocaleEnabled.Code] = "zh-TW,en-US";
@@ -304,14 +304,27 @@ public class CachedSystemPolicyTests
         p.DefaultLocale.Should().Be("en-US");
         p.EnabledLocales.Should().Equal("zh-TW", "en-US");
         p.RequiredTextLocales.Should().Equal("zh-TW", "en-US");
-        p.LocaleFallbacks.Should().Equal("en-US", "zh-TW");
+        p.FallbacksFor("th").Should().Equal("en-US", "zh-TW", "th", "vi");
+        p.Display("th").LocaleFallbacks.Should().Equal("en-US", "zh-TW", "th", "vi");
 
         // 提交後的 Apply 一起換算
         p.Apply(PolicyCatalog.LocaleDefault, "th", p.NextSequence());
         p.DefaultLocale.Should().Be("th");
-        p.LocaleFallbacks.Should().Equal("th", "zh-TW");
+        p.FallbacksFor("th").Should().Equal("th", "zh-TW", "en-US", "vi");
         p.Apply(PolicyCatalog.LocaleEnabled, "", p.NextSequence());
         p.EnabledLocales.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task FallbacksFor_InstalledParent()
+    {
+        var (p, reader, _, _, registry, locales) = CreateWithLocales();
+        locales.Add("ja", "日本語", fallback: "en-US");
+        await registry.EnsureFreshAsync(default);
+        reader.ByCode[PolicyCatalog.LocaleDefault.Code] = "th";
+        await p.EnsureFreshAsync(default);
+        p.FallbacksFor("ja").Should().Equal("en-US", "th", "zh-TW", "vi", "ja");
+        p.Display("ja").LocaleFallbacks.Should().Equal("en-US", "th", "zh-TW", "vi", "ja");
     }
 
     [Fact]
