@@ -69,9 +69,13 @@ public class SessionMiddleware(RequestDelegate next)
         || (HttpMethods.IsGet(method) && path.Equals(Prefix + "/theme", StringComparison.OrdinalIgnoreCase))
         || (HttpMethods.IsPost(method) && path.Equals(AuthPrefix + "demo-login", StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>登入與否都收的端點：有身分時照常檢查，檢查不過就當匿名。</summary>
+    /// <summary>
+    /// 登入與否都收的端點：有身分時照常檢查，檢查不過就當匿名。前端錯誤收件；介面文字（cookie 過期的人在登入頁照樣取得到啟用語系，
+    /// 強制改密碼期間也要顯示文字；啟用與否的判斷在 handler）。
+    /// </summary>
     private static bool IsAnonymousOptional(string method, string path) =>
-        HttpMethods.IsPost(method) && path.Equals(Prefix + "/ops/client-errors", StringComparison.OrdinalIgnoreCase);
+        (HttpMethods.IsPost(method) && path.Equals(Prefix + "/ops/client-errors", StringComparison.OrdinalIgnoreCase))
+        || (HttpMethods.IsGet(method) && path.StartsWith(Prefix + "/i18n/ui/", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsAllowedWhileMustChange(string method, string path) =>
         path.StartsWith(AuthPrefix, StringComparison.OrdinalIgnoreCase)
