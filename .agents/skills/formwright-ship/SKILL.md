@@ -1,6 +1,6 @@
 ---
 name: formwright-ship
-description: Use when a Formwright feature branch or worktree is implemented and reviewed and is ready to go to main — running the gate, leak scan, fast-forward push, waiting for the Render deploy, then verifying on the Demo.
+description: Use when a Formwright feature branch or worktree is implemented and reviewed and is ready to go to main — running the gate, leak scan, local walkthrough, and fast-forward push (the Render Demo deploys on a daily schedule, not on push).
 ---
 
 # Formwright 上線流程
@@ -52,21 +52,14 @@ git fetch -q && git merge-base --is-ancestor origin/main HEAD && git push -q ori
 - 不用 merge commit、不 force push。推完 `git rev-parse origin/main` 確認等於 HEAD。
 - 推進 main 的 commit 必須就是 CI 通過的那個 sha（fast-forward 保證這點）。沒動到 `backend/`、`frontend/`、`shared/`、Dockerfile 或 workflow 的變更 CI 會略過測試，外洩掃描照跑。
 
-## 4. 等部署
+## 4. 部署（不等）
 
-`backend/`、`frontend/`、`shared/` 或 `Dockerfile.demo` 有變更才會觸發 Render 部署（`render.yaml` 的 `buildFilter`）；只改 docs、`.claude/` 等不會部署，跳過這步。
+Render 的 Auto-Deploy 已關（2026-11-20），推上 `main` 不會部署；Demo 由 `.github/workflows/demo-refresh.yml` 每天台北 02:00 部署一次。所以推完 main 這個流程就結束，不等部署、不在 Demo 上冒煙，本機走查（1.5 節）就是合併前的驗證。
 
-```bash
-bash scripts/unattended/wait-deploy.sh <sha>
-```
+- 急著讓 Demo 更新：`gh workflow run demo-refresh.yml`，它會等健康檢查最多 15 分鐘；要冒煙再用 `formwright-demo-verify` 開一次動到的頁面。
+- 隔天排程失敗（健康檢查逾時）時，到 Render 看 log；查明是哪個合併造成的才 `git revert` 該 commit 再推，不 reset。
 
-背景跑，最後一行 `success` 才算成功；`failure`／`error`／`timeout` 都停下。`timeout` 先到 Render 看狀態，不 revert；部署失敗而且查明是這次合併造成的，才 `git revert` 該 commit 再推，不 reset。
-
-## 5. Demo 冒煙檢查
-
-本機已走查過，Demo 上只做冒煙檢查：用 `formwright-demo-verify` skill 開這次動到的頁面一次，確認載得出來、沒有 console 錯誤。版面要量的話，只量最容易出問題的那個寬度。沒有做本機走查的變更（例如純後端），在 Demo 上照 `formwright-demo-verify` 做完整驗證，四種寬度都量。
-
-## 6. 收尾
+## 5. 收尾
 
 - 進度寫進 `docs/roadmap.md` 的工作段表格；功能清單打勾並重算。
 - 確認分支已是 origin/main 的祖先後，移除 worktree 與分支。

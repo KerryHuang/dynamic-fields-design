@@ -7,18 +7,20 @@ Formwright 的 Demo 站與容器部署做法。本機開發與測試見 [CONTRIB
 `Dockerfile` 把前端建置結果和後端打包成一個容器，API 與畫面在同一個網址；`render.yaml` 是 Render 的 Blueprint。
 
 1. 在 [Render](https://render.com) 用 GitHub 登入，New → Blueprint，選這個 repo，Render 會讀 `render.yaml` 建立 `dynamic-modules-demo`。
-2. 之後每次推上 `main` 都會自動重新部署。
+2. 部署由每天的排程觸發（見下方「Demo 每日部署」），推上 `main` 不會自動部署。
 
-限制：免費方案閒置 15 分鐘會休眠，下次開啟要等約 1 分鐘；沒有永久磁碟，休眠重啟後資料回到映像建置時的 Demo 資料（`Dockerfile.demo` 在建置時就產生好，喚醒後不用等），日期停在建置那天，重新部署才會更新。Demo 站開了一鍵登入（`Demo__LoginEnabled`），任何人點一下就能以任何 Demo 帳號含 `admin` 登入，所以站上只放虛構的示範資料，請勿輸入真實資料。Render 上 cookie 帶 `secure; samesite=lax; httponly`（2026-11-05 實測）。
+限制：免費方案閒置 15 分鐘會休眠，下次開啟要等約 1 分鐘；沒有永久磁碟，休眠重啟後資料回到映像建置時的 Demo 資料（`Dockerfile.demo` 在建置時就產生好，喚醒後不用等），日期停在建置那天，每天的排程部署會更新。Demo 站開了一鍵登入（`Demo__LoginEnabled`），任何人點一下就能以任何 Demo 帳號含 `admin` 登入，所以站上只放虛構的示範資料，請勿輸入真實資料。Render 上 cookie 帶 `secure; samesite=lax; httponly`（2026-11-05 實測）。
 
 啟動時自動產生 Demo 資料：設定環境變數 `Demo__SeedOnStartup=true`，站台會在背景產生訂單、故障報修、模具保養、品質異常四組模組與範例記錄；本機預設關閉，Render 改用 `Dockerfile.demo` 在建置時產生，不需要這個設定。也可以由系統管理員在「系統管理 → Demo 資料」手動產生。各情境怎麼示範見 [Demo 腳本](demo.md)。
 
-### Demo 每日重建
+### Demo 每日部署
 
-Demo 的日期停在建置那天，太久沒部署，任務到期、逾期提醒這類有時效的資料會全部過期。`.github/workflows/demo-refresh.yml` 每天台北時間 02:00（UTC 18:00）檢查一次：過去 24 小時 `main` 上如果有會觸發部署的 commit（路徑同 `render.yaml` 的 `buildFilter`），代表當天已經重建過，就跳過；否則呼叫 Render 的 Deploy Hook 重建一次。只在當天沒部署時才重建，是因為 Render 免費方案每月的建置分鐘數有限，用完會暫停建置到月底。
+Render 的 Auto-Deploy 已關掉（2026-11-20）：本月建置額度用完，而且服務的 Build Filters 是空的，`render.yaml` 的 `buildFilter` 沒有套用，連只改文件的 commit 都會觸發部署，一天約 20 次。現在**推上 `main` 不會部署**。
+
+改由 `.github/workflows/demo-refresh.yml` 每天台北時間 02:00（UTC 18:00）部署一次：呼叫 Render 的 Deploy Hook，接著最多等 15 分鐘輪詢 `/api/health/ready`，逾時就讓這次排程失敗。不判斷當天有沒有改動，每天都部署，順便讓 Demo 資料的日期每天更新。
 
 - 設定：Render 的 `dynamic-modules-demo` → Settings → Deploy Hook 複製網址，到 GitHub repo 的 Settings → Secrets and variables → Actions 新增 secret `RENDER_DEPLOY_HOOK`。沒設定時排程只印警告、照樣成功結束。
-- 手動重建：GitHub → Actions → demo-refresh → Run workflow（一樣會先檢查過去 24 小時有沒有部署過）。
+- 急著上線：`gh workflow run demo-refresh.yml`（或 GitHub → Actions → demo-refresh → Run workflow），不必等到隔天 02:00。
 
 ## 環境變數
 

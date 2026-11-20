@@ -46,15 +46,13 @@ GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0
 
 不用 merge commit、不 force push。
 
-收尾清理：分支改動確認已完整進 main（祖先關係，或 rebase 後比對 patch 相同）才算可刪；沒進 main 的保留（使用者 2026-11-18 裁決）。遠端分支不自己刪（auto mode 權限檢查會擋 `git push origin --delete`），在回來報告列一行 `git push origin --delete <分支…>` 給使用者自己跑（使用者 2026-11-19 裁決）。只改 `docs/`、`.claude/`、`.plugharbor/`、`scripts/` 的 push 不會部署。
+收尾清理：分支改動確認已完整進 main（祖先關係，或 rebase 後比對 patch 相同）才算可刪；沒進 main 的保留（使用者 2026-11-18 裁決）。遠端分支不自己刪（auto mode 權限檢查會擋 `git push origin --delete`），在回來報告列一行 `git push origin --delete <分支…>` 給使用者自己跑（使用者 2026-11-19 裁決）。push 一律不會部署（見「部署」）。
 
 ## 部署
-main push 會自動部署 Demo（Render），但只在 `backend/`、`frontend/`、`shared/` 或 `Dockerfile.demo` 有變更時才觸發（`render.yaml` 的 `buildFilter`）；只改 docs、`.claude/` 等的 push 不會部署，不必等。
-
-等部署完成：`bash scripts/unattended/wait-deploy.sh <sha>`，背景跑，等通知。腳本會把短 sha 展開成完整 sha。
+推上 main 不會部署：Render 的 Auto-Deploy 已關（使用者 2026-11-20 裁決，建置額度不夠），Demo 由 `.github/workflows/demo-refresh.yml` 每天台北 02:00 部署一次。單元流程的「部署」與部署後的 Demo 冒煙都跳過，本機走查就是合併前的驗證；回來報告寫「Demo 隔天 02:00 更新」。真的要當天上，跑 `gh workflow run demo-refresh.yml`（等健康檢查最多 15 分鐘），再照實機驗證做冒煙。
 
 ## 實機驗證
-- 時機：有畫面的改動在 gate 通過、推上 main 之前，先用 `bash scripts/unattended/local-demo.sh <worktree>` 在本機走查（使用者 2026-11-11 裁決）。部署後的 Demo 只做冒煙檢查。
+- 時機：有畫面的改動在 gate 通過、推上 main 之前，先用 `bash scripts/unattended/local-demo.sh <worktree>` 在本機走查（使用者 2026-11-11 裁決）。Demo 改成每日排程部署，部署後的冒煙檢查不再是單元流程的一步。
 - 登入：**只用登入頁的「Demo 帳號（點一下直接登入）」按鈕**，絕不在任何欄位輸入帳號密碼。
 - 登入後整頁重新載入再看畫面，不在同一段腳本裡 pushState 換頁，否則會讀到舊 schema。
 - 版型：用 `scripts/unattended/rwd-check.js` 檢查這次動到的頁面，寬度 390、820、1366、1920 四種。

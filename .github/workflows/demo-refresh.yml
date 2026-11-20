@@ -1,7 +1,6 @@
-# Demo 每日重建：Demo 資料在 Dockerfile.demo 建置時產生、日期以建置日為基準，
-# Render 休眠喚醒會回到映像資料；太久沒部署，任務等有時效的資料會全部過期。
-# 只在過去 24 小時 main 沒有會觸發部署的 commit 時才重建（Render 免費方案每月建置分鐘數有限）。
-# 用法與 secret 設定見 docs/deploy.md「Demo 每日重建」。
+# Demo 每日部署：Render 的 Auto-Deploy 已關（2026-11-20，建置額度用完；服務的 Build Filters 沒套用 render.yaml，連文件都會觸發部署），
+# 改成每天台北 02:00 部署一次，順便讓建置時產生的 Demo 資料日期每天更新。
+# 用法與 secret 設定見 docs/deploy.md「Demo 每日部署」。
 name: demo-refresh
 
 on:
@@ -17,28 +16,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  refresh:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 200
-      - name: 過去 24 小時已部署就跳過，否則觸發 Render 重建
+      - name: 觸發 Render 部署並等健康檢查
         env:
           RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          READY_URL: https://dynamic-modules-demo.onrender.com/api/health/ready
         run: |
-          # 路徑與 render.yaml 的 buildFilter 一致
-          changed=$(git log --since="24 hours ago" --format=%h -- backend frontend shared Dockerfile.demo .dockerignore)
-          if [ -n "$changed" ]; then
-            echo "過去 24 小時 main 已有會觸發部署的 commit（$(echo $changed | tr '\n' ' ')），今天已重建過，跳過。" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
           if [ -z "$RENDER_DEPLOY_HOOK" ]; then
-            echo "::warning::沒有設定 secret RENDER_DEPLOY_HOOK，略過重建（設定方式見 docs/deploy.md）"
-            echo "沒有設定 secret RENDER_DEPLOY_HOOK，略過重建。" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::沒有設定 secret RENDER_DEPLOY_HOOK，略過部署（設定方式見 docs/deploy.md）"
+            echo "沒有設定 secret RENDER_DEPLOY_HOOK，略過部署。" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           curl -fsS -X POST "$RENDER_DEPLOY_HOOK" > /dev/null
-          echo "已觸發 Render 重建 Demo。" >> "$GITHUB_STEP_SUMMARY"
+          echo "已觸發 Render 部署，等健康檢查（最多 15 分鐘）。" >> "$GITHUB_STEP_SUMMARY"
+          # 先等舊實例下線，避免第一次就打到還沒換掉的舊版
+          sleep 60
+          deadline=$(( $(date +%s) + 14 * 60 ))
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            if curl -fsS --max-time 20 "$READY_URL" > /dev/null 2>&1; then
+              echo "健康檢查通過。" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::15 分鐘內健康檢查沒有通過：$READY_URL"
+          echo "15 分鐘內健康檢查沒有通過，到 Render 看部署 log。" >> "$GITHUB_STEP_SUMMARY"
+          exit 1

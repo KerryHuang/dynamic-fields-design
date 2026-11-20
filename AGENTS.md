@@ -40,7 +40,7 @@ ERP 是產品目標，也是核心的壓力測試：做不出來的地方，就�
 
 - **先說驗收方式再動手**；修 bug 先寫重現的失敗測試。
 - **只跑相關測試**：`dotnet test <測試專案> --filter <類名>`；全套與 gate 一次只跑一個，不和其他吃 CPU 的測試並行；例外是窄範圍 vitest 加 `--maxWorkers=2` 可以同時跑（使用者裁決）。細節見 `docs/ai/testing.md`。
-- **上線流程**（gate → 本機走查 → 外洩掃描 → fast-forward 推 main → 等部署 → Demo 冒煙檢查）用 `formwright-ship` skill；瀏覽器驗證用 `formwright-demo-verify` skill。
+- **上線流程**（gate → 本機走查 → 外洩掃描 → fast-forward 推 main；Demo 每天 02:00 排程部署，推完不等部署）用 `formwright-ship` skill；瀏覽器驗證用 `formwright-demo-verify` skill。
 - **流程主從**：自動駕駛（`workspace:unattended`）時照它的流程——設計夠細就不另寫實作計畫、不審計畫，整段交一個實作者；業務邊界複雜的設計題先由 `lifecycle:domain-advisor` 審。使用者在場手動開工才走 `lifecycle:implement`（使用者裁決）。
 - **有畫面的改動**合併前要在本機（`scripts/unattended/local-demo.sh`）的 390、820、1366、1920 四種寬度驗過，不得橫向捲動。
 - **git**：逐檔 `git add`，不用 `-A`／`.`、不用 `--no-verify`、不 force push、不 merge commit。
@@ -48,7 +48,7 @@ ERP 是產品目標，也是核心的壓力測試：做不出來的地方，就�
 - **票（tickets plugin 試用，2026-11-20 起）**：
   - 新發現的待辦（審查建議、CI 偶發失敗、實測 bug）用 `tickets:triage` 或 `tickets:ticket-create` 開成 backlog 票，不寫進 `docs/todo.md`；工作段順序仍只認 `docs/roadmap.md`。
   - 票隨工作改階段（升進「近期可開工」→ todo、開做 → in-progress）；合併後關票並留言 commit SHA。
-  - 用 tickets 遇到問題（卡住、做法不對、文件與行為不符），在 `KerryHuang/plugharbor` 開 issue，label `from:formwright`、`plugin:tickets`，內文寫重現步驟、tickets 版本、預期與實際（照外洩規則）；擋住產線的加 `blocker`，並用 SendMessage 告訴 plugharbor 的 tickets 回饋 worker「有 blocker #N」。開完繼續做別的。
+  - 用 tickets 遇到問題（卡住、做法不對、文件與行為不符），在 `KerryHuang/plugharbor` 開 issue，label `from:formwright`、`plugin:tickets`，內文寫重現步驟、tickets 版本、預期與實際（照外洩規則）；擋住產線的加 `blocker`，並用 ListAgents 找 plugharbor 的 tickets 回饋 worker，SendMessage 告訴它「有 blocker #N」。開完繼續做別的。
   - 段開工前跑 `claude plugin marketplace update plugharbor && claude plugin update tickets@plugharbor --scope project`，再 `/reload-plugins`；失敗就照舊版跑，記進回來報告。
 
 ## 文件落點

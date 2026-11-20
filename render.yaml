@@ -6,7 +6,8 @@ services:
     plan: free
     dockerfilePath: ./Dockerfile.demo
     dockerContext: .
-    # 只有映像用到的路徑變更才部署（原本靠 rootDir 限縮在子目錄達成；只改 docs、.claude/ 等不重新部署）
+    # 目前不生效：Render 服務的 Build Filters 是空的，沒套用這段；Auto-Deploy 已在 Render 關閉（2026-11-20），
+    # 改由 .github/workflows/demo-refresh.yml 每天部署一次（見 docs/deploy.md「Demo 每日部署」）。保留備日後重新開 Auto-Deploy 時用。
     buildFilter:
       paths:
         - backend/**
@@ -15,7 +16,7 @@ services:
         - Dockerfile.demo
         - .dockerignore
     healthCheckPath: /api/health/ready
-    autoDeploy: true
+    autoDeploy: false # 已在 Render 關閉，推 main 不部署
     envVars:
       - key: Demo__LoginEnabled
         value: "true"
