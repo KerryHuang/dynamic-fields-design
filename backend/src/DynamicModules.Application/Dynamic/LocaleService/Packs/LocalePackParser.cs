@@ -135,7 +135,8 @@ public static class LocalePackParser
     private static bool ReadSection(JsonElement root, string name, bool nested, Section section, int baseCount, out MessageRef? error)
     {
         error = null;
-        if (!root.TryGetProperty(name, out var e) || e.ValueKind == JsonValueKind.Null) return true;
+        // 只有缺段算沒帶；明示 null 交給下面的物件型別檢查拒收（計畫判斷 1，審查必修 3）
+        if (!root.TryGetProperty(name, out var e)) return true;
         if (e.ValueKind != JsonValueKind.Object)
         {
             error = LocalePackMessages.SectionNotObject(name);

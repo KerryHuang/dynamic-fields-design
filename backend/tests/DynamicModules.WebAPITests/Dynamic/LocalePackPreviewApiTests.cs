@@ -103,6 +103,20 @@ public class LocalePackPreviewApiTests : IDisposable
         Db(_app, db => db.Set<LocalePackPreview>().Count()).Should().Be(0);
     }
 
+    /// <summary>既有語系帶 "ui":null、"server":null 不能當成沒變更（審查必修 3）：回 400、不暫存。</summary>
+    [Fact]
+    public async Task Preview_NullSection_400()
+    {
+        var admin = _app.AsUser();
+        foreach (var section in new[] { "ui", "server" })
+        {
+            var body = System.Text.Encoding.UTF8.GetBytes(
+                "{\"format\":\"formwright-langpack\",\"formatVersion\":1,\"locale\":{\"code\":\"en-US\"},\"" + section + "\":null}");
+            (await FileError(await Preview(admin, body))).Should().Be($"{section} 段必須是 JSON 物件");
+        }
+        Db(_app, db => db.Set<LocalePackPreview>().Count()).Should().Be(0);
+    }
+
     [Fact]
     public async Task Preview_TooLarge()
     {

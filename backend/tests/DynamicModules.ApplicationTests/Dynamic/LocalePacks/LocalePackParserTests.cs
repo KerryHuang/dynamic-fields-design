@@ -180,6 +180,13 @@ public class LocalePackParserTests
     [Fact]
     public void Ui_Array_SectionNotObject() => Error(Pack(rest: "\"ui\":[\"a\"]")).Should().Be("ui 段必須是 JSON 物件");
 
+    /// <summary>明示 null 不是缺段（審查必修 3、計畫判斷 1）：整包拒收；缺段照舊合法（<see cref="AllSectionsMissing_Valid"/>）。</summary>
+    [Theory]
+    [InlineData("ui")]
+    [InlineData("server")]
+    public void Section_ExplicitNull_SectionNotObject(string section) =>
+        Error(Pack(rest: $"\"{section}\":null")).Should().Be($"{section} 段必須是 JSON 物件");
+
     [Fact]
     public void Server_ObjectValue_NotString()
     {
