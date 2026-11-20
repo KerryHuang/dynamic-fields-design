@@ -55,6 +55,7 @@ public class AuthApiTests
         await res.Content.ReadFromJsonAsync<JsonElement>();
 
     [Fact]
+    [Trait("Category", "Postgres")]
     public async Task Options_IncludesLocaleSettings()
     {
         // X-User 模式只為了讓 admin 能改政策；auth/options 本身是公開端點，未登入（不帶標頭）照樣取得
@@ -70,6 +71,7 @@ public class AuthApiTests
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
     public async Task Options_DemoLoginDisabled_StillIncludesLocales()
     {
         using var app = new TestApp();
