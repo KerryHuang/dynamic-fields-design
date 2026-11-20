@@ -17,8 +17,10 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.17.0" />
-    <PackageReference Include="xunit" Version="2.5.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <!-- xUnit 2.8 起預設的 conservative 平行演算法（票 #72、#70）：同時開跑的測試數＝平行執行緒數。2.5 的 aggressive 會把所有測試類別一次排進
+         xUnit 同步內容的佇列，開跑初期建庫、起主機的同步等待占滿執行緒，已在跑的測試的續傳要排幾十秒（CI 實測 30 秒） -->
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
 
   <ItemGroup>
