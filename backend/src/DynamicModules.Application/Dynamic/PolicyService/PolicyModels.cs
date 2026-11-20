@@ -17,8 +17,10 @@ public sealed record ModulePolicyResponse(
     string Code, string Category, PolicyKind Kind, string? Unit, int? Min, int? Max, IReadOnlyList<string>? Options,
     JsonElement SystemValue, JsonElement? Override, JsonElement Effective);
 
-/// <summary>全部政策（含 system 範圍）的生效值，以代碼為鍵。</summary>
-public sealed record EffectivePoliciesResponse(string? ModuleKey, IReadOnlyDictionary<string, JsonElement> Values);
+/// <summary>
+/// 全部政策（含 system 範圍）的生效值，以代碼為鍵；<c>Locales</c> 是全部已安裝語系（含沒啟用的，政策頁的選項自稱用；語系包 i4a 計畫判斷 13）。
+/// </summary>
+public sealed record EffectivePoliciesResponse(string? ModuleKey, IReadOnlyDictionary<string, JsonElement> Values, IReadOnlyList<Common.LocaleInfoResponse> Locales);
 
 /// <summary>政策標準字串與 API JSON 值之間的轉換。</summary>
 public static class PolicyJson

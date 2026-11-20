@@ -6,9 +6,13 @@ public record AuthUserResponse(string UserId, string DisplayName, bool MustChang
 public record DemoAccountResponse(string UserId, string DisplayName);
 
 /// <summary>登入頁選項；未開啟 Demo 一鍵登入時 DemoAccounts 是空陣列。</summary>
-/// <summary>登入前的選項。<c>DefaultLocale</c>、<c>EnabledLocales</c> 是語系政策的生效值（i4a 之後只再加欄位，不改這兩欄的形狀）。</summary>
+/// <summary>
+/// 登入前的選項。<c>DefaultLocale</c>、<c>EnabledLocales</c> 是語系政策的生效值（i4a 之後只再加欄位，不改這兩欄的形狀）；
+/// <c>Locales</c> 是啟用語系的自稱、Quasar 語言包與上層語系，順序同已安裝語系（語系包 i4a 計畫判斷 12）。
+/// </summary>
 public record AuthOptionsResponse(
-    bool DemoLoginEnabled, bool DemoGenerating, List<DemoAccountResponse> DemoAccounts, string DefaultLocale, IReadOnlyList<string> EnabledLocales);
+    bool DemoLoginEnabled, bool DemoGenerating, List<DemoAccountResponse> DemoAccounts, string DefaultLocale, IReadOnlyList<string> EnabledLocales,
+    IReadOnlyList<Common.LocaleInfoResponse> Locales);
 
 /// <summary>系統管理 → 使用者的一列；不含密碼雜湊與 SecurityStamp。</summary>
 public record AdminUserResponse(

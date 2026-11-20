@@ -155,7 +155,7 @@ public class UpdateModulePolicyHandler(
     }
 }
 
-public class GetEffectivePoliciesHandler(IModuleRepository modules, IPolicyReader reader)
+public class GetEffectivePoliciesHandler(IModuleRepository modules, IPolicyReader reader, LocaleRegistry registry)
     : IRequestHandler<GetEffectivePoliciesRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetEffectivePoliciesRequest request, CancellationToken ct)
@@ -171,7 +171,7 @@ public class GetEffectivePoliciesHandler(IModuleRepository modules, IPolicyReade
         // 收件人類政策不出現：前端執行畫面用不到，回應還會帶出使用者帳號
         foreach (var def in PolicyCatalog.All.Where(d => d.Kind != PolicyKind.Recipients))
             values[def.Code] = PolicyJson.ToJson(def, (await reader.ResolveAsync(def, moduleId, ct)).Effective);
-        return ServiceResult.Success(new EffectivePoliciesResponse(request.ModuleKey, values));
+        return ServiceResult.Success(new EffectivePoliciesResponse(request.ModuleKey, values, registry.Locales.Select(LocaleInfoResponse.Of).ToList()));
     }
 }
 
