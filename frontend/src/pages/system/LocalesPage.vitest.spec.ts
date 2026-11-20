@@ -8,6 +8,7 @@ import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
+import { setPreviewLocale } from 'src/i18n/locale-preview';
 import LocalesPage from './LocalesPage.vue';
 
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -283,6 +284,25 @@ describe('LocalesPage 完整版卡片', () => {
     expect(switchLocale.mock.calls[0]![1]).toBe('vi');
     expect(switchLocale.mock.calls[0]![2]).toEqual({ preview: true });
     w.unmount();
+  });
+
+  it('試看 vi → 由語言選單切回繁中 → 試看鈕再次出現', async () => {
+    switchLocale.mockImplementation(async (i18n: { global: { locale: { value: string } } }, code: string) => {
+      setPreviewLocale(code);
+      i18n.global.locale.value = code;
+      return true;
+    });
+    const w = await mountPage({ locales: FULL });
+    q('locale-preview-vi')!.click();
+    await tick();
+    expect(q('locale-preview-vi')).toBeNull();
+    // 語言選單切回：一般切換會清掉試看標記並換回語系（不經本頁）
+    setPreviewLocale(null);
+    (w.getComponent(LocalesPage).vm as unknown as { $i18n: { locale: string } }).$i18n.locale = 'zh-TW';
+    await tick();
+    expect(q('locale-preview-vi')).not.toBeNull();
+    w.unmount();
+    setPreviewLocale(null);
   });
 
   it('「匯出樣板」開對話框且目標是該語系；「新語系樣板」開對話框且代碼可輸入', async () => {
