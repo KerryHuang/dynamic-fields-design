@@ -1,5 +1,9 @@
 using DynamicModules.Application.Dynamic.LocaleService.Commands.ApplyLocalePack;
+using DynamicModules.Application.Dynamic.LocaleService.Commands.ClearLocaleOverrides;
 using DynamicModules.Application.Dynamic.LocaleService.Commands.PreviewLocalePack;
+using DynamicModules.Application.Dynamic.LocaleService.Commands.RemoveLocale;
+using DynamicModules.Application.Dynamic.LocaleService.Commands.RollbackLocalePack;
+using DynamicModules.Application.Dynamic.LocaleService.Queries.GetLocales;
 using DynamicModules.Application.Dynamic.LocaleService.Queries.GetUiMessages;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -52,6 +56,29 @@ public class I18nController(IMediator mediator) : ControllerBase
     [HttpPost("packs/apply")]
     public async Task<IActionResult> ApplyPack([FromBody] ApplyLocalePackBody body) =>
         (await mediator.Send(new ApplyLocalePackRequest(body.PreviewId ?? "", body.FileHash ?? ""), HttpContext.RequestAborted)).ToActionResult(this);
+
+    /// <summary>語系清單（系統管理員；讀資料庫，不讀快照）。</summary>
+    [HttpGet("locales")]
+    public async Task<IActionResult> Locales() =>
+        (await mediator.Send(new GetLocalesRequest(), HttpContext.RequestAborted)).ToActionResult(this);
+
+    /// <summary>回到上一版：成功回 <c>{ code, packId }</c>。</summary>
+    [HttpPost("locales/{code}/rollback")]
+    public async Task<IActionResult> Rollback(string code) =>
+        (await mediator.Send(new RollbackLocalePackRequest(code), HttpContext.RequestAborted)).ToActionResult(this);
+
+    /// <summary>移除覆寫：成功回 <c>{ code, packId }</c>（空版本的 Id）。</summary>
+    [HttpPost("locales/{code}/clear")]
+    public async Task<IActionResult> Clear(string code) =>
+        (await mediator.Send(new ClearLocaleOverridesRequest(code), HttpContext.RequestAborted)).ToActionResult(this);
+
+    /// <summary>移除匯入的語系：成功 204（<c>ToActionResult</c> 對沒有資料的成功回 200，所以這裡照 <c>OpsController</c> 回 <c>NoContent</c>）。</summary>
+    [HttpDelete("locales/{code}")]
+    public async Task<IActionResult> Remove(string code)
+    {
+        var result = await mediator.Send(new RemoveLocaleRequest(code), HttpContext.RequestAborted);
+        return result.IsSuccess ? NoContent() : result.ToActionResult(this);
+    }
 }
 
 public sealed record ApplyLocalePackBody(string? PreviewId, string? FileHash);

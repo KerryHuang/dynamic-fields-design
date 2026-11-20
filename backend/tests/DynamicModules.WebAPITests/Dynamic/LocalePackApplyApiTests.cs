@@ -159,6 +159,20 @@ public class LocalePackApplyApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Stale_AfterABA_409()
+    {
+        await ApplyPackAsync(_app, JaPartial);
+        var admin = _app.AsUser();
+        var mine = await PreviewOkAsync(admin, Bytes(Pack("ja", ui: new Dictionary<string, string> { ["menu.home"] = "（日）ホーム" })));
+        await ApplyPackAsync(_app, Bytes(Encoding.UTF8.GetString(JaPartial).Replace("（日）Sign in\"", "（日）ログイン\"")), client: Admin2(_app));
+        await RollbackAsync(_app, "ja");
+        Layer(Packs(_app, "ja").Single(p => p.IsCurrent).UiJson)["auth.login"].Should().Be("（日）Sign in", "內容回到 A");
+        var res = await ApplyAsync(admin, mine);
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict, "目前版 Id 換了，不靠修改時間");
+        (await CodeOf(res)).Should().Be("localePackStale");
+    }
+
+    [Fact]
     public async Task OtherLocale_NotAffected()
     {
         var admin = _app.AsUser();

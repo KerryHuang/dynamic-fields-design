@@ -55,6 +55,7 @@ public static class DependencyInjection
         services.AddSingleton<Common.Localization.IMessageCatalog, Common.Localization.MessageCatalog>();
         // 語系包分析與重驗的輸入：交易內讀最新清單、覆寫層與三個語系政策（i4d1 計畫判斷 25）
         services.AddScoped<Dynamic.LocaleService.Packs.LocaleWorldReader>();
+        services.AddScoped<Dynamic.LocaleService.Packs.LocaleVersionSwitch>();
         // 語系包匯入開關：WebAPI 依部署設定註冊（後註冊者優先）；自己組 DI 的測試沿用開放
         services.TryAddSingleton(new Dynamic.LocaleService.Packs.LocalePackSettings(ImportEnabled: true));
         // 改營運時區時同一交易內平移日期時間索引
