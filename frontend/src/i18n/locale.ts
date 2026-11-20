@@ -1,5 +1,4 @@
 import { Quasar } from 'quasar';
-import builtinLocales from '../../../shared/builtin-locales.json';
 import { localeInfo, type LocaleInfo } from './locale-settings';
 
 /** 語系代碼（字串；合不合法由「在不在 API 給的清單」判斷，語系包 i4a 計畫判斷 14）。 */
@@ -7,9 +6,13 @@ export type LocaleCode = string;
 
 /**
  * 內建四語（隨程式出貨、一定已安裝），只給伺服器連不上時的退路與測試用；平時的語系清單一律從 API 取（locale-settings）。
- * 單一來源是 shared/builtin-locales.json，後端 BuiltinLocales 以 fixture 測試對齊。
+ * 單一來源是 shared/i18n/<code>/locale.json（各語系一個檔，依 order 排序），後端 BuiltinLocales 以 fixture 測試對齊。
  */
-export const BUILTIN_LOCALES: LocaleInfo[] = builtinLocales.map((l) => ({ ...l, fallbackCode: null }));
+type BuiltinLocaleFile = { code: string; nativeName: string; quasarLang: string; order: number };
+const builtinLocaleFiles = import.meta.glob<BuiltinLocaleFile>('shared/i18n/*/locale.json', { eager: true, import: 'default' });
+export const BUILTIN_LOCALES: LocaleInfo[] = Object.values(builtinLocaleFiles)
+  .sort((a, b) => a.order - b.order)
+  .map(({ code, nativeName, quasarLang }) => ({ code, nativeName, quasarLang, fallbackCode: null }));
 
 /** 伺服器連不上、還沒取得預設語系時的翻譯包退回（不是語系政策的預設）。 */
 export const FALLBACK_LOCALE: LocaleCode = 'zh-TW';

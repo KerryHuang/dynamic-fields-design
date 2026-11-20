@@ -5,7 +5,7 @@ public sealed record BuiltinLocale(string Code, string NativeName, string Quasar
 
 /// <summary>
 /// 內建語系（語系包設計 §4.1 的程式內嵌 manifest）：隨程式出貨、一定已安裝，啟動時同步成 <c>Dynamic_Locale</c> 的 builtin 列。
-/// 前端讀的 <c>shared/builtin-locales.json</c> 是同一份（<c>BuiltinLocalesFixtureTests</c> 逐欄比對）；i4b 改讀 <c>shared/i18n/&lt;code&gt;/locale.json</c>，呼叫端不改。
+/// 與 <c>shared/i18n/&lt;code&gt;/locale.json</c> 一致，由 <c>BuiltinLocalesFixtureTests</c> 與啟動自檢把關；不讀資源（i4b 計畫判斷 3）。
 /// </summary>
 public static class BuiltinLocales
 {

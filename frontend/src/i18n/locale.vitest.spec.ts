@@ -179,3 +179,15 @@ describe('LocaleSwitcher 掛載後政策更新', () => {
     w.unmount();
   });
 });
+
+describe('BUILTIN_LOCALES', () => {
+  it('來自 shared/i18n/<code>/locale.json，依 order 排成內建四語的順序，內容不變', () => {
+    expect(BUILTIN_LOCALES.map((l) => l.code)).toEqual(['zh-TW', 'en-US', 'th', 'vi']);
+    expect(BUILTIN_LOCALES).toEqual([
+      { code: 'zh-TW', nativeName: '繁體中文', quasarLang: 'zh-TW', fallbackCode: null },
+      { code: 'en-US', nativeName: 'English', quasarLang: 'en-US', fallbackCode: null },
+      { code: 'th', nativeName: 'ไทย', quasarLang: 'th', fallbackCode: null },
+      { code: 'vi', nativeName: 'Tiếng Việt', quasarLang: 'vi', fallbackCode: null },
+    ]);
+  });
+});
