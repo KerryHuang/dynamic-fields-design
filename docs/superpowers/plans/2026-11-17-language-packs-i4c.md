@@ -256,7 +256,7 @@ public IReadOnlyList<LocaleContext> ContextsFor(string defaultLocale);   // 一�
     - `Ja_NotInstalled_StillChains`：鏈裡的語系不必已安裝（`Get` 只看 `lc`）。
     - `UnknownKey_Throws`。
     - `AsI18n_InstalledLocales`：出廠 → 四個鍵、值等於基準檔四語；裝 `ja`（上層 `en-US`）並刷新 registry → 五個鍵、`ja` 等於英文；停用 `ja`（政策 `locale.enabled` 不含它）→ 仍有 `ja`（M3：已安裝即產生）。
-    - `AsI18n_RefreshMidway_UsesOneSnapshot`（第二輪必修 4）：裝 `ja`（上層 `en-US`）、預設 `zh-TW`；`BeforeLocaleForTests` 在第一次被呼叫時把 `ja` 的上層改成 `th`、另裝 `ko`、預設改 `vi`，並刷新 registry 與政策（`ReplaceCurrentForTests`）。這次 `AsI18n` 的結果：語系集合＝刷新前的五個（沒有 `ko`），`ja` 是英文；緊接著再呼叫一次（不掛鉤）→ 有 `ko`、`ja` 是泰文。另驗 `registry.ContextsFor(d)` 每個 `lc.Fallbacks` 等於同一時刻 `registry.FallbacksFor(code, d)`。
+    - `AsI18n_RefreshMidway_UsesOneSnapshot`（第二輪必修 4）：裝 `ja`（上層 `en-US`）、預設 `zh-TW`；`BeforeLocaleForTests` 在第一次被呼叫時把 `ja` 的上層改成 `th`、另裝 `ko`、預設改 `vi`，並刷新 registry 與政策（`ReplaceCurrentForTests`）。這次 `AsI18n` 的結果：語系集合＝刷新前的五個（沒有 `ko`），`ja` 是英文；緊接著再呼叫一次（不掛鉤）→ 有 `ko`、`ja` 是泰文。另裝一個已安裝、**無上層、無內建翻譯**的語系 `xx`（刷新前就在）：這次 `AsI18n` 的 `xx` 等於舊預設 `zh-TW` 的文字（刷新後預設已是 `vi`，逐語系重讀預設值的錯誤實作會得到越南文而變紅）；緊接著那次 `xx` 等於越南文。另驗 `registry.ContextsFor(d)` 每個 `lc.Fallbacks` 等於同一時刻 `registry.FallbacksFor(code, d)`。
     - `BuiltinInstance_IgnoresRegistry`：`BuiltinMessageCatalog.Instance.AsI18n(...)` 只有四語；`Get(new LocaleContext("ja", []))` 是繁中；`Get(new LocaleContext("ja", ["en-US"]))` 是英文（照傳入的鏈，判斷 4）。
 - [ ] **Step 2: 跑測試確認失敗**：`cd backend && dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~BuiltinServerTextTests|FullyQualifiedName~MessageCatalogTests"`（編譯失敗）
 - [ ] **Step 3: 實作**
@@ -354,9 +354,9 @@ public IReadOnlyList<LocaleContext> ContextsFor(string defaultLocale);   // 一�
 - `public static Module Build(string dataset, IReadOnlyList<Department> departments, IReadOnlyList<Module> modules, IReadOnlyList<TaskRule> rules, Func<string, I18nText> text)`
 
 - [ ] **Step 0: 先產快照與範本基準**（搬表前，單獨 commit）：在 `TaskReportTextTests` 寫一個暫時的 `Dump` 測試，用**現行** API 產生兩份檔：
-  - `task-report-texts.verified.json`（輸出快照）：`Build(Tasks)`、`Build(TaskEvents)`、`Build("foo")`（不認得的資料來源：名稱是空的 `I18nText`、沒有欄位）三個虛擬模組的模組名、全部欄位名、全部選項標籤（固定選項與傳入的部門、模組、規則實體選項都列，實體選項驗「名稱原樣帶過」），加 `BlankLabels`、`DatasetNames`；依（資料來源、欄位代碼、選項 Id、語系）排序，每個語系存 `Values` 裡的原值（不經 `Resolve`，缺的語系也看得出來）。
+  - `task-report-texts.verified.json`（輸出快照）：`Build(Tasks)`、`Build(TaskEvents)`、`Build("foo")`（不認得的資料來源：照現行輸出存，名稱是空的 `I18nText`；欄位照現行 `DrillColumns` 帶出的那些，不為了描述改行為）三個虛擬模組的模組名、全部欄位名、全部選項標籤（固定選項與傳入的部門、模組、規則實體選項都列，實體選項驗「名稱原樣帶過」），加 `BlankLabels`、`DatasetNames`；依（資料來源、欄位代碼、選項 Id、語系）排序，每個語系存 `Values` 裡的原值（不經 `Resolve`，缺的語系也看得出來）。
   - `ServerTextBaseline/task-report.json`（範本基準，判斷 14）：`Dump` 裡先寫好「位置 → 預定鍵」對照表（欄位名 18、狀態 4、來源 3、完成狀況 4、層級 3、事件種類 2、空值字 5、資料來源名 2），鍵名就是之後 `TextKeys` 的值；四語取自現行 Domain 的字面值。
-  - 核對：對照表 41 個位置、41 個不同的鍵；快照裡固定文字的位置數四語各是 41（少了就停下回報）。跑一次、人工抽看幾句、刪掉 `Dump`，commit 兩個檔（`test(i18n): 任務報表欄位文字快照與範本基準（搬表前）`）。此時 `Table_EqualsBaselines` 的清單還沒加這個檔，仍是綠的。
+  - 核對：對照表 41 個位置、41 個不同的鍵；快照裡固定文字按文字鍵去重後四語各是 41 個（同一句在多個資料來源重複出現只算一次；少了就停下回報）。跑一次、人工抽看幾句、刪掉 `Dump`，commit 兩個檔（`test(i18n): 任務報表欄位文字快照與範本基準（搬表前）`）。此時 `Table_EqualsBaselines` 的清單還沒加這個檔，仍是綠的。
 - [ ] **Step 1: 寫失敗的測試**
   - `BuiltinServerTextTests.Table_EqualsBaselines`：清單加 `task-report.json`（判斷 14；搬表前是紅的）。
   - `TaskReportTextTests.BuiltinLabels_MatchSnapshot`：用新 API（`Build(..., k => BuiltinMessageCatalog.Instance.AsI18n(k))`、`BlankLabelKeys`／`DatasetNameKeys` 經 catalog 四語各取一次）序列化成同一形狀，必須與快照**逐字相同**（含 `Build("foo")` 與實體選項）。
