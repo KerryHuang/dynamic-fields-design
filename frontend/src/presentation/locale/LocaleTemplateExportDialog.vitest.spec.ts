@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import zhTW from 'shared/i18n/zh-TW/ui.json';
 import type { LocaleAdminEntry } from 'src/domain/dynamic/locale-pack-types';
-import { HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
+import { HttpFail, HttpRaw, mockHttp, type Call } from 'src/test-utils/mock-http';
 import LocaleTemplateExportDialog from './LocaleTemplateExportDialog.vue';
 
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -189,5 +189,93 @@ describe('LocaleTemplateExportDialog 下載', () => {
     await download();
     expect(clicked).toHaveLength(0);
     expect(q('export-error')!.textContent).toContain('權限');
+  });
+});
+
+describe('LocaleTemplateExportDialog 完整回應', () => {
+  function spyDownload() {
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:u'), revokeObjectURL: vi.fn() }));
+    const clicked: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { clicked.push(this.download); });
+    return clicked;
+  }
+
+  it('400 的錯誤 Blob 走 Blob 解析：顯示後端訊息、不下載', async () => {
+    const clicked = spyDownload();
+    const body = new Blob([JSON.stringify({ code: 'localePackInvalid', errors: { file: ['樣板參數不合法'] } })], { type: 'application/json' });
+    await mountDialog(LOCALES[2]!, { reply: (c) => (c.url.endsWith('/template') ? new HttpRaw(400, body) : undefined) });
+    await download();
+    expect(clicked).toHaveLength(0);
+    expect(q('export-error')!.textContent).toContain('樣板參數不合法');
+  });
+
+  it('有 Content-Disposition 時用回應檔名，不用預設檔名', async () => {
+    const clicked = spyDownload();
+    const blob = new Blob(['{}']);
+    await mountDialog(LOCALES[2]!, {
+      reply: (c) => (c.url.endsWith('/template') ? new HttpRaw(200, blob, { 'content-disposition': 'attachment; filename=xx.langpack.json' }) : undefined),
+    });
+    await download();
+    expect(clicked).toEqual(['xx.langpack.json']);
+  });
+});
+
+describe('LocaleTemplateExportDialog 重疊請求（世代防護）', () => {
+  function deferred() {
+    let resolve!: (v: unknown) => void;
+    const promise = new Promise<unknown>((r) => { resolve = r; });
+    return { promise, resolve };
+  }
+  async function reopen(w: Awaited<ReturnType<typeof mountDialog>>) {
+    await w.setProps({ modelValue: false });
+    await w.setProps({ modelValue: true });
+    await tick();
+  }
+  function setup() {
+    const clicked: string[] = [];
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:u'), revokeObjectURL: vi.fn() }));
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { clicked.push(this.download); });
+    const a = deferred();
+    const b = deferred();
+    const queue = [a, b];
+    const reply = (c: Call) => (c.url.endsWith('/template') ? queue.shift()!.promise : undefined);
+    return { clicked, a, b, reply };
+  }
+
+  it('A 未完成就關閉重開：A 成功不下載、不關閉重開後的對話框', async () => {
+    const { clicked, a, reply } = setup();
+    const w = await mountDialog(LOCALES[2]!, { reply });
+    await download();
+    await reopen(w);
+    a.resolve(new Blob(['{}']));
+    await tick();
+    expect(clicked).toHaveLength(0);
+    expect(w.emitted('update:modelValue')).toBeUndefined();
+  });
+
+  it('A 未完成就關閉重開：A 失敗的錯誤不顯示在重開後的對話框', async () => {
+    const { a, reply } = setup();
+    const w = await mountDialog(LOCALES[2]!, { reply });
+    await download();
+    await reopen(w);
+    a.resolve(new HttpFail(400, { code: 'localePackInvalid', errors: { file: ['舊請求的錯誤'] } }));
+    await tick();
+    expect(q('export-error')).toBeNull();
+  });
+
+  it('A 未完成就重開並送出 B：A 完成不得清掉 B 的 busy，B 照常下載', async () => {
+    const { clicked, a, b, reply } = setup();
+    const w = await mountDialog(LOCALES[2]!, { reply });
+    await download();
+    await reopen(w);
+    await download();
+    a.resolve(new Blob(['{}']));
+    await tick();
+    expect(isDisabled(q('export-download'))).toBe(true);
+    expect(clicked).toHaveLength(0);
+    b.resolve(new Blob(['{}']));
+    await tick();
+    expect(clicked).toHaveLength(1);
+    expect(w.emitted('update:modelValue')?.at(-1)).toEqual([false]);
   });
 });
