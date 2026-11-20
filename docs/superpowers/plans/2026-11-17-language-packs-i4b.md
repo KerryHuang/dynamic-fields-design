@@ -33,6 +33,15 @@
 | 建議 | 補「從沒選過語言、沿用預設」的快取案例 | 判斷 13 第 1 步；Task 7 案例 |
 | 建議 | 快取秒數等不必設成業務政策 | 已是技術限制，維持列進 §14 |
 
+**第三輪（codex 短核對 `5d94a2bf`：原 9 條 7 條已修，另 4 條要修）**
+
+| # | 意見 | 改在哪裡 |
+|---|---|---|
+| 1 | Task 6 的 `ensureLocaleMessages` 用到 Task 7 才建的 `STARTUP_BUDGET_MS` | 常數改由 Task 6 建在 `src/i18n/locale.ts`，Task 7 的 startup 匯入（判斷 13 第 5 步、16；Task 6、7 Interfaces） |
+| 2 | 判斷 15「同語系有請求就不重發」與 Task 6 案例（c）「目標變 C 要發新請求」矛盾 | 判斷 15：只合併「同語系、同目標雜湊」；目標改變就發新請求、舊請求作廢，依序號與最新 `wanted` 決定是否裝上 |
+| 3 | `readUiCache(code)` 回傳沒有 `code`，startup 卻用 `readUiCache()?.code`；「只存 `formwright.locale` 記的語系」排除了沿用預設的人 | 判斷 14：`readUiCache()` 無參數、回 `{ code, hash, messages }`；快取「目前實際採用的非試看語系」（含沿用預設）；Task 6 Interfaces 與案例 |
+| 4 | 背景試看載入中登出或結束試看，舊回應晚到仍會 `applyLocale(ja)` | 判斷 17、19：`switchLocale` 記切換序號與試看世代，清除試看、登出、session 失效時作廢；套用前重確認；Task 8 加「載入中登出／選回啟用語系」案例 |
+
 ## 前置條件（開工前逐項確認，不符就停下回報）
 
 1. **i4a 已在 main**：`git log --oneline main | grep -E "3d0dd59b|67edc2b4"` 有結果；`backend/src/DynamicModules.Application/Common/LocaleRegistry.cs`、`LocaleInfoResponse.cs`、`frontend/src/i18n/locale-settings.ts`（`setLocaleInfos`、`localeChain`、`useLocales`）都在。
@@ -88,16 +97,16 @@
     - `resetStartupForTests()` 給測試。
 13. 〔技術〕**啟動順序**（設計 §8.2）由 `startLocale(i18n)` 實作，`boot/i18n.ts` 改成 async boot（Quasar 會等 boot 的 promise 完成才掛載 App）。**決定語系與載入文字都在這裡**，guard 只消費 `startupOutcome()` 設定語系資訊與政策（第二輪必修 5），不呼叫 `applyLocale`、不 await 任何文字請求：
     1. 起點 `code = readLocale() ?? readUiCache()?.code`：快取的語系就是上次實際使用的語系，包含「從沒選過、沿用系統預設」的人（建議收：否則這種人每次重新整理都用不到快取）。**試看值在啟動時不用**（判斷 17：要先確認身分與完整已安裝清單）。
-    2. 有 `code` 且快取有它（判斷 14）→ 先 `installUiMessages(code, cached)`、`applyLocale(code, …, false)`，**不等網路就結束 boot**。背景等 `startupOutcome()`：`code` 已不在啟用清單、或使用者從沒選過（沒有 `formwright.locale`）而預設語系已改 → 改成預設語系（載入文字後套用）；否則雜湊不同才重取並換上（判斷 15 的版本規則）。
+    2. 有 `code` 且 `readUiCache()?.code === code`（判斷 14）→ 先 `installUiMessages(code, cached)`、`applyLocale(code, …, false)`，**不等網路就結束 boot**。背景等 `startupOutcome()`：`code` 已不在啟用清單、或使用者從沒選過（沒有 `formwright.locale`）而預設語系已改 → 改成預設語系（載入文字後套用）；否則雜湊不同才重取並換上（判斷 15 的版本規則）。
     3. 沒有快取 → await `startupOutcome()`（不超過預算）；`code ??= defaultLocale`；`code` 不在啟用清單 → 預設語系（原本 guard 的「記的語系已停用就套預設」搬到這裡）；在**剩餘預算**內 `loadUiMessages(code, uiHash)`；成功就 `installUiMessages`、寫快取、套用。
     4. 預算用完（`auth/options` 或文字沒回、或失敗）→ 套用 `code`（沒有 `auth/options` 時只在它屬於 `OFFLINE_LOCALES` 才套，否則繁中），畫面用打包的 zh-TW 顯示（`fallbackLocale`），背景繼續；之後取到就 `installUiMessages`，畫面直接換語言。
-    5. 3 秒是設計 §14 已列的技術上限，寫成 `startup.ts` 的具名常數 `STARTUP_BUDGET_MS`，註解指向 §14。
+    5. 3 秒是設計 §14 已列的技術上限，寫成具名常數 `STARTUP_BUDGET_MS`，放在 `src/i18n/locale.ts`（Task 6 建，`ensureLocaleMessages` 的預設預算也用它；startup 匯入），註解指向 §14。
     - zh-TW 使用者也要取一次（設計 §8.2：可能有覆寫，U1）；打包檔的雜湊在建置時算不出來（前後端雜湊要逐位元一致），所以 zh-TW 一律取，取到前先用打包版本顯示（打包版本就是繁中內建層，不會閃成別的語言）。
-14. 〔技術〕**瀏覽器快取只存一份**：`localStorage` 鍵 `formwright.ui`，值 `{ code, hash, messages }`（扁平）。寫入前先刪掉舊的一份（同一個鍵，覆寫即可）；`setItem` 丟 `QuotaExceededError` 或 localStorage 不可用時不存、不報錯。只存 `formwright.locale` 記的那個語系的文字：**試看中的語系不寫快取**（試看只在分頁內，判斷 17），`ensureLocaleMessages` 載入的其他語系也不寫。讀取時驗形狀（`code`、`hash` 是字串、`messages` 是物件），不符當沒有快取。
+14. 〔技術〕**瀏覽器快取只存一份**：`localStorage` 鍵 `formwright.ui`，值 `{ code, hash, messages }`（扁平）。寫入前先刪掉舊的一份（同一個鍵，覆寫即可）；`setItem` 丟 `QuotaExceededError` 或 localStorage 不可用時不存、不報錯。存的是**目前實際採用的非試看語系**：使用者選的（`formwright.locale`），或從沒選過、沿用系統預設的那個語系（第三輪 3）；**試看中的語系不寫快取**（試看只在分頁內，判斷 17），`ensureLocaleMessages` 載入的其他語系也不寫。讀取介面 `readUiCache()` 不帶參數，回整份 `{ code, hash, messages }`（判斷 13 第 1 步要用 `code`）；讀取時驗形狀（`code`、`hash` 是字串、`messages` 是物件），不符當沒有快取。
 15. 〔技術〕**換新與版本協調**（設計 §8.2「已開著的頁面」；第二輪必修 6）：
     - `use-business-time-watch.ts` 改看 `query.dataUpdatedAt`（每次成功重取都會變，不受 TanStack Query 結構共享影響），每次都先 `applyLocalePolicies`、再 `refreshLoadedMessages(eff.locales)`。不能只靠「資料參考變了」：第一次拿到雜湊 B 但文字請求失敗，下一輪政策仍是 B、參考不變，watcher 就再也不會跑。
-    - `ui-messages.ts` 對每個語系記 `wanted`（伺服器最新給的雜湊）、`loaded`（已裝上的雜湊）、`seq`（最後一次發出的請求序號）。`refreshLoadedMessages` 對每個已載入的語系（目前語系＋`ensureLocaleMessages` 載過的），`wanted !== loaded` 就重取（同一語系已有進行中的請求就不重發）。
-    - 請求完成時：序號不是該語系最新的 → 丟掉（舊請求晚到不覆蓋新版）；回應的 `X-UI-Hash` 等於 `wanted` → 裝上、目前語系另寫快取；不等（打到還沒換新的另一台回了 A）→ 不裝、維持「待重試」，下一輪重取再試；失敗同樣待重試。例外：該語系**還沒有任何文字**時（啟動第 4 步的背景載入），不等也先裝上，總比沒有好，之後照規則換新。
+    - `ui-messages.ts` 對每個語系記 `wanted`（伺服器最新給的雜湊）、`loaded`（已裝上的雜湊）、`seq`（最後一次發出的請求序號）。`refreshLoadedMessages` 對每個已載入的語系（目前語系＋`ensureLocaleMessages` 載過的），`wanted !== loaded` 就重取。**只合併「同語系、同目標雜湊」的請求**（已有一個取 `wanted` 的請求在跑就不重發）；目標雜湊改了（例如 B 還沒回、`wanted` 已變 C）就發新請求，序號遞增，B 那次自動作廢（第三輪 2）。
+    - 請求完成時：序號不是該語系最新的 → 丟掉（舊請求晚到不覆蓋新版，不論它先回還是後回）；回應的 `X-UI-Hash` 等於 `wanted` → 裝上、目前語系另寫快取；不等（打到還沒換新的另一台回了 A）→ 不裝、維持「待重試」，下一輪重取再試；失敗同樣待重試。例外：該語系**還沒有任何文字**時（啟動第 4 步的背景載入），不等也先裝上，總比沒有好，之後照規則換新。
     - 文字請求帶逾時 `UI_FETCH_TIMEOUT_MS = 15000`（axios 實例沒有全域逾時，永不回的請求會讓「進行中」卡住、待重試永遠不發生）；屬技術限制，列進 §14。
     - 不提示、不重新整理。登入頁（匿名）沒有這個輪詢，登入後才有，不另加。
 16. 〔技術〕**`ensureLocaleMessages(codes, { budgetMs = STARTUP_BUDGET_MS }): Promise<LocaleCode[]>`**（設計 §8.4、i4a 判斷 16）：對每個代碼，已載入且雜湊等於 `localeInfo(code)?.uiHash` 就略過；否則並行載入（走判斷 15 的同一套版本協調）；**最晚在 `budgetMs` 時 resolve**，回傳「現在有文字的語系」（含打包的 zh-TW），沒回來的請求在背景繼續。單一語系失敗不丟例外（只是不在回傳清單），呼叫端只為回傳清單裡的語系產生文字（設計 §8.4「取不到的語系就不填那一格」）。同一語系同時被要求兩次共用同一個進行中的 promise。
@@ -115,10 +124,11 @@
       | 系統管理員，`loadSessionSettings` 失敗（導向服務無法使用頁） | 保留，下次成功載入時再驗 |
       | 系統管理員，試看值已不在已安裝清單 | 清除試看 |
       | 系統管理員，試看值已安裝 | 載入並套用 |
+    - **進行中的試看切換要能作廢**（第三輪 4）：`locale-preview.ts` 另記一個試看世代 `previewEpoch`，`setPreviewLocale(null)`、登出、`handleUnauthorized`（session 失效）都遞增它。`switchLocale` 開始時記下（全域切換序號、`previewEpoch`、`useIdentityStore().userId`），文字回來、**`applyLocale` 之前**重新確認：切換序號仍是最新（後來又選了別的語言就作廢，試看與一般切換都適用）；試看切換另要 `previewEpoch` 沒變、`previewLocale() === code`、`userId` 沒變。不符就只裝文字、不套用、不提示。
     - 清除時若畫面語系正是試看值，切回 `readLocale() ?? defaultLocale()`。登出（`useLogout` 成功）與 `handleUnauthorized` 也清除。因為啟動不套試看值，`loadLocaleSettings` 不會覆蓋它；代價是試看中的管理員重新整理後，會先短暫顯示原語系、確認後才換成試看語系（只有管理員、只在試看中）。
     - 權限 fail closed：前端狀態不能讓一般使用者留在未啟用語系；後端本來就把未啟用的 `X-Locale` 當預設語系（p3 判斷 14），匿名取未啟用語系的文字是 404（判斷 8）。
 18. 〔行為，原 Q1，主控裁決待使用者確認，見待決 Q1〕**API 斷線時語言選單列內建四語**（來源 `BUILTIN_LOCALES`＝`shared/i18n/*/locale.json`），與 i4a 判斷 22 相同。i4b 之後選了瀏覽器沒有文字的語系，切換流程取不到文字，照設計 §8.2「切換失敗提示並停在原語系」處理：目前是繁中就停在繁中（即「退回繁中」），目前是有快取的泰文就停在泰文。實作成單點可改：具名常數 `OFFLINE_LOCALES = BUILTIN_LOCALES` 定義在 `src/i18n/locale.ts`（`BUILTIN_LOCALES` 旁邊），startup（判斷 13 第 4 步）與 auth guard 的斷線分支都只引用它；改成只列繁中時只改這一行（`BUILTIN_LOCALES.filter((l) => l.code === FALLBACK_LOCALE)`）與它的測試預期。
-19. 〔行為，依設計 §8.2〕**切換語系**：`switchLocale(code, { preview })`（`ui-messages.ts`）先 `ensureCurrentMessages(code)`；載入中選單項目顯示 `q-spinner` 並停用其他項目；成功才 `applyLocale`；失敗用 `Notify` 顯示 `t('locale.loadFailed', { name: nativeName(code) })`（「無法載入{name}，請稍後再試」）並停在原語系。新句子三句：`locale.notEnabled`（未啟用）、`locale.loadFailed`、`locale.loading`（載入中，給 spinner 的 `aria-label`），四語都給、單行 JSON（`.claude/rules/frontend.md`）。
+19. 〔行為，依設計 §8.2〕**切換語系**：`switchLocale(code, { preview })`（`ui-messages.ts`）先 `ensureCurrentMessages(code)`；載入中選單項目顯示 `q-spinner` 並停用其他項目；成功且通過判斷 17 的作廢檢查才 `applyLocale`；失敗用 `Notify` 顯示 `t('locale.loadFailed', { name: nativeName(code) })`（「無法載入{name}，請稍後再試」）並停在原語系。新句子三句：`locale.notEnabled`（未啟用）、`locale.loadFailed`、`locale.loading`（載入中，給 spinner 的 `aria-label`），四語都給、單行 JSON（`.claude/rules/frontend.md`）。
 20. 〔技術〕**測試環境照常有四語文字**：`vitest.setup.ts` 從 `shared/i18n/*/ui.json` import 四份，對 en-US、th、vi 呼叫 `i18n.global.setLocaleMessage`（zh-TW 已打包）。理由：上百個既有 spec 掛載元件後切 English 斷言英文文案，那是元件行為測試、不是載入測試；載入行為由 Task 6、7 的新 spec 測：vue-i18n 沒有安全的「移除某語系文字」API，所以 `startup`／`ui-messages` 的 spec 各自 `createI18n` 一個只有繁中的乾淨實例傳入受測函式，這兩個模組的函式因此**接收 i18n 實例參數**、不直接 import boot 的單例；`designer-graph`、`LedgerTab` 的 spec 用單例，案例內用沒有預載的代碼（`ja`）測。
 21. 〔技術〕**`shared/quasar-langs.json`**（設計 §8.5、T2、§22）：`scripts/i18n/gen-quasar-langs.mjs`（手動執行的 node 腳本，列 `frontend/node_modules/quasar/lang/*.js` 檔名、去掉 `.js`、排序，寫成 JSON 陣列，一行一個）；`frontend/src/i18n/quasar-langs.vitest.spec.ts` 比對它與 `import.meta.glob('../../node_modules/quasar/lang/*.js')` 的鍵完全相同（升級 Quasar 後語言包變動會讓這個測試失敗，提示重跑腳本）。後端內嵌，`BuiltinLocaleResources.QuasarLangs` 供 i4d1 的安裝驗證；本段的用途是啟動自檢（內建四語的 `quasarLang` 都在清單內）與 `LocaleRegistry` 讀到資料表 `installed` 列的 `QuasarLang` 不在清單時當成 `null` 並記 Warning（只可能來自資料修補）。
 22. 〔技術〕**gate 不加 Docker 映像建置**。判斷 4 的建置檢查讓 Docker 裡的 `dotnet publish` 在缺 `shared/` 時直接失敗，啟動自檢讓 `Dockerfile.demo` 建映像時（`--generate-demo-data`）就失敗，兩道都在建置期擋下設計 §8.1 擔心的「悄悄全部變繁中」；完整映像建置要十分鐘以上，放進每次 gate 不划算。設計 §19 的「Docker 映像冒煙」在 Task 11 本機做一次，結果寫進交付說明。`gate.yml` 不改（`shared/` 與 `Dockerfile*` 的變更本來就觸發前後端全跑）。
@@ -370,7 +380,7 @@ i4b 開工不需要等這兩題；計畫照推薦實作，兩題都做成單點�
 
 **Files:**
 - Create: `frontend/src/i18n/ui-messages.ts`、`frontend/src/i18n/ui-messages.vitest.spec.ts`
-- Modify: `frontend/src/i18n/locale-settings.ts`（`LocaleInfo` 加 `uiHash: string`）、`frontend/src/i18n/locale.ts`（`BUILTIN_LOCALES` 補 `uiHash: ''`）、`frontend/src/services/api/dynamic-api.ts`（`getUiMessages(code, v)` 回 `{ hash: string; messages: Record<string, string> }`，`hash` 取回應標頭 `x-ui-hash`）、`frontend/package.json` 與 `frontend/bun.lock`（判斷 11：`bun add @intlify/message-compiler@11.4.19`，`dependencies` 寫精確版本）
+- Modify: `frontend/src/i18n/locale-settings.ts`（`LocaleInfo` 加 `uiHash: string`）、`frontend/src/i18n/locale.ts`（`BUILTIN_LOCALES` 補 `uiHash: ''`；新增 `STARTUP_BUDGET_MS`，第三輪 1）、`frontend/src/services/api/dynamic-api.ts`（`getUiMessages(code, v)` 回 `{ hash: string; messages: Record<string, string> }`，`hash` 取回應標頭 `x-ui-hash`）、`frontend/package.json` 與 `frontend/bun.lock`（判斷 11：`bun add @intlify/message-compiler@11.4.19`，`dependencies` 寫精確版本）
 
 **Interfaces:**（i18n 實例當參數，判斷 20）
 ```ts
@@ -379,12 +389,13 @@ export function prepareMessages(flat: Record<string, unknown>, base: Record<stri
 export function installUiMessages(i18n: I18nLike, code: LocaleCode, flat: Record<string, unknown>, hash: string): void;
 export const hasUiMessages = (i18n: I18nLike, code: LocaleCode): boolean;
 export function loadedHash(code: LocaleCode): string | undefined;
-export const UI_FETCH_TIMEOUT_MS = 15000;                     // 判斷 15
+export const STARTUP_BUDGET_MS = 3000;                        // locale.ts；設計 §14，ensureLocaleMessages 的預設預算、startup 匯入
+export const UI_FETCH_TIMEOUT_MS = 15000;                     // ui-messages.ts；判斷 15
 export function loadUiMessages(code: LocaleCode, hash?: string): Promise<{ hash: string; messages: Record<string, string> }>;
 export function ensureLocaleMessages(i18n: I18nLike, codes: LocaleCode[], opts?: { budgetMs?: number }): Promise<LocaleCode[]>;
 export function ensureCurrentMessages(i18n: I18nLike, code: LocaleCode): Promise<void>;   // 失敗丟錯（切換語系用）
 export function refreshLoadedMessages(i18n: I18nLike, infos: LocaleInfo[]): Promise<void>;
-export function readUiCache(code: LocaleCode): { hash: string; messages: Record<string, string> } | null;
+export function readUiCache(): { code: LocaleCode; hash: string; messages: Record<string, string> } | null;
 export function writeUiCache(code: LocaleCode, hash: string, messages: Record<string, string>): void;
 ```
 - `base` 是打包的 zh-TW 壓平結果（模組內算一次）。`prepareMessages`：非字串值、基準外的鍵丟掉；`baseCompile` 有錯的句子丟掉並改用 `base` 同鍵；回傳巢狀物件。
@@ -401,7 +412,7 @@ export function writeUiCache(code: LocaleCode, hash: string, messages: Record<st
   - `refreshLoadedMessages`：已載入 `th`（雜湊 A），新 `infos` 的 `th` 是 B → 重取並換上；沒載入過的 `vi` 不取；`th` 是目前語系時另寫快取。
   - **版本協調**（第二輪必修 6）：`th` 已載入 A，`wanted` 變 B：(a) 第一次重取回 `X-UI-Hash: A`（舊台）→ 不裝、仍是 A；第二次呼叫 `refreshLoadedMessages`（同樣是 B）→ 再取、回 B → 裝上 B；(b) 第一次重取 reject → 第二次成功回 B → 裝上；(c) 舊請求晚到：對 `th` 先後發出兩次請求（第二次因 `wanted` 又變 C），C 先回、B 後回 → 最後是 C；(d) 請求超過 `UI_FETCH_TIMEOUT_MS` → 視為失敗，下一輪會重發。
   - 還沒有任何文字的語系：回應雜湊與 `wanted` 不同也先裝上。
-  - `writeUiCache`／`readUiCache`：寫 `th` 再寫 `vi` → 只剩 `vi`（同一個鍵）；`setItem` 丟 `QuotaExceededError` 不丟例外；形狀不符（`messages` 是字串）讀回 null；localStorage 不可用回 null。
+  - `writeUiCache`／`readUiCache`：寫 `th` 再寫 `vi` → `readUiCache()` 回 `{ code: 'vi', … }`（同一個鍵，只剩一份）；`setItem` 丟 `QuotaExceededError` 不丟例外；形狀不符（`messages` 是字串）讀回 null；localStorage 不可用回 null。
 - [ ] **Step 2: 跑測試確認失敗**：`cd frontend && bunx vitest run src/i18n/ui-messages.vitest.spec.ts --maxWorkers=2`
 - [ ] **Step 3: 實作**
 - [ ] **Step 4: 跑測試確認通過**：同 Step 2；`bunx vitest run src/i18n src/services/api --maxWorkers=2`；`bun run typecheck`
@@ -423,7 +434,7 @@ export function writeUiCache(code: LocaleCode, hash: string, messages: Record<st
 
 **Interfaces:**
 ```ts
-export const STARTUP_BUDGET_MS = 3000;   // 設計 §14：auth/options 加語系文字兩趟合計
+// STARTUP_BUDGET_MS 從 src/i18n/locale.ts 匯入（Task 6 建）
 export interface StartupOutcome { options: AuthOptions | null }
 export function startupOutcome(): Promise<StartupOutcome>;           // 最晚預算到時 resolve，永不 reject
 export function takeStartupAuthOptions(): AuthOptions | undefined;   // 啟動那次成功才給、只給一次
@@ -483,6 +494,7 @@ export function switchLocale(code: LocaleCode, opts?: { preview?: boolean }): Pr
     - 元件本身不呼叫 `getMe`（spy 為 0 次，第二輪必修 9）。
   - `MainLayout`：`/me` 回 `isSystemAdmin: true` → 語言選單有試看項目；`false` → 沒有。
   - `auth-guard`（判斷 17 的分支表逐列一案；`sessionStorage` 都先放 `ja`，`ja` 已安裝但**未啟用**，`auth/options` 的 `locales` 不含它）：匿名 → 清除；強制改密碼 → 清除；非管理員 → 清除、畫面是 `formwright.locale` 或預設；管理員 → 在 `loadSessionSettings` 之後才判斷（`getEffectivePolicies` 的 `locales` 含 `ja`）→ 背景載入並套用 `ja`、`formwright.locale` 不變；管理員但 `ja` 不在生效政策的 `locales` → 清除；`loadSessionSettings` 失敗 → 保留；`useLogout` 成功、`handleUnauthorized` → 清除。
+    - **晚到的回應**（第三輪 4）：管理員背景載入 `ja` 期間 (a) 登出、(b) session 失效（`handleUnauthorized`）、(c) 在選單選回 `English` → `ja` 的回應之後才到也**不** `applyLocale('ja')`，`i18n.locale` 分別是登出後的語系、預設語系、`en-US`；(d) 一般切換：選 `th`（慢）後立刻選 `vi`（快）→ 最後是 `vi`。
 - [ ] **Step 2: 跑測試確認失敗**：`cd frontend && bunx vitest run src/i18n src/router src/layouts --maxWorkers=2`
 - [ ] **Step 3: 實作**（判斷 19 的三個新鍵在本 Task 加進四份 `ui.json`，Step 4 的 `locales.vitest.spec.ts` 才過：`locale.notEnabled` 未啟用／Not enabled／ยังไม่เปิดใช้／Chưa bật；`locale.loadFailed` 無法載入{name}，請稍後再試／Couldn't load {name}. Please try again later.／โหลด{name}ไม่ได้ โปรดลองอีกครั้งภายหลัง／Không thể tải {name}, vui lòng thử lại sau；`locale.loading` 載入中／Loading／กำลังโหลด／Đang tải。泰文、越南文是機器翻譯，同 #30 的既有狀態）
 - [ ] **Step 4: 跑測試確認通過**：同 Step 2；`bunx vitest run src/i18n/locales.vitest.spec.ts --maxWorkers=2`；`bun run typecheck`
