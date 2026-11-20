@@ -1,6 +1,6 @@
 # Formwright（表匠）— 給 AI agent 的專案規範
 
-所有 AI 工具（Claude Code、Codex、其他）共用這一份。Claude Code 在沒有 `CLAUDE.md` 時會自動讀它，所以 **repo 裡不要放 `CLAUDE.md` 或 `CLAUDE.local.md`**，否則這份會被略過。
+所有 AI 工具（Claude Code、Codex、其他）共用這一份，指示內容只寫在這裡。Claude Code 透過根目錄 `CLAUDE.md` 的一行 `@AGENTS.md` 讀到它（上層目錄有 `CLAUDE.md` 時，Claude Code 不會自動載入 `AGENTS.md`）；`CLAUDE.md` 只放那一行，不放副本。
 
 ## 宗旨（設計與實作前先對照）
 
@@ -13,7 +13,7 @@ ERP 是產品目標，也是核心的壓力測試：做不出來的地方，就�
 ## 鐵則
 
 1. **ERP 邏輯不寫死。** 程式裡只放平台機制；業務邏輯一律是資料（模組、欄位、規則、流程、報表、權限的定義）。
-2. **業務政策要能設定，不寫成程式常數**（使用者 2026-11-11 指示）：數量上限、預設值、天數與時間規則、通知對象、特定模組或應用程式代碼的特例分支、寫死的群組／角色／狀態代碼，都要由系統管理員或設計者設定。
+2. **業務政策要能設定，不寫成程式常數**（使用者裁決）：數量上限、預設值、天數與時間規則、通知對象、特定模組或應用程式代碼的特例分支、寫死的群組／角色／狀態代碼，都要由系統管理員或設計者設定。
    - 可以寫死、但要列清單讓使用者看過：資料完整性守衛（被引用的欄位不能刪或停用）、安全與權限檢查、格式與長度等技術限制。
    - 畫面呈現方式（按鈕隱藏或灰色）不屬於這條。
    - 同一個上限或預設值不准在 Domain、Application、前端各寫一份；集中成單一來源，前端從 API 取得。
@@ -39,9 +39,9 @@ ERP 是產品目標，也是核心的壓力測試：做不出來的地方，就�
 ## 工作方式
 
 - **先說驗收方式再動手**；修 bug 先寫重現的失敗測試。
-- **只跑相關測試**：`dotnet test <測試專案> --filter <類名>`；全套與 gate 一次只跑一個，不和其他吃 CPU 的測試並行。細節見 `docs/ai/testing.md`。
+- **只跑相關測試**：`dotnet test <測試專案> --filter <類名>`；全套與 gate 一次只跑一個，不和其他吃 CPU 的測試並行；例外是窄範圍 vitest 加 `--maxWorkers=2` 可以同時跑（使用者裁決）。細節見 `docs/ai/testing.md`。
 - **上線流程**（gate → 本機走查 → 外洩掃描 → fast-forward 推 main → 等部署 → Demo 冒煙檢查）用 `formwright-ship` skill；瀏覽器驗證用 `formwright-demo-verify` skill。
-- **流程主從**：自動駕駛（`workspace:unattended`）時照它的流程——設計夠細就不另寫實作計畫、不審計畫，整段交一個實作者；業務邊界複雜的設計題先由 `lifecycle:domain-advisor` 審。使用者在場手動開工才走 `lifecycle:implement`（使用者 2026-11-19 裁決）。
+- **流程主從**：自動駕駛（`workspace:unattended`）時照它的流程——設計夠細就不另寫實作計畫、不審計畫，整段交一個實作者；業務邊界複雜的設計題先由 `lifecycle:domain-advisor` 審。使用者在場手動開工才走 `lifecycle:implement`（使用者裁決）。
 - **有畫面的改動**合併前要在本機（`scripts/unattended/local-demo.sh`）的 390、820、1366、1920 四種寬度驗過，不得橫向捲動。
 - **git**：逐檔 `git add`，不用 `-A`／`.`、不用 `--no-verify`、不 force push、不 merge commit。
 

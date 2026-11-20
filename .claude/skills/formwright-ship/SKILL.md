@@ -9,7 +9,7 @@ description: Use when a Formwright feature branch or worktree is implemented and
 
 ## 1. Gate（GitHub Actions）
 
-功能分支推上 GitHub 就會跑 `.github/workflows/gate.yml`。repo 是公開的，**推分支前先跑第 2 節的外洩掃描，三項都是 0 才推**（使用者 2026-11-13 裁決）。
+功能分支推上 GitHub 就會跑 `.github/workflows/gate.yml`。repo 是公開的，**推分支前先跑第 2 節的外洩掃描，三項都是 0 才推**（使用者裁決）。
 
 ```bash
 git push -q -u origin <功能分支>
