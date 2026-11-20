@@ -83,6 +83,44 @@ public class AuthApiTests
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Options_IncludesLocaleInfos()
+    {
+        using var app = new TestApp();
+        var body = await Json(await app.AsUser(null).GetAsync($"{Auth}/options"));
+        var locales = body.GetProperty("locales").EnumerateArray().ToList();
+        locales.Select(l => l.GetProperty("code").GetString()).Should().Equal("zh-TW", "en-US", "th", "vi");
+        var th = locales[2];
+        th.GetProperty("nativeName").GetString().Should().Be("ไทย");
+        th.GetProperty("quasarLang").GetString().Should().Be("th");
+        th.GetProperty("fallbackCode").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Options_LocaleInfos_OnlyEnabled()
+    {
+        using var app = new TestApp();
+        await LocaleTestKit.InstallAsync(app, "ja", "日本語", fallback: "en-US");
+        async Task<List<JsonElement>> Locales() =>
+            (await Json(await app.AsUser(null).GetAsync($"{Auth}/options"))).GetProperty("locales").EnumerateArray().ToList();
+        (await Locales()).Select(l => l.GetProperty("code").GetString()).Should().NotContain("ja");
+
+        (await app.AsUser().PutAsJsonAsync($"{Base}/system/policies/locale.enabled", new { value = new[] { "zh-TW", "en-US", "ja" } }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        var locales = await Locales();
+        locales.Select(l => l.GetProperty("code").GetString()).Should().Equal("zh-TW", "en-US", "ja");
+        var ja = locales[2];
+        ja.GetProperty("nativeName").GetString().Should().Be("日本語");
+        ja.GetProperty("fallbackCode").GetString().Should().Be("en-US");
+        // 全域略過 null，這兩欄要永遠帶出
+        ja.TryGetProperty("quasarLang", out var q).Should().BeTrue();
+        q.ValueKind.Should().Be(JsonValueKind.Null);
+        locales[0].TryGetProperty("fallbackCode", out var f).Should().BeTrue();
+        f.ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
     public async Task XUserHeader_WithoutCookie_Returns401()
     {
         using var app = NewApp();

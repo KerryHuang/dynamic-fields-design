@@ -68,6 +68,7 @@ public sealed class InstalledLocalesUpgradeTests
             var options = await (await app.AsUser(null).GetAsync($"{Base}/auth/options")).Content.ReadFromJsonAsync<JsonElement>();
             options.GetProperty("defaultLocale").GetString().Should().Be("en-US");
             options.GetProperty("enabledLocales").EnumerateArray().Select(e => e.GetString()).Should().Equal("zh-TW", "en-US", "th", "vi");
+            options.GetProperty("locales").EnumerateArray().Select(l => l.GetProperty("code").GetString()).Should().Equal("zh-TW", "en-US", "th", "vi");
         }
         finally
         {

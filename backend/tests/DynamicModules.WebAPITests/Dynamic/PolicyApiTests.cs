@@ -373,4 +373,22 @@ public class PolicyApiTests : IDisposable
         (await sales.GetAsync($"{Base}/policies/effective?module=m-nope")).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await _app.AsUser(null).GetAsync($"{Base}/policies/effective")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Effective_IncludesInstalledLocales()
+    {
+        await LocaleTestKit.InstallAsync(_app, "ja", "日本語", fallback: "en-US");
+        var key = await CreateModule(_app.AsUser());
+        var sales = _app.AsUser("sales01");
+        foreach (var url in new[] { $"{Base}/policies/effective", $"{Base}/policies/effective?module={key}" })
+        {
+            var body = await JsonOf(await sales.GetAsync(url));
+            var locales = body.GetProperty("locales").EnumerateArray().ToList();
+            // 全部已安裝語系（含沒啟用的 ja），不只啟用的
+            locales.Select(l => l.GetProperty("code").GetString()).Should().Equal("zh-TW", "en-US", "th", "vi", "ja");
+            locales[4].GetProperty("nativeName").GetString().Should().Be("日本語");
+            locales[4].GetProperty("fallbackCode").GetString().Should().Be("en-US");
+            body.GetProperty("values").GetProperty("locale.enabled").EnumerateArray().Select(e => e.GetString()).Should().NotContain("ja");
+        }
+    }
 }

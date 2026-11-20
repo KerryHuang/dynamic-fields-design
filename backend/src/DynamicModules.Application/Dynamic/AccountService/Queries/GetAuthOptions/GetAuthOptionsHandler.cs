@@ -8,17 +8,21 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Queries.GetAuthOptions;
 
-public class GetAuthOptionsHandler(AuthSettings settings, IAccountRepository accounts, IDemoDataRunner demo, CachedSystemPolicy policies)
+public class GetAuthOptionsHandler(
+    AuthSettings settings, IAccountRepository accounts, IDemoDataRunner demo, CachedSystemPolicy policies, LocaleRegistry registry)
     : IRequestHandler<GetAuthOptionsRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetAuthOptionsRequest request, CancellationToken ct)
     {
+        var enabled = policies.EnabledLocales;
+        // 登入前只給啟用語系，順序依已安裝語系
+        var locales = registry.Locales.Where(l => enabled.Contains(l.Code)).Select(LocaleInfoResponse.Of).ToList();
         if (!settings.DemoLoginEnabled)
-            return ServiceResult.Success(new AuthOptionsResponse(false, false, [], policies.DefaultLocale, policies.EnabledLocales));
+            return ServiceResult.Success(new AuthOptionsResponse(false, false, [], policies.DefaultLocale, enabled, locales));
 
         var list = await accounts.ListDemoLoginAccountsAsync(ct);
         return ServiceResult.Success(new AuthOptionsResponse(
             true, demo.Current.State == DemoRunState.Running,
-            [.. list.Select(a => new DemoAccountResponse(a.UserId, a.DisplayName))], policies.DefaultLocale, policies.EnabledLocales));
+            [.. list.Select(a => new DemoAccountResponse(a.UserId, a.DisplayName))], policies.DefaultLocale, enabled, locales));
     }
 }
