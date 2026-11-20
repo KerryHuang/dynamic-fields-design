@@ -6,6 +6,37 @@ Formwright 的 Demo 站與容器部署做法。本機開發與測試見 [CONTRIB
 
 `Dockerfile.demo` 把前端建置結果、後端與建置時產生的 Demo 資料打包成一個容器，API 與畫面在同一個網址。Render 免費方案每月的建置額度不夠用，所以改成由 GitHub Actions 建好映像推上 GHCR，託管平台只拉現成映像、不自己建置（使用者 2026-11-20 裁決）。目前 Render（公開 Demo）與 Azure Container Apps（內部備案）同步部署。
 
+### 部署架構
+
+原本由 Render 從 git 自己建置，推上 `main` 就自動部署。2026-11 本月 Render 建置額度用完，改成 GitHub Actions 每天建映像推上 GHCR，Render 與 Azure 備案拉同一份映像同步部署（使用者 2026-11-20 裁決）。推上 `main` 不再部署。
+
+```mermaid
+flowchart TD
+  T["每天 02:00（台北）<br/>或手動 gh workflow run"] --> W["GitHub Actions<br/>demo-refresh.yml"]
+  W --> I["job image<br/>用 Dockerfile.demo 建映像<br/>（建置時產生 Demo 資料）"]
+  I --> G[("GHCR<br/>formwright-demo:latest / :sha<br/>公開、免登入可拉")]
+  G --> R1["job deploy<br/>POST DEMO_DEPLOY_HOOK"]
+  G --> A1["job deploy-azure<br/>OIDC 登入 Azure<br/>containerapp update → :sha"]
+  R1 --> R2["Render formwright-demo<br/>Existing Image・Free・Singapore<br/>拉 :latest，不自己建置"]
+  A1 --> A2["Azure Container Apps（內部備案）<br/>East Asia・0.25 vCPU<br/>副本 0～1"]
+  R2 --> RV{"/api/version 的 commit<br/>= 這次的 sha？<br/>每 20 秒，最多 15 分"}
+  A2 --> AV{"/api/version 的 commit<br/>= 這次的 sha？<br/>每 20 秒，最多 10 分"}
+  RV -- 是 --> OK1["Render 新版上線"]
+  RV -- 逾時 --> F1["workflow 失敗"]
+  AV -- 是 --> OK2["Azure 新版上線"]
+  AV -- 逾時 --> F2["workflow 失敗"]
+  A2 -. 當月花費 ≥ 1 美元 .-> B["Azure 預算 monthly-1usd"]
+  B -.-> AG["動作群組"] -.-> LA["Logic App<br/>POST …/stop"] -.-> S["app 停機<br/>（手動重開）"]
+```
+
+| | Render（公開 Demo） | Azure（內部備案） |
+|---|---|---|
+| 角色 | 公開 Demo | 內部備案 |
+| 區域 | Singapore | East Asia |
+| 休眠 | 閒置 15 分 | 閒置約 6.5 分縮到 0 |
+| 喚醒 | 約 1 分鐘 | 約 27 秒 |
+| 費用 | 免費 | 免費額度內，每月約 200 小時；超過 1 美元自動停機 |
+
 1. 映像：`ghcr.io/kerryhuang/formwright-demo`，標籤有 `latest` 和 commit sha。託管平台要能拉得到：把 GHCR package 設成公開，或在平台設定 registry 認證。
 2. 託管平台：建一個「從映像部署」的服務，映像填 `ghcr.io/kerryhuang/formwright-demo:latest`、健康檢查路徑 `/api/health/ready`，關掉 Auto-Deploy；把平台的 Deploy Hook 網址設成 GitHub secret `DEMO_DEPLOY_HOOK`。
 
@@ -27,7 +58,7 @@ Formwright 的 Demo 站與容器部署做法。本機開發與測試見 [CONTRIB
 
 設定：
 
-- secret `DEMO_DEPLOY_HOOK`：託管平台的 Deploy Hook 網址（GitHub repo → Settings → Secrets and variables → Actions → Secrets）。沒設定時只建映像、印警告、照樣成功結束；有設定時先去掉前後空白與換行，不是 `https://` 開頭就報錯讓排程失敗。舊的 `RENDER_DEPLOY_HOOK` 指向 git 建置的舊服務，workflow 已不再使用。
+- secret `DEMO_DEPLOY_HOOK`：託管平台的 Deploy Hook 網址（GitHub repo → Settings → Secrets and variables → Actions → Secrets）。沒設定時只建映像、印警告、照樣成功結束；有設定時先去掉前後空白與換行，不是 `https://` 開頭就報錯讓排程失敗。舊 secret `RENDER_DEPLOY_HOOK` 已於 2026-11-20 刪除。
 - variable `DEMO_URL`：Demo 站網址（同一頁的 Variables），沒設定時用 `https://formwright-demo.onrender.com`。
 
 急著上線：`gh workflow run demo-refresh.yml`（或 GitHub → Actions → demo-refresh → Run workflow），不必等到隔天 02:00。
