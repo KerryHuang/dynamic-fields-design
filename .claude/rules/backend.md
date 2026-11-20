@@ -14,3 +14,7 @@ paths:
 - **使用者看得到的訊息**：集中在同功能的 `*Messages.cs`（例：`TaskService/TaskMessages.cs`），不散寫在 handler。WebAPI 依 `X-Locale` 回傳語系，四語字串表在 `Application/Common/MessageText.cs`；字面值是表內某句的繁中原文才會被翻譯，其餘照中文回傳（還沒搬完）。
 - **改種子或共用 fixture 前**，先 grep 既有測試對那筆資料的斷言（例：新增 Demo 使用者會改變群組成員與提及候選的筆數）。
 - **測試**：xUnit，`tests/DynamicModules.{Domain,Application,WebAPI}Tests`；開發中只跑 `--filter` 窄範圍，WebAPI 全套留給 gate。測試資料全部虛構。
+- **上限與政策的通則**（使用者 2026-11-20 裁決，從個案提升為規範）：
+  - 政策調嚴不溯及既有資料：上限只在新增、或重新存檔時檢查；既有超標的資料照常能讀、能執行，不會突然存不了。
+  - 超過上限的錯誤訊息要帶出上限數字（例「每個流程最多 {max} 條轉換」），不和其他錯誤共用一句籠統的訊息。
+  - 授予或收回高權限（系統管理員、系統權限）的稽核標 HighRisk，並依實際持有者變化發安全事件（含經群組成員異動間接取得）；一般模組權限存檔只記稽核、不發通知。
