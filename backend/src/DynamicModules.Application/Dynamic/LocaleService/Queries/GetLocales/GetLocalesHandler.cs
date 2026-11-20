@@ -12,8 +12,8 @@ public sealed class GetLocalesHandler(LocaleWorldReader worlds, ILocalePackRepos
 {
     public async Task<ServiceResult> Handle(GetLocalesRequest request, CancellationToken ct)
     {
-        var world = await worlds.ReadAsync(ct);
-        var current = (await packs.ListCurrentAsync(ct)).ToDictionary(p => p.Code, StringComparer.Ordinal);
+        // 世界與目前版原始列出自同一次讀取（i4d2 計畫判斷 6）；PreviousAsync 是對記憶體清單逐一 await，不是列舉查詢時再查
+        var (world, current) = await worlds.ReadWithCurrentAsync(ct);
         var items = new List<LocaleAdminItem>();
         foreach (var info in world.Installed)
         {
@@ -24,7 +24,7 @@ public sealed class GetLocalesHandler(LocaleWorldReader worlds, ILocalePackRepos
                 world.Enabled.Contains(info.Code), world.DefaultLocale == info.Code, world.Required.Contains(info.Code),
                 new LocaleOverrideCounts(overlay?.Ui.Count ?? 0, overlay?.Server.Count ?? 0),
                 pack is null ? null : new LocalePackSummary(pack.PackVersion, pack.FileName, pack.ImportedUtc, pack.ImportedUserId),
-                hasPrevious));
+                hasPrevious, LocaleCompleteness.Of(info.Code, overlay), LocaleOverlayReview.Of(pack), pack?.BuiltFor));
         }
         return ServiceResult.Success(new LocaleAdminList(settings.ImportEnabled,
             await policies.IntAsync(PolicyCatalog.LocalePackMaxBytes, null, ct), await policies.IntAsync(PolicyCatalog.LocaleMaxInstalled, null, ct), items));
