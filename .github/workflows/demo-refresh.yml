@@ -44,6 +44,10 @@ jobs:
   deploy:
     needs: image
     runs-on: ubuntu-latest
+    # 寫入 GitHub Deployments（Actions 依 environment 自動建立 deployment 與狀態）
+    environment:
+      name: demo
+      url: ${{ vars.DEMO_URL || 'https://formwright-demo.onrender.com' }}
     timeout-minutes: 20
     permissions:
       contents: read
@@ -85,6 +89,8 @@ jobs:
   deploy-azure:
     needs: image
     runs-on: ubuntu-latest
+    # 不加 environment：加了之後 OIDC token 的 subject 變成 environment:demo-azure，
+    # 現有聯合憑證只認 ref:refs/heads/main，登入會失敗（見 docs/deploy.md「Demo 每日部署」）
     timeout-minutes: 20
     permissions:
       id-token: write

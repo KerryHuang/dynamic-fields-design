@@ -61,6 +61,8 @@ flowchart TD
 - secret `DEMO_DEPLOY_HOOK`：託管平台的 Deploy Hook 網址（GitHub repo → Settings → Secrets and variables → Actions → Secrets）。沒設定時只建映像、印警告、照樣成功結束；有設定時先去掉前後空白與換行，不是 `https://` 開頭就報錯讓排程失敗。舊 secret `RENDER_DEPLOY_HOOK` 已於 2026-11-20 刪除。
 - variable `DEMO_URL`：Demo 站網址（同一頁的 Variables），沒設定時用 `https://formwright-demo.onrender.com`。
 
+GitHub Deployments：Render 的部署寫入環境 `demo`（附 Demo 網址）；舊環境 `main - dynamic-modules-demo` 是舊服務的 Render 整合留下的歷史紀錄。Azure 備案還沒寫入：job 加 environment 後 OIDC token 的 subject 會變成 `repo:<owner>@<owner-id>/<repo>@<repo-id>:environment:demo-azure`，現有聯合憑證只認 `ref:refs/heads/main`，要先在 Azure 加一張對應 environment 的聯合憑證（只能使用者自己建），再替 `deploy-azure` 加 `environment: demo-azure`（不設 url，網址不公開）。
+
 急著上線：`gh workflow run demo-refresh.yml`（或 GitHub → Actions → demo-refresh → Run workflow），不必等到隔天 02:00。
 
 ### Azure Container Apps 備案
