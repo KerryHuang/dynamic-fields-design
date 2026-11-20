@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.OpsService.Health;
 using DynamicModules.Application.Dynamic.OpsService.Incidents;
 using DynamicModules.Application.Dynamic.PolicyService;
@@ -38,7 +39,7 @@ public readonly record struct DirectReservation(DirectHandoff Kind, DateTime? Se
 /// </summary>
 public sealed class DirectAlertQueue(
     IServiceScopeFactory scopes, IAlertMailSender sender, IAlertSecretProtector protector, IOpsEnvironment env, AlertMailOptions options,
-    TimeProvider time, CachedSystemPolicy policyCache, ILogger<DirectAlertQueue> logger)
+    TimeProvider time, CachedSystemPolicy policyCache, LocaleRegistry registry, ILogger<DirectAlertQueue> logger)
 {
     /// <summary>直送佇列上限（技術限制，§17.9）。</summary>
     public const int MaxItems = 20;
@@ -162,7 +163,8 @@ public sealed class DirectAlertQueue(
             if (!_policy.Allows(def.Category, severity)) return;
             var mail = AlertMailComposer.Direct(IncidentTitles.HealthPrefix + def.Code,
                 IncidentTitles.Health(HealthCheckCatalog.Camel(o.Status), o.Value, null, null, 1), severity, def.Category, transition,
-                o.CheckedUtc, env.Version, _settings?.MailLocale, policyCache.DefaultLocale, env.Edition, options);
+                o.CheckedUtc, env.Version, registry.ContextFor(_settings?.MailLocale ?? policyCache.DefaultLocale, policyCache.DefaultLocale),
+                env.Edition, options);
             if (_items.Count >= MaxItems && _items.FindIndex(i => i.ReservedUtc is null && !i.Sending) is var oldest and >= 0)
             {
                 logger.LogWarning("直送佇列已滿（{Max} 封），丟掉最舊的一封：{TransitionId}", MaxItems, _items[oldest].TransitionId);

@@ -8,6 +8,8 @@ import type { SchemaField } from 'src/domain/dynamic/types';
 import type { FlowBasicErrors } from '../FlowBasicFields.vue';
 import { truncateEdgeLabel } from 'src/presentation/dynamic/approval/progress-graph';
 import { conditionSummary } from 'src/presentation/dynamic/rules/condition-summary';
+import { i18n } from 'src/boot/i18n';
+import { installedLocales } from 'src/i18n/locale-settings';
 import { joinList, tFor, type Translate } from 'src/i18n/translate';
 import type { EdgeTrialState, NodeTrial, TrialOverlay } from './designer-trial';
 
@@ -64,10 +66,10 @@ export interface GraphContext {
 
 export const kindIcon = (k: ApprovalNodeKind) => KIND_ICON[k] ?? 'help_outline';
 
-/** 流程名稱的 i18n 預設：所有語系各一份（新節點「簽核 n」，U51）。 */
-export const LOCALES = ['zh-TW', 'en-US', 'th', 'vi'] as const;
-export const approvalNames = (n: number) => Object.fromEntries(LOCALES.map((l) => [l, tFor(l)('approval.designer.graph.newApproval', { n })]));
-export const conditionLabels = (n: number) => Object.fromEntries(LOCALES.map((l) => [l, tFor(l)('approval.designer.graph.newCondition', { n })]));
+/** 流程名稱的 i18n 預設：每個已安裝且前端有翻譯包的語系各一份（新節點「簽核 n」，U51；i4a 計畫判斷 16）。 */
+const nameLocales = () => installedLocales().filter((l) => i18n.global.availableLocales.includes(l));
+export const approvalNames = (n: number) => Object.fromEntries(nameLocales().map((l) => [l, tFor(l)('approval.designer.graph.newApproval', { n })]));
+export const conditionLabels = (n: number) => Object.fromEntries(nameLocales().map((l) => [l, tFor(l)('approval.designer.graph.newCondition', { n })]));
 
 /** 載入：座標取版面，沒有座標的節點用由左到右的自動排版補（J71）。 */
 export function initialState(def: GraphDefinition, layout?: ApprovalFlowLayout | null): GraphState {

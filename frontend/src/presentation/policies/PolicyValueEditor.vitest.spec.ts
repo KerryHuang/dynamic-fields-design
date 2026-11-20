@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import zhTW from 'src/i18n/zh-TW.json';
 import type { PolicyMeta, PolicyValue } from 'src/domain/dynamic/policy-types';
+import { BUILTIN_LOCALES } from 'src/i18n/locale';
+import { setLocaleInfos } from 'src/i18n/locale-settings';
 import PolicyValueEditor from './PolicyValueEditor.vue';
 import { buildRecipientOptions } from './useRecipientNames';
 
@@ -179,5 +181,13 @@ describe('PolicyValueEditor 語系類', () => {
     const m = make({ code: 'locale.default', category: 'locale', kind: 'choice', options: ['zh-TW', 'en-US', 'th', 'vi'] }, 'en-US');
     const sel = m.findComponent(quasar.QSelect);
     expect((sel.props('options') as { label: string }[]).map((o) => o.label)).toEqual(['繁體中文', 'English', 'ไทย', 'Tiếng Việt']);
+  });
+  it('新裝的語系：選項有「日本語」，不出現 policies.choices.ja', () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US' }]);
+    const m = make({ code: 'locale.default', category: 'locale', kind: 'choice', options: ['zh-TW', 'en-US', 'th', 'vi', 'ja'] }, 'ja');
+    const labels = (m.findComponent(quasar.QSelect).props('options') as { label: string }[]).map((o) => o.label);
+    setLocaleInfos(BUILTIN_LOCALES);
+    expect(labels).toContain('日本語');
+    expect(labels.join()).not.toContain('policies.choices');
   });
 });

@@ -30,7 +30,8 @@ public sealed class GetSmtpChannelHandler(IAlertChannelRepository channels, IMai
         var c = await channels.GetAsync(AlertChannel.Smtp, ct) ?? new AlertChannel();
         return ServiceResult.Success(new SmtpChannelResponse(
             c.Enabled, AlertAddresses.Split(c.ToAddresses),
-            new Setting<string>(AlertMailText.Locale(c.MailLocale, policyCache.DefaultLocale), policyCache.DefaultLocale, c.MailLocale is null),
+            // 回存的值（不換成有信件翻譯的語系，否則存了新語系的下拉會顯示成別的語言）；已停用的現值由畫面標示
+            new Setting<string>(c.MailLocale ?? policyCache.DefaultLocale, policyCache.DefaultLocale, c.MailLocale is null),
             c.LastSuccessUtc, c.LastFailureUtc, c.LastError, c.ConsecutiveFailures, !auth.DemoLoginEnabled,
             (await mailSettings.GetAsync(ct))?.Configured ?? false));
     }
@@ -47,8 +48,8 @@ public sealed record UpdateSmtpChannelRequest(bool Enabled, IReadOnlyList<string
 }
 
 public sealed class UpdateSmtpChannelHandler(
-    IAlertChannelRepository channels, AuthSettings auth, CachedSystemPolicy policyCache, ICurrentUser user, AuditContext audit, IUnitOfWork uow, TimeProvider time)
-    : IRequestHandler<UpdateSmtpChannelRequest, ServiceResult>
+    IAlertChannelRepository channels, AuthSettings auth, CachedSystemPolicy policyCache, LocaleRegistry registry, ICurrentUser user, AuditContext audit,
+    IUnitOfWork uow, TimeProvider time) : IRequestHandler<UpdateSmtpChannelRequest, ServiceResult>
 {
     // 欄位長度＝§17.4 的欄位長度
     private const int AddressMax = 255, ToJoinedMax = 2000;
@@ -67,7 +68,8 @@ public sealed class UpdateSmtpChannelHandler(
             Error("toAddresses", MessageRef.Of(MessageText.SmtpRecipientsCount, 1, AlertLimits.MaxRecipients));
         else if (to.Any(a => a.Length > AddressMax || !MailAddressRules.IsEmail(a))) Error("toAddresses", MessageRef.Of(MessageText.EmailFormat));
         else if (string.Join(",", to).Length > ToJoinedMax) Error("toAddresses", MessageRef.Of(MessageText.TooLong, ToJoinedMax));
-        if (r.MailLocaleSet && r.MailLocale is not null && (!AlertMailText.Locales.Contains(r.MailLocale) || !policyCache.EnabledLocales.Contains(r.MailLocale)))
+        // 可設定的語系＝已安裝且啟用；信件文字用哪張表在寄信時沿退回鏈挑（i4a 計畫判斷 23）
+        if (r.MailLocaleSet && r.MailLocale is not null && (!registry.Codes.Contains(r.MailLocale) || !policyCache.EnabledLocales.Contains(r.MailLocale)))
             Error("mailLocale", MessageRef.Of(MessageText.OptionInvalid));
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
@@ -120,7 +122,8 @@ public sealed record SendSmtpTestRequest : IRequest<ServiceResult>, ISystemAdmin
 
 public sealed class SendSmtpTestHandler(
     IAlertChannelRepository channels, IMailSettingsRepository mailSettings, IAlertSecretProtector protector, IAlertMailSender mailer,
-    SmtpTestGate gate, AuthSettings auth, CachedSystemPolicy policyCache, ICurrentUser user, IAuditLog audit, TimeProvider time) : IRequestHandler<SendSmtpTestRequest, ServiceResult>
+    SmtpTestGate gate, AuthSettings auth, CachedSystemPolicy policyCache, LocaleRegistry registry, ICurrentUser user, IAuditLog audit, TimeProvider time)
+    : IRequestHandler<SendSmtpTestRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SendSmtpTestRequest request, CancellationToken ct)
     {
@@ -135,7 +138,7 @@ public sealed class SendSmtpTestHandler(
         MailSendResult result;
         using (var timeout = new CancellationTokenSource(AlertLimits.SendTimeout, time))
         using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token))
-            result = await mailer.SendAsync(settings, password, AlertMailComposer.Test(settings.MailLocale, policyCache.DefaultLocale), linked.Token);
+            result = await mailer.SendAsync(settings, password, AlertMailComposer.Test(registry.ContextFor(settings.MailLocale ?? policyCache.DefaultLocale, policyCache.DefaultLocale)), linked.Token);
         await audit.TryWriteNowAsync(new AuditEntry("ops.channel.test", result.Ok ? AuditResult.Success : AuditResult.Failed,
             AuditTargets.Channel, AlertChannel.Smtp, ReasonCode: result.Ok ? null : result.Stage,
             Summary: new AuditSummary().Add("sentTo", settings.ToAddresses.Count).Add("serverCode", result.ServerCode).ToJson()), ct);

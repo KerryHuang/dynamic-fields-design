@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { i18n } from 'src/boot/i18n';
+import { BUILTIN_LOCALES } from 'src/i18n/locale';
+import { setLocaleInfos } from 'src/i18n/locale-settings';
 import type { ApprovalFlow, GraphDefinition } from 'src/domain/dynamic/approval-flow-types';
 import { edgeBendX, layoutLeftToRight, NODE_H, NODE_W } from 'src/domain/dynamic/approval-graph-layout';
 import { mapGraphIssues } from 'src/domain/dynamic/approval-graph-errors';
 import zhTW from 'src/i18n/zh-TW.json';
 import type { TrialOverlay } from './designer-trial';
-import { initialState, newFlowState, sourceOf, toVueFlow, FLOW_SELECTION, type GraphContext } from './designer-graph';
+import { approvalNames, conditionLabels, initialState, newFlowState, sourceOf, toVueFlow, FLOW_SELECTION, type GraphContext } from './designer-graph';
 
 const msg = (k: string, p?: Record<string, unknown>) => {
   const v = k.split('.').reduce<unknown>((o, s) => (o as Record<string, unknown> | undefined)?.[s], zhTW as unknown);
@@ -135,5 +138,24 @@ describe('designer-graph', () => {
     expect(s.definition.nodes[1]).toMatchObject({ approvers: { source: 'manager', level: 1 }, mode: 'any' });
     expect(s.definition.nodes[1].name).toMatchObject({ 'zh-TW': '簽核 1', 'en-US': 'Approval 1' });
     expect(Object.keys(s.positions)).toHaveLength(3);
+  });
+});
+
+describe('新節點名稱的語系＝已安裝且前端有翻譯包的語系', () => {
+  afterEach(() => setLocaleInfos(BUILTIN_LOCALES));
+  const ja = { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null };
+  it('出廠四語各一份', () => {
+    expect(Object.keys(approvalNames(1))).toEqual(['zh-TW', 'en-US', 'th', 'vi']);
+    expect(Object.keys(conditionLabels(1))).toEqual(['zh-TW', 'en-US', 'th', 'vi']);
+  });
+  it('裝了 ja 但沒有翻譯包：不產生 ja', () => {
+    setLocaleInfos([...BUILTIN_LOCALES, ja]);
+    expect(approvalNames(1)).not.toHaveProperty('ja');
+  });
+  it('裝了 ja 且有翻譯包：產生 ja 那句', () => {
+    setLocaleInfos([...BUILTIN_LOCALES, ja]);
+    i18n.global.setLocaleMessage('ja', { approval: { designer: { graph: { newApproval: '承認 {n}', newCondition: '条件 {n}' } } } } as never);
+    expect(approvalNames(2).ja).toBe('承認 2');
+    expect(conditionLabels(3).ja).toBe('条件 3');
   });
 });

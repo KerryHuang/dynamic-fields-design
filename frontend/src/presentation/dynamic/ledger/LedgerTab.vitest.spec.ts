@@ -2,11 +2,13 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import * as quasar from 'quasar';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { LedgerConfig } from 'src/domain/dynamic/events-ledger';
 import type { DesignerField, FieldType, ModuleDetail } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
+import { BUILTIN_LOCALES } from 'src/i18n/locale';
+import { setLocaleInfos } from 'src/i18n/locale-settings';
 import { findInputByTestId } from 'src/test-utils/find-by-testid';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import LedgerTab from './LedgerTab.vue';
@@ -29,7 +31,7 @@ const mod = (extra: Partial<ModuleDetail> = {}, fields = [field(1, 'text'), fiel
 });
 const saved = (extra: Partial<LedgerConfig> = {}): LedgerConfig => ({ moduleKey: 'journal', reversalFieldId: 4, negate: [2], swap: [], recordCount: 0, ...extra });
 
-async function mountTab(m: ModuleDetail, existing: LedgerConfig | null, workflow = false) {
+async function mountTab(m: ModuleDetail, existing: LedgerConfig | null, workflow = false, extra: Record<string, object> = {}) {
   api.getLedger.mockImplementation(async () => {
     if (existing) return existing;
     throw { status: 404 };
@@ -40,7 +42,7 @@ async function mountTab(m: ModuleDetail, existing: LedgerConfig | null, workflow
   });
   api.getModules.mockResolvedValue([]);
   api.getMe.mockResolvedValue({ designer: { read: true, add: true, edit: true, delete: true } } as never);
-  const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+  const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW, ...extra } });
   const w = mount(LedgerTab, {
     props: { module: m },
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createPinia(), i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
@@ -143,6 +145,27 @@ describe('LedgerTab', () => {
       config: expect.objectContaining({ readOnly: true, required: false, refTarget: { kind: 'module', key: 'journal' } }),
     });
     expect(comp(w, 'ledger-reversal-field').props('modelValue')).toBe(9);
+  });
+
+  describe('沖銷欄位標籤的語系＝已安裝且前端有翻譯包的語系', () => {
+    afterEach(() => setLocaleInfos(BUILTIN_LOCALES));
+    const create = async (extra: Record<string, object> = {}) => {
+      api.addField.mockResolvedValue(field(9, 'reference', self));
+      setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null }]);
+      const w = await mountTab(mod({}, [field(1, 'text'), field(2, 'decimal')]), null, false, extra);
+      await pick(w, 'ledger-enable', true);
+      await w.find('[data-testid="ledger-create-reversal"]').trigger('click');
+      await flushPromises();
+      return api.addField.mock.calls.at(-1)![1].label as Record<string, string>;
+    };
+    it('裝了 ja 但沒有翻譯包：不產生 ja', async () => {
+      expect(Object.keys(await create())).not.toContain('ja');
+    });
+    it('裝了 ja 且有翻譯包：產生 ja 那句', async () => {
+      const label = await create({ ja: { ledger: { reversalFieldLabel: '取消元' } } });
+      expect(label.ja).toBe('取消元');
+      expect(label['zh-TW']).toBe('沖銷自');
+    });
   });
 
   it('pairs swap fields of the same type only', async () => {

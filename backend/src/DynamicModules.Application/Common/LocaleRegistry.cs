@@ -2,6 +2,7 @@ using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -53,6 +54,12 @@ public sealed class LocaleRegistry(IServiceScopeFactory scopes, TimeProvider tim
     /// <summary>多語文字的退回鏈（要求的語系之後依序試，<see cref="LocaleChain"/>）。</summary>
     public IReadOnlyList<string> FallbacksFor(string locale, string defaultLocale) =>
         LocaleChain.Fallbacks(locale, defaultLocale, Locales.Select(l => (l.Code, l.FallbackCode)).ToList());
+
+    /// <summary>
+    /// 語系與它的退回鏈（寄信、通知等不經請求快取的寫入端用；i4a 計畫判斷 23）：呼叫端自己讀的預設語系（例如交易內經 <c>IPolicyReader</c> 讀的）
+    /// 與鏈用同一個來源，不混用政策快照。
+    /// </summary>
+    public LocaleContext ContextFor(string locale, string defaultLocale) => new(locale, FallbacksFor(locale, defaultLocale));
 
     private static bool IsStale(Published p, DateTimeOffset now) =>
         now - p.LoadedAt >= (p.Failed ? CachedSystemPolicy.FailureTtl : CachedSystemPolicy.Ttl);

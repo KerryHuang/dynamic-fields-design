@@ -225,4 +225,16 @@ public class LocaleRegistryTests
         await r.EnsureFreshAsync(default);
         r.FallbacksFor("ja", "th").Should().Equal("en-US", "th", "zh-TW", "vi", "ja");
     }
+
+    [Fact]
+    public async Task ContextFor_UsesChain()
+    {
+        var (r, repo, _, _) = Create();
+        repo.Add("ja", "日本語", fallback: "en-US");
+        await r.EnsureFreshAsync(default);
+        var lc = r.ContextFor("ja", "th");
+        lc.Locale.Should().Be("ja");
+        lc.Fallbacks.Should().Equal("en-US", "th", "zh-TW", "vi", "ja");
+        lc.Fallbacks.Should().Equal(r.FallbacksFor("ja", "th"));
+    }
 }

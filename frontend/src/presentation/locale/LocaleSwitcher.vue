@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import { computed } from 'vue';
-import { LOCALES, applyLocale, type LocaleCode } from 'src/i18n/locale';
-import { enabledLocales } from 'src/i18n/locale-settings';
+import { applyLocale, type LocaleCode } from 'src/i18n/locale';
+import { nativeName, useLocales } from 'src/i18n/locale-settings';
 
 const { t, locale } = useI18n();
-// 只列啟用的語系（政策 locale.enabled）；停用的不列，目前語系若已停用，下次進來會改用預設語系
-const options = computed(() => LOCALES.filter((l) => enabledLocales().includes(l.code)));
+const { enabled } = useLocales();
+// 只列啟用的語系（政策 locale.enabled），各語言用自稱；停用的不列，目前語系若已停用，下次進來會改用預設語系
+const options = computed(() => enabled.value.map((code) => ({ code, label: nativeName(code) })));
 const pick = (code: LocaleCode) => applyLocale(code, locale);
 </script>
 

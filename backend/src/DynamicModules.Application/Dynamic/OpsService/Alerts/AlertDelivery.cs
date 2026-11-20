@@ -6,6 +6,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Ops;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -26,7 +27,8 @@ public sealed record ClaimAlertRequest(JobLeaseFence? Fence, string ClaimedBy) :
 
 public sealed class ClaimAlertHandler(
     IScheduledJobRepository jobs, IAlertChannelRepository channels, IMailSettingsRepository mailSettings, IAlertOutboxRepository outbox,
-    IOpsIncidentRepository incidents, IPolicyReader policies, IUnitOfWork uow, TimeProvider time) : IRequestHandler<ClaimAlertRequest, ServiceResult>
+    IOpsIncidentRepository incidents, IPolicyReader policies, IUnitOfWork uow, TimeProvider time, LocaleRegistry registry)
+    : IRequestHandler<ClaimAlertRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ClaimAlertRequest r, CancellationToken ct)
     {
@@ -43,7 +45,8 @@ public sealed class ClaimAlertHandler(
         }
 
         var defaultLocale = await policies.ChoiceAsync(PolicyCatalog.LocaleDefault, null, ct);
-        await DigestAsync(now, settings, defaultLocale, ct);
+        var mailContext = registry.ContextFor(settings.MailLocale ?? defaultLocale, defaultLocale);
+        await DigestAsync(now, mailContext, ct);
 
         var policy = await AlertEmailPolicy.ReadAsync(policies, ct);
         var full = await outbox.CountQuotaUsedAsync(AlertChannel.Smtp, now - AlertLimits.QuotaWindow, ct) >= policy.MaxPerHour;
@@ -60,7 +63,7 @@ public sealed class ClaimAlertHandler(
     /// <summary>
     /// 每個整點後的第一輪：這個整點之後還沒有摘要信、而有整點前建立且還沒掛上的 <c>digested</c> 列，就新增一封摘要信並把那些列掛上去（同一交易）。
     /// </summary>
-    private async Task DigestAsync(DateTime now, SmtpSettings settings, string defaultLocale, CancellationToken ct)
+    private async Task DigestAsync(DateTime now, LocaleContext mailContext, CancellationToken ct)
     {
         var hour = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc);
         if (await outbox.DigestExistsSinceAsync(AlertChannel.Smtp, hour, ct)) return;
@@ -73,10 +76,10 @@ public sealed class ClaimAlertHandler(
             items.Add(incident is null
                 ? new DigestItem(row.IncidentId, IncidentSeverity.Warning, null, row.Subject, row.CreatedUtc)
                 : new DigestItem(incident.Id, incident.Severity, incident.Category,
-                    IncidentTitles.Text(AlertMailText.Locale(settings.MailLocale, defaultLocale), incident.TitleKey, IncidentTitles.FromJson(incident.TitleParamsJson)),
+                    IncidentTitles.Text(AlertMailText.Locale(mailContext), incident.TitleKey, IncidentTitles.FromJson(incident.TitleParamsJson)),
                     row.CreatedUtc));
         }
-        var mail = AlertMailComposer.Digest(items, settings.MailLocale, defaultLocale);
+        var mail = AlertMailComposer.Digest(items, mailContext);
         var digest = new AlertOutbox
         {
             Channel = AlertChannel.Smtp, Transition = AlertTransition.Digest, Subject = mail.Subject, Body = mail.Body,

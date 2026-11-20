@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -15,7 +16,7 @@ namespace DynamicModules.Application.Dynamic.OpsService.Incidents;
 /// </summary>
 public sealed class OpsNotifier(
     INotificationRepository notifications, IPermissionRepository permissions, IPolicyReader policies, RecipientResolver recipients,
-    IBusinessTime time, ILogger<OpsNotifier> logger)
+    IBusinessTime time, LocaleRegistry registry, ILogger<OpsNotifier> logger)
 {
     public const string SourceType = "opsIncident";
 
@@ -35,7 +36,9 @@ public sealed class OpsNotifier(
         {
             ["titleKey"] = titleKey, ["params"] = titleParams ?? new Dictionary<string, object>(), ["incidentId"] = incidentId,
         });
-        var snapshot = IncidentTitles.Snapshot(await policies.ChoiceAsync(PolicyCatalog.LocaleDefault, null, ct), titleKey, titleParams);
+        // 寫進資料的系統文字用系統預設語系（N1、N2）
+        var def = await policies.ChoiceAsync(PolicyCatalog.LocaleDefault, null, ct);
+        var snapshot = IncidentTitles.Snapshot(registry.ContextFor(def, def), titleKey, titleParams);
         foreach (var userId in to.Distinct(StringComparer.Ordinal))
             notifications.Add(new Notification
             {

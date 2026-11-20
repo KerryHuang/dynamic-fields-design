@@ -4,8 +4,7 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSaveSmtpChannel, useSmtpChannel, useTestSmtpChannel } from 'src/application/dynamic/queries/ops-queries';
 import { formatTime, mailTestError } from 'src/domain/ops/ops-format';
-import { LOCALES } from 'src/i18n/locale';
-import { enabledLocales } from 'src/i18n/locale-settings';
+import { enabledLocales, nativeName } from 'src/i18n/locale-settings';
 import { joinList } from 'src/i18n/translate';
 import type { ApiError } from 'src/services/api/http';
 
@@ -23,16 +22,15 @@ watch(c, (v) => {
   draft.value = { enabled: v.enabled, toAddresses: [...v.toAddresses], mailLocale: v.mailLocale.isFactory ? null : v.mailLocale.value };
 }, { immediate: true });
 
-const localeName = (code: string) => LOCALES.find((l) => l.code === code)?.label ?? code;
 // 只列啟用語系；已存的語言之後被停用時仍列出並標「已停用」，只能維持、不能新選（照常寄）
 const savedLocale = computed(() => (c.value && !c.value.mailLocale.isFactory ? c.value.mailLocale.value : null));
 const localeOptions = computed(() => {
   const opts: { value: string | null; label: string; disable?: boolean }[] = [
-    { value: null, label: t('ops.channel.localeFactory', { name: localeName(c.value?.mailLocale.factory ?? '') }) },
-    ...LOCALES.filter((l) => enabledLocales().includes(l.code)).map((l) => ({ value: l.code as string, label: l.label })),
+    { value: null, label: t('ops.channel.localeFactory', { name: nativeName(c.value?.mailLocale.factory ?? '') }) },
+    ...enabledLocales().map((code) => ({ value: code as string, label: nativeName(code) })),
   ];
   const saved = savedLocale.value;
-  if (saved && !opts.some((o) => o.value === saved)) opts.push({ value: saved, label: `${localeName(saved)}（${t('ops.channel.localeDisabled')}）`, disable: true });
+  if (saved && !opts.some((o) => o.value === saved)) opts.push({ value: saved, label: `${nativeName(saved)}（${t('ops.channel.localeDisabled')}）`, disable: true });
   return opts;
 });
 
