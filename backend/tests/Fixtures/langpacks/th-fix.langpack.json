@@ -1,0 +1,16 @@
+{
+  "format": "formwright-langpack",
+  "formatVersion": 1,
+  "locale": {
+    "code": "th"
+  },
+  "pack": {
+    "version": "2026.11-fix1",
+    "note": "แก้คำแปลภาษาไทย 3 ข้อความ (ทดสอบ)"
+  },
+  "ui": {
+    "menu.closedApps": "แอปที่ปิดแล้ว (แก้)",
+    "menu.conversions": "การแปลงเอกสาร (แก้)",
+    "menu.custom": "ฟังก์ชันที่กำหนดเอง"
+  }
+}

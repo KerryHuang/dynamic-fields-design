@@ -1,0 +1,12 @@
+{
+  "format": "formwright-langpack",
+  "formatVersion": 1,
+  "locale": {
+    "code": "ar",
+    "nativeName": "العربية",
+    "direction": "rtl"
+  },
+  "ui": {
+    "auth.backToApp": "نعم"
+  }
+}

@@ -53,6 +53,8 @@ public static class DependencyInjection
         services.AddScoped<Common.RequestLocale>();
         services.AddSingleton<Dynamic.PolicyService.CachedSystemPolicy>();
         services.AddSingleton<Common.Localization.IMessageCatalog, Common.Localization.MessageCatalog>();
+        // 語系包分析與重驗的輸入：交易內讀最新清單、覆寫層與三個語系政策（i4d1 計畫判斷 25）
+        services.AddScoped<Dynamic.LocaleService.Packs.LocaleWorldReader>();
         // 改營運時區時同一交易內平移日期時間索引
         services.AddScoped<Dynamic.PolicyService.IPolicyChangeHook, Dynamic.RecordService.TimeZoneChangeHook>();
         // 沒有部署出廠值時用空的；WebAPI 之後註冊讀部署設定檔的實例會蓋過它

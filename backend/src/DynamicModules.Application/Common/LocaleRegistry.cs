@@ -183,7 +183,7 @@ public sealed class LocaleRegistry(IServiceScopeFactory scopes, TimeProvider tim
                 {
                     infos = Build(await repo.ListAsync(cts.Token));
                     var packs = scope.ServiceProvider.GetRequiredService<ILocalePackRepository>();
-                    overlays = OverlaysFrom(await packs.ListCurrentAsync(cts.Token), infos);
+                    overlays = OverlaysFrom(await packs.ListCurrentAsync(cts.Token), infos, logger);
                 }
                 Publish(cur =>
                 {
@@ -246,8 +246,9 @@ public sealed class LocaleRegistry(IServiceScopeFactory scopes, TimeProvider tim
 
     /// <summary>
     /// 解析各語系目前版的覆寫層：只留已安裝語系、基準鍵以內的鍵；解析失敗（只可能是資料修補）就當成那個語系沒有覆寫層並記 Warning。
+    /// 快照與 i4d1 的 <c>LocaleWorldReader</c> 共用同一套規則。
     /// </summary>
-    private IReadOnlyDictionary<string, LocaleOverlay> OverlaysFrom(IReadOnlyList<LocalePack> packs, IReadOnlyList<InstalledLocaleInfo> infos)
+    internal static IReadOnlyDictionary<string, LocaleOverlay> OverlaysFrom(IReadOnlyList<LocalePack> packs, IReadOnlyList<InstalledLocaleInfo> infos, ILogger logger)
     {
         var installed = infos.Select(i => i.Code).ToHashSet(StringComparer.Ordinal);
         var result = new Dictionary<string, LocaleOverlay>(StringComparer.Ordinal);

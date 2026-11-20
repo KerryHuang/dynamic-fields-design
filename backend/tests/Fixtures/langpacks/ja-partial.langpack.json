@@ -1,0 +1,55 @@
+{
+  "format": "formwright-langpack",
+  "formatVersion": 1,
+  "locale": {
+    "code": "ja",
+    "nativeName": "日本語",
+    "direction": "ltr",
+    "fallback": "en-US"
+  },
+  "pack": {
+    "version": "0.1.0",
+    "builtFor": "2026.11",
+    "baseLocale": "zh-TW",
+    "note": "テスト用の架空の日本語パック"
+  },
+  "ui": {
+    "auth.backToApp": "（日）Back to the app",
+    "auth.changeFailed": "（日）Could not change the password",
+    "auth.changePassword": "（日）Change password",
+    "auth.changePasswordTitle": "（日）Change password",
+    "auth.changeRequired": "（日）You must change your password before continuing",
+    "auth.confirmPassword": "（日）Enter the new password again",
+    "auth.currentPassword": "（日）Current password",
+    "auth.demoGenerating": "（日）Demo data is being generated. Accounts will appear here when it finishes",
+    "auth.demoTitle": "（日）Demo accounts (click to sign in)",
+    "auth.login": "（日）Sign in",
+    "auth.loginFailed": "（日）Sign-in failed",
+    "auth.loginTitle": "（日）Sign in",
+    "auth.logout": "（日）Sign out",
+    "auth.logoutFailed": "（日）Could not sign out. Check your connection and try again.",
+    "auth.newPassword": "（日）New password (at least 8 characters)",
+    "auth.password": "（日）Password",
+    "auth.passwordMismatch": "（日）The new passwords do not match",
+    "auth.passwordTooShort": "（日）The new password must be at least 8 characters",
+    "auth.retry": "（日）Retry",
+    "auth.serviceUnavailable": "（日）Cannot reach the server right now. Please try again shortly",
+    "auth.userId": "（日）User ID",
+    "common.listSeparator": "（日）, ",
+    "common.moreActions": "（日）More actions",
+    "common.networkError": "（日）Network error. Check your connection and try again.",
+    "common.no": "（日）No",
+    "common.serverError": "（日）Something went wrong. Please try again later",
+    "common.yes": "（日）Yes",
+    "menu.approvals": "（日）Approvals",
+    "menu.apps": "（日）Apps",
+    "menu.audit": "（日）Audit log"
+  },
+  "server": {
+    "Forbidden": "この操作を実行する権限がありません",
+    "DatabaseBusy": "システムが混雑しています。しばらくしてから再試行してください",
+    "ServerError": "エラーが発生しました。しばらくしてから再試行してください",
+    "report.Yes": "はい",
+    "report.No": "いいえ"
+  }
+}

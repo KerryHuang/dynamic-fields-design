@@ -46,6 +46,7 @@
     { "name": "是撞到固定別名 No", "installed": [], "pack": { "code": "ja", "fallback": "en-US", "yes": "No", "no": "いいえ" }, "expectedRejected": ["report.Yes"], "expectedWarnings": 0 },
     { "name": "是撞到其他語系的否", "installed": [{ "code": "th", "fallback": null, "yes": "ใช่", "no": "ไม่" }], "pack": { "code": "ja", "fallback": "en-US", "yes": "ไม่", "no": "いいえ" }, "expectedRejected": ["report.Yes"], "expectedWarnings": 0 },
     { "name": "只有是、否走上層語系", "installed": [], "pack": { "code": "ja", "fallback": "en-US", "yes": "はい", "no": null }, "expectedRejected": [], "expectedWarnings": 0 },
-    { "name": "兩個既有語系本來就撞、這份包沒帶是否：不拒收、警告", "installed": [{ "code": "ko", "fallback": null, "yes": "예", "no": "아니요" }, { "code": "ja", "fallback": null, "yes": "はい", "no": "예" }], "pack": { "code": "fr", "fallback": null, "yes": null, "no": null }, "expectedRejected": [], "expectedWarnings": 1 }
+    { "name": "兩個既有語系本來就撞、這份包沒帶是否：不拒收、警告", "installed": [{ "code": "ko", "fallback": null, "yes": "예", "no": "아니요" }, { "code": "ja", "fallback": null, "yes": "はい", "no": "예" }], "pack": { "code": "fr", "fallback": null, "yes": null, "no": null }, "expectedRejected": [], "expectedWarnings": 1 },
+    { "name": "拒收後退回的字又撞到第三個語系：否撞泰文的是而拒收，退回英文的否又和越南文的是相同（英文本來就撞）→ 只拒一次、其餘列警告", "installed": [{ "code": "en-US", "fallback": null, "yes": "Yes", "no": "Có" }], "pack": { "code": "ja", "fallback": "en-US", "yes": "はい", "no": "ใช่" }, "expectedRejected": ["report.No"], "expectedWarnings": 1 }
   ]
 }

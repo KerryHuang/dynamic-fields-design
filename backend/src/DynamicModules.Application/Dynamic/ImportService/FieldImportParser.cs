@@ -46,6 +46,9 @@ public sealed class BooleanWords
 
     public static BooleanWords From(IEnumerable<(string Yes, string No)> perLocale) => new(perLocale);
 
+    /// <summary>同時出現在「是」與「否」兩邊的字（含固定別名，不分大小寫）；語系包分析用它判斷撞字（票 #68，i4d1 計畫判斷 6）。</summary>
+    public IReadOnlySet<string> Ambiguous => _ambiguous;
+
     /// <summary>內建四語（經 <see cref="BuiltinMessageCatalog"/>）；沒有 DI 的呼叫端與測試用。</summary>
     public static BooleanWords Builtin { get; } = From(BuiltinLocales.Codes.Select(l => new LocaleContext(l, []))
         .Select(lc => (BuiltinMessageCatalog.Instance.Get(lc, ReportText.Yes), BuiltinMessageCatalog.Instance.Get(lc, ReportText.No))));
