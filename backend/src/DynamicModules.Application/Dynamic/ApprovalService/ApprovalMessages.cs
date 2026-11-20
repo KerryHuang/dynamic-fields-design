@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.ValueObjects;
 
@@ -147,11 +148,12 @@ public static class ApprovalMessages
     public static string RerouteNote(string flow) => $"單據內容已變，改用流程「{flow}」重新簽核";
     public const string RerouteFallbackNote = "單據內容已變，沒有符合的流程，改由備援簽核人重新簽核";
     public static string ReroutePickNote(string flow) => $"單據內容已變，改用流程「{flow}」，需由發起人重新送出";
-    public static readonly I18nText FallbackStageName = MessageText.AsI18n(MessageText.ApprovalFallbackStage);
+    // 以下 I18nText 標籤對每個已安裝語系各產生一句（語系包 i4c 計畫判斷 2、8）：每次呼叫依當下的語系快照，不在型別初始化時算一次
+    public static I18nText FallbackStageName(IMessageCatalog m) => m.AsI18n(MessageText.ApprovalFallbackStage);
     public static string ManagerLabel(int level) => MessageText.Get(null, MessageText.ApprovalManagerLabel, level);
-    public static I18nText ManagerLabelI18n(int level) => MessageText.AsI18n(MessageText.ApprovalManagerLabel, level);
+    public static I18nText ManagerLabelI18n(IMessageCatalog m, int level) => m.AsI18n(MessageText.ApprovalManagerLabel, level);
     public static readonly string PickLabel = MessageText.Get(null, MessageText.ApprovalPickLabel);
-    public static readonly I18nText PickLabelI18n = MessageText.AsI18n(MessageText.ApprovalPickLabel);
+    public static I18nText PickLabelI18n(IMessageCatalog m) => m.AsI18n(MessageText.ApprovalPickLabel);
 
     // ── 設計器的進行中實例守衛（§8.6，管理類，不在執行期語系化範圍） ──
     private static string Listing(IReadOnlyList<string> titles, int total) =>
@@ -207,7 +209,7 @@ public static class ApprovalMessages
     public static readonly MessageRef TargetSelf = MessageRef.Of(MessageText.ApprovalTargetSelf);
     public static readonly MessageRef TargetInitiator = MessageRef.Of(MessageText.ApprovalTargetInitiator);
     public static readonly MessageRef TargetInStage = MessageRef.Of(MessageText.ApprovalTargetInStage);
-    public static readonly I18nText AddSignStageName = MessageText.AsI18n(MessageText.ApprovalAddSignStage);
+    public static I18nText AddSignStageName(IMessageCatalog m) => m.AsI18n(MessageText.ApprovalAddSignStage);
     public static readonly MessageRef AddSignUsersRequired = MessageRef.Of(MessageText.ApprovalAddSignUsersRequired);
     public static MessageRef AddSignTooManyUsers(int max) => MessageRef.Of(MessageText.ApprovalAddSignTooManyUsers, max);
     public static MessageRef AddSignLimit(int max) => MessageRef.Of(MessageText.ApprovalAddSignLimit, max);

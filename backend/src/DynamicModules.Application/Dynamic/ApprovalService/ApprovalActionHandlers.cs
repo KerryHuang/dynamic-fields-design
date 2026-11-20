@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.RecordService;
@@ -186,7 +187,7 @@ public sealed record AddSignPlan(IReadOnlyList<string> UserIds, string Mode);
 public sealed class ApprovalApprover(
     IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalEngine engine, ApprovalTransitionRunner runner,
     ICurrentUser user, IBusinessTime time, IUnitOfWork uow, IModuleRepository modules, FieldTypeRegistry registry,
-    IDynamicAccessGuard guard, IRecordRepository records, ApprovalReadGrant grant, ApprovalPolicies policies)
+    IDynamicAccessGuard guard, IRecordRepository records, ApprovalReadGrant grant, ApprovalPolicies policies, IMessageCatalog messages)
 {
     public async Task<ServiceResult> ApproveAsync(long taskId, string rowVersion, string? comment, Dictionary<string, JsonElement?>? requestValues,
         AddSignPlan? addSign, CancellationToken ct)
@@ -256,7 +257,7 @@ public sealed class ApprovalApprover(
             // 位置緊接目前關卡與它先前加簽出的關卡（同一關先加簽的先簽）；排在後面的其他排隊關卡（例如巢狀加簽時，上一層其他人的加簽）順延一號
             var added = new ApprovalStageRun
             {
-                InstanceId = inst.Id, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = addSign.Mode,
+                InstanceId = inst.Id, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName(messages), Mode = addSign.Mode,
                 Status = ApprovalStageStatus.Queued, AddedByUserId = user.UserId, AddSignUserIds = [.. addSign.UserIds]
             };
             if (ApprovalGraphMode.Applies(inst, def))
@@ -387,7 +388,7 @@ public class AddSignTaskHandler(
 /// <summary>退回發起人或上一關（設計 §7.3、§8.3）；意見必填。</summary>
 public class RejectTaskHandler(
     IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalEngine engine, ApprovalTransitionRunner runner,
-    ApprovalNotifier notifier, ApprovalWriteContext context, ICurrentUser user, IBusinessTime time, IUnitOfWork uow)
+    ApprovalNotifier notifier, ApprovalWriteContext context, ICurrentUser user, IBusinessTime time, IUnitOfWork uow, IMessageCatalog messages)
     : IRequestHandler<RejectTaskRequest, ServiceResult>
 {
     public const string ToInitiator = "initiator", ToPrevious = "previous";
@@ -428,7 +429,7 @@ public class RejectTaskHandler(
             if (run.StageCode is null)
                 repo.AddRun(new ApprovalStageRun
                 {
-                    InstanceId = inst.Id, Seq = restartSeq + 1, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = run.Mode,
+                    InstanceId = inst.Id, Seq = restartSeq + 1, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName(messages), Mode = run.Mode,
                     Status = ApprovalStageStatus.Queued, AddedByUserId = run.AddedByUserId, AddSignUserIds = [.. run.AddSignUserIds ?? []],
                     NodeId = run.NodeId, NodeKind = run.NodeKind, BranchKey = run.BranchKey   // graph 欄位（J10）；sequence 都是 null
                 });

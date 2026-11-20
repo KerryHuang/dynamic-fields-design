@@ -1,5 +1,4 @@
 using System.Globalization;
-using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Common;
@@ -484,10 +483,6 @@ public static class MessageText
     /// <summary>無參數訊息的繁中原文 → 鍵；兩鍵同一句時建表就會丟例外。</summary>
     private static readonly Dictionary<string, string> KeyByZh = Table.Where(kv => !kv.Value.Zh.Contains('{'))
         .ToDictionary(kv => kv.Value.Zh, kv => kv.Key);
-
-    /// <summary>把一句訊息展成內建語系的 <see cref="I18nText"/>，給要當作其他訊息參數的標籤用（如「第 2 層主管」）。</summary>
-    public static I18nText AsI18n(string key, params object[] args) =>
-        new(BuiltinLocales.Codes.Select(l => KeyValuePair.Create(l, Get(l, key, args))));
 
     /// <summary>沒有對應語系時退回繁中，與 <see cref="I18nText.FallbackLocale"/> 一致。</summary>
     public static string Get(string? locale, string key, params object[] args)

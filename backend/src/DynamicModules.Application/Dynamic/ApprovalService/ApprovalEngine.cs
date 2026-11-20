@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Domain.Approvals;
@@ -19,7 +20,8 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 public sealed class ApprovalEngine(
     IApprovalInstanceRepository repo, ApproverResolver resolver, ApprovalTaskFactory tasks, ApprovalNotifier notifier,
     ApprovalTransitionRunner runner, FieldTypeRegistry registry, IModuleRepository modules, IBusinessTime time, ICurrentUser user,
-    IOperationContext op, IUnitOfWork uow, ApprovalWriteContext context, ApprovalAlert alert, ApprovalGraphEngine graph, DynamicModules.Application.Common.RequestLocale requestLocale) : IApprovalStageSteps
+    IOperationContext op, IUnitOfWork uow, ApprovalWriteContext context, ApprovalAlert alert, ApprovalGraphEngine graph, DynamicModules.Application.Common.RequestLocale requestLocale,
+    IMessageCatalog messages) : IApprovalStageSteps
 {
     public const string SystemActor = "system";
 
@@ -125,7 +127,7 @@ public sealed class ApprovalEngine(
     {
         var ctx = await resolver.ContextAsync(module, inst.InitiatorUserId, values, null, ct);
         var source = new ApproverSource(ApprovalSources.Users, UserIds: [.. addSign.AddSignUserIds ?? []]);
-        var resolution = ApproverResolver.Resolve(ctx, ApprovalMessages.AddSignStageName, addSign.Mode, source, def.FallbackApprovers, ApprovalOnEmpty.Fallback);
+        var resolution = ApproverResolver.Resolve(ctx, ApprovalMessages.AddSignStageName(messages), addSign.Mode, source, def.FallbackApprovers, ApprovalOnEmpty.Fallback);
         if (resolution.Error is { } error) return ([], ServiceResult.Conflict(error));
         return ([.. resolution.Seats.Select(s => s.Reason == ApprovalTaskReason.Resolved ? s with { Reason = ApprovalTaskReason.Added } : s)], null);
     }
@@ -227,7 +229,7 @@ public sealed class ApprovalEngine(
             if (resolution.Error is { } error) return (null, outcome, ServiceResult.Conflict(error));
             var run = new ApprovalStageRun
             {
-                InstanceId = fresh.Id, Seq = 1, StageCode = FallbackStageCode, NameSnapshot = ApprovalMessages.FallbackStageName, Mode = ApprovalModes.Any
+                InstanceId = fresh.Id, Seq = 1, StageCode = FallbackStageCode, NameSnapshot = ApprovalMessages.FallbackStageName(messages), Mode = ApprovalModes.Any
             };
             await StartAsync(fresh, run, resolution.Seats, null, ct);
         }
@@ -257,7 +259,7 @@ public sealed class ApprovalEngine(
             if (fallback.Error is { } fallbackError) return ServiceResult.Conflict(fallbackError);
             var restarted = new ApprovalStageRun
             {
-                InstanceId = inst.Id, Seq = seq, StageCode = FallbackStageCode, NameSnapshot = ApprovalMessages.FallbackStageName, Mode = ApprovalModes.Any,
+                InstanceId = inst.Id, Seq = seq, StageCode = FallbackStageCode, NameSnapshot = ApprovalMessages.FallbackStageName(messages), Mode = ApprovalModes.Any,
                 NodeId = previous.NodeId, NodeKind = previous.NodeKind, BranchKey = previous.BranchKey, InEdgeId = previous.InEdgeId
             };
             await StartAsync(inst, restarted, fallback.Seats, null, ct, NotificationKinds.ApprovalReturned);
@@ -270,7 +272,7 @@ public sealed class ApprovalEngine(
             if (failure is not null) return failure;
             var again = new ApprovalStageRun
             {
-                InstanceId = inst.Id, Seq = seq, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = previous.Mode,
+                InstanceId = inst.Id, Seq = seq, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName(messages), Mode = previous.Mode,
                 AddedByUserId = previous.AddedByUserId, AddSignUserIds = [.. previous.AddSignUserIds ?? []],
                 NodeId = previous.NodeId, NodeKind = previous.NodeKind, BranchKey = previous.BranchKey, InEdgeId = previous.InEdgeId
             };

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Localization;
+using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.ValueObjects;
@@ -194,6 +195,31 @@ public class MessageCatalogTests
         foreach (var lc in env.Registry.ContextsFor("vi"))
             lc.Fallbacks.Should().Equal(env.Registry.FallbacksFor(lc.Locale, "vi"), lc.Locale);
         env.Registry.ContextsFor("vi").Select(lc => lc.Locale).Should().Equal(env.Registry.Codes);
+    }
+
+    [Fact]
+    public async Task AsI18n_Builtin_SameAsBefore()
+    {
+        // 刪掉的靜態 AsI18n 在 main 的結果＝基準檔四語範本各自帶參數
+        var env = await CreateAsync();
+        I18nText Expected(string key, params object[] args) => new(BuiltinServerTextTests.Locales.Select(l =>
+            KeyValuePair.Create(l, args.Length == 0 ? Base[key][l] : string.Format(CultureInfo.InvariantCulture, Base[key][l], args))));
+
+        ApprovalMessages.FallbackStageName(env.Catalog).Values.Should().Equal(Expected(MessageText.ApprovalFallbackStage).Values);
+        ApprovalMessages.PickLabelI18n(env.Catalog).Values.Should().Equal(Expected(MessageText.ApprovalPickLabel).Values);
+        ApprovalMessages.AddSignStageName(env.Catalog).Values.Should().Equal(Expected(MessageText.ApprovalAddSignStage).Values);
+        ApprovalMessages.ManagerLabelI18n(env.Catalog, 2).Values.Should().Equal(Expected(MessageText.ApprovalManagerLabel, 2).Values);
+    }
+
+    [Fact]
+    public async Task ApprovalLabels_FollowInstalled()
+    {
+        var env = await CreateAsync("zh-TW", r => r.Add("ja", "日本語", fallback: "en-US"));
+        ApprovalMessages.FallbackStageName(env.Catalog).Values.Should().ContainKey("ja");
+
+        env.Repo.Remove("ja");
+        await env.RefreshAsync();
+        ApprovalMessages.FallbackStageName(env.Catalog).Values.Should().NotContainKey("ja", "每次呼叫都依當下已安裝的語系產生");
     }
 
     [Fact]

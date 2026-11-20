@@ -1,12 +1,17 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.ApplicationTests.Common;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Domain.Approvals;
+using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTestKit;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
@@ -270,10 +275,80 @@ public class ApprovalProgressGraphTests : ApprovalTestBase
         var view = await ViewAs(fresh.Id, "buyer1");
 
         view.Graph!.Nodes.Select(n => (n.Id, n.State)).Should().Equal(("start", "passed"), ("_fallback", "active"), ("end", "notReached"));
-        Node(view, "_fallback").Name!.Resolve("zh-TW").Should().Be(ApprovalMessages.FallbackStageName.Resolve("zh-TW"));
+        Node(view, "_fallback").Name!.Resolve("zh-TW").Should().Be(ApprovalMessages.FallbackStageName(Svc<IMessageCatalog>()).Resolve("zh-TW"));
         Traversed(view).Should().Equal("e1");
         // 被重新比對的舊實例照它自己的流程畫：lead 同意過，之後被關閉
         (await ViewAs(id, "buyer1")).Graph!.Nodes.Select(n => n.Id).Should().Equal("start", "lead", "end");
+    }
+
+    /// <summary>送出後被追加費用壓低、沒有流程符合，改走備援（同 <see cref="Progress_Fallback_SequenceFlow_StartFallbackEnd"/>）；回傳備援實例。</summary>
+    private async Task<ApprovalInstance> FallbackInstance()
+    {
+        var r = await Scenario3();
+        As("buyer1");
+        var po = await NewPo(r, price: 50000);
+        var id = (await MustSubmit(po.Id, r.Confirmed)).InstanceId!.Value;
+        await AddExtra(r, po.Id, -45000);
+        await MustApprove(id, "buyer2");
+        var fresh = PendingOf(po.Id);
+        fresh.RouteKind.Should().Be(ApprovalRouteKind.Fallback);
+        return fresh;
+    }
+
+    private async Task SetFallbackRunNames(long instanceId, I18nText? name)
+    {
+        foreach (var run in Db.Context.Set<ApprovalStageRun>().Where(x => x.InstanceId == instanceId && x.StageCode == ApprovalEngine.FallbackStageCode).ToList())
+            run.NameSnapshot = name;
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+    }
+
+    private static ApprovalStageView FallbackStage(ApprovalInstanceView v) => v.Stages.Single(s => s.StageCode == ApprovalEngine.FallbackStageCode);
+
+    [Fact]
+    public async Task Progress_Fallback_NodeNameFromSnapshot()
+    {
+        // 第二輪必修 5：備援節點的名稱先用實例的名稱快照，和時間軸一致；快照沒有才用 catalog 現產
+        var fresh = await FallbackInstance();
+
+        await SetFallbackRunNames(fresh.Id, Text("快照名稱"));
+        var view = await ViewAs(fresh.Id, "buyer1");
+        Node(view, "_fallback").Name!.Resolve("zh-TW").Should().Be("快照名稱");
+        FallbackStage(view).Name.Resolve("zh-TW").Should().Be("快照名稱");
+
+        await SetFallbackRunNames(fresh.Id, null);
+        view = await ViewAs(fresh.Id, "buyer1");
+        Node(view, "_fallback").Name!.Values.Should().BeEquivalentTo(ApprovalMessages.FallbackStageName(Svc<IMessageCatalog>()).Values);
+    }
+
+    [Fact]
+    public async Task Progress_Fallback_Ja_SnapshotHasInstalledLocales_GraphSameAsTimelineAfterChainChange()
+    {
+        // 裝了 ja（上層 en-US）才建的備援實例：名稱快照有 ja（英文），沒有未安裝的 ko；之後把 ja 的上層改成 th，圖與時間軸仍是建立當時的快照
+        await LocaleTestKit.InstallAsync(Services, "ja", "日本語", fallback: "en-US");
+        var english = Svc<IMessageCatalog>().Get(new LocaleContext("en-US", []), MessageText.ApprovalFallbackStage);
+        var fresh = await FallbackInstance();
+
+        var view = await ViewAs(fresh.Id, "buyer1");
+        FallbackStage(view).Name.Values.Should().ContainKey("ja").And.NotContainKey("ko");
+        FallbackStage(view).Name.Values["ja"].Should().Be(english);
+
+        using (var scope = NewScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            var ja = db.Set<InstalledLocale>().Single(l => l.Code == "ja");
+            ja.FallbackCode = "th";
+            ja.ModifiedUtc = DateTime.UtcNow.AddMinutes(1);
+            await db.SaveChangesAsync();
+        }
+        var registry = Svc<LocaleRegistry>();
+        registry.Invalidate();
+        await registry.EnsureFreshAsync(default);
+        registry.Find("ja")!.FallbackCode.Should().Be("th");
+
+        view = await ViewAs(fresh.Id, "buyer1");
+        Node(view, "_fallback").Name!.Values["ja"].Should().Be(english);
+        FallbackStage(view).Name.Values["ja"].Should().Be(english);
     }
 
     [Fact]

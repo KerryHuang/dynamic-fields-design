@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 using DynamicModules.Domain.Approvals;
@@ -93,7 +94,7 @@ public class ApprovalAddSignTests : ApprovalTestBase
         added.AddSignUserIds.Should().Equal("emp2");
         added.Mode.Should().Be(ApprovalModes.Any);
         added.DueTime.Should().BeNull();
-        added.NameSnapshot!.Resolve("zh-TW").Should().Be(ApprovalMessages.AddSignStageName.Resolve("zh-TW"));
+        added.NameSnapshot!.Resolve("zh-TW").Should().Be(ApprovalMessages.AddSignStageName(Svc<IMessageCatalog>()).Resolve("zh-TW"));
         Inst(id).CurrentStageRunId.Should().Be(added.Id);
         var task = Open(id, "emp2");
         task.Reason.Should().Be(ApprovalTaskReason.Added);

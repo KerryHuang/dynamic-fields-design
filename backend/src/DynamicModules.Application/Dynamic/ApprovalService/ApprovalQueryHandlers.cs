@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.RecordService;
@@ -147,7 +148,8 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
 /// </summary>
 public class GetRecordApprovalHandler(
     IRecordRepository records, IModuleRepository modules, IApprovalInstanceRepository repo, IDynamicAccessGuard guard,
-    IPermissionRepository permissions, ApprovalReader reader, ApprovalReadGrant grant, ICurrentUser user, ApprovalPolicies policies)
+    IPermissionRepository permissions, ApprovalReader reader, ApprovalReadGrant grant, ICurrentUser user, ApprovalPolicies policies,
+    IMessageCatalog messages)
     : IRequestHandler<GetRecordApprovalRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetRecordApprovalRequest request, CancellationToken ct)
@@ -199,8 +201,9 @@ public class GetRecordApprovalHandler(
         var hidden = await grant.HiddenFieldIdsAsync(module, read, granted, ct);
         var unwritable = await grant.UnwritableFieldIdsAsync(module, read, granted, ct);
         var addSignLimit = await policies.MaxAddSignStagesAsync(module.Id, ct);
+        var fallbackStageName = ApprovalMessages.FallbackStageName(messages);
         var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, unwritable, module.Workflow, ShowTitle(i), addSignLimit,
-            allRuns, allActions, rejectedRunIds, ownStages.GetValueOrDefault(i.Id))).ToList();
+            allRuns, allActions, rejectedRunIds, ownStages.GetValueOrDefault(i.Id), fallbackStageName)).ToList();
         var pending = instances.Any(i => i.Status == ApprovalInstanceStatus.Pending);
         var targets = canRead ? await reader.SubmitTargetsAsync(module, record, pending, ct) : [];
         return ServiceResult.Success(new RecordApprovalResponse(
@@ -367,7 +370,7 @@ internal static class ApprovalViews
         IReadOnlyList<ApprovalAction> allActions, IReadOnlyDictionary<string, string> names, string me, bool writable, bool manager,
         IReadOnlySet<long>? hiddenFieldIds, IReadOnlySet<long>? unwritableFieldIds, Workflow? workflow, bool showTitle, int addSignLimit,
         IReadOnlyList<ApprovalStageRun> unfilteredRuns, IReadOnlyList<ApprovalAction> unfilteredActions,
-        IReadOnlySet<long> rejectedRunIds, IReadOnlySet<long>? ownRunIds)
+        IReadOnlySet<long> rejectedRunIds, IReadOnlySet<long>? ownRunIds, I18nText fallbackStageName)
     {
         string Name(string id) => names.GetValueOrDefault(id) ?? id;
         var pending = i.Status == ApprovalInstanceStatus.Pending;
@@ -412,12 +415,12 @@ internal static class ApprovalViews
         var flowName = i.FlowSetSnapshot.FirstOrDefault(e => e.FlowId == i.FlowId)?.Name;
         return new ApprovalInstanceView(i.Id, i.Status, i.RouteKind, flowName, i.FromOptionId, i.ToOptionId, i.InitiatorUserId, i.SubmittedTime, i.CompletedTime,
             i.RowVersion, stages, actions, canWithdraw, pending && writable && manager, showTitle ? i.TitleSnapshot : "",
-            ProgressGraph(i, def, pathRuns, rejectedRunIds, ownRunIds));
+            ProgressGraph(i, def, pathRuns, rejectedRunIds, ownRunIds, fallbackStageName));
     }
 
     /// <summary>備援實例的進度圖定義（U8）：開始 → 備援簽核 → 結束；節點實例以 StageCode = <see cref="ApprovalEngine.FallbackStageCode"/> 對應。</summary>
-    private static readonly ApprovalDefinition FallbackDefinition = new(ApprovalShapes.Graph, null, null, null, [],
-        [new(StartId, ApprovalNodeKinds.Start), new(ApprovalEngine.FallbackStageCode, ApprovalNodeKinds.Approval, ApprovalMessages.FallbackStageName, Mode: ApprovalModes.Any),
+    private static ApprovalDefinition FallbackDefinition(I18nText stageName) => new(ApprovalShapes.Graph, null, null, null, [],
+        [new(StartId, ApprovalNodeKinds.Start), new(ApprovalEngine.FallbackStageCode, ApprovalNodeKinds.Approval, stageName, Mode: ApprovalModes.Any),
          new(EndId, ApprovalNodeKinds.End)],
         [new("e1", StartId, ApprovalEngine.FallbackStageCode), new("e2", ApprovalEngine.FallbackStageCode, EndId)]);
 
@@ -428,11 +431,15 @@ internal static class ApprovalViews
     /// 再看形狀。資料對不上或快照遺失回 null，時間軸照常。ownRunIds 非 null 是只看得到自己關卡的讀者：照 J7 遮蔽，判斷與時間軸用同一組 Shown。
     /// </summary>
     private static ApprovalProgressGraph? ProgressGraph(ApprovalInstance i, ApprovalDefinition? def, IReadOnlyList<ApprovalStageRun> runs,
-        IReadOnlySet<long> rejectedRunIds, IReadOnlySet<long>? ownRunIds)
+        IReadOnlySet<long> rejectedRunIds, IReadOnlySet<long>? ownRunIds, I18nText fallbackStageName)
     {
         if (def is null) return null;
         var byStageCode = i.RouteKind == ApprovalRouteKind.Fallback || def.Shape != ApprovalShapes.Graph;
-        var shown = i.RouteKind == ApprovalRouteKind.Fallback ? FallbackDefinition : ApprovalGraphConversion.FromSequence(def);
+        // 備援節點的名稱先用這個實例備援關卡的名稱快照（與時間軸一致；第二輪必修 5），沒有才用查詢當下 catalog 產生的
+        var shown = i.RouteKind == ApprovalRouteKind.Fallback
+            ? FallbackDefinition(runs.Where(r => r.StageCode == ApprovalEngine.FallbackStageCode).OrderBy(r => r.Seq)
+                .Select(r => r.NameSnapshot).FirstOrDefault(n => n is not null) ?? fallbackStageName)
+            : ApprovalGraphConversion.FromSequence(def);
         if (ApprovalGraphProgress.Of(shown, runs, rejectedRunIds, byStageCode, i.Status == ApprovalInstanceStatus.Approved) is not { } p) return null;
         var nodes = p.Nodes.Select(n => ProgressNodeView(n, ownRunIds)).ToList();
         var edges = p.Edges.Select(e => new ApprovalProgressEdge(e.Id, e.From, e.To, e.Label, ownRunIds is null && e.Traversed)).ToList();

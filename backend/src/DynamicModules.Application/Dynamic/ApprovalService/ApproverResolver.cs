@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Dynamic.OrganizationService;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Approvals;
@@ -20,12 +21,12 @@ public sealed record StageResolution(IReadOnlyList<SeatPlan> Seats, bool AllUnit
 
 /// <summary>
 /// 解析的輸入：Picks 是這一關的自選結果；GroupNames 給錯誤與歷程說明用。NoteLocale 是寫進簽核歷程說明（資料庫）的語系＝系統預設語系
-/// （N1，使用者 2026-11-20 裁決）；null 為繁中。
+/// （N1，使用者 2026-11-20 裁決）；null 為繁中。Messages 產生主管、自選等標籤（每個已安裝語系一句）；null 時用只看內建四語的 catalog（測試直接建）。
 /// </summary>
 public sealed record ResolveContext(
     Module Module, string InitiatorUserId, IReadOnlyDictionary<string, JsonElement?> Values, IReadOnlyList<string>? Picks, OrgSnapshot Org,
     IReadOnlyDictionary<long, IReadOnlyList<string>> GroupMembers, IReadOnlyList<string> DefaultFallback, int MaxApprovers, bool AllowSelfApproval,
-    IReadOnlyDictionary<long, I18nText>? GroupNames = null, LocaleContext? NoteLocale = null);
+    IReadOnlyDictionary<long, I18nText>? GroupNames = null, LocaleContext? NoteLocale = null, IMessageCatalog? Messages = null);
 
 /// <summary>
 /// 簽核人解析（設計 §6.1、§6.4、§6.5）：先依來源切出來源單位，每個單位只留啟用中的人（政策不允許自簽時還要不是發起人）；
@@ -33,7 +34,7 @@ public sealed record ResolveContext(
 /// </summary>
 public sealed class ApproverResolver(
     OrgSnapshotLoader org, IPermissionRepository permissions, ApprovalPolicies approvalPolicies, RecipientResolver recipients,
-    Microsoft.Extensions.Logging.ILogger<ApproverResolver> logger, DynamicModules.Application.Common.RequestLocale requestLocale)
+    Microsoft.Extensions.Logging.ILogger<ApproverResolver> logger, DynamicModules.Application.Common.RequestLocale requestLocale, IMessageCatalog messages)
 {
     public const string AnySeat = "any";
 
@@ -48,7 +49,7 @@ public sealed class ApproverResolver(
         if (fallback.Count == 0) logger.LogDebug("模組 {ModuleKey} 的預設備援對象政策解析為空，需要備援的關卡會回 409", module.Key);
         var limits = await approvalPolicies.LimitsAsync(module.Id, ct);   // 下一關啟動當下的設定（裁決 2）
         return new ResolveContext(module, initiator, values, picks, snapshot, members, fallback, limits.MaxApprovers,
-            await approvalPolicies.AllowSelfApprovalAsync(module.Id, ct), groups, requestLocale.SystemDefault);
+            await approvalPolicies.AllowSelfApprovalAsync(module.Id, ct), groups, requestLocale.SystemDefault, messages);
     }
 
     public static StageResolution Resolve(ResolveContext ctx, I18nText stageName, string mode, ApproverSource source, ApproverSource? fallback, string onEmpty)
@@ -112,12 +113,14 @@ public sealed class ApproverResolver(
     public static StageResolution ResolveFallback(ResolveContext ctx, ApproverSource? fallback)
     {
         var users = FallbackUsers(ctx, fallback);
-        if (users.Count == 0) return new([], false, ApprovalMessages.NoApprover(ApprovalMessages.FallbackStageName, fallback?.Source ?? "admin"));
+        if (users.Count == 0) return new([], false, ApprovalMessages.NoApprover(ApprovalMessages.FallbackStageName(Messages(ctx)), fallback?.Source ?? "admin"));
         // 備援簽核人執行時只受技術上限（與 Resolve 頂替的備援一致）
         var limit = PolicyCatalog.ApprovalMaxApprovers.Max;
-        if (users.Count > limit) return new([], false, ApprovalMessages.TooManyApprovers(ApprovalMessages.FallbackStageName, limit));
+        if (users.Count > limit) return new([], false, ApprovalMessages.TooManyApprovers(ApprovalMessages.FallbackStageName(Messages(ctx)), limit));
         return new([new SeatPlan(AnySeat, users, ApprovalTaskReason.Fallback, null)], false, null);
     }
+
+    private static IMessageCatalog Messages(ResolveContext ctx) => ctx.Messages ?? BuiltinMessageCatalog.Instance;
 
     /// <summary>來源單位（設計 §6.5 表）：群組各一、使用者各一、manager／userField 整個一個、自選的人各一、略過的群組各一（為空）。</summary>
     private static IEnumerable<(object Label, IReadOnlyList<string> Users)> Units(ResolveContext ctx, ApproverSource source)
@@ -135,7 +138,7 @@ public sealed class ApproverResolver(
             case ApprovalSources.Manager:
                 var level = source.Level ?? 1;
                 var manager = ManagerChain.Resolve(ctx.Org, ctx.InitiatorUserId, level);
-                yield return (ApprovalMessages.ManagerLabelI18n(level), manager is null ? [] : [manager]);
+                yield return (ApprovalMessages.ManagerLabelI18n(Messages(ctx), level), manager is null ? [] : [manager]);
                 break;
             case ApprovalSources.UserField:
                 var field = ctx.Module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == source.FieldId);
@@ -149,12 +152,12 @@ public sealed class ApproverResolver(
                 if (source.CandidatesUnmatched)
                 {
                     // 對不上時由備援頂替，會簽仍要湊滿原本的票數（設計 §14.4，審查 M1）：依 min 產生同樣數量的空單位
-                    for (var i = 0; i < Math.Max(1, PickRange(ctx, source).Min); i++) yield return (ApprovalMessages.PickLabelI18n, []);
+                    for (var i = 0; i < Math.Max(1, PickRange(ctx, source).Min); i++) yield return (ApprovalMessages.PickLabelI18n(Messages(ctx)), []);
                     break;
                 }
                 var allowed = Candidates(ctx, source);
                 var picks = ctx.Picks ?? [];
-                if (picks.Count == 0) yield return (ApprovalMessages.PickLabelI18n, []);
+                if (picks.Count == 0) yield return (ApprovalMessages.PickLabelI18n(Messages(ctx)), []);
                 foreach (var p in picks) yield return (p, allowed is null || allowed.Contains(p) ? [p] : []);
                 break;
         }
