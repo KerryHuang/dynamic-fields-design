@@ -35,6 +35,25 @@
 
 新題：**Q9**（參數不符的句子怎麼呈現，見「代為決定的事」）。估計行數：i4d2-1 ≈ 1500 → ≈ 1680、i4d2-2 ≈ 1450 → ≈ 1540，兩批仍在 1300–1700 之間，子段切法不變。
 
+**第三輪（2026-11-21，跨家族短核對 `8ee7e026`：新必修 4，全收）**：四條都對照 main 查過，屬實。
+
+| # | 審查意見 | 查證結果 | 改在哪 |
+|---|---|---|---|
+| 必 1 | 匯出篩選前後端條件不一致 | 屬實：判斷 10 的 `onlyBaseChanged` 已含參數不符，但 Task 4 只在「有原文已更新」時啟用核取框 | Task 4：核取框文案改「只匯出原文已更新或參數不符的句子」，啟用條件是兩段 `baseChanged + paramsChanged > 0`；加「只有參數不符」的測試 |
+| 必 2 | 「每個案例零拒收」不成立 | 屬實：樣板保留目前譯文，參數不符的覆寫原樣匯回會被 `placeholder` 拒收（判斷 7 本來就這樣寫） | Task 3 `RoundTrip_Analyzes` 分兩組：合法樣板零拒收；含參數不符覆寫的樣板，拒收數與鍵＝參數不符的句子、原因 `placeholder` |
+| 必 3 | mock 只換 Query 快取不會更新 `installedLocales()` | 屬實：`installedLocales()` 讀 `locale-settings.ts` 的 `infos`，只由 `applyLocalePolicies` 更新；main 是 `MainLayout` 的 `useBusinessTimeWatch` 在 watch 裡呼叫，`LocalePackImportDialog` 的 `mountDialog` 沒掛它，而且 watch 是非同步觸發，`await refetchQueries` 之後不保證已跑 | 判斷 13：refetch 後對話框直接用回傳的生效值呼叫 `applyLocalePolicies(eff.values, eff.locales)`（同一個函式、冪等），再檢查 `installedLocales()`；Task 5 測試改 mock HTTP 的 `/policies/effective`，不 mock `locale-settings` |
+| 必 4 | 60 句案例驗了 internal 屬性、失效鍵不屬於那兩個集合 | 屬實：backend/src 沒有任何 `InternalsVisibleTo`；`AllBaseChanged`／`AllParamsChanged` 不含失效鍵 | Task 1 `LocaleOverlayReviewTests` 的 60 個失效鍵改驗計數 60、清單 50、`OrphanedTexts` 60；`Confirm_MoreThanListed` 的 `currentReview` 改由 `LocaleOverlayReview.Of(假的 LocalePack 列)` 產生；完整集合只透過確認與匯出的公開結果驗，不加 `InternalsVisibleTo` |
+
+**第三輪改到 Task 1–3 的地方（給已在做 i4d2-1 的實作者）**：
+- Task 1 `LocaleOverlayReviewTests`：「60 個已失效鍵」改驗 `Orphaned` 60、`OrphanedKeys` 50 筆 Ordinal、`OrphanedTexts(current, "ui")` 60 筆，刪掉「`All*` 集合仍是 60」。
+- Task 1 `LocalePackAnalyzerTests.Confirm_MoreThanListed`：`currentReview` 用 `LocaleOverlayReview.Of` 吃一筆 60 句舊雜湊的 `LocalePack`（實體欄位是公開的）產生，不直接設 internal 屬性；斷言仍是 `UiConfirm` 60、`confirmed` 60。
+- Task 1 `LocalePackAnalyzerTests.Unchanged_BaseChanged_IsConfirmed`：`currentReview` 同樣由 `LocaleOverlayReview.Of` 產生。
+- Task 3 `LocaleTemplateBuilderTests.RoundTrip_Analyzes`：拆成 `RoundTrip_Analyzes_Clean`（零拒收、零多餘）與 `RoundTrip_Analyzes_ParamsMismatch_RejectedAsExpected`（拒收鍵＝參數不符的鍵、原因 `placeholder`、其餘零拒收）。
+- Task 3 `LocaleTemplateBuilderTests.OnlyBaseChanged_MoreThanListed`：只斷言輸出樣板的鍵數與鍵集（公開結果），不讀 internal 集合。
+- Task 2 不受影響。
+
+估計行數不變（各約 ±10 行）。
+
 ---
 
 ## 前置條件（開工前逐項確認，不符就停下回報）
@@ -137,7 +156,7 @@
     - 未安裝的新代碼：`locale` 段取查詢參數，`ui`／`server` 全是空字串，沒有 `review`。
 11. 〔技術〕**大小**：樣板不設伺服器端上限（鍵數有界：基準鍵 × 三段＋失效鍵；泰文全套含原文與參考約 0.6 MB）。前端下載後比對清單的 `packMaxBytes`，超過就照樣存檔並提示（Q8）。
 12. 〔技術〕**前端版型**（Task 5）：清單改成卡片格（`row q-col-gutter-md`，卡片 `col-12 col-sm-6 col-lg-4`；390 一欄、820 兩欄、1366／1920 三欄），所有寬度同一套模板（`frontend.md`「清單在手機寬度改用卡片…操作鈕放卡片下方」）。卡片內：標題列（自稱、代碼、來源、啟用／預設標籤）、完整度兩行（`q-linear-progress` 加文字「介面 1790／2701（66%）」）、覆寫句數與目前版本（沿用 i4d1 文案）、檢視提示（有才顯示）、`q-expansion-item`「查看明細」（缺最多的分類、四種鍵清單各前 50 筆並註明總數）；`q-card-actions` 放「匯出樣板」「以此語系預覽」（只限未啟用）與「⋯」（回到上一版、移除覆寫、移除語系，沿用 i4d1）。既有 `data-testid`（`locale-row-<code>`、`locale-actions-<code>` 等）保留，既有 spec 不改預期值。長代碼與長自稱 `overflow-wrap: anywhere`。顏色只用 Quasar 色名與既有 CSS 變數（`src/css/themes/` 守衛）。
-13. 〔技術〕**以此語系預覽**（設計 §12、M2）：按鈕呼叫 `switchLocale({ global: composer }, code, { preview: true })`（`src/i18n/ui-messages.ts`，i4b 判斷 17 的完整試看流程：只在這個分頁、`sessionStorage`、登出結束），不另寫一份。顯示條件：該語系未啟用、不是目前試看中的語系。匯入對話框在套用成功、新語系未啟用時，「現在啟用」旁加同一個按鈕；按之前先 `await queryClient.refetchQueries({ queryKey: ['effective-policies'] })`，等 `installedLocales()` 含這個代碼再切（`LocaleSwitcher` 的試看清單也從這裡來），否則顯示 `locale.loadFailed`。後端訊息在試看時仍是預設語系（設計 §15 已列），按鈕旁的說明寫明。
+13. 〔技術〕**以此語系預覽**（設計 §12、M2）：按鈕呼叫 `switchLocale({ global: composer }, code, { preview: true })`（`src/i18n/ui-messages.ts`，i4b 判斷 17 的完整試看流程：只在這個分頁、`sessionStorage`、登出結束），不另寫一份。顯示條件：該語系未啟用、不是目前試看中的語系。匯入對話框在套用成功、新語系未啟用時，「現在啟用」旁加同一個按鈕；按之前先 `await queryClient.refetchQueries({ queryKey: ['effective-policies'] })`，再從 `queryClient.getQueryData(['effective-policies', ''])` 取回生效值、**直接呼叫 `applyLocalePolicies(eff.values, eff.locales)`**（第三輪必修 3：`installedLocales()` 只由這個函式更新；平常是 `MainLayout` 的 `useBusinessTimeWatch` 在 watch 裡呼叫，非同步觸發，`await` 之後不保證已跑；同一個函式、冪等，watch 之後再跑一次也一樣），然後確認 `installedLocales()` 含這個代碼再切（`LocaleSwitcher` 的試看清單也從這裡來），否則顯示 `locale.loadFailed`。後端訊息在試看時仍是預設語系（設計 §15 已列），按鈕旁的說明寫明。
 14. 〔技術〕**匯出下載**：`dynamicApi.exportLocaleTemplate(code, options)` 照 `exportReport` 的寫法（`responseType: 'blob'`、`validateStatus: () => true`、錯誤本文從 Blob 解析成 `ApiError`、檔名取 `Content-Disposition`），對話框用 `URL.createObjectURL` 下載（同 `ReportViewPage.vue`）。
 15. 〔技術〕**安全網（各批必跑）**：`AuditCoverageTests`、`AuthorizationWriteInventoryTests`（ApplicationTests）、`EndpointRoutesTests`、`SecurityTests`（WebAPITests）；新端點落在 `/api/v3/dynamic/` 底下（`EndpointRoutesTests` 自動涵蓋）。前端全域守衛：`src/css/themes/no-hardcoded-colors.vitest.spec.ts`、`src/i18n/locales.vitest.spec.ts`（四語鍵一致、可編譯）、`src/i18n/table-no-data-label.vitest.spec.ts`、`src/domain/dynamic/policy-i18n.vitest.spec.ts`。
 
@@ -285,11 +304,11 @@
 - [ ] **Step 1: 寫失敗的測試**
   - `LocalePackAnalyzerTests.BuiltFor_DiffersFromPlatform_Warns`：`builtFor` "2026.10"、`platformVersion` "2026.11"、包只帶 30 句 → 警告 `builtForDiffers`，參數 `["2026.10","2026.11", 基準總數−30]`；`BuiltFor_Dev_NoWarning`（任一邊是 `dev`、null、空字串，或兩邊相等）→ 沒有這個警告；`BuiltFor_LongPlatformVersion_SameBuild_NoWarning`（第二輪必修 6）：`platformVersion` 是 25 字元，包的 `builtFor` 是它的前 20 字元（＝同平台匯出的樣板）→ 沒有警告。
   - `LocalePackAnalyzerTests.Unchanged_BaseChanged_IsConfirmed`（第二輪必修 2：用真的基準鍵 `dynamic.save`，`common` 段沒有 `save`，用錯鍵會被算成多餘鍵）：世界裡 `th` 的覆寫層有 `dynamic.save`＝"X"，`currentReview` 把它列為原文已更新；包帶同一句 "X" → `plan.UiConfirm` 含 `dynamic.save`、`report.ui.confirmed` 1、`plan.OverlayChanged` true、`plan.NoChanges` false；沒有列為原文已更新時 `UiConfirm` 空、`OverlayChanged` false、`NoChanges` true。分析器拿目前版雜湊的方式：`LocaleWorld` 不帶原始列，所以 `Analyze` 另收 `OverlayReview? currentReview`（預覽 handler 以 `LocaleOverlayReview.Of(目前版)` 算好傳入；用 `AllBaseChanged` 完整集合，判斷 3）。
-  - `LocalePackAnalyzerTests.Confirm_MoreThanListed`（第二輪建議 3）：60 句原文已更新、包原樣帶這 60 句 → `UiConfirm` 60 筆、`confirmed` 60（第 51 句之後也確認）。
+  - `LocalePackAnalyzerTests.Confirm_MoreThanListed`（第二輪建議 3）：60 句原文已更新、包原樣帶這 60 句 → `UiConfirm` 60 筆、`confirmed` 60（第 51 句之後也確認）。`currentReview` 用 `LocaleOverlayReview.Of(一筆 60 句舊雜湊的 LocalePack)` 產生（第三輪必修 4：`AllBaseChanged` 是 internal、測試組件看不到，也不為此加 `InternalsVisibleTo`），完整集合只透過 `UiConfirm` 這個公開結果驗。上一條 `Unchanged_BaseChanged_IsConfirmed` 的 `currentReview` 同樣這樣產生。
   - `LocalePackAnalyzerTests.Report_TopMissing_UsesAfterWorld`（第二輪必修 5）：`ja` 目前缺 `approval.*` 全部，包補上其中一半 → 報告 `completeness.topMissing` 的 `approval` 缺數是套用後剩下的一半，和 `completeness.ui.have` 同一個世界。
   - `LocalePackAnalyzerTests.ParamsChanged_Server_ReimportRejected`：目前覆寫是舊參數的範本 → 原樣再匯入被拒（`placeholder`），不進 `ServerConfirm`。
   - `LocalePackModelsTests.Plan_OldJsonWithoutConfirm_DeserializesEmpty`：i4d1 形狀的 `PlanJson`（沒有兩個新欄位）用 `LocalePackStorage.Json` 反序列化 → 兩個清單是空的，`OverlayChanged`、`NoChanges` 照舊算；i4d1 形狀的 `ReportJson` → `Ui.Confirmed` 0、`OrphanedDropped` 是 `(0, 0)`、`Completeness.TopMissing` 空。
-  - `LocaleOverlayReviewTests`：沒有版本 → 全 0；雜湊不同 → 原文已更新；雜湊缺 → 不算原文已更新；後端覆寫參數和現在 zh 不符 → 參數不符（**不論有沒有記雜湊**，第二輪必修 2、4）；參數不符再分（第二輪必修 4，各一個案例）：zh 現在 `{0}`、覆寫用 `{0}{1}` → 參數不符且執行期退回；zh 現在 `{0}{1}`、覆寫只有 `{0}` → 參數不符、**不算**執行期退回；zh 現在零參數、覆寫有 `{0}` → 參數不符、不算執行期退回；介面文字用了現在不允許的名稱 → 參數不符、執行期退回 0；原始 `UiJson` 有非基準鍵 → 已失效 1 且鍵名在清單；60 個已失效鍵 → 計數 60、清單 50 筆且 Ordinal 排序、`All*` 集合仍是 60；`UiJson` 不是合法 JSON → 全 0 不丟例外。
+  - `LocaleOverlayReviewTests`：沒有版本 → 全 0；雜湊不同 → 原文已更新；雜湊缺 → 不算原文已更新；後端覆寫參數和現在 zh 不符 → 參數不符（**不論有沒有記雜湊**，第二輪必修 2、4）；參數不符再分（第二輪必修 4，各一個案例）：zh 現在 `{0}`、覆寫用 `{0}{1}` → 參數不符且執行期退回；zh 現在 `{0}{1}`、覆寫只有 `{0}` → 參數不符、**不算**執行期退回；zh 現在零參數、覆寫有 `{0}` → 參數不符、不算執行期退回；介面文字用了現在不允許的名稱 → 參數不符、執行期退回 0；原始 `UiJson` 有非基準鍵 → 已失效 1 且鍵名在清單；60 個已失效鍵 → `Orphaned` 60、`OrphanedKeys` 50 筆且 Ordinal 排序、`OrphanedTexts(current, "ui")` 60 筆（第三輪必修 4：失效鍵不屬於 `AllBaseChanged`／`AllParamsChanged`，且兩者是 internal）；`UiJson` 不是合法 JSON → 全 0 不丟例外。
   - `LocaleCompletenessTests`：同一組輸入和 `Analyze` 報告的 `completeness` 相等（含 `TopMissing`）；`TopMissing`：介面文字缺 `approval.*` 3 句、`dynamic.*` 1 句 → 第一組 `("ui","approval",3)`；同數依分類名排序；最多 5 組；後端訊息的 `report.`、`alert.`、其他分到三組。
   - `LocalePackPreviewApiTests.Preview_OrphanedDropped`：套用 `ja-partial` 後，用 `DbContext` 直接把目前版 `UiJson` 加一個非基準鍵（模擬平台改鍵名），再預覽一份有新句子的包 → `orphanedDropped.ui` 1；預覽一份和目前完全相同的包（`NoChanges`）→ 0；**預覽一份只改 `locale.nativeName`、句子完全相同的包**（第二輪必修 1：`NoChanges` false 但 `OverlayChanged` false）→ 0。`Preview_BuiltFor_PlatformVersion`：`TestApp.ExtraServices` 換成回傳 "2026.11" 的假 `IOpsEnvironment`，上傳 `builtFor` "2026.10" → 警告存在；預設主機（`dev`）→ 沒有。`Preview_Report_TopMissing`：預覽 `ja-partial` → `completeness.topMissing` 至多 5 組。
   - `LocalePackApplyApiTests`（都標 `Category=Postgres`）：
@@ -341,11 +360,12 @@
     - `Review`：有目前版時 `review.orphaned.ui` 帶舊譯文；沒有版本時沒有 `review` 段。
     - `NewCode`：未安裝的 `id` → `locale` 段取選項、`ui`／`server` 全空、沒有 `review`。
     - `BuiltFor`：`platformVersion` 25 字元 → 截成 20；null → `dev`（兩者都經 `PlatformBuiltFor`，判斷 2）。
-    - `OnlyBaseChanged_MoreThanListed`（第二輪建議 3）：60 句原文已更新 → 樣板 `ui` 有 60 鍵（不是畫面清單的 50）；參數不符但沒記雜湊的句子也在篩選結果裡。
+    - `OnlyBaseChanged_MoreThanListed`（第二輪建議 3）：60 句原文已更新 → 樣板 `ui` 有 60 鍵（不是畫面清單的 50）；參數不符但沒記雜湊的句子也在篩選結果裡。只斷言輸出樣板的鍵數與鍵集（公開結果），不讀 internal 集合（第三輪必修 4）。
     - `Validate`（純函式，第二輪必修 7）：代碼格式錯、未安裝缺 `nativeName`、`nativeName` 過長、`quasarLang` 不在清單、`fallback` 未安裝、`source`／`reference` 未安裝、`scopes` 空或有不認得的值 → 各自的 `MessageRef`；**過深鏈**：世界裡 `x1→en-US`、`x2→x1`、`x3→x2`，新代碼 `fallback=x3` → `FallbackTooDeep`（和匯入時同一句）；`fallback=x2` → 通過。
     - `ScopeUiOnly` → 沒有 `server` 段（`source`、`reference` 也只有 `ui`）。
     - `RoundTrip_Parses`：每個案例的輸出過 `LocalePackParser.Parse` 沒有錯誤、沒有逐鍵問題。
-    - `RoundTrip_Analyzes`（第二輪建議 4：逐句語法主要在分析器驗，Parser 往返證明不了）：每個案例的輸出 Parse 後再對同一個世界跑 `LocalePackAnalyzer.Analyze` → 沒有整包錯誤，兩段 `rejected` 0、`extra` 0。
+    - `RoundTrip_Analyzes_Clean`（第二輪建議 4：逐句語法主要在分析器驗，Parser 往返證明不了）：目標語系**沒有參數不符的覆寫**的各案例，輸出 Parse 後再對同一個世界跑 `LocalePackAnalyzer.Analyze` → 沒有整包錯誤，兩段 `rejected` 0、`extra` 0。
+    - `RoundTrip_Analyzes_ParamsMismatch_RejectedAsExpected`（第三輪必修 2）：目標語系有 2 句參數不符的後端覆寫，樣板照判斷 10 保留目前譯文 → 原樣分析時 `server.rejected` 2、拒收鍵＝那 2 句、原因都是 `placeholder`，其餘句子零拒收、`extra` 0。這是「待重翻」樣板的預期結果（判斷 7：參數不符的句子不會被確認，要改譯文）。
   - `LocaleTemplateApiTests`（新類別標 `Category=Postgres`）：
     - `Export_Builtin_Th`：200、`Content-Type` 是 `application/json`、`Content-Disposition` 是 attachment 且檔名 `th.langpack.json`；本文可解析、`format`／`formatVersion` 正確。
     - `Export_ThenImport_RoundTrip`（主要驗收）：匯出 `th` 全部 → 原檔上傳預覽 → `ui.rejected`、`server.rejected`、`ui.extra`、`server.extra` 都是 0，`ui.unchanged + ui.sameAsBuiltin + ui.skipped`＝基準鍵數；匯出新代碼 `id`（自稱「Bahasa Indonesia」、上層 `en-US`）→ 預覽 `locale.isNew` true、`fallbackCode` `en-US`、`ui.skipped`＝基準鍵數。
@@ -374,12 +394,12 @@
 - Create: `frontend/src/presentation/locale/LocaleTemplateExportDialog.vue`＋`.vitest.spec.ts`
 - Modify: `shared/i18n/{zh-TW,en-US,th,vi}/ui.json`（`localePacks.export.*`）
 
-對話框（繁中文案；四語都要給）：標題「匯出翻譯樣板」；目標語系（從語系卡片開啟時固定顯示自稱與代碼；從頁首「新語系樣板」開啟時是代碼、自稱、上層語系（選填，下拉列已安裝語系）、日期元件語言包（選填）四個輸入，Q6）；原文語系（下拉，已安裝，預設繁體中文）、參考語系（下拉，已安裝＋「不附」，預設 English）；範圍「介面文字」「系統訊息」（核取，預設都勾；都不勾時「下載」停用：送出一定會被擋）；「只匯出缺的句子」「只匯出原文已更新的句子」（後者在目標語系沒有原文已更新的句子時停用）；說明一行「樣板是 .langpack.json，翻好後從『匯入語系包』匯回；空白的句子代表沒翻，匯入時略過。」；按鈕「下載」「取消」。下載後若檔案大於清單的 `packMaxBytes`，對話框不關，顯示 Q8 的提示；否則關閉並提示「已下載」。400 顯示後端訊息（`errors.file`）；403 顯示既有的權限不足文字。版型 `max-width: 560px`、手機全寬、輸入框都有 `label`。
+對話框（繁中文案；四語都要給）：標題「匯出翻譯樣板」；目標語系（從語系卡片開啟時固定顯示自稱與代碼；從頁首「新語系樣板」開啟時是代碼、自稱、上層語系（選填，下拉列已安裝語系）、日期元件語言包（選填）四個輸入，Q6）；原文語系（下拉，已安裝，預設繁體中文）、參考語系（下拉，已安裝＋「不附」，預設 English）；範圍「介面文字」「系統訊息」（核取，預設都勾；都不勾時「下載」停用：送出一定會被擋）；「只匯出缺的句子」「只匯出原文已更新或參數不符的句子」（後者對應 `onlyBaseChanged`，判斷 10 的篩選是兩者聯集；目標語系兩段的 `baseChanged + paramsChanged` 都是 0 時停用，第三輪必修 1）；說明一行「樣板是 .langpack.json，翻好後從『匯入語系包』匯回；空白的句子代表沒翻，匯入時略過。」；按鈕「下載」「取消」。下載後若檔案大於清單的 `packMaxBytes`，對話框不關，顯示 Q8 的提示；否則關閉並提示「已下載」。400 顯示後端訊息（`errors.file`）；403 顯示既有的權限不足文字。版型 `max-width: 560px`、手機全寬、輸入框都有 `label`。
 
 - [ ] **Step 1: 寫失敗的測試**（mock `dynamicApi`，照 `LocalePackImportDialog.vitest.spec.ts` 的寫法）
   - 從卡片開啟：送出的參數是 `code`＋`scopes=['ui','server']`、`source='zh-TW'`、`reference='en-US'`、兩個篩選 false；勾選後參數跟著變；參考選「不附」送空字串。
   - 「新語系樣板」：多送 `nativeName`、`fallback`、`quasarLang`；代碼格式不對時**照常送出**並顯示後端 400 訊息（判斷：前端不重算格式規則）。
-  - 範圍都不勾 → 「下載」停用；目標沒有原文已更新句子 → 該核取停用。
+  - 範圍都不勾 → 「下載」停用；目標的 `baseChanged` 與 `paramsChanged` 都是 0 → 「只匯出原文已更新或參數不符的句子」停用；**只有參數不符**（`baseChanged` 0、`paramsChanged` 1）→ 可勾，送出 `onlyBaseChanged=true`（第三輪必修 1）；只有原文已更新 → 可勾。
   - 回傳 Blob 大於 `packMaxBytes` → 顯示提示（含兩個 MB 數字）、對話框不關；小於 → 關閉。
   - 下載用 `URL.createObjectURL`、`a.download` 是回應的檔名。
 - [ ] **Step 2: 跑測試確認失敗**：`cd frontend && bunx vitest run src/presentation/locale/LocaleTemplateExportDialog.vitest.spec.ts --maxWorkers=2`
@@ -408,13 +428,13 @@
   - `LocalesPage.vitest.spec.ts`（第二輪必修 2：既有共用 fixture 是 zh-TW、th、vi、ja 四列，既有斷言是四列）：既有 fixture **不換**，只在 `locale()` helper 補新欄位的預設值（`completeness` 完整、`topMissing` 空、`review` 全 0、`builtFor: null`），既有案例與「四列」斷言照過；新案例另建五列 fixture（zh-TW、en-US、th、vi 四張內建＋一張匯入的 `ja`）：五張卡片；完整度文字與百分比（四捨五入到整數）；`review` 全 0 時不顯示檢視行；原文已更新與參數不符各一行；`runtimeFallback` 0 時沒有括號、> 0 時括號內是該數；「查看明細」展開後列出鍵名與「共 N 筆」；未啟用的卡片有「以此語系預覽」、按下呼叫 `switchLocale(…, code, { preview: true })`（mock `src/i18n/ui-messages`）；啟用中的沒有；「匯出樣板」開對話框且目標是該語系；「新語系樣板」開對話框且目標可輸入；既有 i4d1 案例（三個動作、確認框文字、invalidate 三個 key、`importEnabled: false` 停用）照過。
   - `LocalePackImportDialog.vitest.spec.ts`：
     - 報告有 `builtForDiffers` 警告時顯示三個參數（不是 `unknown` 文案）；`confirmed`、`orphanedDropped` 的兩行在 0 時不顯示；`completeness.topMissing` 有值時列出分類與缺數、空陣列時不顯示。
-    - 套用成功、`enabled: false` → 有「以此語系預覽」。按下後（第二輪建議 4：驗狀態，不只驗呼叫順序）：mock 的 `refetchQueries` 在 resolve 前把 `effective-policies` 快取換成含新代碼的已安裝清單 → 斷言 `switchLocale` 被呼叫時 `installedLocales()` 已含該代碼；另一案例 refetch 後清單仍不含該代碼 → 不呼叫 `switchLocale`、顯示 `locale.loadFailed`。
+    - 套用成功、`enabled: false` → 有「以此語系預覽」。按下後（第二輪建議 4、第三輪必修 3：驗狀態，不只驗呼叫順序）：`mountDialog` 的 `mockHttp` 加 `/policies/effective`，回傳 `locales` 含新代碼 `ja`；**不 mock `src/i18n/locale-settings`**（走真的 `applyLocalePolicies`），只 mock `switchLocale`，在 mock 實作裡記下當下的 `installedLocales()` → 斷言含 `ja`；另一案例 `/policies/effective` 回的 `locales` 不含 `ja` → 不呼叫 `switchLocale`、顯示 `locale.loadFailed`。每個案例結束把語系狀態還原（再呼叫一次 `applyLocalePolicies` 帶出廠清單），不污染同檔其他案例。
     - **#71-1**：套用送出後關閉對話框、重開並選了另一個檔，舊的套用才回 409（或「現在啟用」才回 400）→ 新對話框不顯示舊錯誤、不出現「重新預覽」。
     - **#71-2**：報告的 `extraKeys` 含 `<img src=x onerror=alert(1)>` 與 `<script>…</script>` → 以文字節點呈現（`wrapper.find('img').exists()` false、`textContent` 含原字串）。
 - [ ] **Step 2: 跑測試確認失敗**：`cd frontend && bunx vitest run src/pages/system/LocalesPage.vitest.spec.ts src/presentation/locale --maxWorkers=2`
 - [ ] **Step 3: 實作**
 - [ ] **Step 4: 跑測試確認通過**：同 Step 2；加跑 Task 4 Step 4 的四個守衛與 `src/i18n/ui-messages.vitest.spec.ts`（試看流程沒被改壞）；`bun run typecheck`。
-- [ ] **Step 5: 本機走查**（`Localization__PackImportEnabled=true bash scripts/unattended/local-demo.sh <worktree 絕對路徑>`，背景執行等 READY；`formwright-demo-verify` skill）：admin 登入 → 系統管理 → 語系 → 四張卡片完整度 100% → 匯出 `th` 樣板（只勾缺的：應是空的 `ui`／`server`）→ 「新語系樣板」匯出 `id` → 用該檔匯入 → 報告新安裝、全部略過 → 套用 → 「以此語系預覽」（介面沿退回鏈顯示 English）→ 結束試看；匯入 `ja-partial` → 卡片完整度與缺最多的分類 → 用測試夾具（或 `sqlite3` 直接改本機 Demo 資料庫的 `BaseHashesJson` 與 `UiJson`，只在本機）造原文已更新 2 句、已失效 1 句 → 卡片顯示兩行提示與明細 → 匯出「只匯出原文已更新」→ 原樣匯回 → 報告「確認原文已更新 2 句」「會清掉 1 句已失效」→ 套用後提示消失 → 回到上一版提示回來。**四種寬度**（第二輪必修 9；照 `formwright-demo-verify` 的版型：390x844x3 mobile touch／820x1180x2 mobile touch／1366x768x1／1920x1080x1）：每個寬度逐一量四個狀態——語系頁（卡片收合）、一張卡片「查看明細」展開、匯入對話框顯示報告、匯出樣板對話框（含「新語系樣板」四個輸入）。資料要含最壞情況：長鍵名（明細清單）、長自稱（50 字元、無空白的拉丁字串）、長錯誤訊息（匯出對話框的 400 訊息、報告的過深鏈錯誤）。每個狀態量三件事：整頁 `document.documentElement.scrollWidth <= clientWidth`；頁面用 `scripts/unattended/rwd-check.js` 的 `innerOverflow`（它只掃 `main *`）應為空；**對話框掛在 `body` 底下、`main *` 量不到**，另用 `evaluate_script` 對 `.q-dialog *` 跑同一個條件（`scrollWidth > clientWidth + 1`），結果應為空——`innerOverflow` 有項目時逐項判斷，一般卡片與對話框在手機寬度不可以橫捲。截圖與量測結果放專案 `.tmp/`。再用預設的 `local-demo.sh`（Demo 模式）重跑：匯出可用、匯入報告可看、「套用」停用；到政策停用 ไทย → 卡片出現「以此語系預覽」。
+- [ ] **Step 5: 本機走查**（`Localization__PackImportEnabled=true bash scripts/unattended/local-demo.sh <worktree 絕對路徑>`，背景執行等 READY；`formwright-demo-verify` skill）：admin 登入 → 系統管理 → 語系 → 四張卡片完整度 100% → 匯出 `th` 樣板（只勾缺的：應是空的 `ui`／`server`）→ 「新語系樣板」匯出 `id` → 用該檔匯入 → 報告新安裝、全部略過 → 套用 → 「以此語系預覽」（介面沿退回鏈顯示 English）→ 結束試看；匯入 `ja-partial` → 卡片完整度與缺最多的分類 → 用測試夾具（或 `sqlite3` 直接改本機 Demo 資料庫的 `BaseHashesJson` 與 `UiJson`，只在本機）造原文已更新 2 句、已失效 1 句 → 卡片顯示兩行提示與明細 → 匯出「只匯出原文已更新或參數不符的句子」→ 原樣匯回 → 報告「確認原文已更新 2 句」「會清掉 1 句已失效」→ 套用後提示消失 → 回到上一版提示回來。**四種寬度**（第二輪必修 9；照 `formwright-demo-verify` 的版型：390x844x3 mobile touch／820x1180x2 mobile touch／1366x768x1／1920x1080x1）：每個寬度逐一量四個狀態——語系頁（卡片收合）、一張卡片「查看明細」展開、匯入對話框顯示報告、匯出樣板對話框（含「新語系樣板」四個輸入）。資料要含最壞情況：長鍵名（明細清單）、長自稱（50 字元、無空白的拉丁字串）、長錯誤訊息（匯出對話框的 400 訊息、報告的過深鏈錯誤）。每個狀態量三件事：整頁 `document.documentElement.scrollWidth <= clientWidth`；頁面用 `scripts/unattended/rwd-check.js` 的 `innerOverflow`（它只掃 `main *`）應為空；**對話框掛在 `body` 底下、`main *` 量不到**，另用 `evaluate_script` 對 `.q-dialog *` 跑同一個條件（`scrollWidth > clientWidth + 1`），結果應為空——`innerOverflow` 有項目時逐項判斷，一般卡片與對話框在手機寬度不可以橫捲。截圖與量測結果放專案 `.tmp/`。再用預設的 `local-demo.sh`（Demo 模式）重跑：匯出可用、匯入報告可看、「套用」停用；到政策停用 ไทย → 卡片出現「以此語系預覽」。
 - [ ] **Step 6: Commit**（`feat(i18n): 語系頁完整版（卡片、完整度、覆寫檢視、以此語系預覽）`）；`#71` 的兩個測試另一個 commit（`test(i18n): 匯入對話框補關閉重開與多餘鍵純文字的回歸測試（#71）`）。超過 700 行就把頁面與對話框分兩個 commit。
 
 **驗收**：Step 4 全過；Step 5 逐項記錄（含截圖路徑）；`grep -n "#[0-9a-fA-F]\{3,6\}" frontend/src/pages/system/LocalesPage.vue frontend/src/presentation/locale/*.vue` 無結果。
