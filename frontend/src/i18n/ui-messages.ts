@@ -192,7 +192,9 @@ let switchSeq = 0;
 
 /**
  * 切換語系（判斷 17、19）：先載入文字，成功且沒被作廢才套用；失敗提示「無法載入〇〇」並停在原語系。
- * 作廢：之後又切了別的語言；試看切換另要試看世代沒變、試看值仍是這個語系、登入的人沒變。
+ * 試看標記（sessionStorage）只記「目前生效的試看」：成功套用時才和語系一起提交（試看寫入、一般切換清除），
+ * 失敗時畫面不變、標記也不動，所以仍在試看的語系照樣不寫瀏覽器快取、登出時照樣結束試看。
+ * 作廢：之後又切了別的語言；試看切換另要試看世代（結束試看、登出、session 失效就遞增）與登入的人都沒變。
  * preview：只試看（不記住、不寫瀏覽器快取）；remember: false：套用但不寫 formwright.locale（結束試看時回原語系用）。
  */
 export async function switchLocale(i18n: I18nWithT, code: LocaleCode, opts: { preview?: boolean; remember?: boolean } = {}): Promise<boolean> {
@@ -200,25 +202,31 @@ export async function switchLocale(i18n: I18nWithT, code: LocaleCode, opts: { pr
   const epoch = previewEpoch();
   const user = opts.preview ? useIdentityStore().userId : undefined;
   const stillWanted = () => seq === switchSeq
-    && (!opts.preview || (previewEpoch() === epoch && previewLocale() === code && useIdentityStore().userId === user));
+    && (!opts.preview || (previewEpoch() === epoch && useIdentityStore().userId === user));
   try {
     await ensureCurrentMessages(i18n, code);
   } catch {
     if (!stillWanted()) return false;
-    if (opts.preview) setPreviewLocale(null);
+    // 標記的試看沒在畫面上（例如重新整理後恢復試看失敗）就清掉，免得之後誤判
+    const p = previewLocale();
+    if (p && p !== i18n.global.locale.value) setPreviewLocale(null);
     Notify.create({ type: 'negative', message: i18n.global.t('locale.loadFailed', { name: nativeName(code) }) });
     return false;
   }
   if (!stillWanted()) return false;
+  if (opts.preview) setPreviewLocale(code);
+  else if (previewLocale()) setPreviewLocale(null);
   applyLocale(code, i18n.global.locale, !opts.preview && opts.remember !== false);
   cacheCurrent(i18n);
   return true;
 }
 
-/** 結束試看（選回啟用語系以外的情況：登出、session 失效、guard 驗不過）；畫面正是試看語系時切回記住的語系或預設語系。 */
+/**
+ * 結束試看（登出、session 失效、guard 驗不過）：一律遞增試看世代（作廢進行中的試看切換）；
+ * 畫面正是試看語系時切回記住的語系或預設語系。
+ */
 export function endPreview(i18n: I18nWithT): void {
   const p = previewLocale();
-  if (!p) return;
   setPreviewLocale(null);
   if (p && i18n.global.locale.value === p) void switchLocale(i18n, readLocale() ?? defaultLocaleOrNull() ?? FALLBACK_LOCALE, { remember: false });
 }

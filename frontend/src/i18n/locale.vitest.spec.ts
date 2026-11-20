@@ -9,7 +9,7 @@ import LocaleSwitcher from 'src/presentation/locale/LocaleSwitcher.vue';
 import { setLocaleInfos, setLocaleSettings } from './locale-settings';
 import { BUILTIN_LOCALES, LOCALE_KEY, applyDocumentLocale, applyLocale, quasarPacks, readLocale } from './locale';
 import { PREVIEW_KEY } from './locale-preview';
-import { readUiCache, resetUiMessagesForTests } from './ui-messages';
+import { endPreview, readUiCache, refreshLoadedMessages, resetUiMessagesForTests } from './ui-messages';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { createPinia, setActivePinia } from 'pinia';
 
@@ -259,6 +259,36 @@ describe('LocaleSwitcher 載入文字與試看（i4b 判斷 17、19）', () => {
     expect(i18n.global.locale.value).toBe('en-US');
     expect(sessionStorage.getItem(PREVIEW_KEY)).toBeNull();
     expect(localStorage.getItem(LOCALE_KEY)).toBe('en-US');
+  });
+
+  it('試看 ja 中再切 th 失敗：仍標記在試看、背景換新不寫快取、結束試看回原語系（i4b 修正輪 2）', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, JA]);
+    vi.spyOn(dynamicApi, 'getUiMessages').mockImplementation(async (code) => {
+      if (code === 'th') throw new Error('down');
+      return { hash: code === 'ja' ? 'J' : '', messages: { 'menu.home': code } };
+    });
+    vi.spyOn(quasar.Notify, 'create').mockImplementation(() => () => {});
+    const i18n = zhOnly();
+    mount(LocaleSwitcher, { attachTo: document.body, props: { allowPreview: true }, global: plugins(i18n) });
+    await open();
+    el('locale-preview-ja')!.click();
+    await flushPromises();
+    expect(i18n.global.locale.value).toBe('ja');
+    await open();
+    el('locale-option-th')!.click();
+    await flushPromises();
+    expect(i18n.global.locale.value).toBe('ja');
+    expect(sessionStorage.getItem(PREVIEW_KEY)).toBe('ja');
+    // 60 秒換新：ja 有新版
+    vi.mocked(dynamicApi.getUiMessages).mockResolvedValue({ hash: 'J2', messages: { 'menu.home': 'ja2' } });
+    await refreshLoadedMessages(i18n, [...BUILTIN_LOCALES, { ...JA, uiHash: 'J2' }]);
+    expect(i18n.global.t('menu.home')).toBe('ja2');
+    expect(readUiCache()?.code).not.toBe('ja');
+    // 登出等結束試看：回原語系
+    endPreview(i18n);
+    await flushPromises();
+    expect(i18n.global.locale.value).toBe('zh-TW');
+    expect(sessionStorage.getItem(PREVIEW_KEY)).toBeNull();
   });
 
   it('allowPreview 但沒有未啟用語系：沒有分隔線', async () => {

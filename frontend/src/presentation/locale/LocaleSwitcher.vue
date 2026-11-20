@@ -2,7 +2,6 @@
 import { useI18n } from 'vue-i18n';
 import { computed, ref } from 'vue';
 import type { LocaleCode } from 'src/i18n/locale';
-import { setPreviewLocale } from 'src/i18n/locale-preview';
 import { installedLocales, nativeName, useLocales } from 'src/i18n/locale-settings';
 import { switchLocale } from 'src/i18n/ui-messages';
 
@@ -20,7 +19,6 @@ const menu = ref(false);
 const loading = ref<LocaleCode | null>(null);
 const pick = async (code: LocaleCode, preview = false) => {
   if (loading.value) return;
-  setPreviewLocale(preview ? code : null);
   loading.value = code;
   try {
     await switchLocale({ global: composer }, code, { preview });
