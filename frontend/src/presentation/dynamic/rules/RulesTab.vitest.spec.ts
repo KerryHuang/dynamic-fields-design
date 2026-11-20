@@ -35,7 +35,7 @@ function mountTab(canEdit = true, maxRules: number | 'pending' = 100) {
   api.getRules.mockResolvedValue(JSON.parse(JSON.stringify(rules)));
   api.getMe.mockResolvedValue(me(canEdit));
   if (maxRules === 'pending') api.getEffectivePolicies.mockReturnValue(new Promise(() => {}));
-  else api.getEffectivePolicies.mockResolvedValue({ moduleKey: 'a', values: { 'design.maxRulesPerModule': maxRules } });
+  else api.getEffectivePolicies.mockResolvedValue({ locales: [], moduleKey: 'a', values: { 'design.maxRulesPerModule': maxRules } });
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   return mount(RulesTab, {
     props: { module: mod },

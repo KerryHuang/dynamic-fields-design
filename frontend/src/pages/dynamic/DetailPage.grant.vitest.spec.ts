@@ -55,7 +55,7 @@ async function mountPage(setup: () => void) {
   api.related.mockResolvedValue([] as never);
   api.recordHistory.mockResolvedValue({ items: [], totalCount: 0, currentPage: 1, pagesSize: 20 });
   api.getRecordTasks.mockResolvedValue({ items: [], canAdd: false, manualRules: [] });
-  api.getEffectivePolicies.mockResolvedValue({ values: {} });
+  api.getEffectivePolicies.mockResolvedValue({ locales: [], values: {} });
   api.getRecordConversions.mockResolvedValue([]);
   api.getRecordEffects.mockResolvedValue({ items: [], hiddenCount: 0 } as never);
   api.getPrintTemplates.mockResolvedValue([]);

@@ -10,7 +10,8 @@ export const i18n = createI18n({
   legacy: false,
   locale: FALLBACK_LOCALE,
   fallbackLocale: FALLBACK_LOCALE,
-  messages: { 'zh-TW': zhTW, 'en-US': enUS, th, vi },
+  // 鍵型別放寬成字串：語系代碼是資料（已安裝語系），不是這四個翻譯包的聯集
+  messages: { 'zh-TW': zhTW, 'en-US': enUS, th, vi } as Record<string, typeof zhTW>,
 });
 
 export default defineBoot(({ app }) => {

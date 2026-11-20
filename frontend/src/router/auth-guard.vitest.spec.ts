@@ -7,8 +7,9 @@ import { useIdentityStore } from 'src/stores/use-identity-store';
 import { useThemeStore } from 'src/stores/use-theme-store';
 import { resetSessionSettings } from 'src/application/dynamic/session-settings';
 import { businessOffset, setBusinessOffset } from 'src/domain/dynamic/business-time';
-import { LOCALE_KEY } from 'src/i18n/locale';
-import { defaultLocale, enabledLocales, setLocaleSettings } from 'src/i18n/locale-settings';
+import * as quasar from 'quasar';
+import { BUILTIN_LOCALES, LOCALE_KEY, applyLocale } from 'src/i18n/locale';
+import { defaultLocale, enabledLocales, installedLocales, nativeName, setLocaleInfos, setLocaleSettings } from 'src/i18n/locale-settings';
 import { handleUnauthorized, installAuthGuard, safeRedirect } from './auth-guard';
 
 const page = { template: '<i/>' };
@@ -48,13 +49,14 @@ function setup() {
 
 beforeEach(() => {
   effResponse = effective('+08:00');
-  optionsResponse = { status: 200, data: { demoLoginEnabled: false, demoGenerating: false, demoAccounts: [], defaultLocale: 'zh-TW', enabledLocales: ['zh-TW', 'en-US', 'th', 'vi'] } };
+  optionsResponse = { status: 200, data: { demoLoginEnabled: false, demoGenerating: false, demoAccounts: [], defaultLocale: 'zh-TW', enabledLocales: ['zh-TW', 'en-US', 'th', 'vi'], locales: BUILTIN_LOCALES } };
   localStorage.clear();
 });
 
 // 測試會改營運時區，結束後換回 vitest.setup 的出廠值
 afterEach(() => {
   setBusinessOffset('+08:00');
+  setLocaleInfos(BUILTIN_LOCALES);
   setLocaleSettings({ defaultLocale: 'zh-TW', enabled: ['zh-TW', 'en-US', 'th', 'vi'], requiredText: ['zh-TW'] });
 });
 
@@ -307,7 +309,10 @@ describe('safeRedirect', () => {
 });
 
 describe('auth guard 語系政策', () => {
-  const en = (enabled: string[], def = 'en-US') => ({ status: 200, data: { defaultLocale: def, enabledLocales: enabled } });
+  // 同後端：locales 只含啟用語系
+  const en = (enabled: string[], def = 'en-US') =>
+    ({ status: 200, data: { defaultLocale: def, enabledLocales: enabled, locales: BUILTIN_LOCALES.filter((l) => enabled.includes(l.code)) } });
+  const JA = { code: 'ja', nativeName: '日本語', quasarLang: null, fallbackCode: 'en-US' };
   beforeEach(() => {
     meResponse = { status: 401, data: { message: '請先登入' } };
   });
@@ -339,13 +344,44 @@ describe('auth guard 語系政策', () => {
     expect(localStorage.getItem(LOCALE_KEY)).toBe('th');
   });
 
-  it('伺服器連不上時維持繁中、全部語系可選', async () => {
+  it('伺服器連不上時維持繁中、內建四語可選（自稱取自內建清單）', async () => {
+    setLocaleInfos([]);
     optionsResponse = { status: 500, data: null };
     const router = setup();
     await router.push('/login');
     expect(uiLocale.value).toBe('zh-TW');
     expect(defaultLocale()).toBe('zh-TW');
     expect(enabledLocales()).toEqual(['zh-TW', 'en-US', 'th', 'vi']);
+    expect(nativeName('th')).toBe('ไทย');
+  });
+
+  it('auth/options 的 locales 有新裝的語系時列進已安裝語系', async () => {
+    optionsResponse = { status: 200, data: { defaultLocale: 'zh-TW', enabledLocales: ['zh-TW', 'ja'], locales: [BUILTIN_LOCALES[0], JA] } };
+    const router = setup();
+    await router.push('/login');
+    expect(installedLocales()).toEqual(['zh-TW', 'ja']);
+    expect(enabledLocales()).toEqual(['zh-TW', 'ja']);
+  });
+
+  it('記過 ja 但 ja 沒啟用時套用預設語系', async () => {
+    optionsResponse = en(['zh-TW', 'en-US']);
+    localStorage.setItem(LOCALE_KEY, 'ja');
+    const router = setup();
+    await router.push('/login');
+    expect(uiLocale.value).toBe('en-US');
+  });
+
+  it('完整啟動：記住的 ja 先載同名的 Quasar 包，拿到語系資訊（quasarLang: null）後改套 en-US', async () => {
+    const setLang = vi.spyOn(quasar.Quasar.lang, 'set').mockImplementation(() => {});
+    localStorage.setItem(LOCALE_KEY, 'ja');
+    optionsResponse = { status: 200, data: { defaultLocale: 'zh-TW', enabledLocales: ['zh-TW', 'en-US', 'ja'], locales: [...BUILTIN_LOCALES.slice(0, 2), JA] } };
+    const router = setup();
+    applyLocale('ja', uiLocale, false); // boot/i18n.ts 的做法
+    await vi.waitFor(() => expect(setLang.mock.calls.at(-1)?.[0].isoName).toBe('ja'));
+    await router.push('/login');
+    await vi.waitFor(() => expect(setLang.mock.calls.at(-1)?.[0].isoName).toBe('en-US'));
+    expect(uiLocale.value).toBe('ja');
+    setLang.mockRestore();
   });
 
   it('登入後載入全系統生效值時更新三個語系設定', async () => {

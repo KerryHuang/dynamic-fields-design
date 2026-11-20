@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ApprovalNodeDef } from 'src/domain/dynamic/approval-flow-types';
 import { conditionOutEdges, setNode } from 'src/domain/dynamic/approval-graph-edit';
-import type { ModuleDetail } from 'src/domain/dynamic/types';
+import type { I18nText, ModuleDetail } from 'src/domain/dynamic/types';
 import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
 import ConditionEdgeFields from './ConditionEdgeFields.vue';
 import type { GraphDesigner } from './use-graph-designer';
@@ -12,7 +12,7 @@ import type { GraphDesigner } from './use-graph-designer';
 const props = defineProps<{ designer: GraphDesigner; node: ApprovalNodeDef; module: ModuleDetail }>();
 const { t } = useI18n();
 const out = computed(() => conditionOutEdges(props.designer.state.value!.definition, props.node.id));
-const setName = (name: Record<string, string>) => props.designer.edit((s) => setNode(s, props.node.id, { name: Object.keys(name).length ? name : undefined }), `node:${props.node.id}:name`);
+const setName = (name: I18nText) => props.designer.edit((s) => setNode(s, props.node.id, { name: Object.keys(name).length ? name : undefined }), `node:${props.node.id}:name`);
 </script>
 
 <template>

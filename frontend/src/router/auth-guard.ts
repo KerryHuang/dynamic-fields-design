@@ -3,8 +3,8 @@ import type { Router } from 'vue-router';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
 import { loadSessionSettings, resetSessionSettings, sessionSettingsLoaded } from 'src/application/dynamic/session-settings';
-import { FALLBACK_LOCALE, LOCALES, applyLocale, readLocale } from 'src/i18n/locale';
-import { setLocaleSettings, toLocaleCodes } from 'src/i18n/locale-settings';
+import { BUILTIN_LOCALES, FALLBACK_LOCALE, applyDocumentLocale, applyLocale, readLocale } from 'src/i18n/locale';
+import { setLocaleInfos, setLocaleSettings, toLocaleCodes, type LocaleInfo } from 'src/i18n/locale-settings';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { useThemeStore } from 'src/stores/use-theme-store';
 
@@ -18,23 +18,29 @@ const loginLocation = (redirect: string) => ({ path: '/login', query: redirect =
 const SERVICE_UNAVAILABLE = '/service-unavailable';
 
 /**
- * 登入前就要知道預設與啟用語系（GET auth/options）：瀏覽器沒記過語系、或記的語系已停用時套用預設（不寫入 localStorage）。
- * 取不到時（伺服器連不上）維持繁中、全部語系可選，之後登入後的全系統生效值會再更新。
+ * 登入前就要知道語系資訊與預設、啟用語系（GET auth/options）：瀏覽器沒記過語系、或記的語系已停用時套用預設（不寫入 localStorage）。
+ * 取不到時（伺服器連不上）維持繁中、內建四語可選（語系包 i4a 計畫判斷 22），之後登入後的全系統生效值會再更新。
+ * 拿到語系資訊後一律對目前語系重套 Quasar 語言包：boot 時還沒有資訊，記住的語系先載了代碼同名的包（判斷 17）。
  */
 async function loadLocaleSettings(locale: { value: string } | undefined): Promise<void> {
+  let infos: LocaleInfo[] = BUILTIN_LOCALES;
   let def = FALLBACK_LOCALE;
-  let enabled = LOCALES.map((l) => l.code);
+  let enabled = BUILTIN_LOCALES.map((l) => l.code);
   try {
     const o = await dynamicApi.getAuthOptions();
+    setLocaleInfos(o.locales);
     const list = toLocaleCodes(o.enabledLocales);
     const d = toLocaleCodes([o.defaultLocale])[0];
-    if (d && list.length) { def = d; enabled = list; }
+    if (d && list.length) { infos = o.locales; def = d; enabled = list; }
   } catch {
     /* 維持繁中 */
   }
+  setLocaleInfos(infos);
   setLocaleSettings({ defaultLocale: def, enabled });
+  if (!locale) return;
   const stored = readLocale();
-  if (locale && (!stored || !enabled.includes(stored))) applyLocale(def, locale, false);
+  if (!stored || !enabled.includes(stored)) applyLocale(def, locale, false);
+  else applyDocumentLocale(locale.value);
 }
 
 /**

@@ -1,11 +1,16 @@
-import { LOCALES } from 'src/i18n/locale';
-import { defaultLocaleOrNull, requiredTextLocales } from 'src/i18n/locale-settings';
+import { localeChain, requiredTextLocales } from 'src/i18n/locale-settings';
 import type { I18nText, Locale } from './types';
 
-/** 與後端同一條退回鏈：要求的語系 → 系統預設語系 → 繁中 → 第一個有值的（照固定支援語系順序，同後端）；空字串視為沒有。 */
+/**
+ * 與後端同一條退回鏈（localeChain）：要求的語系 → 上層語系 → 系統預設語系 → 繁中 → 全部已安裝語系；空字串視為沒有。
+ * 沒安裝的語系鍵不挑（U6：存起來但不顯示）。
+ */
 export function resolveI18n(text: I18nText | undefined, locale: string): string {
-  const pick = (l: string | null) => (l ? text?.[l as Locale] : undefined);
-  return pick(locale) || pick(defaultLocaleOrNull()) || pick('zh-TW') || LOCALES.map((l) => pick(l.code)).find((v) => !!v) || '';
+  for (const l of [locale, ...localeChain(locale)]) {
+    const v = text?.[l];
+    if (v) return v;
+  }
+  return '';
 }
 
 /** Trims every locale and drops empty ones; no value left in any locale means no text at all (undefined). */

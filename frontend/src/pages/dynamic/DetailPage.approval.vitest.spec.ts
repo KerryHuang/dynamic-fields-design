@@ -50,7 +50,7 @@ async function mountPage(rec: DynamicRecord, targets: number[] = [], sch: Module
   api.recordHistory.mockResolvedValue({ items: [], totalCount: 0, currentPage: 1, pagesSize: 20 });
   api.getRecordTasks.mockResolvedValue({ items: [], canAdd: false, manualRules: [] });
   api.getRecordApproval.mockResolvedValue({ current, previous: [], submitTargets: targets });
-  api.getEffectivePolicies.mockResolvedValue({ values: {} });
+  api.getEffectivePolicies.mockResolvedValue({ locales: [], values: {} });
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/dynamic/:moduleKey/:id', component: DetailPage }] });
   await router.push('/dynamic/m/5');
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });

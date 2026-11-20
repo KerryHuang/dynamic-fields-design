@@ -114,7 +114,7 @@ describe('LoginPage', () => {
     resetSessionSettings();
     api.getAuthOptions.mockResolvedValue(off as never);
     api.getMe.mockRejectedValue({ status: 401 });
-    api.getEffectivePolicies.mockResolvedValue({ values: { 'locale.timeZone': '+07:00' } });
+    api.getEffectivePolicies.mockResolvedValue({ locales: [], values: { 'locale.timeZone': '+07:00' } });
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [{ path: '/login', component: LoginPage, meta: { public: true } }, { path: '/:p(.*)*', component: { template: '<i/>' } }],

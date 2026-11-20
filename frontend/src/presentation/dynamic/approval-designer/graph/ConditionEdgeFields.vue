@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ApprovalEdgeDef } from 'src/domain/dynamic/approval-flow-types';
 import { conditionOutEdges, reorderConditionEdge, setEdge } from 'src/domain/dynamic/approval-graph-edit';
-import type { ConditionNode, ModuleDetail } from 'src/domain/dynamic/types';
+import type { ConditionNode, I18nText, ModuleDetail } from 'src/domain/dynamic/types';
 import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
 import ConditionEditor from 'src/presentation/dynamic/list/ConditionEditor.vue';
@@ -22,7 +22,7 @@ const target = computed(() => { const n = def.value.nodes.find((x) => x.id === p
 const errs = computed(() => fieldErrors(props.designer.issues.value?.errors.edges[props.edge.id]));
 const edit = computed(() => props.designer.canEdit.value);
 
-const setLabel = (label: Record<string, string>) => props.designer.edit((s) => setEdge(s, props.edge.id, { label: Object.keys(label).length ? label : undefined }), `edge:${props.edge.id}:label`);
+const setLabel = (label: I18nText) => props.designer.edit((s) => setEdge(s, props.edge.id, { label: Object.keys(label).length ? label : undefined }), `edge:${props.edge.id}:label`);
 const setWhen = (when: ConditionNode | undefined) => props.designer.edit((s) => setEdge(s, props.edge.id, { when }), `edge:${props.edge.id}:when`);
 const move = (delta: -1 | 1) => props.designer.edit((s) => reorderConditionEdge(s, props.edge.id, delta));
 </script>
