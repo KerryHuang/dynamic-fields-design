@@ -1,0 +1,446 @@
+{
+  "alert.Category": {
+    "zh-TW": "類別：{0}",
+    "en-US": "Category: {0}",
+    "th": "ประเภท: {0}",
+    "vi": "Loại: {0}"
+  },
+  "alert.CheckedAt": {
+    "zh-TW": "檢查時間：{0}",
+    "en-US": "Checked at: {0}",
+    "th": "เวลาที่ตรวจ: {0}",
+    "vi": "Thời gian kiểm tra: {0}"
+  },
+  "alert.Count": {
+    "zh-TW": "次數：{0}",
+    "en-US": "Occurrences: {0}",
+    "th": "จำนวนครั้ง: {0}",
+    "vi": "Số lần: {0}"
+  },
+  "alert.DigestIntro": {
+    "zh-TW": "過去一小時另有 {0} 則告警超過每小時寄信上限，沒有逐封寄出：",
+    "en-US": "{0} more alerts in the past hour exceeded the hourly email limit and were not sent one by one:",
+    "th": "ชั่วโมงที่ผ่านมามีการแจ้งเตือนอีก {0} รายการที่เกินขีดจำกัดอีเมลต่อชั่วโมงและไม่ได้ส่งทีละฉบับ:",
+    "vi": "Một giờ qua còn {0} cảnh báo khác vượt giới hạn email mỗi giờ và không được gửi từng email:"
+  },
+  "alert.DigestLine": {
+    "zh-TW": "#{0} [{1}] {2}：{3}",
+    "en-US": "#{0} [{1}] {2}: {3}",
+    "th": "#{0} [{1}] {2}: {3}",
+    "vi": "#{0} [{1}] {2}: {3}"
+  },
+  "alert.DigestMore": {
+    "zh-TW": "另有 {0} 則，請看監控頁。",
+    "en-US": "{0} more; see the monitoring page.",
+    "th": "มีอีก {0} รายการ โปรดดูหน้าติดตามระบบ",
+    "vi": "Còn {0} cảnh báo khác, vui lòng xem trang giám sát."
+  },
+  "alert.DigestSubject": {
+    "zh-TW": "[Formwright] 過去一小時另有 {0} 則告警",
+    "en-US": "[Formwright] {0} more alerts in the past hour",
+    "th": "[Formwright] ชั่วโมงที่ผ่านมามีการแจ้งเตือนอีก {0} รายการ",
+    "vi": "[Formwright] Một giờ qua còn {0} cảnh báo khác"
+  },
+  "alert.DirectNote": {
+    "zh-TW": "資料庫目前寫不進去，這封信由看門狗直接寄出；事件編號要等資料庫恢復、補寫事件後才會產生。",
+    "en-US": "The database cannot be written to right now, so this email was sent directly by the watchdog. The incident number will exist only after the database recovers and the incident is written.",
+    "th": "ขณะนี้ไม่สามารถเขียนฐานข้อมูลได้ อีเมลนี้จึงส่งโดยตรงจากตัวเฝ้าระบบ หมายเลขเหตุการณ์จะมีหลังจากฐานข้อมูลกลับมาและบันทึกเหตุการณ์แล้ว",
+    "vi": "Hiện không thể ghi vào cơ sở dữ liệu nên email này được bộ giám sát gửi trực tiếp; số sự cố chỉ có sau khi cơ sở dữ liệu phục hồi và sự cố được ghi lại."
+  },
+  "alert.FirstSeen": {
+    "zh-TW": "首次：{0}",
+    "en-US": "First seen: {0}",
+    "th": "ครั้งแรก: {0}",
+    "vi": "Lần đầu: {0}"
+  },
+  "alert.Handler": {
+    "zh-TW": "處理者：{0}",
+    "en-US": "Who handles it: {0}",
+    "th": "ผู้ดำเนินการ: {0}",
+    "vi": "Người xử lý: {0}"
+  },
+  "alert.LastSeen": {
+    "zh-TW": "最近：{0}",
+    "en-US": "Last seen: {0}",
+    "th": "ล่าสุด: {0}",
+    "vi": "Gần nhất: {0}"
+  },
+  "alert.Link": {
+    "zh-TW": "事件連結：{0}",
+    "en-US": "Incident link: {0}",
+    "th": "ลิงก์เหตุการณ์: {0}",
+    "vi": "Liên kết sự cố: {0}"
+  },
+  "alert.MailTestBody": {
+    "zh-TW": "這是 Formwright 寄信設定的測試信。收到這封信表示 SMTP 連線與寄件地址可以寄信；帳號信與告警信都用這組設定寄出。",
+    "en-US": "This is a test email for the Formwright email settings. Receiving it means the SMTP connection and sender address work; account and alert emails are sent with these settings.",
+    "th": "นี่คืออีเมลทดสอบการตั้งค่าอีเมลของ Formwright เมื่อได้รับอีเมลนี้แสดงว่าการเชื่อมต่อ SMTP และที่อยู่ผู้ส่งใช้ส่งอีเมลได้ อีเมลบัญชีและอีเมลแจ้งเตือนจะส่งด้วยการตั้งค่านี้",
+    "vi": "Đây là email thử cho cài đặt email Formwright. Nhận được email này nghĩa là kết nối SMTP và địa chỉ người gửi gửi được thư; email tài khoản và email cảnh báo đều gửi bằng cài đặt này."
+  },
+  "alert.MailTestSubject": {
+    "zh-TW": "[Formwright] 寄信設定測試信",
+    "en-US": "[Formwright] Email settings test email",
+    "th": "[Formwright] อีเมลทดสอบการตั้งค่าอีเมล",
+    "vi": "[Formwright] Email thử cài đặt email"
+  },
+  "alert.Subject": {
+    "zh-TW": "[Formwright][{0}] {1}（#{2}）",
+    "en-US": "[Formwright][{0}] {1} (#{2})",
+    "th": "[Formwright][{0}] {1} (#{2})",
+    "vi": "[Formwright][{0}] {1} (#{2})"
+  },
+  "alert.SubjectDirect": {
+    "zh-TW": "[Formwright][{0}] {1}",
+    "en-US": "[Formwright][{0}] {1}",
+    "th": "[Formwright][{0}] {1}",
+    "vi": "[Formwright][{0}] {1}"
+  },
+  "alert.TestBody": {
+    "zh-TW": "這是 Formwright 告警通道的測試信。收到這封信表示 SMTP 設定可以寄信，之後的告警信會寄到這組信箱。",
+    "en-US": "This is a test email from the Formwright alert channel. Receiving it means the SMTP settings work; future alert emails will be sent to these addresses.",
+    "th": "นี่คืออีเมลทดสอบจากช่องทางแจ้งเตือนของ Formwright เมื่อได้รับอีเมลนี้แสดงว่าการตั้งค่า SMTP ใช้ส่งอีเมลได้ อีเมลแจ้งเตือนต่อไปจะส่งมายังที่อยู่ชุดนี้",
+    "vi": "Đây là email thử từ kênh cảnh báo Formwright. Nhận được email này nghĩa là cài đặt SMTP gửi được thư; các email cảnh báo sau sẽ gửi đến những địa chỉ này."
+  },
+  "alert.TestSubject": {
+    "zh-TW": "[Formwright] 告警通道測試信",
+    "en-US": "[Formwright] Alert channel test email",
+    "th": "[Formwright] อีเมลทดสอบช่องทางแจ้งเตือน",
+    "vi": "[Formwright] Email thử kênh cảnh báo"
+  },
+  "alert.TitleAdminGranted": {
+    "zh-TW": "系統管理員權限異動：授予",
+    "en-US": "System administrator rights changed: granted",
+    "th": "สิทธิ์ผู้ดูแลระบบเปลี่ยน: ให้สิทธิ์",
+    "vi": "Thay đổi quyền quản trị hệ thống: cấp quyền"
+  },
+  "alert.TitleAdminRevoked": {
+    "zh-TW": "系統管理員權限異動：拿掉",
+    "en-US": "System administrator rights changed: revoked",
+    "th": "สิทธิ์ผู้ดูแลระบบเปลี่ยน: ถอนสิทธิ์",
+    "vi": "Thay đổi quyền quản trị hệ thống: thu hồi quyền"
+  },
+  "alert.TitleChannel": {
+    "zh-TW": "告警信寄不出去（{0}）",
+    "en-US": "Alert emails cannot be sent ({0})",
+    "th": "ส่งอีเมลแจ้งเตือนไม่ได้ ({0})",
+    "vi": "Không gửi được email cảnh báo ({0})"
+  },
+  "alert.TitleChannelCode": {
+    "zh-TW": "，伺服器回應 {0}",
+    "en-US": ", server replied {0}",
+    "th": ", เซิร์ฟเวอร์ตอบ {0}",
+    "vi": ", máy chủ trả lời {0}"
+  },
+  "alert.TitleClient": {
+    "zh-TW": "前端錯誤：{0}",
+    "en-US": "Browser error: {0}",
+    "th": "ข้อผิดพลาดฝั่งเบราว์เซอร์: {0}",
+    "vi": "Lỗi phía trình duyệt: {0}"
+  },
+  "alert.TitleConfig": {
+    "zh-TW": "規則「{0}」設定有問題：{1}",
+    "en-US": "Rule \"{0}\" has a setup problem: {1}",
+    "th": "กฎ \"{0}\" มีปัญหาการตั้งค่า: {1}",
+    "vi": "Quy tắc \"{0}\" có vấn đề cấu hình: {1}"
+  },
+  "alert.TitleHealth": {
+    "zh-TW": "健康檢查「{0}」{1}",
+    "en-US": "Health check \"{0}\": {1}",
+    "th": "การตรวจสุขภาพ \"{0}\": {1}",
+    "vi": "Kiểm tra sức khỏe \"{0}\": {1}"
+  },
+  "alert.TitlePrivilegeGranted": {
+    "zh-TW": "有人取得設計器或權限設定權限",
+    "en-US": "Someone gained designer or permission settings rights",
+    "th": "มีผู้ได้รับสิทธิ์ตัวออกแบบหรือการตั้งค่าสิทธิ์",
+    "vi": "Có người được cấp quyền trình thiết kế hoặc cài đặt quyền"
+  },
+  "alert.TitlePrivilegeRevoked": {
+    "zh-TW": "有人的設計器或權限設定權限被收回",
+    "en-US": "Someone's designer or permission settings rights were revoked",
+    "th": "มีผู้ถูกถอนสิทธิ์ตัวออกแบบหรือการตั้งค่าสิทธิ์",
+    "vi": "Quyền trình thiết kế hoặc cài đặt quyền của một người đã bị thu hồi"
+  },
+  "alert.TitleRouteSuffix": {
+    "zh-TW": "（{0}）",
+    "en-US": " ({0})",
+    "th": " ({0})",
+    "vi": " ({0})"
+  },
+  "alert.TitleRulePaused": {
+    "zh-TW": "任務規則「{0}」連續失敗 {1} 次，已自動暫停",
+    "en-US": "Task rule \"{0}\" failed {1} times in a row and was paused automatically",
+    "th": "กฎงาน \"{0}\" ล้มเหลวติดกัน {1} ครั้ง และถูกหยุดอัตโนมัติ",
+    "vi": "Quy tắc công việc \"{0}\" lỗi liên tiếp {1} lần và đã tự động tạm dừng"
+  },
+  "alert.TitleServer": {
+    "zh-TW": "伺服器錯誤：{0}",
+    "en-US": "Server error: {0}",
+    "th": "ข้อผิดพลาดของเซิร์ฟเวอร์: {0}",
+    "vi": "Lỗi máy chủ: {0}"
+  },
+  "alert.TooLong": {
+    "zh-TW": "…（內容過長，請看監控頁）",
+    "en-US": "… (too long; see the monitoring page)",
+    "th": "… (ยาวเกินไป โปรดดูหน้าติดตามระบบ)",
+    "vi": "… (quá dài, vui lòng xem trang giám sát)"
+  },
+  "alert.Transition": {
+    "zh-TW": "狀況：{0}",
+    "en-US": "What happened: {0}",
+    "th": "สถานการณ์: {0}",
+    "vi": "Tình huống: {0}"
+  },
+  "alert.Version": {
+    "zh-TW": "版本：{0}",
+    "en-US": "Version: {0}",
+    "th": "เวอร์ชัน: {0}",
+    "vi": "Phiên bản: {0}"
+  },
+  "alert.check.backup.freshness": {
+    "zh-TW": "備份新鮮度",
+    "en-US": "Backup freshness",
+    "th": "ความใหม่ของการสำรองข้อมูล",
+    "vi": "Độ mới của bản sao lưu"
+  },
+  "alert.check.database.integrity": {
+    "zh-TW": "資料完整性",
+    "en-US": "Data integrity",
+    "th": "ความถูกต้องของข้อมูล",
+    "vi": "Tính toàn vẹn dữ liệu"
+  },
+  "alert.check.database.walSize": {
+    "zh-TW": "資料庫 WAL 檔大小",
+    "en-US": "Database WAL file size",
+    "th": "ขนาดไฟล์ WAL ของฐานข้อมูล",
+    "vi": "Kích thước tệp WAL của cơ sở dữ liệu"
+  },
+  "alert.check.database.writable": {
+    "zh-TW": "資料庫可寫",
+    "en-US": "Database writable",
+    "th": "ฐานข้อมูลเขียนได้",
+    "vi": "Cơ sở dữ liệu ghi được"
+  },
+  "alert.check.scheduler.jobs": {
+    "zh-TW": "排程器",
+    "en-US": "Scheduler",
+    "th": "ตัวจัดตารางงาน",
+    "vi": "Bộ lập lịch"
+  },
+  "alert.check.security.loginFailures": {
+    "zh-TW": "登入失敗次數",
+    "en-US": "Failed sign-ins",
+    "th": "การเข้าสู่ระบบล้มเหลว",
+    "vi": "Số lần đăng nhập thất bại"
+  },
+  "alert.check.storage.diskFree": {
+    "zh-TW": "磁碟剩餘空間",
+    "en-US": "Free disk space",
+    "th": "พื้นที่ดิสก์คงเหลือ",
+    "vi": "Dung lượng đĩa còn trống"
+  },
+  "alert.label.category.config": {
+    "zh-TW": "客戶設定",
+    "en-US": "Customer configuration",
+    "th": "การตั้งค่าของลูกค้า",
+    "vi": "Cấu hình của khách hàng"
+  },
+  "alert.label.category.defect": {
+    "zh-TW": "產品缺陷",
+    "en-US": "Product defect",
+    "th": "ข้อบกพร่องของผลิตภัณฑ์",
+    "vi": "Lỗi sản phẩm"
+  },
+  "alert.label.category.infra": {
+    "zh-TW": "基礎設施",
+    "en-US": "Infrastructure",
+    "th": "โครงสร้างพื้นฐาน",
+    "vi": "Hạ tầng"
+  },
+  "alert.label.category.security": {
+    "zh-TW": "安全",
+    "en-US": "Security",
+    "th": "ความปลอดภัย",
+    "vi": "Bảo mật"
+  },
+  "alert.label.handler.admin": {
+    "zh-TW": "需要管理員確認",
+    "en-US": "Needs an administrator to confirm",
+    "th": "ต้องให้ผู้ดูแลระบบยืนยัน",
+    "vi": "Cần quản trị viên xác nhận"
+  },
+  "alert.label.handler.contactVendor": {
+    "zh-TW": "產品問題：請附事件編號與錯誤代碼聯絡廠商",
+    "en-US": "Product problem: contact the vendor with the incident number and error code",
+    "th": "ปัญหาของผลิตภัณฑ์: โปรดติดต่อผู้ให้บริการพร้อมหมายเลขเหตุการณ์และรหัสข้อผิดพลาด",
+    "vi": "Lỗi sản phẩm: vui lòng liên hệ nhà cung cấp kèm số sự cố và mã lỗi"
+  },
+  "alert.label.handler.designer": {
+    "zh-TW": "需要設計者處理",
+    "en-US": "Needs the designer",
+    "th": "ต้องให้ผู้ออกแบบจัดการ",
+    "vi": "Cần người thiết kế xử lý"
+  },
+  "alert.label.handler.it": {
+    "zh-TW": "需要 IT 處理",
+    "en-US": "Needs IT",
+    "th": "ต้องให้ฝ่าย IT จัดการ",
+    "vi": "Cần bộ phận IT xử lý"
+  },
+  "alert.label.handler.vendor": {
+    "zh-TW": "廠商處理",
+    "en-US": "Handled by the vendor",
+    "th": "ผู้ให้บริการจัดการ",
+    "vi": "Nhà cung cấp xử lý"
+  },
+  "alert.label.ruleError.check.conditionInvalid": {
+    "zh-TW": "檢查條件已不可用",
+    "en-US": "the check condition is no longer valid",
+    "th": "เงื่อนไขการตรวจสอบใช้ไม่ได้แล้ว",
+    "vi": "điều kiện kiểm tra không còn dùng được"
+  },
+  "alert.label.ruleError.effect.handlerMissing": {
+    "zh-TW": "找不到外掛處理器",
+    "en-US": "the plug-in handler cannot be found",
+    "th": "ไม่พบตัวจัดการปลั๊กอิน",
+    "vi": "không tìm thấy trình xử lý plug-in"
+  },
+  "alert.label.ruleError.effect.missingDetail": {
+    "zh-TW": "找不到明細模組",
+    "en-US": "the detail module cannot be found",
+    "th": "ไม่พบโมดูลรายละเอียด",
+    "vi": "không tìm thấy mô-đun chi tiết"
+  },
+  "alert.label.ruleError.effect.targetUnavailable": {
+    "zh-TW": "效果的目標模組未啟用或已關閉",
+    "en-US": "the effect's target module is not active or is closed",
+    "th": "โมดูลเป้าหมายของผลลัพธ์ไม่ได้เปิดใช้หรือถูกปิด",
+    "vi": "mô-đun đích của hiệu ứng chưa bật hoặc đã đóng"
+  },
+  "alert.label.ruleError.effect.tooManyRows": {
+    "zh-TW": "明細列超過上限",
+    "en-US": "too many detail rows",
+    "th": "แถวรายละเอียดเกินขีดจำกัด",
+    "vi": "số dòng chi tiết vượt giới hạn"
+  },
+  "alert.label.ruleError.effect.unknownKind": {
+    "zh-TW": "未知的效果種類",
+    "en-US": "unknown effect kind",
+    "th": "ประเภทผลลัพธ์ที่ไม่รู้จัก",
+    "vi": "loại hiệu ứng không xác định"
+  },
+  "alert.label.ruleError.event.loop": {
+    "zh-TW": "連動事件形成循環",
+    "en-US": "chained events form a loop",
+    "th": "เหตุการณ์ต่อเนื่องวนเป็นลูป",
+    "vi": "chuỗi sự kiện liên động tạo thành vòng lặp"
+  },
+  "alert.label.ruleError.event.tooDeep": {
+    "zh-TW": "連動事件串聯過深",
+    "en-US": "chained events go too deep",
+    "th": "เหตุการณ์ต่อเนื่องซ้อนลึกเกินไป",
+    "vi": "chuỗi sự kiện liên động quá sâu"
+  },
+  "alert.label.severity.critical": {
+    "zh-TW": "嚴重",
+    "en-US": "Critical",
+    "th": "ร้ายแรง",
+    "vi": "Nghiêm trọng"
+  },
+  "alert.label.severity.info": {
+    "zh-TW": "資訊",
+    "en-US": "Info",
+    "th": "ข้อมูล",
+    "vi": "Thông tin"
+  },
+  "alert.label.severity.warning": {
+    "zh-TW": "警告",
+    "en-US": "Warning",
+    "th": "เตือน",
+    "vi": "Cảnh báo"
+  },
+  "alert.label.stage.auth": {
+    "zh-TW": "認證",
+    "en-US": "authentication",
+    "th": "การยืนยันตัวตน",
+    "vi": "xác thực"
+  },
+  "alert.label.stage.config": {
+    "zh-TW": "設定不完整，請重填密碼",
+    "en-US": "settings incomplete; re-enter the password",
+    "th": "การตั้งค่าไม่ครบ โปรดกรอกรหัสผ่านใหม่",
+    "vi": "cài đặt chưa đầy đủ, vui lòng nhập lại mật khẩu"
+  },
+  "alert.label.stage.connect": {
+    "zh-TW": "連線",
+    "en-US": "connection",
+    "th": "การเชื่อมต่อ",
+    "vi": "kết nối"
+  },
+  "alert.label.stage.send": {
+    "zh-TW": "寄送",
+    "en-US": "sending",
+    "th": "การส่ง",
+    "vi": "gửi"
+  },
+  "alert.label.stage.tls": {
+    "zh-TW": "TLS",
+    "en-US": "TLS",
+    "th": "TLS",
+    "vi": "TLS"
+  },
+  "alert.label.status.critical": {
+    "zh-TW": "嚴重",
+    "en-US": "critical",
+    "th": "ร้ายแรง",
+    "vi": "nghiêm trọng"
+  },
+  "alert.label.status.error": {
+    "zh-TW": "檢查本身失敗",
+    "en-US": "the check itself failed",
+    "th": "การตรวจเองล้มเหลว",
+    "vi": "bản thân kiểm tra bị lỗi"
+  },
+  "alert.label.status.ok": {
+    "zh-TW": "正常",
+    "en-US": "OK",
+    "th": "ปกติ",
+    "vi": "Bình thường"
+  },
+  "alert.label.status.warning": {
+    "zh-TW": "警告",
+    "en-US": "warning",
+    "th": "เตือน",
+    "vi": "cảnh báo"
+  },
+  "alert.label.transition.escalated": {
+    "zh-TW": "嚴重度升高",
+    "en-US": "Severity increased",
+    "th": "ความรุนแรงเพิ่มขึ้น",
+    "vi": "Mức nghiêm trọng tăng"
+  },
+  "alert.label.transition.occurred": {
+    "zh-TW": "再次異動",
+    "en-US": "Changed again",
+    "th": "เปลี่ยนแปลงอีกครั้ง",
+    "vi": "Thay đổi lần nữa"
+  },
+  "alert.label.transition.opened": {
+    "zh-TW": "新發生",
+    "en-US": "New",
+    "th": "เกิดขึ้นใหม่",
+    "vi": "Mới xảy ra"
+  },
+  "alert.label.transition.regressed": {
+    "zh-TW": "結案後再次發生",
+    "en-US": "Happened again after being resolved",
+    "th": "เกิดขึ้นอีกหลังปิดแล้ว",
+    "vi": "Xảy ra lại sau khi đã đóng"
+  },
+  "alert.label.transition.renotify": {
+    "zh-TW": "仍未處理，再提醒一次",
+    "en-US": "Still not handled; reminder",
+    "th": "ยังไม่ได้จัดการ แจ้งเตือนอีกครั้ง",
+    "vi": "Vẫn chưa xử lý, nhắc lại"
+  }
+}
