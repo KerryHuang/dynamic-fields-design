@@ -1,11 +1,11 @@
 import { evaluateRules, type RuleState } from 'src/domain/dynamic/rule-engine';
 import type { ConditionNode, ModuleSchema } from 'src/domain/dynamic/types';
+import { businessToday } from 'src/domain/dynamic/business-time';
 import { normalizeForRules } from './field-type-registry';
 
-/** Local yyyy-MM-dd of the machine (no existing date utility); the backend uses business time (+08:00). */
-export function todayLocal(now = new Date()): string {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+/** Business-time-zone yyyy-MM-dd (policy locale.timeZone), same as the backend. */
+export function todayBusiness(now = new Date()): string {
+  return businessToday(now);
 }
 
 const COMPUTED = new Set(['formula', 'autonumber', 'rollup']);
@@ -39,7 +39,7 @@ export function ruleStateOf(
     Object.fromEntries(fields.map((f) => [f.key, normalizeForRules(values[f.key], f.type)]));
   return evaluateRules(
     rules, normalized(current), stored && normalized(stored), fields,
-    schema.blocks.map((b) => ({ id: b.id, fieldIds: b.fields.map((f) => f.id) })), todayLocal(),
+    schema.blocks.map((b) => ({ id: b.id, fieldIds: b.fields.map((f) => f.id) })), todayBusiness(),
   );
 }
 

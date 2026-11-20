@@ -94,6 +94,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useLogout } from 'src/application/dynamic/queries/auth-queries';
 import { useMenu } from 'src/application/dynamic/queries/modules-queries';
 import { useMe, useUsers } from 'src/application/dynamic/queries/permissions-queries';
+import { useBusinessTimeWatch } from 'src/application/dynamic/queries/use-business-time-watch';
 import { recordRecent } from 'src/application/dynamic/recent-modules';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { groupMenu, systemLinks } from 'src/domain/dynamic/menu-nav';
@@ -122,6 +123,7 @@ const router = useRouter();
 const collapseDrawer = computed(() => router.currentRoute.value.meta.collapseDrawer === true);
 watch(collapseDrawer, (c) => { drawerOpen.value = c ? false : !overlayMode.value; });
 const logoutMutation = useLogout();
+useBusinessTimeWatch();
 
 const { data: menu } = useMenu();
 const menuGroups = computed(() => groupMenu(menu.value ?? [], locale.value));

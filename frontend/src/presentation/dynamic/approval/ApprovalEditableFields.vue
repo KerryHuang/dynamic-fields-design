@@ -31,7 +31,7 @@ watch(() => props.errors, (errs) => {
 }, { deep: true });
 
 /** Validates the editable fields; null when something is invalid. What changed is judged on the raw input, what is sent is the
- *  parsed value (trimmed text, +08:00 datetime, ordered multi-select): the same as DynamicForm sends. */
+ *  parsed value (trimmed text, datetime with the business offset, ordered multi-select): the same as DynamicForm sends. */
 async function collect(): Promise<Record<string, unknown> | null> {
   const { valid, values: parsed } = await validate();
   if (!valid) return null;

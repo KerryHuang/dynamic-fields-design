@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
-import { isWritable, ruleStateOf } from './rule-state';
+import { setBusinessOffset } from 'src/domain/dynamic/business-time';
+import { isWritable, ruleStateOf, todayBusiness } from './rule-state';
 
 const field = (id: number, key: string, type: SchemaField['type']): SchemaField => ({
   id, key, type, label: { 'zh-TW': key }, options: [],
@@ -29,5 +30,18 @@ describe('rule-state', () => {
     const empty = ruleStateOf(schema([]), {}, undefined);
     expect(isWritable(field(2, 'total', 'rollup'), empty)).toBe(false);
     expect(isWritable(field(3, 'note', 'text'), empty)).toBe(true);
+  });
+});
+
+describe('todayBusiness', () => {
+  it('用營運時區', () => {
+    const now = new Date('2026-11-10T17:30:00Z');
+    expect(todayBusiness(now)).toBe('2026-11-11');
+    setBusinessOffset('-05:00');
+    try {
+      expect(todayBusiness(now)).toBe('2026-11-10');
+    } finally {
+      setBusinessOffset('+08:00');
+    }
   });
 });

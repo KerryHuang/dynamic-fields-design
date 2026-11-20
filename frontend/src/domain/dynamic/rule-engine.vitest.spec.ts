@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { setBusinessOffset } from './business-time';
 import cases from '../../../../shared/rule-cases.json';
 import type { ConditionNode, FieldConfig, SchemaRule } from './types';
 import { evaluateCondition, evaluateRules, type SchemaFieldLike } from './rule-engine';
@@ -83,5 +84,21 @@ describe('rule engine: skipped and degenerate rules', () => {
     expect(eq.hidden.has(3)).toBe(true);
     const ne = run(hide({ field: 1, op: 'ne', value: 'abc' }), { n: Number.NaN }); // ne true -> shown
     expect(ne.hidden.has(3)).toBe(false);
+  });
+});
+
+describe('rule engine: business time zone', () => {
+  it('+07:00 時 datetime 以營運時區的日期切點為準', () => {
+    const fields = new Map<number, SchemaFieldLike>([[4, { id: 4, key: 'dt', type: 'datetime' }]]);
+    const cond: ConditionNode = { field: 4, op: 'withinNextDays', value: 0 };
+    // UTC 16:30 在 +08:00 是 11-05 00:30，在 +07:00 是 11-04 23:30
+    const values = { dt: '2026-11-04T16:30:00Z' };
+    try {
+      expect(evaluateCondition(cond, values, fields, '2026-11-04')).toBe(false);
+      setBusinessOffset('+07:00');
+      expect(evaluateCondition(cond, values, fields, '2026-11-04')).toBe(true);
+    } finally {
+      setBusinessOffset('+08:00');
+    }
   });
 });

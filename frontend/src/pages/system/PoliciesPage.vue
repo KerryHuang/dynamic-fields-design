@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { Notify } from 'quasar';
+import { Dialog, Notify } from 'quasar';
 import { computed, reactive, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useSaveSystemPolicy, useSystemPolicies } from 'src/application/dynamic/queries/policies-queries';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
+import { setBusinessOffset } from 'src/domain/dynamic/business-time';
 import { groupByCategory, policyRangeText, policyValueText, samePolicyValue, type PolicyValue, type SystemPolicy } from 'src/domain/dynamic/policy-types';
 import PolicyValueEditor from 'src/presentation/policies/PolicyValueEditor.vue';
 import { useRecipientNames } from 'src/presentation/policies/useRecipientNames';
@@ -30,11 +31,21 @@ const nameKey = (code: string) => `policies.items.${code}.name`;
 const helpKey = (code: string) => `policies.items.${code}.help`;
 const dirty = (p: SystemPolicy) => !invalid[p.code] && !samePolicyValue(drafts[p.code], p.effective);
 
+const TIME_ZONE = 'locale.timeZone';
+
+/** 改營運時區前先確認（設計 §3.5）；成功後本頁立即換用新偏移，其他分頁由 useBusinessTimeWatch 要求重新整理。 */
 function submit(p: SystemPolicy, value: PolicyValue | null) {
+  if (p.code !== TIME_ZONE) return send(p, value);
+  Dialog.create({ message: t('policies.timeZoneWarning'), cancel: true, persistent: true, ok: { label: t('policies.confirm') } })
+    .onOk(() => send(p, value));
+}
+
+function send(p: SystemPolicy, value: PolicyValue | null) {
   errors[p.code] = '';
   save.mutate({ code: p.code, value }, {
     onSuccess: (r) => {
       drafts[p.code] = r.value ?? r.factory;
+      if (p.code === TIME_ZONE) setBusinessOffset(String(r.effective));
       Notify.create({ type: 'positive', message: t('policies.saved') });
     },
     onError: (e) => {

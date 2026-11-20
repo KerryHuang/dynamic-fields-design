@@ -1,5 +1,6 @@
 import { enableAutoUnmount } from '@vue/test-utils';
 import { afterAll, afterEach } from 'vitest';
+import { setBusinessOffset } from 'src/domain/dynamic/business-time';
 
 // 每個測試結束就卸載掛載的元件，不讓上一個測試的元件留到下一個。
 enableAutoUnmount(afterEach);
@@ -8,3 +9,6 @@ enableAutoUnmount(afterEach);
 // 測試檔若在這 16ms 內結束，計時器會在 jsdom 拆除後觸發，丟 "window is not defined" 讓整批算失敗（CI 偶發）。
 // 每個檔案結束前多等一下，讓已排的更新在 window 還在時跑完。
 afterAll(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+// 營運時區：等於後端出廠值，只給測試用（正式環境由登入後的第一次導覽從 API 載入）。
+setBusinessOffset('+08:00');

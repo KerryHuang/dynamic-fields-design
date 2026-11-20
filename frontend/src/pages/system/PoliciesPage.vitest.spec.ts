@@ -5,6 +5,7 @@ import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { businessOffset, setBusinessOffset } from 'src/domain/dynamic/business-time';
 import type { SystemPolicy } from 'src/domain/dynamic/policy-types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
@@ -17,6 +18,9 @@ const api = vi.mocked(dynamicApi);
 
 const RULES: SystemPolicy = {
   code: 'task.maxRulesPerModule', category: 'task', kind: 'integer', scope: 'module', unit: 'count', min: 1, max: 100, factory: 20, effective: 20,
+};
+const TIME_ZONE: SystemPolicy = {
+  code: 'locale.timeZone', category: 'locale', kind: 'utcOffset', scope: 'system', factory: '+08:00', effective: '+08:00', options: ['+07:00', '+08:00'],
 };
 const PACKAGE: SystemPolicy = {
   code: 'task.maxRulesPerPackage', category: 'task', kind: 'integer', scope: 'system', unit: 'count', min: 1, max: 500, factory: 50, effective: 50,
@@ -34,7 +38,7 @@ async function mountPage(over: { isSystemAdmin?: boolean; policies?: SystemPolic
   mounted = mount(Host, {
     attachTo: document.body,
     global: {
-      plugins: [[quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify } }], i18n, createPinia(),
+      plugins: [[quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify, Dialog: quasar.Dialog } }], i18n, createPinia(),
         [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]],
     },
   });
@@ -117,5 +121,34 @@ describe('PoliciesPage', () => {
     await flushPromises();
     expect(q('policy-error-task.maxRulesPerModule')!.textContent).toContain('必須是 1 到 100 的整數');
     expect(input.value).toBe('0');
+  });
+
+  it('改時區要先確認', async () => {
+    await mountPage({ policies: [TIME_ZONE] });
+    api.saveSystemPolicy.mockResolvedValue({ ...TIME_ZONE, value: '+07:00', effective: '+07:00' });
+    const select = mounted!.findAllComponents(quasar.QSelect).find((c) => (c.props('options') as unknown[] | undefined)?.length === 2)!;
+    select.vm.$emit('update:modelValue', '+07:00');
+    await flushPromises();
+    const wait = () => new Promise((r) => setTimeout(r, 50));
+    try {
+      q('policy-save-locale.timeZone')!.click();
+      await wait(); await wait();
+      const text = document.body.querySelector('.q-dialog')!.textContent!;
+      expect(text).toContain('記錄的日期時間欄位保持原本的絕對時間');
+      expect(text).toContain('系統自記的時間不換算');
+      // 取消不送出
+      ([...document.body.querySelectorAll('.q-dialog button')][0] as HTMLElement).click();
+      await wait();
+      expect(api.saveSystemPolicy).not.toHaveBeenCalled();
+
+      q('policy-save-locale.timeZone')!.click();
+      await wait(); await wait();
+      ([...document.body.querySelectorAll('.q-dialog button')].at(-1) as HTMLElement).click();
+      await wait(); await flushPromises();
+      expect(api.saveSystemPolicy).toHaveBeenCalledWith('locale.timeZone', '+07:00');
+      expect(businessOffset()).toBe('+07:00');
+    } finally {
+      setBusinessOffset('+08:00');
+    }
   });
 });

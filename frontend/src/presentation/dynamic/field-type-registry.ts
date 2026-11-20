@@ -1,6 +1,7 @@
 import type { Component } from 'vue';
 import { getActivePinia } from 'pinia';
 import { z, type ZodTypeAny } from 'zod';
+import { businessToday, toBusinessWallClock, withBusinessOffset } from 'src/domain/dynamic/business-time';
 import AttachmentInput from 'src/components/framework/AttachmentInput.vue';
 import DateSelect from 'src/components/framework/DateSelect.vue';
 import GenericSelect from 'src/components/framework/GenericSelect.vue';
@@ -95,14 +96,8 @@ const checks: Record<FieldType, Check> = {
   reference: (v) => (isNum(v) || (typeof v === 'string' && v !== '') ? null : msgOf(V + 'reference')),
 };
 
-/** The browser's local date as yyyy-MM-dd. */
-function localToday(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 /** Create-mode default; one pointing at a deactivated option counts as no default, like the backend (R19). */
-export function defaultValueOf(f: SchemaField, today: string = localToday()): unknown {
+export function defaultValueOf(f: SchemaField, today: string = businessToday()): unknown {
   if (f.type === 'date' && f.config.defaultToday) return today;
   const d = f.config.defaultValue;
   const active = new Set(f.options.filter((o) => o.active).map((o) => o.value));
@@ -125,21 +120,18 @@ function normalize(v: unknown, type: FieldType): unknown {
   return v;
 }
 
-const toTaipei = (iso: string) => {
-  const d = new Date(Date.parse(iso) + 8 * 3600_000);
-  return `${d.toISOString().slice(0, 19)}+08:00`;
-};
+const toBusiness = (iso: string) => withBusinessOffset(toBusinessWallClock(iso)!);
 
 const OFFSET_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 
 /**
- * Form model value as the rule engine (and backend) see it: blank becomes null, datetime carries +08:00.
+ * Form model value as the rule engine (and backend) see it: blank becomes null, datetime carries the business offset.
  * A datetime without an offset or unparsable is treated as no value so the engine never depends on the machine timezone.
  */
 export function normalizeForRules(raw: unknown, type: FieldType): unknown {
   const v = normalize(raw, type);
   if (type !== 'datetime' || v === null) return v;
-  return typeof v === 'string' && OFFSET_DATETIME.test(v) && !Number.isNaN(Date.parse(v)) ? toTaipei(v) : null;
+  return typeof v === 'string' && OFFSET_DATETIME.test(v) && !Number.isNaN(Date.parse(v)) ? toBusiness(v) : null;
 }
 
 /**
@@ -159,7 +151,7 @@ export function zodFor(field: SchemaField, previous?: unknown, required = field.
       ctx.addIssue({ code: 'custom', message: t(err.key, err.params) });
       return z.NEVER;
     }
-    if (field.type === 'datetime') return toTaipei(v as string);
+    if (field.type === 'datetime') return toBusiness(v as string);
     if (field.type === 'multienum') {
       const order = new Map(field.options.map((o, i) => [o.value, i]));
       return [...new Set(v as string[])].sort((a, b) => (order.get(a) ?? 1e9) - (order.get(b) ?? 1e9));
@@ -280,7 +272,9 @@ export const fieldTypeRegistry: Record<FieldType, FieldTypeEntry> = {
   currency: entry('currency', number(scaleOf), formatCurrency),
   percent: entry('percent', number(scaleOf), (v) => `${v}%`),
   date: entry('date', plain(DateSelect)),
-  datetime: entry('datetime', plain(DateSelect, () => ({ withTime: true })), (v) => asText(v).replace('T', ' ').slice(0, 16)),
+  // 換成營運時區（政策 locale.timeZone）的牆上時間；解析不了照原文顯示
+  datetime: entry('datetime', plain(DateSelect, () => ({ withTime: true })),
+    (v) => ((typeof v === 'string' ? toBusinessWallClock(v) : null) ?? asText(v)).replace('T', ' ').slice(0, 16)),
   time: entry('time', plain(TimeInput)),
   boolean: entry('boolean', plain(ToggleInput), (v, _f, l) => tFor(l)(v ? 'common.yes' : 'common.no')),
   email: entry('email', plain(TextInput)),

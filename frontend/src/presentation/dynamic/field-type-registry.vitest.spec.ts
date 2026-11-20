@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi as vitest } from 'vitest';
+import { setBusinessOffset } from 'src/domain/dynamic/business-time';
 import { i18n } from 'src/boot/i18n';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import sharedOperators from '../../../../shared/filter-operators.json';
@@ -8,7 +9,7 @@ import th from 'src/i18n/th.json';
 import vi from 'src/i18n/vi.json';
 import zhTW from 'src/i18n/zh-TW.json';
 import type { FieldType, SchemaField } from 'src/domain/dynamic/types';
-import { defaultValueOf, fieldTypeRegistry, operatorsFor } from './field-type-registry';
+import { defaultValueOf, fieldTypeRegistry, normalizeForRules, operatorsFor } from './field-type-registry';
 
 const ALL: FieldType[] = ['text', 'textarea', 'integer', 'decimal', 'currency', 'percent', 'date', 'datetime', 'time', 'boolean', 'email', 'phone', 'url', 'enum', 'multienum', 'user', 'formula', 'autonumber', 'reference', 'rollup', 'attachment'];
 
@@ -204,6 +205,28 @@ describe('defaultValueOf today', () => {
   });
   it('defaults to the local date', () => {
     expect(defaultValueOf(dateField({ defaultToday: true }))).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+  it('default today uses business zone', () => {
+    vitest.useFakeTimers();
+    vitest.setSystemTime(new Date('2026-11-10T17:30:00Z'));
+    try {
+      setBusinessOffset('+07:00');
+      expect(defaultValueOf(dateField({ defaultToday: true }))).toBe('2026-11-11');
+      setBusinessOffset('+05:30');
+      expect(defaultValueOf(dateField({ defaultToday: true }))).toBe('2026-11-10');
+    } finally {
+      vitest.useRealTimers();
+      setBusinessOffset('+08:00');
+    }
+  });
+  it('displays stored offset in business zone', () => {
+    setBusinessOffset('+07:00');
+    try {
+      expect(fieldTypeRegistry.datetime.format('2026-11-11T10:00:00+08:00', f('datetime'), 'zh-TW')).toBe('2026-11-11 09:00');
+      expect(normalizeForRules('2026-11-11T10:00:00+08:00', 'datetime')).toBe('2026-11-11T09:00:00+07:00');
+    } finally {
+      setBusinessOffset('+08:00');
+    }
   });
 });
 

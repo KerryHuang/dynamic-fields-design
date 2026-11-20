@@ -8,10 +8,13 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { useIdentityStore } from 'src/stores/use-identity-store';
+import { resetSessionSettings } from 'src/application/dynamic/session-settings';
+import { businessOffset, setBusinessOffset } from 'src/domain/dynamic/business-time';
+import { installAuthGuard } from 'src/router/auth-guard';
 import LoginPage from './LoginPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { getAuthOptions: vi.fn(), login: vi.fn(), demoLogin: vi.fn(), getMe: vi.fn() },
+  dynamicApi: { getAuthOptions: vi.fn(), login: vi.fn(), demoLogin: vi.fn(), getMe: vi.fn(), getEffectivePolicies: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
 
@@ -104,6 +107,37 @@ describe('LoginPage', () => {
     expect(useIdentityStore().userId).toBe('admin');
     expect(queryClient.getQueryData(['stale'])).toBeUndefined();
     expect(router.currentRoute.value.fullPath).toBe('/dynamic/order');
+  });
+
+  it('登入成功後（不重新整理）導到首頁，營運時區已設定', async () => {
+    setActivePinia(createPinia());
+    resetSessionSettings();
+    api.getAuthOptions.mockResolvedValue(off as never);
+    api.getMe.mockRejectedValue({ status: 401 });
+    api.getEffectivePolicies.mockResolvedValue({ values: { 'locale.timeZone': '+07:00' } });
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/login', component: LoginPage, meta: { public: true } }, { path: '/:p(.*)*', component: { template: '<i/>' } }],
+    });
+    installAuthGuard(router);
+    await router.push('/login');
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    mounted = mount(LoginPage, {
+      attachTo: document.body,
+      global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], i18n, router, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    });
+    await flushPromises();
+    expect(api.getEffectivePolicies).not.toHaveBeenCalled();
+    api.login.mockResolvedValue({ userId: 'admin', displayName: 'A', mustChangePassword: false });
+    try {
+      await submit();
+      await flushPromises();
+      expect(router.currentRoute.value.path).toBe('/');
+      expect(api.getEffectivePolicies).toHaveBeenCalledTimes(1);
+      expect(businessOffset()).toBe('+07:00');
+    } finally {
+      setBusinessOffset('+08:00');
+    }
   });
 
   it('an external redirect is ignored', async () => {

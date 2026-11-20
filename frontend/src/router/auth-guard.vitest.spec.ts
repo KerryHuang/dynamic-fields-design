@@ -1,10 +1,12 @@
 import { QueryClient } from '@tanstack/vue-query';
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { http } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { useThemeStore } from 'src/stores/use-theme-store';
+import { resetSessionSettings } from 'src/application/dynamic/session-settings';
+import { businessOffset, setBusinessOffset } from 'src/domain/dynamic/business-time';
 import { handleUnauthorized, installAuthGuard, safeRedirect } from './auth-guard';
 
 const page = { template: '<i/>' };
@@ -18,13 +20,19 @@ const routes = [
 
 let meResponse: { status: number; data: unknown };
 let meCalls: number;
+let effResponse: { status: number; data: unknown };
+let effCalls: number;
+const effective = (zone: string) => ({ status: 200, data: { values: { 'locale.timeZone': zone } } });
 
 function setup() {
   setActivePinia(createPinia());
+  resetSessionSettings();
   meCalls = 0;
+  effCalls = 0;
   http.defaults.adapter = async (config) => {
     if (config.url === '/me') meCalls++;
-    const r = meResponse;
+    if (config.url === '/policies/effective') effCalls++;
+    const r = config.url === '/policies/effective' ? effResponse : meResponse;
     if (r.status >= 400) return Promise.reject({ config, response: r });
     return { data: r.data, status: r.status, statusText: 'OK', headers: {}, config };
   };
@@ -32,6 +40,13 @@ function setup() {
   installAuthGuard(router);
   return router;
 }
+
+beforeEach(() => {
+  effResponse = effective('+08:00');
+});
+
+// 測試會改營運時區，結束後換回 vitest.setup 的出廠值
+afterEach(() => setBusinessOffset('+08:00'));
 
 describe('auth guard', () => {
   beforeEach(() => {
@@ -129,6 +144,98 @@ describe('auth guard', () => {
     const router = setup();
     await router.push('/login');
     expect(router.currentRoute.value.path).toBe('/login');
+  });
+});
+
+describe('auth guard: business time zone (營運時區)', () => {
+  const signedIn = { status: 200, data: { userId: 'admin', mustChangePassword: false } };
+  beforeEach(() => {
+    meResponse = { status: 401, data: { message: '請先登入' } };
+  });
+
+  it('登入後設定營運時區', async () => {
+    meResponse = signedIn;
+    effResponse = effective('+07:00');
+    const router = setup();
+    await router.push('/dynamic/order');
+    expect(router.currentRoute.value.path).toBe('/dynamic/order');
+    expect(businessOffset()).toBe('+07:00');
+    expect(effCalls).toBe(1);
+  });
+
+  it('取生效值失敗導到 service-unavailable', async () => {
+    meResponse = signedIn;
+    effResponse = { status: 500, data: { message: 'x' } };
+    const router = setup();
+    await router.push('/dynamic/order');
+    expect(router.currentRoute.value.path).toBe('/service-unavailable');
+    expect(router.currentRoute.value.query.redirect).toBe('/dynamic/order');
+  });
+
+  it('公開頁面導覽不需要營運時區', async () => {
+    // 乾淨的模組：營運時區從沒設定過
+    vi.resetModules();
+    const freshHttp = (await import('src/services/api/http')).http;
+    const freshTime = await import('src/domain/dynamic/business-time');
+    const freshGuard = await import('./auth-guard');
+    setActivePinia(createPinia());
+    let calls = 0;
+    freshHttp.defaults.adapter = async (config) => {
+      if (config.url === '/policies/effective') calls++;
+      return Promise.reject({ config, response: { status: 401, data: { message: '請先登入' } } });
+    };
+    const router = createRouter({ history: createMemoryHistory(), routes });
+    freshGuard.installAuthGuard(router);
+    await router.push('/dynamic/order');
+    expect(router.currentRoute.value.path).toBe('/login');
+    expect(calls).toBe(0);
+    expect(freshTime.isBusinessOffsetLoaded()).toBe(false);
+  });
+
+  it('登入後的下一次導覽補載', async () => {
+    effResponse = effective('+07:00');
+    const router = setup();
+    await router.push('/dynamic/order');
+    expect(router.currentRoute.value.path).toBe('/login');
+    expect(effCalls).toBe(0);
+    useIdentityStore().setSession('admin', false);
+    await router.push('/');
+    expect(effCalls).toBe(1);
+    expect(businessOffset()).toBe('+07:00');
+    await router.push('/dynamic/order');
+    expect(effCalls).toBe(1);
+  });
+
+  it('登出後重登入重新載入', async () => {
+    meResponse = signedIn;
+    effResponse = effective('+07:00');
+    const router = setup();
+    await router.push('/');
+    expect(businessOffset()).toBe('+07:00');
+    // useLogout 的 onSuccess：清身分、清「已載入」
+    useIdentityStore().clear();
+    resetSessionSettings();
+    await router.push('/login');
+    effResponse = effective('+08:00');
+    useIdentityStore().setSession('admin', false);
+    await router.push('/dynamic/order');
+    expect(effCalls).toBe(2);
+    expect(businessOffset()).toBe('+08:00');
+  });
+
+  it('session 過期後重登入重新載入', async () => {
+    meResponse = signedIn;
+    effResponse = effective('+07:00');
+    const router = setup();
+    await router.push('/dynamic/order');
+    handleUnauthorized(router, new QueryClient());
+    await new Promise((r) => setTimeout(r));
+    expect(router.currentRoute.value.path).toBe('/login');
+    effResponse = effective('+08:00');
+    useIdentityStore().setSession('admin', false);
+    await router.push('/dynamic/order');
+    expect(effCalls).toBe(2);
+    expect(businessOffset()).toBe('+08:00');
   });
 });
 

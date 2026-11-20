@@ -46,6 +46,7 @@ describe('MainLayout menu', () => {
       if (config.url === '/users') data = USERS;
       else if (config.url === '/me') data = me(true);
       else if (config.url === '/notifications') data = { items: [], unreadCount: 0 };
+      else if (config.url === '/policies/effective') data = { values: { 'locale.timeZone': '+08:00' } };
       else { seen.push(user); data = [{ key: 'm', name: { 'zh-TW': `menu-${user}` } }]; }
       return { data, status: 200, statusText: 'OK', headers: {}, config };
     };

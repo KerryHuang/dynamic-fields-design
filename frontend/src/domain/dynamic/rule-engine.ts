@@ -1,4 +1,5 @@
 import sharedOperators from '../../../../shared/filter-operators.json';
+import { businessOffsetMs } from './business-time';
 import type {
   ConditionNode, FieldCondition, FieldConfig, FilterOperator, I18nText, SchemaField, SchemaRule,
 } from './types';
@@ -22,7 +23,6 @@ type Kind = 'number' | 'date' | 'text';
 interface IndexValue { kind: Kind; value: number | string }
 
 const DAY_MS = 86_400_000;
-const BUSINESS_OFFSET_MS = 8 * 3_600_000; // +08:00
 
 const OPERATORS_BY_TYPE = sharedOperators as Record<string, FilterOperator[]>;
 const EMPTY_OPS: FilterOperator[] = ['isEmpty', 'isNotEmpty'];
@@ -81,8 +81,8 @@ export function isEvaluable(node: ConditionNode | undefined, fields: Map<number,
 }
 
 const dateToMs = (s: string) => Date.parse(`${s}T00:00:00Z`);
-// datetime shifted into +08:00 so its UTC fields read as business-timezone wall clock
-const dateTimeToMs = (s: string) => Date.parse(s) + BUSINESS_OFFSET_MS;
+// datetime shifted into the business offset (policy locale.timeZone) so its UTC fields read as business-timezone wall clock
+const dateTimeToMs = (s: string) => Date.parse(s) + businessOffsetMs();
 
 function indexOne(f: SchemaFieldLike, v: unknown): IndexValue | null {
   if (v === null || v === undefined) return null;

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import type { AuthUser } from 'src/domain/dynamic/types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { useIdentityStore } from 'src/stores/use-identity-store';
+import { resetSessionSettings } from '../session-settings';
 import { SECRET_MUTATION, useSecretMutation } from './secret-mutation';
 
 /** Polls while the server is generating demo accounts so they appear without a reload. */
@@ -51,6 +52,7 @@ export function useLogout() {
     onSuccess: () => {
       qc.clear();
       identity.clear();
+      resetSessionSettings();
     },
   });
 }

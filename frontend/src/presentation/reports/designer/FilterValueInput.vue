@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useQueries } from '@tanstack/vue-query';
 import { computed } from 'vue';
+import { toBusinessWallClock } from 'src/domain/dynamic/business-time';
 import { useI18n } from 'vue-i18n';
 import { useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import PopupSelect from 'src/components/framework/PopupSelect.vue';
@@ -54,14 +55,11 @@ const knownTitles = computed(() => Object.fromEntries(refValues.value.map((id, i
   return [String(id), r?.data ? r.data.title : status === 404 ? t('dynamic.reference.missing') : status === 403 ? t('dynamic.reference.restricted') : String(id)];
 })));
 
-// datetime-local 只認 yyyy-MM-ddTHH:mm 的台北牆上時間；存檔後的值是 yyyy-MM-ddTHH:mm:ss+08:00，其他偏移換算成台北時間
+// datetime-local 只認 yyyy-MM-ddTHH:mm 的營運時區牆上時間；帶偏移的值換算成營運時區（政策 locale.timeZone），沒有偏移的值本來就是牆上時間
 function toLocalInput(v: unknown): string {
   if (typeof v !== 'string') return '';
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v}T00:00`;
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(v)) return v.slice(0, 16); // 沒有偏移：台北牆上時間
-  if (v.endsWith('+08:00')) return v.slice(0, 16);
-  const ms = Date.parse(v);
-  return Number.isNaN(ms) ? '' : new Date(ms + 8 * 3_600_000).toISOString().slice(0, 16);
+  return (toBusinessWallClock(v) ?? '').slice(0, 16);
 }
 const shown = (v: unknown) => (kind.value === 'datetime-local' ? toLocalInput(v) : ((v as string | number | null | undefined) ?? ''));
 const isChoice = computed(() => ['option', 'bool', 'user'].includes(kind.value));
