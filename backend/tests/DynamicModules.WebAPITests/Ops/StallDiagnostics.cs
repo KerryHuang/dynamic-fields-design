@@ -13,9 +13,11 @@ internal static class StallDiagnostics
     public static async Task WithinAsync(TestApp app, params (string Name, Task Task)[] branches)
     {
         using var probe = new ContextProbe(SynchronizationContext.Current);
+        LatencyTrace.Mark("#72 並行案例開始");
         try
         {
             await SchedulerTestKit.Within(Task.WhenAll(branches.Select(b => b.Task)));
+            LatencyTrace.Mark("#72 並行案例結束");
         }
         catch (TimeoutException e)
         {
@@ -114,4 +116,66 @@ internal static class StallDiagnostics
             sb.AppendLine("  " + string.Join(" | ", cols));
         }
     }
+
+    /// <summary>
+    /// 票 #70／#72 的整輪證據：第一個 TestApp 建立時（在 xUnit 的同步內容上）開始，每 500 ms 量一次同步內容與執行緒池的排隊延遲，
+    /// 以 5 秒為一格記最大值；只在 GitHub Actions（有 GITHUB_STEP_SUMMARY）時於行程結束寫進該步驟的摘要。通過的輪次也留證據。
+    /// </summary>
+    internal static class LatencyTrace
+    {
+        private static readonly System.Diagnostics.Stopwatch Clock = System.Diagnostics.Stopwatch.StartNew();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (double Context, double Pool)> Buckets = new();
+        private static readonly System.Collections.Concurrent.ConcurrentQueue<string> Marks = new();
+        private static SynchronizationContext? _context;
+        private static Timer? _timer;
+        private static int _contextPending;
+
+        public static void EnsureStarted()
+        {
+            var summary = Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY");
+            if (string.IsNullOrEmpty(summary) || SynchronizationContext.Current is not { } ctx) return;
+            if (Interlocked.CompareExchange(ref _context, ctx, null) is not null) return;
+            _timer = new Timer(_ => Tick(), null, 0, 500);
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => Write(summary);
+        }
+
+        public static void Mark(string what) { if (_context is not null) Marks.Enqueue($"{Clock.Elapsed.TotalSeconds:F1}s {what}"); }
+
+        private static void Tick()
+        {
+            var sent = Clock.Elapsed.TotalMilliseconds;
+            ThreadPool.UnsafeQueueUserWorkItem(_ => Record(sent, pool: true), null);
+            if (Interlocked.CompareExchange(ref _contextPending, 1, 0) != 0) return;
+            _context!.Post(_ =>
+            {
+                Record(sent, pool: false);
+                Volatile.Write(ref _contextPending, 0);
+            }, null);
+        }
+
+        private static void Record(double sent, bool pool)
+        {
+            var delay = Clock.Elapsed.TotalMilliseconds - sent;
+            Buckets.AddOrUpdate((int)(sent / 5000), _ => pool ? (0, delay) : (delay, 0),
+                (_, v) => pool ? (v.Context, Math.Max(v.Pool, delay)) : (Math.Max(v.Context, delay), v.Pool));
+        }
+
+        private static void Write(string path)
+        {
+            try
+            {
+                var sb = new StringBuilder("### WebAPITests 排隊延遲（票 #70／#72 診斷）\n\n| 時間 (s) | xUnit 同步內容最大延遲 (s) | 執行緒池最大延遲 (s) |\n|---|---|---|\n");
+                foreach (var (k, v) in Buckets.OrderBy(b => b.Key).Where(b => b.Value.Context > 500 || b.Value.Pool > 500))
+                    sb.AppendLine($"| {k * 5}–{k * 5 + 5} | {v.Context / 1000:F1} | {v.Pool / 1000:F1} |");
+                sb.AppendLine().AppendLine($"（只列超過 0.5 秒的格；共 {Buckets.Count} 格）").AppendLine();
+                foreach (var m in Marks) sb.AppendLine($"- {m}");
+                File.AppendAllText(path, sb.ToString());
+            }
+            catch
+            {
+                // 診斷寫不出來不影響測試結果
+            }
+        }
+    }
 }
+

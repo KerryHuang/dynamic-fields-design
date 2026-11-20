@@ -65,7 +65,12 @@ internal static class LocaleTestKit
             registry.Invalidate();
             await registry.EnsureFreshAsync(CancellationToken.None);
             var texts = registry.Texts();
-            if (done(texts)) return;
+            if (done(texts))
+            {
+                if ((DateTime.UtcNow - started).TotalMilliseconds > 1000)
+                    Ops.StallDiagnostics.LatencyTrace.Mark($"語系快照等待結束（{attempts} 次、{(DateTime.UtcNow - started).TotalMilliseconds:F0} ms）");
+                return;
+            }
             if (DateTime.UtcNow > deadline)
                 throw new TimeoutException($"語系快照 30 秒內沒有反映寫入；{(describe is null ? "" : describe(texts) + "；")}"
                     + $"generation={registry.Generation}、嘗試 {attempts} 次、耗時 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms\n"
