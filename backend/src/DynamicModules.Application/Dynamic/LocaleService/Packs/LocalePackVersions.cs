@@ -3,7 +3,9 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using DynamicModules.Application.Common.Localization;
+using DynamicModules.Application.Dynamic.OpsService;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.LocaleService.Packs;
@@ -54,13 +56,22 @@ internal static class LocalePackVersions
     {
         var hashes = new SortedDictionary<string, string>(StringComparer.Ordinal);
         foreach (var key in keys)
-            hashes[key] = !changed.Contains(key) && old?.GetValueOrDefault(key) is { } kept ? kept : Hash(zh(key));
+            hashes[key] = !changed.Contains(key) && old?.GetValueOrDefault(key) is { } kept ? kept : BaseHash(zh(key));
         return hashes;
     }
 
-    private static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16].ToLowerInvariant();
+    /// <summary>原文雜湊（SHA-256 前 16 個十六進位字元，小寫）；<see cref="LocaleOverlayReview"/> 用同一個算法比對「原文已更新」。</summary>
+    internal static string BaseHash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16].ToLowerInvariant();
 
-    private static Dictionary<string, Dictionary<string, string>> ParseHashes(string? json)
+    /// <summary>
+    /// 平台版本在語系包裡的表示（i4d2 計畫判斷 2，唯一一處）：null 或空白是 <see cref="IOpsEnvironment.DevVersion"/>；否則截成前
+    /// <see cref="LocalePackLimits.MaxPackBuiltFor"/> 個字元（Parser 對 <c>pack.builtFor</c> 的上限）。樣板匯出與預覽比對都經過它。
+    /// </summary>
+    internal static string PlatformBuiltFor(string? version) =>
+        string.IsNullOrWhiteSpace(version) ? IOpsEnvironment.DevVersion
+        : version.Length > LocalePackLimits.MaxPackBuiltFor ? version[..LocalePackLimits.MaxPackBuiltFor] : version;
+
+    internal static Dictionary<string, Dictionary<string, string>> ParseHashes(string? json)
     {
         if (string.IsNullOrEmpty(json)) return [];
         try { return JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(json) ?? []; }

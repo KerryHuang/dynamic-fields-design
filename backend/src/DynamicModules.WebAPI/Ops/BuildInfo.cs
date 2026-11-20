@@ -1,11 +1,12 @@
 using System.Reflection;
+using DynamicModules.Application.Dynamic.OpsService;
 
 namespace DynamicModules.WebAPI.Ops;
 
 /// <summary>建置時注入的版本資訊（AssemblyMetadata）；沒注入時三個值都是 dev。</summary>
 public static class BuildInfo
 {
-    private const string Dev = "dev";
+    private const string Dev = IOpsEnvironment.DevVersion;
 
     public static string Version { get; } = Read("AppVersion");
     public static string Commit { get; } = Read("GitCommit");

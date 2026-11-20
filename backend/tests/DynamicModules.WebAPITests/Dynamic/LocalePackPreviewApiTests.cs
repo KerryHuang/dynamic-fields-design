@@ -1,13 +1,16 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using DynamicModules.Application.Dynamic.OpsService;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.WebAPI.Controllers.v3.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using static DynamicModules.WebAPITests.LocaleTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
@@ -214,6 +217,82 @@ public class LocalePackPreviewApiTests : IDisposable
     {
         using var app = new TestApp(seedDemoPeople: false);
         (await Preview(app.AsUser(), Fixture("ja-partial.langpack.json"))).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // ── i4d2（計畫 Task 1）──
+
+    /// <summary>回固定版本的假 <see cref="IOpsEnvironment"/>。</summary>
+    internal sealed record FakeOps(string Version) : IOpsEnvironment
+    {
+        public string Commit => "test";
+        public string BuiltAt => "test";
+        public string Edition => "OnPrem";
+    }
+
+    internal static void UseVersion(TestApp app, string version) => app.ExtraServices = s =>
+    {
+        s.RemoveAll<IOpsEnvironment>();
+        s.AddSingleton<IOpsEnvironment>(new FakeOps(version));
+    };
+
+    /// <summary>直接在目前版的 <c>UiJson</c> 加一個非基準鍵（模擬平台改了鍵名）。</summary>
+    internal static void AddOrphan(TestApp app, string code, string key, string text)
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+        var row = db.Set<LocalePack>().Single(p => p.Code == code && p.IsCurrent);
+        var layer = JsonSerializer.Deserialize<SortedDictionary<string, string>>(row.UiJson)!;
+        layer[key] = text;
+        row.UiJson = JsonSerializer.Serialize(layer);
+        db.SaveChanges();
+    }
+
+    private static int Dropped(JsonElement report, string segment) => report.GetProperty("orphanedDropped").GetProperty(segment).GetInt32();
+
+    [Fact]
+    public async Task Preview_OrphanedDropped()
+    {
+        var admin = _app.AsUser();
+        await ApplyPackAsync(_app, Fixture("ja-partial.langpack.json"));
+        AddOrphan(_app, "ja", "zz.renamedKey", "古い訳");
+
+        var changed = await PreviewOkAsync(admin, System.Text.Encoding.UTF8.GetBytes(Pack("ja", ui: new Dictionary<string, string> { ["menu.home"] = "（新）ホーム" })));
+        (Dropped(changed, "ui"), Dropped(changed, "server")).Should().Be((1, 0));
+
+        var same = await PreviewOkAsync(admin, Fixture("ja-partial.langpack.json"));
+        Dropped(same, "ui").Should().Be(0, "沒有變動就不寫新版本，失效的鍵這次不會被清");
+
+        var nameOnly = await PreviewOkAsync(admin, System.Text.Encoding.UTF8.GetBytes(Pack("ja", nativeName: "日本語（改）")));
+        nameOnly.GetProperty("locale").GetProperty("changes").EnumerateArray().Select(c => c.GetString()).Should().Contain("nativeName");
+        Dropped(nameOnly, "ui").Should().Be(0, "只改語系欄位不寫新版本");
+    }
+
+    private static byte[] WithBuiltFor(string builtFor) => System.Text.Encoding.UTF8.GetBytes(
+        "{\"format\":\"formwright-langpack\",\"formatVersion\":1,\"locale\":{\"code\":\"ja\",\"nativeName\":\"日本語\"},\"pack\":{\"builtFor\":\"" + builtFor
+        + "\"},\"ui\":{\"menu.home\":\"ホーム\"}}");
+
+    private static IEnumerable<string?> WarningCodes(JsonElement r) => r.GetProperty("warnings").EnumerateArray().Select(w => w.GetProperty("code").GetString());
+
+    [Fact]
+    public async Task Preview_BuiltFor_PlatformVersion()
+    {
+        using var app = new TestApp();
+        UseVersion(app, "2026.11");
+        var r = await PreviewOkAsync(app.AsUser(), WithBuiltFor("2026.10"));
+        var w = r.GetProperty("warnings").EnumerateArray().Single(x => x.GetProperty("code").GetString() == "builtForDiffers");
+        w.GetProperty("args").EnumerateArray().Select(a => a.GetString()).Take(2).Should().Equal("2026.10", "2026.11");
+
+        WarningCodes(await PreviewOkAsync(_app.AsUser(), WithBuiltFor("2026.10"))).Should().NotContain("builtForDiffers", "預設主機是 dev");
+    }
+
+    [Fact]
+    public async Task Preview_Report_TopMissing()
+    {
+        var r = await PreviewOkAsync(_app.AsUser(), Fixture("ja-partial.langpack.json"));
+        var top = r.GetProperty("completeness").GetProperty("topMissing").EnumerateArray().ToList();
+        top.Should().HaveCountGreaterThan(0).And.HaveCountLessThanOrEqualTo(5);
+        top.Select(t => t.GetProperty("missing").GetInt32()).Should().BeInDescendingOrder();
+        top[0].GetProperty("segment").GetString().Should().BeOneOf("ui", "server");
     }
 
     /// <summary>不回報長度的串流（HttpClient 以 chunked 送出，伺服器拿不到 Content-Length）。</summary>
