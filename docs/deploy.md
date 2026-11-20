@@ -13,6 +13,13 @@ Formwright 的 Demo 站與容器部署做法。本機開發與測試見 [CONTRIB
 
 啟動時自動產生 Demo 資料：設定環境變數 `Demo__SeedOnStartup=true`，站台會在背景產生訂單、故障報修、模具保養、品質異常四組模組與範例記錄；本機預設關閉，Render 改用 `Dockerfile.demo` 在建置時產生，不需要這個設定。也可以由系統管理員在「系統管理 → Demo 資料」手動產生。各情境怎麼示範見 [Demo 腳本](demo.md)。
 
+### Demo 每日重建
+
+Demo 的日期停在建置那天，太久沒部署，任務到期、逾期提醒這類有時效的資料會全部過期。`.github/workflows/demo-refresh.yml` 每天台北時間 02:00（UTC 18:00）檢查一次：過去 24 小時 `main` 上如果有會觸發部署的 commit（路徑同 `render.yaml` 的 `buildFilter`），代表當天已經重建過，就跳過；否則呼叫 Render 的 Deploy Hook 重建一次。只在當天沒部署時才重建，是因為 Render 免費方案每月的建置分鐘數有限，用完會暫停建置到月底。
+
+- 設定：Render 的 `dynamic-modules-demo` → Settings → Deploy Hook 複製網址，到 GitHub repo 的 Settings → Secrets and variables → Actions 新增 secret `RENDER_DEPLOY_HOOK`。沒設定時排程只印警告、照樣成功結束。
+- 手動重建：GitHub → Actions → demo-refresh → Run workflow（一樣會先檢查過去 24 小時有沒有部署過）。
+
 ## 環境變數
 
 | 變數 | 用途 |

@@ -1,0 +1,44 @@
+# Demo 每日重建：Demo 資料在 Dockerfile.demo 建置時產生、日期以建置日為基準，
+# Render 休眠喚醒會回到映像資料；太久沒部署，任務等有時效的資料會全部過期。
+# 只在過去 24 小時 main 沒有會觸發部署的 commit 時才重建（Render 免費方案每月建置分鐘數有限）。
+# 用法與 secret 設定見 docs/deploy.md「Demo 每日重建」。
+name: demo-refresh
+
+on:
+  schedule:
+    - cron: "0 18 * * *" # UTC 18:00＝台北 02:00
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 200
+      - name: 過去 24 小時已部署就跳過，否則觸發 Render 重建
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          # 路徑與 render.yaml 的 buildFilter 一致
+          changed=$(git log --since="24 hours ago" --format=%h -- backend frontend shared Dockerfile.demo .dockerignore)
+          if [ -n "$changed" ]; then
+            echo "過去 24 小時 main 已有會觸發部署的 commit（$(echo $changed | tr '\n' ' ')），今天已重建過，跳過。" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::warning::沒有設定 secret RENDER_DEPLOY_HOOK，略過重建（設定方式見 docs/deploy.md）"
+            echo "沒有設定 secret RENDER_DEPLOY_HOOK，略過重建。" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK" > /dev/null
+          echo "已觸發 Render 重建 Demo。" >> "$GITHUB_STEP_SUMMARY"

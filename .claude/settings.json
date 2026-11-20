@@ -31,7 +31,8 @@
     ]
   },
   "enabledPlugins": {
-    "lifecycle@plugharbor": true
+    "lifecycle@plugharbor": true,
+    "tickets@plugharbor": true
   },
   "extraKnownMarketplaces": {
     "plugharbor": {

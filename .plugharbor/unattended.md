@@ -63,7 +63,7 @@ main push 會自動部署 Demo（Render），但只在 `backend/`、`frontend/`�
 - 做完清掉 emulate，導回 about:blank。
 
 ## 空檔來源
-`docs/todo.md` 的「近期可開工」區（欄位照 workspace unattended 的 speed-rules）；做完一項就從同檔「其他」補一項。
+`docs/todo.md` 的「近期可開工」區（欄位照 workspace unattended 的 speed-rules）；做完一項就從 GitHub backlog 票（`stage:backlog`）挑一項補上，行尾寫票號。
 
 ## 不並行的工作
 - 獨占資源：本機 Demo 埠（9180）、瀏覽器（chrome-devtools）、本機 Demo DB；同時只給一條線用，另一條線要走查就等前一條收掉。

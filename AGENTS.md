@@ -44,13 +44,19 @@ ERP 是產品目標，也是核心的壓力測試：做不出來的地方，就�
 - **流程主從**：自動駕駛（`workspace:unattended`）時照它的流程——設計夠細就不另寫實作計畫、不審計畫，整段交一個實作者；業務邊界複雜的設計題先由 `lifecycle:domain-advisor` 審。使用者在場手動開工才走 `lifecycle:implement`（使用者裁決）。
 - **有畫面的改動**合併前要在本機（`scripts/unattended/local-demo.sh`）的 390、820、1366、1920 四種寬度驗過，不得橫向捲動。
 - **git**：逐檔 `git add`，不用 `-A`／`.`、不用 `--no-verify`、不 force push、不 merge commit。
+- **Demo 資料**：有使用者看得到的功能或行為的段，合併前 Demo 種子要能示範成功路徑與主要失敗分支（被擋、退回、停用、個人化）；純後端、維運段在交付說明寫「無可示範」。改種子前照 `.claude/rules/backend.md` 先 grep 既有斷言（使用者裁決）。
+- **票（tickets plugin 試用，2026-11-20 起）**：
+  - 新發現的待辦（審查建議、CI 偶發失敗、實測 bug）用 `tickets:triage` 或 `tickets:ticket-create` 開成 backlog 票，不寫進 `docs/todo.md`；工作段順序仍只認 `docs/roadmap.md`。
+  - 票隨工作改階段（升進「近期可開工」→ todo、開做 → in-progress）；合併後關票並留言 commit SHA。
+  - 用 tickets 遇到問題（卡住、做法不對、文件與行為不符），在 `KerryHuang/plugharbor` 開 issue，label `from:formwright`、`plugin:tickets`，內文寫重現步驟、tickets 版本、預期與實際（照外洩規則）；擋住產線的加 `blocker`，並用 SendMessage 告訴 plugharbor 的 tickets 回饋 worker「有 blocker #N」。開完繼續做別的。
+  - 段開工前跑 `claude plugin marketplace update plugharbor && claude plugin update tickets@plugharbor --scope project`，再 `/reload-plugins`；失敗就照舊版跑，記進回來報告。
 
 ## 文件落點
 
 - 進度：路線文件的工作段表格（`docs/roadmap.md`）。
 - 裁決：寫回對應的設計文件；功能討論與規劃結果列進 `docs/feature.md`（改完跑清單腳本重算）。
 - 使用者看得到的行為改變：同步 `docs/manual.md`。
-- 不屬於產品功能的跨 session 雜事（bug 調查、開發流程、清理）：`docs/todo.md`，做完就刪。
+- 不屬於產品功能的跨 session 雜事（bug 調查、開發流程、清理）：開 GitHub backlog 票；只有升進「近期可開工」的才寫進 `docs/todo.md`（附票號），做完就刪。
 - 站內連結用相對路徑。
 
 ## 公開 repo
