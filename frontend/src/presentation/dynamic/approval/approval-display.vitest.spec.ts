@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
-import enUS from 'src/i18n/en-US.json';
-import zhTW from 'src/i18n/zh-TW.json';
+import enUS from 'shared/i18n/en-US/ui.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { badgeColor, badgeText, instanceTitle } from './approval-display';
 
 const { t } = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } }).global;

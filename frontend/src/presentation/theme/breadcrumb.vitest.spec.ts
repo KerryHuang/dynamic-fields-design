@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { breadcrumbFor } from './breadcrumb';
 
 const MENU = [

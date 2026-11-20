@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ApprovalProgressEdge, ApprovalProgressNode, ApprovalProgressState, ApprovalStageView } from 'src/domain/dynamic/approval-types';
 import { ADDSIGN_H, ADDSIGN_W, NODE_H, NODE_W } from 'src/domain/dynamic/approval-graph-layout';
-import enUS from 'src/i18n/en-US.json';
-import zhTW from 'src/i18n/zh-TW.json';
+import enUS from 'shared/i18n/en-US/ui.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { stageColor, stageIcon } from './approval-display';
 import { buildProgressGraph, EDGE_LABEL_MAX_PX, focusNodeId, graphHeight, initialViewport, stateView, truncateEdgeLabel, viewportTransform } from './progress-graph';
 
@@ -57,8 +57,8 @@ describe('stateView', () => {
   });
 
   it('every text key exists in all four languages', async () => {
-    const th = (await import('src/i18n/th.json')).default as Record<string, unknown>;
-    const vi = (await import('src/i18n/vi.json')).default as Record<string, unknown>;
+    const th = (await import('shared/i18n/th/ui.json')).default as Record<string, unknown>;
+    const vi = (await import('shared/i18n/vi/ui.json')).default as Record<string, unknown>;
     const states = ['passed', 'active', 'returned', 'skipped', 'cancelled', 'ended', 'notReached', 'changed', 'hidden'];
     for (const m of [zhTW, enUS, th, vi]) {
       const get = lookup(m as Record<string, unknown>);

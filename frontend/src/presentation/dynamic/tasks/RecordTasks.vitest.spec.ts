@@ -5,7 +5,7 @@ import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import RecordTasks from './RecordTasks.vue';

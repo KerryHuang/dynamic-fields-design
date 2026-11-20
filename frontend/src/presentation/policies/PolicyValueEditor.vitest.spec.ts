@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import * as quasar from 'quasar';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import type { PolicyMeta, PolicyValue } from 'src/domain/dynamic/policy-types';
 import { BUILTIN_LOCALES } from 'src/i18n/locale';
 import { setLocaleInfos } from 'src/i18n/locale-settings';

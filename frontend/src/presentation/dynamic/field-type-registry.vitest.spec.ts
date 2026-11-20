@@ -4,10 +4,10 @@ import { setBusinessOffset } from 'src/domain/dynamic/business-time';
 import { i18n } from 'src/boot/i18n';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import sharedOperators from '../../../../shared/filter-operators.json';
-import enUS from 'src/i18n/en-US.json';
-import th from 'src/i18n/th.json';
-import vi from 'src/i18n/vi.json';
-import zhTW from 'src/i18n/zh-TW.json';
+import enUS from 'shared/i18n/en-US/ui.json';
+import th from 'shared/i18n/th/ui.json';
+import vi from 'shared/i18n/vi/ui.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import type { FieldType, SchemaField } from 'src/domain/dynamic/types';
 import { defaultValueOf, fieldTypeRegistry, normalizeForRules, operatorsFor } from './field-type-registry';
 

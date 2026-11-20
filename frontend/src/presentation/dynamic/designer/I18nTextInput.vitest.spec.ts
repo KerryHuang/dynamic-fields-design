@@ -3,7 +3,7 @@ import * as quasar from 'quasar';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import { setLocaleSettings } from 'src/i18n/locale-settings';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import I18nTextInput from './I18nTextInput.vue';
 
 function mountInput(modelValue: Record<string, string>, extra: Record<string, unknown> = {}) {

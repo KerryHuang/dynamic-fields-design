@@ -7,7 +7,7 @@ import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { IncidentSummary, OpsOverview } from 'src/domain/ops/ops-types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import OpsPage from './OpsPage.vue';

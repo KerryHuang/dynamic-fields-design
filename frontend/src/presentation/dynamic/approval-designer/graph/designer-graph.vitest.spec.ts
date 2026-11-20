@@ -5,7 +5,7 @@ import { setLocaleInfos } from 'src/i18n/locale-settings';
 import type { ApprovalFlow, GraphDefinition } from 'src/domain/dynamic/approval-flow-types';
 import { edgeBendX, layoutLeftToRight, NODE_H, NODE_W } from 'src/domain/dynamic/approval-graph-layout';
 import { mapGraphIssues } from 'src/domain/dynamic/approval-graph-errors';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import type { TrialOverlay } from './designer-trial';
 import { approvalNames, conditionLabels, initialState, newFlowState, sourceOf, toVueFlow, FLOW_SELECTION, type GraphContext } from './designer-graph';
 

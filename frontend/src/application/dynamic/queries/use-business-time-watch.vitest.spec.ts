@@ -7,7 +7,7 @@ import { createI18n } from 'vue-i18n';
 import { businessOffset, setBusinessOffset } from 'src/domain/dynamic/business-time';
 import { BUILTIN_LOCALES } from 'src/i18n/locale';
 import { enabledLocales, installedLocales, localeChain, nativeName, requiredTextLocales, setLocaleInfos, setLocaleSettings } from 'src/i18n/locale-settings';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { useBusinessTimeWatch } from './use-business-time-watch';
 

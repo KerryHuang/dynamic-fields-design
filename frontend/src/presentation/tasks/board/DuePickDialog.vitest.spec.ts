@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import * as quasar from 'quasar';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import DuePickDialog from './DuePickDialog.vue';
 
 function mountDialog() {

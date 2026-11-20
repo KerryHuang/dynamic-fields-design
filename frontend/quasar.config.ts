@@ -8,7 +8,7 @@ export default defineConfig(() => ({
   build: {
     target: { browser: ['es2022'], node: 'node20' },
     vueRouterMode: 'history' as const,
-    alias: { src: fileURLToPath(new URL('./src', import.meta.url)) },
+    alias: { src: fileURLToPath(new URL('./src', import.meta.url)), shared: fileURLToPath(new URL('../shared', import.meta.url)) },
     // 前端版本與後端同一組 build-arg（Dockerfile）；沒給是空字串，程式顯示 dev（src/services/ops/build-info.ts）
     defineEnv: {
       APP_VERSION: process.env.APP_VERSION ?? '',

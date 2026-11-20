@@ -8,7 +8,7 @@ import type { StageDraft } from 'src/domain/dynamic/approval-flow-draft';
 import { buildFlowInput, draftFromFlow } from 'src/domain/dynamic/approval-flow-draft';
 import type { ApprovalStageDef, SequenceFlow } from 'src/domain/dynamic/approval-flow-types';
 import type { DesignerField, ModuleDetail } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ApproverSourceEditor from './ApproverSourceEditor.vue';
 import FlowStagesEditor from './FlowStagesEditor.vue';

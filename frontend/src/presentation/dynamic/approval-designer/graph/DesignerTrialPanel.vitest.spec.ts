@@ -8,7 +8,7 @@ import { createI18n } from 'vue-i18n';
 import type { ApprovalFlow, ApproverSource, GraphDefinition } from 'src/domain/dynamic/approval-flow-types';
 import type { ApprovalPreview } from 'src/domain/dynamic/approval-types';
 import type { DesignerField, ModuleDetail } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import DesignerTrialPanel from './DesignerTrialPanel.vue';
 import type { TrialOverlay } from './designer-trial';

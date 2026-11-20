@@ -5,8 +5,8 @@ import { ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { RecordEffects as Effects } from 'src/domain/dynamic/events-ledger';
-import enUS from 'src/i18n/en-US.json';
-import zhTW from 'src/i18n/zh-TW.json';
+import enUS from 'shared/i18n/en-US/ui.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import RecordEffects from './RecordEffects.vue';
 
 const data = ref<Effects>({

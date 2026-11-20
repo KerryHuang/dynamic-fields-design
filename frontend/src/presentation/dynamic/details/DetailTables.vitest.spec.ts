@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { DynamicRecord, SchemaDetail, SchemaField } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import DetailTables from './DetailTables.vue';
 
 const field = (id: number, type: SchemaField['type'], label: string, extra: Partial<SchemaField> = {}): SchemaField => ({

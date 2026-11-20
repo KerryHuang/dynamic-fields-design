@@ -8,7 +8,7 @@ import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { ApprovalInstanceView, RecordApprovalSummary } from 'src/domain/dynamic/approval-types';
 import type { DynamicRecord, ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import DetailPage from './DetailPage.vue';
 

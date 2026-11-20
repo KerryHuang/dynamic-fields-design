@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { useBoardColumns } from 'src/application/dynamic/queries/task-board-queries';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import type { InternalAxiosRequestConfig } from 'axios';
 import { http } from 'src/services/api/http';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';

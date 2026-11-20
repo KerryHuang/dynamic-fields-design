@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { ApprovalActionView, ApprovalInstanceView, ApprovalProgressGraph, ApprovalStageView, ApprovalTaskView, RecordApproval } from 'src/domain/dynamic/approval-types';
 import type { ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import ApprovalPanel from './ApprovalPanel.vue';
 
 // 真的畫布會載入 Vue Flow；這裡換成替身（Vue Flow 的行為在 ProgressGraphCanvas 自己的 spec 與瀏覽器走查驗）。

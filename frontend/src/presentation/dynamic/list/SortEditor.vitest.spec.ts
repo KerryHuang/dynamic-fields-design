@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import GenericSelect from 'src/components/framework/GenericSelect.vue';
 import type { ModuleSchema, SchemaField, ViewSort } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import SortEditor from './SortEditor.vue';
 
 const field = (id: number, label: string, sortable = true): SchemaField => ({

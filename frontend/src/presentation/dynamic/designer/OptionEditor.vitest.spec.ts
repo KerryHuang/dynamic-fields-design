@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { DesignerOption } from 'src/domain/dynamic/types';
 import { setLocaleSettings } from 'src/i18n/locale-settings';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import OptionEditor from './OptionEditor.vue';
 

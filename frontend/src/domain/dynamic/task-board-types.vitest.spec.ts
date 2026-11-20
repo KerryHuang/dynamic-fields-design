@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import {
   BOARD_COLUMN_GAP, BOARD_MIN_COLUMN_WIDTH, columnsPerScreen, gridTrackCount, isLaterDateAllowed, moveBlockKey, moveFlowOf, moveTargets, moveCardLocally, removeCardLocally, restoreCardLocally,
   visibleRange, type BoardCard, type BoardColumn, type TaskBoardData,
@@ -75,7 +75,7 @@ describe('task-board-types', () => {
       { kind: 'column', reason: 'overdue' }, { kind: 'column', reason: 'thisWeekEmpty' }, { kind: 'column', reason: 'inactiveAssignee' },
       { kind: 'column', reason: 'unavailable' }, { kind: 'noPermission' }, { kind: 'frozen' },
     ] as const;
-    const locales = [zhTW, (await import('src/i18n/en-US.json')).default, (await import('src/i18n/th.json')).default, (await import('src/i18n/vi.json')).default];
+    const locales = [zhTW, (await import('shared/i18n/en-US/ui.json')).default, (await import('shared/i18n/th/ui.json')).default, (await import('shared/i18n/vi/ui.json')).default];
     for (const b of blocks) {
       for (const m of locales) {
         const text = moveBlockKey(b).split('.').reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], m);

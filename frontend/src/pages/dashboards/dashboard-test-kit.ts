@@ -7,7 +7,7 @@ import { h, type Component } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import type { CardResult, DashboardCard, DashboardDetail, DashboardList } from 'src/domain/dynamic/dashboard-types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { http } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 

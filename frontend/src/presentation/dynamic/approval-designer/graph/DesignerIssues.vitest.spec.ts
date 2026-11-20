@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { ApprovalFlow, GraphDefinition } from 'src/domain/dynamic/approval-flow-types';
 import { mapGraphIssues } from 'src/domain/dynamic/approval-graph-errors';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import DesignerIssues from './DesignerIssues.vue';
 import { useGraphDesigner } from './use-graph-designer';
 

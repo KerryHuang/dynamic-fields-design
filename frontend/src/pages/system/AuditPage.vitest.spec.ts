@@ -7,7 +7,7 @@ import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { AuditDetail, AuditSummary } from 'src/domain/ops/ops-types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { findInputByTestId } from 'src/test-utils/find-by-testid';
 import { HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';

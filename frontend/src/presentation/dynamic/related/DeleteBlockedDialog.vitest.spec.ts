@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { BlockingRef, DeleteBlocked } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import DeleteBlockedDialog from './DeleteBlockedDialog.vue';
 
 const ref = (i: number, title?: string | null): BlockingRef => ({

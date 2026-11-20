@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import { emptySet, type SetDraft } from 'src/domain/dynamic/event-draft';
 import type { DesignerField, FieldType } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { findInputByTestId } from 'src/test-utils/find-by-testid';
 import EventSetRow from './EventSetRow.vue';
 

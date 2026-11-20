@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils';
 import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import DesignerToolbar from './DesignerToolbar.vue';
 
 const base = { readonly: false, phone: false, showFlowProps: false, undoable: false, redoable: false, dirty: false, busy: false, errorCount: 0, canDiscard: false, canDelete: false, trialOpen: false };

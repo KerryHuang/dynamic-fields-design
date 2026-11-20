@@ -8,7 +8,7 @@ import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { ModuleSchema, SchemaDetail, SchemaField, SchemaPermissions } from 'src/domain/dynamic/types';
 import DetailGrid from 'src/presentation/dynamic/details/DetailGrid.vue';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import PopupSelect from 'src/components/framework/PopupSelect.vue';
 import FormPage from './FormPage.vue';

@@ -1,9 +1,9 @@
 import { defineBoot } from '#q-app';
 import { createI18n } from 'vue-i18n';
-import enUS from 'src/i18n/en-US.json';
-import th from 'src/i18n/th.json';
-import vi from 'src/i18n/vi.json';
-import zhTW from 'src/i18n/zh-TW.json';
+import enUS from 'shared/i18n/en-US/ui.json';
+import th from 'shared/i18n/th/ui.json';
+import vi from 'shared/i18n/vi/ui.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { FALLBACK_LOCALE, applyLocale, readLocale } from 'src/i18n/locale';
 
 export const i18n = createI18n({

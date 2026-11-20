@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import zhTW from './zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 
 // 手冊的文案以畫面實際文字為準（.claude/rules/docs.md）：權限軸-b 的畫面句子要原樣出現在手冊裡
 const manual = readFileSync(resolve(process.cwd(), '../docs/manual.md'), 'utf8');

@@ -6,7 +6,7 @@ import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { ModuleCatalog, ReportDetail, ReportResult } from 'src/domain/dynamic/report-types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ReportViewPage from './ReportViewPage.vue';
 import { FACTORY_ME_THEME } from 'src/domain/theme/theme-fixtures';

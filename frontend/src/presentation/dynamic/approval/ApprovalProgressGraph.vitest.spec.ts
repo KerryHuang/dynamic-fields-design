@@ -3,7 +3,7 @@ import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { ApprovalActionView, ApprovalProgressGraph, ApprovalStageView } from 'src/domain/dynamic/approval-types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import ApprovalProgressGraphView from './ApprovalProgressGraph.vue';
 
 // 畫布只有在需要畫圖時才會被動態載入並掛載；替身記下掛載次數，沒畫圖的情況要斷言它是 0。

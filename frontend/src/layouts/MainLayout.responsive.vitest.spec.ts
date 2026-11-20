@@ -5,8 +5,8 @@ import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import enUS from 'src/i18n/en-US.json';
-import zhTW from 'src/i18n/zh-TW.json';
+import enUS from 'shared/i18n/en-US/ui.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { http } from 'src/services/api/http';
 import MainLayout from './MainLayout.vue';
 

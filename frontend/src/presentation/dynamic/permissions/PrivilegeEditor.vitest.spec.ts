@@ -3,7 +3,7 @@ import * as quasar from 'quasar';
 import { describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { Group, ModulePermissions, Privileges } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import PrivilegeEditor from './PrivilegeEditor.vue';
 
 const none: Privileges = { read: false, add: false, edit: false, delete: false, printExport: false, pricing: false, approve: false };

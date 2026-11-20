@@ -3,7 +3,7 @@ import * as quasar from 'quasar';
 import { describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { PreviewStage } from 'src/domain/dynamic/approval-types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import PreviewStages from './PreviewStages.vue';
 
 const mountIt = (stages: PreviewStage[], designer = false) => mount(PreviewStages, {

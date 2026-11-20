@@ -5,7 +5,7 @@ import { createPinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { Me, ModulePermissions, Privileges } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import PermissionsTab from './PermissionsTab.vue';
 import { FACTORY_ME_THEME } from 'src/domain/theme/theme-fixtures';

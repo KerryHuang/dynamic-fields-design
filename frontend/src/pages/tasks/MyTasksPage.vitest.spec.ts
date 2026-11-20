@@ -7,7 +7,7 @@ import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { assigneeBoardWire, boardWire, cardWire, columnWire, configWire, dueBoardWire, shareTargetsWire, viewDetailWire, viewSummaryWire } from 'src/presentation/tasks/board/board-fixtures';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { commentWire, taskDetailWire, taskWire, USERS } from 'src/presentation/dynamic/tasks/task-fixtures';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';

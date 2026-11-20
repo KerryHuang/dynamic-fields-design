@@ -7,7 +7,7 @@ import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { ListView, ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import FilterPanel from 'src/presentation/dynamic/list/FilterPanel.vue';
 import ExportMenu from 'src/presentation/dynamic/list/ExportMenu.vue';
 import ImportDialog from 'src/presentation/dynamic/list/ImportDialog.vue';

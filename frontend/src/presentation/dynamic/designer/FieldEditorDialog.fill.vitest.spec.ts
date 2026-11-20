@@ -5,7 +5,7 @@ import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { DesignerField, FieldType, ModuleDetail } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import FieldEditorDialog from './FieldEditorDialog.vue';
 import FieldMapEditor from './FieldMapEditor.vue';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ApprovalInstanceView, ApprovalStageView, ApprovalTaskView } from 'src/domain/dynamic/approval-types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { currentStage, hasApprovalActions, myOpenTask, resultNotice } from './approval-actions';
 
 const task = (p: Partial<ApprovalTaskView> = {}): ApprovalTaskView => ({

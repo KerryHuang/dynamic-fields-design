@@ -7,7 +7,7 @@ import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { businessOffset, setBusinessOffset } from 'src/domain/dynamic/business-time';
 import type { SystemPolicy } from 'src/domain/dynamic/policy-types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import PoliciesPage from './PoliciesPage.vue';
 

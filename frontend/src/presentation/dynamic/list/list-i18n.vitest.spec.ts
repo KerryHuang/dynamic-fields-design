@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import enUS from 'src/i18n/en-US.json';
-import th from 'src/i18n/th.json';
-import vi from 'src/i18n/vi.json';
-import zhTW from 'src/i18n/zh-TW.json';
+import enUS from 'shared/i18n/en-US/ui.json';
+import th from 'shared/i18n/th/ui.json';
+import vi from 'shared/i18n/vi/ui.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 
 type Tree = { [k: string]: string | Tree };
 const leaves = (t: Tree, prefix = ''): string[] =>

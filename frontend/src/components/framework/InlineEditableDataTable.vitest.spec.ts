@@ -3,7 +3,7 @@ import * as quasar from 'quasar';
 import { describe, expect, it } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import InlineEditableDataTable from './InlineEditableDataTable.vue';
 
 type Row = { id: string; name: string };

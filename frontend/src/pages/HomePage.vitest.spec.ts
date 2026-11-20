@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { http } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import HomePage from './HomePage.vue';

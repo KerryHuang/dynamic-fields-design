@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { ModulePolicy } from 'src/domain/dynamic/policy-types';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { FACTORY_ME_THEME } from 'src/domain/theme/theme-fixtures';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { bodyOf, mockHttp, type Call } from 'src/test-utils/mock-http';

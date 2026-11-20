@@ -7,7 +7,7 @@ import { h, watch } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import IconSelect from 'src/presentation/dynamic/designer/IconSelect.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ApprovalFlowsTab from 'src/presentation/dynamic/approval-designer/ApprovalFlowsTab.vue';

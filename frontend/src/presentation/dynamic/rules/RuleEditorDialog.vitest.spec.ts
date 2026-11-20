@@ -5,10 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import GenericSelect from 'src/components/framework/GenericSelect.vue';
 import type { Rule, SchemaField } from 'src/domain/dynamic/types';
-import enUS from 'src/i18n/en-US.json';
-import th from 'src/i18n/th.json';
-import vi18n from 'src/i18n/vi.json';
-import zhTW from 'src/i18n/zh-TW.json';
+import enUS from 'shared/i18n/en-US/ui.json';
+import th from 'shared/i18n/th/ui.json';
+import vi18n from 'shared/i18n/vi/ui.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import RuleEditorDialog from './RuleEditorDialog.vue';
 
 const field = (id: number, type: SchemaField['type'], label: string, options: SchemaField['options'] = []): SchemaField => ({

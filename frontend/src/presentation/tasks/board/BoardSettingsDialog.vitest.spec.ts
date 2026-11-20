@@ -4,7 +4,7 @@ import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { TaskBoardConfig, TaskGanttConfig, TaskViewConfig, TaskViewKind } from 'src/domain/dynamic/task-board-types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { USERS } from 'src/presentation/dynamic/tasks/task-fixtures';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import { ganttConfigWire } from '../gantt/gantt-fixtures';

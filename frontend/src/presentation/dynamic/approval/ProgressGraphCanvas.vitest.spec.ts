@@ -4,7 +4,7 @@ import { camelize, defineComponent, h } from 'vue';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { Edge, Node } from '@vue-flow/core';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import ProgressGraphCanvas from './ProgressGraphCanvas.vue';
 import canvasSource from './ProgressGraphCanvas.vue?raw';
 import type { ProgressNodeData, ViewportPlan } from './progress-graph';

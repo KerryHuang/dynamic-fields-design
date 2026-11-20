@@ -7,7 +7,7 @@ import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { FACTORY_ME_THEME } from 'src/domain/theme/theme-fixtures';
 import type { MeTheme } from 'src/domain/theme/theme-model';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import AppearancePage from './AppearancePage.vue';
 

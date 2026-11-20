@@ -8,7 +8,7 @@ import { emptyFlowDraft, type FlowDraft } from 'src/domain/dynamic/approval-flow
 import type { ApprovalFlow, ApproverSource } from 'src/domain/dynamic/approval-flow-types';
 import type { ApprovalPreview } from 'src/domain/dynamic/approval-types';
 import type { ConditionNode, DesignerField, ModuleDetail } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { fieldTypeRegistry } from 'src/presentation/dynamic/field-type-registry';
 import FlowTrialPanel from './FlowTrialPanel.vue';

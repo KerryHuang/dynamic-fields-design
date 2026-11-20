@@ -3,7 +3,7 @@ import * as quasar from 'quasar';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { ApprovalActionView, ApprovalStageView, ApprovalTaskView } from 'src/domain/dynamic/approval-types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import ProgressNodeDetail from './ProgressNodeDetail.vue';
 
 const task = (p: Partial<ApprovalTaskView> = {}): ApprovalTaskView => ({

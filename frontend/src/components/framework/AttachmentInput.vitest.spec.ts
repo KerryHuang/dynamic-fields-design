@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import type { AttachmentSettings } from 'src/domain/dynamic/types';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { attachmentContextKey, type AttachmentContext } from 'src/presentation/dynamic/attachment-context';
 import AttachmentInput from './AttachmentInput.vue';
 

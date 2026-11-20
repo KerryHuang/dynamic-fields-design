@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { clearUnmatched, defaultSourceOf, hintOf, isSingleApprover, levelOptions, removalBlocked, unmatchedOf } from './approver-source';
 
 const lookup = (k: string) => k.split('.').reduce<unknown>((o, p) => (o as Record<string, unknown>)[p], zhTW) as string;

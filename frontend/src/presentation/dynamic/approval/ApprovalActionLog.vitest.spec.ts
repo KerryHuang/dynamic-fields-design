@@ -2,8 +2,8 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { ApprovalActionView } from 'src/domain/dynamic/approval-types';
-import enUS from 'src/i18n/en-US.json';
-import zhTW from 'src/i18n/zh-TW.json';
+import enUS from 'shared/i18n/en-US/ui.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import ApprovalActionLog from './ApprovalActionLog.vue';
 
 const action = (p: Partial<ApprovalActionView>): ApprovalActionView => ({

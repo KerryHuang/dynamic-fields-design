@@ -5,7 +5,7 @@ import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
-import zhTW from 'src/i18n/zh-TW.json';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import type { Department } from 'src/domain/dynamic/organization';
 import type { AdminUser } from 'src/domain/dynamic/types';
 import { noSystemPrivileges } from 'src/domain/dynamic/system-privileges';
