@@ -39,14 +39,14 @@ public class LocalePackAnalyzerTests
 
     private static LocalePackAnalysis Ok(ParsedLocalePack pack, LocaleWorld world, int max = Max)
     {
-        var a = LocalePackAnalyzer.Analyze(pack, world, max);
+        var a = LocalePackAnalyzer.Analyze(pack, world, max, platformVersion: null);
         a.Error.Should().BeNull(a.Error?.Resolve("zh-TW"));
         return a;
     }
 
     private static string Err(ParsedLocalePack pack, LocaleWorld world, int max = Max)
     {
-        var a = LocalePackAnalyzer.Analyze(pack, world, max);
+        var a = LocalePackAnalyzer.Analyze(pack, world, max, platformVersion: null);
         a.Plan.Should().BeNull();
         return a.Error!.Resolve("zh-TW");
     }
@@ -319,5 +319,134 @@ public class LocalePackAnalyzerTests
         back.BooleanCandidates.Should().BeEquivalentTo(plan.BooleanCandidates);
         back.Locale.Should().Be(plan.Locale);
         LocalePackAnalyzer.Recheck(back, KoNoHai, Max).BooleanChanged.Should().BeFalse();
+    }
+
+    // ── i4d2：平台版本比對、原文已更新的確認、缺最多的分類（i4d2 計畫 Task 1）──
+
+    /// <summary>沒有佔位符的介面文字基準鍵（值可以是任意文字）。</summary>
+    private static IReadOnlyList<string> PlainUiKeys(int take) => BuiltinLocaleResources.BaseKeys
+        .Where(k => BuiltinLocaleResources.UiPlaceholderNames.GetValueOrDefault(k) is not { Count: > 0 } && !BuiltinLocaleResources.Ui["zh-TW"][k].Contains('{'))
+        .Take(take).ToList();
+
+    private static ParsedLocalePack WithBuiltFor(string? builtFor, IReadOnlyDictionary<string, string> ui) =>
+        new("ja", "日本語", null, "en-US", null, builtFor, null, null, ui, [], Empty, [], 0);
+
+    /// <summary>一筆目前版：<paramref name="ui"/> 的每個鍵都記一個過期的原文雜湊。</summary>
+    private static Domain.Entities.Dynamic.LocalePack StaleRow(string code, IReadOnlyDictionary<string, string> ui) => new()
+    {
+        Code = code, IsCurrent = true, UiJson = JsonSerializer.Serialize(ui), ServerJson = "{}",
+        BaseHashesJson = JsonSerializer.Serialize(new { ui = ui.Keys.ToDictionary(k => k, _ => "0000000000000000"), server = new Dictionary<string, string>() }),
+    };
+
+    [Fact]
+    public void BuiltFor_DiffersFromPlatform_Warns()
+    {
+        var ui = PlainUiKeys(30).ToDictionary(k => k, k => "（日）" + k, StringComparer.Ordinal);
+        var a = LocalePackAnalyzer.Analyze(WithBuiltFor("2026.10", ui), World(), Max, "2026.11");
+        var total = BuiltinLocaleResources.BaseKeys.Count + BuiltinServerText.BaseKeys.Count;
+        a.Report!.Warnings.Should().ContainSingle(w => w.Code == LocalePackAnalyzer.WarningBuiltForDiffers)
+            .Which.Args.Should().Equal("2026.10", "2026.11", (total - 30).ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Theory]
+    [InlineData("dev", "2026.11")]
+    [InlineData("2026.10", "dev")]
+    [InlineData(null, "2026.11")]
+    [InlineData("2026.10", null)]
+    [InlineData("2026.10", "")]
+    [InlineData("2026.11", "2026.11")]
+    public void BuiltFor_Dev_NoWarning(string? builtFor, string? platform)
+    {
+        var a = LocalePackAnalyzer.Analyze(WithBuiltFor(builtFor, D(("menu.home", "ホーム"))), World(), Max, platform);
+        a.Report!.Warnings.Should().NotContain(w => w.Code == LocalePackAnalyzer.WarningBuiltForDiffers);
+    }
+
+    [Fact]
+    public void BuiltFor_LongPlatformVersion_SameBuild_NoWarning()
+    {
+        var platform = "2026.11.21-build.12345";
+        platform.Length.Should().BeGreaterThan(LocalePackLimits.MaxPackBuiltFor);
+        var a = LocalePackAnalyzer.Analyze(WithBuiltFor(platform[..LocalePackLimits.MaxPackBuiltFor], D(("menu.home", "ホーム"))), World(), Max, platform);
+        a.Report!.Warnings.Should().NotContain(w => w.Code == LocalePackAnalyzer.WarningBuiltForDiffers);
+    }
+
+    [Fact]
+    public void Unchanged_BaseChanged_IsConfirmed()
+    {
+        var current = D(("dynamic.save", "X"));
+        var world = World(overlays: new() { ["th"] = (current, Empty) });
+        var pack = Pack("th", ui: D(("dynamic.save", "X")), nativeName: null);
+
+        var a = LocalePackAnalyzer.Analyze(pack, world, Max, null, LocaleOverlayReview.Of(StaleRow("th", current)));
+        a.Plan!.UiConfirm.Should().Equal("dynamic.save");
+        a.Report!.Ui.Confirmed.Should().Be(1);
+        a.Plan.OverlayChanged.Should().BeTrue();
+        a.Plan.NoChanges.Should().BeFalse();
+
+        var fresh = new Domain.Entities.Dynamic.LocalePack { Code = "th", IsCurrent = true, UiJson = JsonSerializer.Serialize(current), BaseHashesJson = "{}" };
+        var b = LocalePackAnalyzer.Analyze(pack, world, Max, null, LocaleOverlayReview.Of(fresh));
+        b.Plan!.UiConfirm.Should().BeEmpty();
+        b.Report!.Ui.Confirmed.Should().Be(0);
+        b.Plan.OverlayChanged.Should().BeFalse();
+        b.Plan.NoChanges.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Confirm_MoreThanListed()
+    {
+        var ui = PlainUiKeys(60).ToDictionary(k => k, k => "（日）" + k, StringComparer.Ordinal);
+        ui.Should().HaveCount(60);
+        var world = World([("ja", "en-US")], new() { ["ja"] = (ui, Empty) });
+        var a = LocalePackAnalyzer.Analyze(Pack("ja", ui: ui, nativeName: null), world, Max, null, LocaleOverlayReview.Of(StaleRow("ja", ui)));
+        a.Plan!.UiConfirm.Should().HaveCount(60).And.BeEquivalentTo(ui.Keys);
+        a.Report!.Ui.Confirmed.Should().Be(60);
+        a.Report.Ui.Unchanged.Should().Be(60);
+    }
+
+    /// <summary>測試端獨立算的「缺最多的分類」（計畫判斷 4 的規則）。</summary>
+    private static List<MissingCategory> ExpectedTop(string code, LocaleOverlay? overlay)
+    {
+        var builtinUi = BuiltinLocaleResources.Ui.GetValueOrDefault(code);
+        var ui = BuiltinLocaleResources.BaseKeys
+            .Where(k => !(overlay?.Ui.GetValueOrDefault(k) is { Length: > 0 }) && !(builtinUi?.GetValueOrDefault(k) is { Length: > 0 }))
+            .GroupBy(k => k.Split('.')[0]).Select(g => new MissingCategory("ui", g.Key, g.Count()));
+        var server = BuiltinServerText.BaseKeys
+            .Where(k => !(overlay?.Server.GetValueOrDefault(k) is { Length: > 0 }) && !(BuiltinServerText.TryGet(code, k, out var t) && t.Length > 0))
+            .GroupBy(k => k.StartsWith("report.") ? "report" : k.StartsWith("alert.") ? "alert" : "message")
+            .Select(g => new MissingCategory("server", g.Key, g.Count()));
+        return ui.Concat(server).OrderByDescending(c => c.Missing).ThenBy(c => c.Category, StringComparer.Ordinal).ThenBy(c => c.Segment, StringComparer.Ordinal)
+            .Take(LocalePackLimits.MaxMissingCategories).ToList();
+    }
+
+    [Fact]
+    public void Report_TopMissing_UsesAfterWorld()
+    {
+        var world = World([("ja", "en-US")]);
+        var biggest = BuiltinLocaleResources.BaseKeys.GroupBy(k => k.Split('.')[0]).OrderByDescending(g => g.Count()).First().ToList();
+        var half = biggest.Take(biggest.Count / 2).ToDictionary(k => k, k => BuiltinLocaleResources.Ui["zh-TW"][k], StringComparer.Ordinal);
+        var a = Ok(Pack("ja", ui: half, nativeName: null), world);
+        a.Report!.Ui.Added.Should().Be(half.Count);
+
+        var after = LocalePackAnalyzer.After(world, a.Plan!).Overlays["ja"];
+        a.Report.Completeness.TopMissing.Should().Equal(ExpectedTop("ja", after));
+        a.Report.Completeness.TopMissing.Should().NotEqual(ExpectedTop("ja", null), "用套用後的世界，不是目前的");
+        a.Report.Completeness.Ui.Have.Should().Be(half.Count);
+    }
+
+    [Fact]
+    public void ParamsChanged_Server_ReimportRejected()
+    {
+        var key = BuiltinServerText.BaseKeys.First(k => BuiltinServerText.TryGet("zh-TW", k, out var zh) && zh.Contains("{0}") && !zh.Contains("{1}"));
+        var stale = D((key, "舊 {0} {1}"));
+        var world = World(overlays: new() { ["th"] = (Empty, stale) });
+        var row = new Domain.Entities.Dynamic.LocalePack
+        {
+            Code = "th", IsCurrent = true, UiJson = "{}", ServerJson = JsonSerializer.Serialize(stale),
+            BaseHashesJson = JsonSerializer.Serialize(new { ui = new Dictionary<string, string>(), server = new Dictionary<string, string> { [key] = "0000000000000000" } }),
+        };
+        var a = LocalePackAnalyzer.Analyze(Pack("th", server: stale, nativeName: null), world, Max, null, LocaleOverlayReview.Of(row));
+        a.Report!.Server.RejectedItems.Should().ContainSingle().Which.Reason.Should().Be(LocalePackReasons.Placeholder);
+        a.Plan!.ServerConfirm.Should().BeEmpty();
+        a.Report.Server.Confirmed.Should().Be(0);
     }
 }

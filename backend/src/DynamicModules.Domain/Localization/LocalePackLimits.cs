@@ -24,6 +24,8 @@ public static class LocalePackLimits
     public const int MaxPreviews = 5;
     /// <summary>報告的拒收清單與多餘鍵清單只列前幾筆。</summary>
     public const int MaxListedItems = 50;
+    /// <summary>完整度的「缺最多的分類」只列前幾組（i4d2 計畫判斷 4）。</summary>
+    public const int MaxMissingCategories = 5;
 }
 
 /// <summary>逐句拒收原因代碼（報告與前端 i18n 鍵 <c>localePacks.reasons.&lt;代碼&gt;</c> 共用）。</summary>

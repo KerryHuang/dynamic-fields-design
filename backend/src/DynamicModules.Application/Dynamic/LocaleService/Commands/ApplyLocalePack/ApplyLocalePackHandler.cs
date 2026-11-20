@@ -61,15 +61,17 @@ public sealed class ApplyLocalePackHandler(
             }
         }
 
-        // 覆寫層：U5 逐句合併、Q6 與內建相同的拿掉；沒有任何變動就不加版本（不為了換 token 把上一版擠掉）
+        // 覆寫層：U5 逐句合併、Q6 與內建相同的拿掉；只有確認原文已更新也要寫（雜湊不寫進新列就沒地方存，i4d2 判斷 7）。
+        // 沒有任何變動就不加版本（不為了換 token 把上一版擠掉）；只改語系欄位也不加
         LocalePack? next = null;
-        if (plan.UiSet.Count + plan.UiRemove.Count + plan.ServerSet.Count + plan.ServerRemove.Count > 0)
+        if (plan.OverlayChanged)
         {
             var merged = LocalePackAnalyzer.After(world, plan).Overlays[plan.Code];
             next = new LocalePack
             {
                 Code = plan.Code, UiJson = LocalePackVersions.LayerJson(merged.Ui), ServerJson = LocalePackVersions.LayerJson(merged.Server),
-                BaseHashesJson = LocalePackVersions.BaseHashesJson(currentPack, merged.Ui, merged.Server, plan.UiSet.Keys.ToList(), plan.ServerSet.Keys.ToList()),
+                BaseHashesJson = LocalePackVersions.BaseHashesJson(currentPack, merged.Ui, merged.Server,
+                    plan.UiSet.Keys.Union(plan.UiConfirm).ToHashSet(StringComparer.Ordinal), plan.ServerSet.Keys.Union(plan.ServerConfirm).ToHashSet(StringComparer.Ordinal)),
                 FileHash = preview.FileHash, FileName = preview.FileName, PackVersion = plan.Pack.Version, BuiltFor = plan.Pack.BuiltFor,
                 BaseLocale = plan.Pack.BaseLocale, Note = plan.Pack.Note,
                 ReportJson = JsonSerializer.Serialize(new { ui = Counts(report.Ui), server = Counts(report.Server), completeness = report.Completeness }, LocalePackStorage.Json),
@@ -99,5 +101,5 @@ public sealed class ApplyLocalePackHandler(
     private static ServiceResult Stale() => ServiceResult.Conflict(LocalePackMessages.Stale, LocalePackMessages.CodeStale);
 
     private static object Counts(SectionReport s) =>
-        new { s.Added, s.Changed, s.Unchanged, s.Skipped, s.SameAsBuiltin, s.Extra, s.Rejected };
+        new { s.Added, s.Changed, s.Unchanged, s.Skipped, s.SameAsBuiltin, s.Extra, s.Rejected, s.Confirmed };
 }
