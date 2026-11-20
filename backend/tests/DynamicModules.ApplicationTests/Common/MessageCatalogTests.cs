@@ -232,4 +232,78 @@ public class MessageCatalogTests
         b.Get(new LocaleContext("ja", []), MessageText.Forbidden).Should().Be(Base[MessageText.Forbidden]["zh-TW"]);
         b.Get(new LocaleContext("ja", ["en-US"]), MessageText.Forbidden).Should().Be(Base[MessageText.Forbidden]["en-US"]);
     }
+
+    // ── 覆寫層（i4d1 計畫判斷 11）──
+
+    private static string ServerJson(params (string Key, string Value)[] pairs) => JsonSerializer.Serialize(pairs.ToDictionary(p => p.Key, p => p.Value));
+
+    /// <summary>內建繁中範本只有一個參數 {0} 的第一個鍵（Ordinal 排序）。</summary>
+    private static string OneArgKey() => BuiltinServerText.BaseKeys.First(k =>
+        BuiltinServerText.Table[k].Zh.Contains("{0}") && !BuiltinServerText.Table[k].Zh.Contains("{1}"));
+
+    [Fact]
+    public async Task Overlay_Server_FirstThenBuiltin()
+    {
+        var env = await CreateAsync("zh-TW", r => r.Add("ja", "日本語", fallback: "en-US"));
+        env.Repo.Packs.Set("ja", serverJson: ServerJson((MessageText.Forbidden, "権限がありません")));
+        env.Repo.Packs.Set("th", serverJson: ServerJson(("report.Yes", "ใช่ (ทดสอบ)")));
+        await env.RefreshAsync();
+
+        env.Catalog.Get(env.Lc("ja"), MessageText.Forbidden).Should().Be("権限がありません");
+        env.Catalog.Get(env.Lc("ja"), MessageText.ResourceNotFound).Should().Be(Base[MessageText.ResourceNotFound]["en-US"], "沒覆寫的鍵走鏈");
+        env.Catalog.Get(env.Lc("th"), "report.Yes").Should().Be("ใช่ (ทดสอบ)");
+        env.Catalog.AsI18n(MessageText.Forbidden).Values["ja"].Should().Be("権限がありません");
+    }
+
+    [Fact]
+    public async Task Overlay_BadTemplate_FallsBackToBuiltin()
+    {
+        var key = OneArgKey();
+        var env = await CreateAsync("zh-TW");
+        env.Repo.Packs.Set("th", serverJson: ServerJson((key, "เสีย {1}")));
+        await env.RefreshAsync();
+        var log = new LocaleRegistryOverlayTests.WarningLog<MessageCatalog>();
+        var catalog = new MessageCatalog(env.Registry, env.Policy, log);
+
+        var text = catalog.Invoking(c => c.Get(env.Lc("th"), key, "X")).Should().NotThrow().Subject;
+
+        text.Should().Be(string.Format(CultureInfo.InvariantCulture, BuiltinServerText.Table[key].Th, "X"));
+        log.Warnings.Should().ContainSingle(w => w.Contains(key));
+    }
+
+    [Fact]
+    public async Task AsI18n_OverlaySwapMidway_OneSnapshot()
+    {
+        var env = await CreateAsync("zh-TW", r => r.Add("ja", "日本語", fallback: "en-US"));
+        env.Repo.Packs.Set("ja", serverJson: ServerJson((MessageText.Forbidden, "旧")));
+        await env.RefreshAsync();
+        var hooked = false;
+        env.Catalog.BeforeLocaleForTests = _ =>
+        {
+            if (hooked) return;
+            hooked = true;
+            env.Repo.Packs.Set("ja", serverJson: ServerJson((MessageText.Forbidden, "新")));
+#pragma warning disable xUnit1031
+            env.RefreshAsync().GetAwaiter().GetResult();
+#pragma warning restore xUnit1031
+        };
+
+        var first = env.Catalog.AsI18n(MessageText.Forbidden);
+        env.Catalog.BeforeLocaleForTests = null;
+
+        hooked.Should().BeTrue();
+        first.Values["ja"].Should().Be("旧", "整批只讀一份快照");
+        env.Catalog.AsI18n(MessageText.Forbidden).Values["ja"].Should().Be("新");
+    }
+
+    [Fact]
+    public async Task BuiltinInstance_IgnoresOverlay()
+    {
+        var env = await CreateAsync("zh-TW");
+        env.Repo.Packs.Set("th", serverJson: ServerJson((MessageText.Forbidden, "ทดสอบ")));
+        await env.RefreshAsync();
+
+        env.Catalog.Get(env.Lc("th"), MessageText.Forbidden).Should().Be("ทดสอบ");
+        BuiltinMessageCatalog.Instance.Get(new LocaleContext("th", []), MessageText.Forbidden).Should().Be(Base[MessageText.Forbidden]["th"]);
+    }
 }

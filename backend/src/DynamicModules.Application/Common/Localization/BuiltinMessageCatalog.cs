@@ -13,7 +13,7 @@ public sealed class BuiltinMessageCatalog : IMessageCatalog
 
     private BuiltinMessageCatalog() { }
 
-    public string Get(LocaleContext lc, string key, params object[] args) => MessageCatalog.Format(MessageCatalog.Lookup(lc, key), args);
+    public string Get(LocaleContext lc, string key, params object[] args) => MessageCatalog.Format(MessageCatalog.Lookup(lc, key, overlay: null), args);
 
     public I18nText AsI18n(string key, params object[] args) =>
         new(BuiltinLocales.Codes.Select(l => KeyValuePair.Create(l, Get(new LocaleContext(l, []), key, args))));
