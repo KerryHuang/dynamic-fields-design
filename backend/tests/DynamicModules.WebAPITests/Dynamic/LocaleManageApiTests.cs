@@ -363,4 +363,101 @@ public class LocaleManageApiTests : IDisposable
         rows.Select(r => r.Action).Should().Equal("locale.pack.rollback", "locale.pack.clear", "locale.remove");
         rows.Should().OnlyContain(r => r.TargetKind == "locale" && r.TargetId == "ja" && r.TargetLabel == "日本語");
     }
+
+    // ── i4d2（計畫 Task 2）：完整度、缺最多的分類、覆寫檢視 ──
+
+    private static readonly string[] ReviewFields = ["baseChanged", "paramsChanged", "runtimeFallback", "orphaned"];
+
+    private static IEnumerable<string?> Keys(JsonElement section, string name) => section.GetProperty(name).EnumerateArray().Select(k => k.GetString());
+
+    /// <summary>直接改目前版的原始列（不 Invalidate；清單讀資料庫）。</summary>
+    private void EditCurrent(string code, Action<LocalePack> edit) =>
+        Write(_app, db => edit(db.Set<LocalePack>().Single(p => p.Code == code && p.IsCurrent)));
+
+    private static string ZhServer(string key) => Application.Common.Localization.BuiltinServerText.TryGet("zh-TW", key, out var zh) ? zh : "";
+
+    private static IReadOnlySet<int> ArgsOf(string template) =>
+        System.Text.RegularExpressions.Regex.Matches(template, @"(?<!\{)\{(\d+)\}").Select(m => int.Parse(m.Groups[1].Value)).ToHashSet();
+
+    private static string ServerKey(params int[] args) => Application.Common.Localization.BuiltinServerText.BaseKeys
+        .First(k => ArgsOf(ZhServer(k)).SetEquals(args) && !ZhServer(k).Contains("{{"));
+
+    [Fact]
+    public async Task List_Factory_Completeness()
+    {
+        var uiTotal = Application.Common.Localization.BuiltinLocaleResources.BaseKeys.Count;
+        var serverTotal = Application.Common.Localization.BuiltinServerText.BaseKeys.Count;
+        foreach (var r in (await List()).GetProperty("locales").EnumerateArray())
+        {
+            var c = r.GetProperty("completeness");
+            (c.GetProperty("ui").GetProperty("have").GetInt32(), c.GetProperty("ui").GetProperty("total").GetInt32()).Should().Be((uiTotal, uiTotal));
+            (c.GetProperty("server").GetProperty("have").GetInt32(), c.GetProperty("server").GetProperty("total").GetInt32()).Should().Be((serverTotal, serverTotal));
+            c.GetProperty("topMissing").GetArrayLength().Should().Be(0);
+            foreach (var segment in new[] { "ui", "server" })
+                foreach (var f in ReviewFields)
+                    r.GetProperty("review").GetProperty(segment).GetProperty(f).GetInt32().Should().Be(0, $"{segment}.{f}");
+            r.TryGetProperty("builtFor", out var builtFor).Should().BeTrue("builtFor 要明示輸出 null");
+            builtFor.ValueKind.Should().Be(JsonValueKind.Null);
+        }
+    }
+
+    [Fact]
+    public async Task List_NewLocale_Completeness()
+    {
+        await ApplyPackAsync(_app, JaPartial);
+        var ja = Row(await List(), "ja");
+        ja.GetProperty("completeness").GetProperty("ui").GetProperty("have").GetInt32().Should().Be(30);
+        var top = ja.GetProperty("completeness").GetProperty("topMissing").EnumerateArray().ToList();
+        top.Should().HaveCountGreaterThan(0).And.HaveCountLessThanOrEqualTo(5);
+        top.Select(t => t.GetProperty("missing").GetInt32()).Should().BeInDescendingOrder();
+        ja.GetProperty("builtFor").GetString().Should().Be("2026.11");
+    }
+
+    [Fact]
+    public async Task List_Review_BaseChangedAndOrphaned()
+    {
+        await ApplyPackAsync(_app, Fixture("th-fix.langpack.json"));
+        EditCurrent("th", p =>
+        {
+            var hashes = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(p.BaseHashesJson)!;
+            foreach (var k in hashes["ui"].Keys.ToList()) hashes["ui"][k] = "0000000000000000";
+            p.BaseHashesJson = JsonSerializer.Serialize(hashes);
+            var ui = JsonSerializer.Deserialize<Dictionary<string, string>>(p.UiJson)!;
+            ui["zz.renamedKey"] = "เก่า";
+            p.UiJson = JsonSerializer.Serialize(ui);
+        });
+        var review = Row(await List(), "th").GetProperty("review").GetProperty("ui");
+        review.GetProperty("baseChanged").GetInt32().Should().Be(2);
+        Keys(review, "baseChangedKeys").Should().Equal("menu.closedApps", "menu.conversions");
+        review.GetProperty("orphaned").GetInt32().Should().Be(1);
+        Keys(review, "orphanedKeys").Should().Equal("zz.renamedKey");
+    }
+
+    [Fact]
+    public async Task List_Review_ParamsMismatch()
+    {
+        await ApplyPackAsync(_app, Fixture("th-fix.langpack.json"));
+        var tooMany = ServerKey(0);
+        var tooFew = ServerKey(0, 1);
+        EditCurrent("th", p => p.ServerJson = JsonSerializer.Serialize(new Dictionary<string, string> { [tooMany] = "{0} และ {1}", [tooFew] = "เฉพาะ {0}" }));
+        var review = Row(await List(), "th").GetProperty("review").GetProperty("server");
+        review.GetProperty("paramsChanged").GetInt32().Should().Be(2);
+        Keys(review, "paramsChangedKeys").Should().BeEquivalentTo(tooMany, tooFew);
+        review.GetProperty("runtimeFallback").GetInt32().Should().Be(1);
+        Keys(review, "runtimeFallbackKeys").Should().Equal(tooMany);
+        review.GetProperty("baseChanged").GetInt32().Should().Be(0, "沒記雜湊也算參數不符，但不算原文已更新");
+    }
+
+    [Fact]
+    public async Task List_ReadsDb_NotSnapshot()
+    {
+        await ApplyPackAsync(_app, JaPartial);
+        var before = _app.Services.GetRequiredService<LocaleRegistry>().Texts().Overlay("ja")!.PackId;
+        EditCurrent("ja", p => p.UiJson = "{\"menu.home\":\"ホーム\",\"zz.gone\":\"x\"}");
+        var ja = Row(await List(), "ja");
+        ja.GetProperty("review").GetProperty("ui").GetProperty("orphaned").GetInt32().Should().Be(1);
+        ja.GetProperty("completeness").GetProperty("ui").GetProperty("have").GetInt32().Should().Be(1, "完整度也讀資料庫，不讀快照");
+        _app.Services.GetRequiredService<LocaleRegistry>().Texts().Overlay("ja")!.Ui.Should().HaveCount(30, "快照仍是舊的");
+        before.Should().BePositive();
+    }
 }
