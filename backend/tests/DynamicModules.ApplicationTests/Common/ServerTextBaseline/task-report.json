@@ -1,0 +1,248 @@
+{
+  "report.TaskBlankAssignee": {
+    "zh-TW": "未指派",
+    "en-US": "Unassigned",
+    "th": "ยังไม่มอบหมาย",
+    "vi": "Chưa giao"
+  },
+  "report.TaskBlankAssigneeDepartment": {
+    "zh-TW": "（無部門）",
+    "en-US": "(No department)",
+    "th": "(ไม่มีแผนก)",
+    "vi": "(Không có phòng ban)"
+  },
+  "report.TaskBlankCreator": {
+    "zh-TW": "系統",
+    "en-US": "System",
+    "th": "ระบบ",
+    "vi": "Hệ thống"
+  },
+  "report.TaskBlankModule": {
+    "zh-TW": "（無）",
+    "en-US": "(None)",
+    "th": "(ไม่มี)",
+    "vi": "(Không có)"
+  },
+  "report.TaskBlankRule": {
+    "zh-TW": "（無）",
+    "en-US": "(None)",
+    "th": "(ไม่มี)",
+    "vi": "(Không có)"
+  },
+  "report.TaskCompletionLate": {
+    "zh-TW": "逾期完成",
+    "en-US": "Completed late",
+    "th": "เสร็จล่าช้า",
+    "vi": "Hoàn thành trễ hạn"
+  },
+  "report.TaskCompletionNoDue": {
+    "zh-TW": "無到期日完成",
+    "en-US": "Completed, no due date",
+    "th": "เสร็จโดยไม่มีวันครบกำหนด",
+    "vi": "Hoàn thành, không có hạn"
+  },
+  "report.TaskCompletionNotDone": {
+    "zh-TW": "未完成",
+    "en-US": "Not completed",
+    "th": "ยังไม่เสร็จ",
+    "vi": "Chưa hoàn thành"
+  },
+  "report.TaskCompletionOnTime": {
+    "zh-TW": "準時完成",
+    "en-US": "Completed on time",
+    "th": "เสร็จตรงเวลา",
+    "vi": "Hoàn thành đúng hạn"
+  },
+  "report.TaskDatasetTaskEvents": {
+    "zh-TW": "任務事件（建立或完成）",
+    "en-US": "Task event (created or completed)",
+    "th": "เหตุการณ์ของงาน (สร้างหรือเสร็จ)",
+    "vi": "Sự kiện công việc (tạo hoặc hoàn thành)"
+  },
+  "report.TaskDatasetTasks": {
+    "zh-TW": "任務",
+    "en-US": "Task",
+    "th": "งาน",
+    "vi": "Công việc"
+  },
+  "report.TaskEventCompleted": {
+    "zh-TW": "完成",
+    "en-US": "Completed",
+    "th": "เสร็จ",
+    "vi": "Hoàn thành"
+  },
+  "report.TaskEventCreated": {
+    "zh-TW": "建立",
+    "en-US": "Created",
+    "th": "สร้าง",
+    "vi": "Tạo"
+  },
+  "report.TaskFieldAssignee": {
+    "zh-TW": "負責人",
+    "en-US": "Assignee",
+    "th": "ผู้รับผิดชอบ",
+    "vi": "Người phụ trách"
+  },
+  "report.TaskFieldAssigneeDepartment": {
+    "zh-TW": "負責人部門",
+    "en-US": "Assignee department",
+    "th": "แผนกของผู้รับผิดชอบ",
+    "vi": "Phòng ban người phụ trách"
+  },
+  "report.TaskFieldCompletedTime": {
+    "zh-TW": "完成時間",
+    "en-US": "Completed at",
+    "th": "เวลาที่เสร็จ",
+    "vi": "Thời gian hoàn thành"
+  },
+  "report.TaskFieldCompletion": {
+    "zh-TW": "完成狀況",
+    "en-US": "Completion",
+    "th": "สถานะการเสร็จ",
+    "vi": "Tình trạng hoàn thành"
+  },
+  "report.TaskFieldCompletionDays": {
+    "zh-TW": "完成天數",
+    "en-US": "Days to complete",
+    "th": "จำนวนวันที่ใช้",
+    "vi": "Số ngày hoàn thành"
+  },
+  "report.TaskFieldCreatedTime": {
+    "zh-TW": "建立時間",
+    "en-US": "Created at",
+    "th": "เวลาที่สร้าง",
+    "vi": "Thời gian tạo"
+  },
+  "report.TaskFieldCreator": {
+    "zh-TW": "建立者",
+    "en-US": "Created by",
+    "th": "ผู้สร้าง",
+    "vi": "Người tạo"
+  },
+  "report.TaskFieldDelayDays": {
+    "zh-TW": "延遲天數",
+    "en-US": "Days late",
+    "th": "จำนวนวันที่ล่าช้า",
+    "vi": "Số ngày trễ"
+  },
+  "report.TaskFieldDueDate": {
+    "zh-TW": "到期日",
+    "en-US": "Due date",
+    "th": "วันครบกำหนด",
+    "vi": "Ngày đến hạn"
+  },
+  "report.TaskFieldEventDate": {
+    "zh-TW": "事件日期",
+    "en-US": "Event date",
+    "th": "วันที่ของเหตุการณ์",
+    "vi": "Ngày sự kiện"
+  },
+  "report.TaskFieldEventKind": {
+    "zh-TW": "事件種類",
+    "en-US": "Event type",
+    "th": "ประเภทเหตุการณ์",
+    "vi": "Loại sự kiện"
+  },
+  "report.TaskFieldLevel": {
+    "zh-TW": "層級",
+    "en-US": "Level",
+    "th": "ระดับ",
+    "vi": "Cấp"
+  },
+  "report.TaskFieldModule": {
+    "zh-TW": "所屬模組",
+    "en-US": "Module",
+    "th": "โมดูล",
+    "vi": "Mô-đun"
+  },
+  "report.TaskFieldOverdue": {
+    "zh-TW": "是否逾期",
+    "en-US": "Overdue",
+    "th": "เกินกำหนดหรือไม่",
+    "vi": "Quá hạn"
+  },
+  "report.TaskFieldRule": {
+    "zh-TW": "任務規則",
+    "en-US": "Task rule",
+    "th": "กฎงาน",
+    "vi": "Quy tắc công việc"
+  },
+  "report.TaskFieldSource": {
+    "zh-TW": "來源",
+    "en-US": "Source",
+    "th": "ที่มา",
+    "vi": "Nguồn"
+  },
+  "report.TaskFieldStatus": {
+    "zh-TW": "狀態",
+    "en-US": "Status",
+    "th": "สถานะ",
+    "vi": "Trạng thái"
+  },
+  "report.TaskFieldTitle": {
+    "zh-TW": "標題",
+    "en-US": "Title",
+    "th": "ชื่องาน",
+    "vi": "Tiêu đề"
+  },
+  "report.TaskLevelChild": {
+    "zh-TW": "子任務",
+    "en-US": "Subtask",
+    "th": "งานย่อย",
+    "vi": "Công việc con"
+  },
+  "report.TaskLevelParent": {
+    "zh-TW": "父任務",
+    "en-US": "Parent task",
+    "th": "งานหลัก",
+    "vi": "Công việc cha"
+  },
+  "report.TaskLevelStandalone": {
+    "zh-TW": "獨立任務",
+    "en-US": "Standalone task",
+    "th": "งานเดี่ยว",
+    "vi": "Công việc độc lập"
+  },
+  "report.TaskSourcePersonal": {
+    "zh-TW": "個人任務",
+    "en-US": "Personal task",
+    "th": "งานส่วนตัว",
+    "vi": "Công việc cá nhân"
+  },
+  "report.TaskSourceRecord": {
+    "zh-TW": "記錄上建立",
+    "en-US": "Created on a record",
+    "th": "สร้างจากระเบียน",
+    "vi": "Tạo trên bản ghi"
+  },
+  "report.TaskSourceRule": {
+    "zh-TW": "規則產生",
+    "en-US": "Generated by a rule",
+    "th": "สร้างโดยกฎ",
+    "vi": "Do quy tắc tạo"
+  },
+  "report.TaskStatusCancelled": {
+    "zh-TW": "已取消",
+    "en-US": "Cancelled",
+    "th": "ยกเลิกแล้ว",
+    "vi": "Đã hủy"
+  },
+  "report.TaskStatusDone": {
+    "zh-TW": "已完成",
+    "en-US": "Done",
+    "th": "เสร็จแล้ว",
+    "vi": "Hoàn thành"
+  },
+  "report.TaskStatusInProgress": {
+    "zh-TW": "進行中",
+    "en-US": "In progress",
+    "th": "กำลังดำเนินการ",
+    "vi": "Đang làm"
+  },
+  "report.TaskStatusTodo": {
+    "zh-TW": "待辦",
+    "en-US": "To do",
+    "th": "รอดำเนินการ",
+    "vi": "Cần làm"
+  }
+}

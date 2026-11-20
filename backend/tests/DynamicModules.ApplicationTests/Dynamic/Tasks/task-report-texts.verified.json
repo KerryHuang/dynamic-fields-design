@@ -1,0 +1,981 @@
+[
+  {
+    "section": "blank",
+    "dataset": "",
+    "field": -11,
+    "option": 0,
+    "values": {
+      "en-US": "(None)",
+      "th": "(ไม่มี)",
+      "vi": "(Không có)",
+      "zh-TW": "（無）"
+    }
+  },
+  {
+    "section": "blank",
+    "dataset": "",
+    "field": -10,
+    "option": 0,
+    "values": {
+      "en-US": "(None)",
+      "th": "(ไม่มี)",
+      "vi": "(Không có)",
+      "zh-TW": "（無）"
+    }
+  },
+  {
+    "section": "blank",
+    "dataset": "",
+    "field": -5,
+    "option": 0,
+    "values": {
+      "en-US": "System",
+      "th": "ระบบ",
+      "vi": "Hệ thống",
+      "zh-TW": "系統"
+    }
+  },
+  {
+    "section": "blank",
+    "dataset": "",
+    "field": -4,
+    "option": 0,
+    "values": {
+      "en-US": "(No department)",
+      "th": "(ไม่มีแผนก)",
+      "vi": "(Không có phòng ban)",
+      "zh-TW": "（無部門）"
+    }
+  },
+  {
+    "section": "blank",
+    "dataset": "",
+    "field": -3,
+    "option": 0,
+    "values": {
+      "en-US": "Unassigned",
+      "th": "ยังไม่มอบหมาย",
+      "vi": "Chưa giao",
+      "zh-TW": "未指派"
+    }
+  },
+  {
+    "section": "datasetName",
+    "dataset": "taskEvents",
+    "field": 0,
+    "option": 0,
+    "values": {
+      "en-US": "Task event (created or completed)",
+      "th": "เหตุการณ์ของงาน (สร้างหรือเสร็จ)",
+      "vi": "Sự kiện công việc (tạo hoặc hoàn thành)",
+      "zh-TW": "任務事件（建立或完成）"
+    }
+  },
+  {
+    "section": "datasetName",
+    "dataset": "tasks",
+    "field": 0,
+    "option": 0,
+    "values": {
+      "en-US": "Task",
+      "th": "งาน",
+      "vi": "Công việc",
+      "zh-TW": "任務"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "foo",
+    "field": -10,
+    "option": 0,
+    "values": {
+      "en-US": "Module",
+      "th": "โมดูล",
+      "vi": "Mô-đun",
+      "zh-TW": "所屬模組"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "foo",
+    "field": -8,
+    "option": 0,
+    "values": {
+      "en-US": "Completed at",
+      "th": "เวลาที่เสร็จ",
+      "vi": "Thời gian hoàn thành",
+      "zh-TW": "完成時間"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "foo",
+    "field": -6,
+    "option": 0,
+    "values": {
+      "en-US": "Due date",
+      "th": "วันครบกำหนด",
+      "vi": "Ngày đến hạn",
+      "zh-TW": "到期日"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "foo",
+    "field": -3,
+    "option": 0,
+    "values": {
+      "en-US": "Assignee",
+      "th": "ผู้รับผิดชอบ",
+      "vi": "Người phụ trách",
+      "zh-TW": "負責人"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "foo",
+    "field": -2,
+    "option": 0,
+    "values": {
+      "en-US": "Status",
+      "th": "สถานะ",
+      "vi": "Trạng thái",
+      "zh-TW": "狀態"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "foo",
+    "field": -1,
+    "option": 0,
+    "values": {
+      "en-US": "Title",
+      "th": "ชื่องาน",
+      "vi": "Tiêu đề",
+      "zh-TW": "標題"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "taskEvents",
+    "field": -19,
+    "option": 0,
+    "values": {
+      "en-US": "Event date",
+      "th": "วันที่ของเหตุการณ์",
+      "vi": "Ngày sự kiện",
+      "zh-TW": "事件日期"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "taskEvents",
+    "field": -18,
+    "option": 0,
+    "values": {
+      "en-US": "Event type",
+      "th": "ประเภทเหตุการณ์",
+      "vi": "Loại sự kiện",
+      "zh-TW": "事件種類"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "taskEvents",
+    "field": -16,
+    "option": 0,
+    "values": {
+      "en-US": "Level",
+      "th": "ระดับ",
+      "vi": "Cấp",
+      "zh-TW": "層級"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "taskEvents",
+    "field": -11,
+    "option": 0,
+    "values": {
+      "en-US": "Task rule",
+      "th": "กฎงาน",
+      "vi": "Quy tắc công việc",
+      "zh-TW": "任務規則"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "taskEvents",
+    "field": -10,
+    "option": 0,
+    "values": {
+      "en-US": "Module",
+      "th": "โมดูล",
+      "vi": "Mô-đun",
+      "zh-TW": "所屬模組"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "taskEvents",
+    "field": -9,
+    "option": 0,
+    "values": {
+      "en-US": "Source",
+      "th": "ที่มา",
+      "vi": "Nguồn",
+      "zh-TW": "來源"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "taskEvents",
+    "field": -5,
+    "option": 0,
+    "values": {
+      "en-US": "Created by",
+      "th": "ผู้สร้าง",
+      "vi": "Người tạo",
+      "zh-TW": "建立者"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "taskEvents",
+    "field": -4,
+    "option": 0,
+    "values": {
+      "en-US": "Assignee department",
+      "th": "แผนกของผู้รับผิดชอบ",
+      "vi": "Phòng ban người phụ trách",
+      "zh-TW": "負責人部門"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "taskEvents",
+    "field": -3,
+    "option": 0,
+    "values": {
+      "en-US": "Assignee",
+      "th": "ผู้รับผิดชอบ",
+      "vi": "Người phụ trách",
+      "zh-TW": "負責人"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "taskEvents",
+    "field": -2,
+    "option": 0,
+    "values": {
+      "en-US": "Status",
+      "th": "สถานะ",
+      "vi": "Trạng thái",
+      "zh-TW": "狀態"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "taskEvents",
+    "field": -1,
+    "option": 0,
+    "values": {
+      "en-US": "Title",
+      "th": "ชื่องาน",
+      "vi": "Tiêu đề",
+      "zh-TW": "標題"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -16,
+    "option": 0,
+    "values": {
+      "en-US": "Level",
+      "th": "ระดับ",
+      "vi": "Cấp",
+      "zh-TW": "層級"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -15,
+    "option": 0,
+    "values": {
+      "en-US": "Days late",
+      "th": "จำนวนวันที่ล่าช้า",
+      "vi": "Số ngày trễ",
+      "zh-TW": "延遲天數"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -14,
+    "option": 0,
+    "values": {
+      "en-US": "Days to complete",
+      "th": "จำนวนวันที่ใช้",
+      "vi": "Số ngày hoàn thành",
+      "zh-TW": "完成天數"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -13,
+    "option": 0,
+    "values": {
+      "en-US": "Completion",
+      "th": "สถานะการเสร็จ",
+      "vi": "Tình trạng hoàn thành",
+      "zh-TW": "完成狀況"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -12,
+    "option": 0,
+    "values": {
+      "en-US": "Overdue",
+      "th": "เกินกำหนดหรือไม่",
+      "vi": "Quá hạn",
+      "zh-TW": "是否逾期"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -11,
+    "option": 0,
+    "values": {
+      "en-US": "Task rule",
+      "th": "กฎงาน",
+      "vi": "Quy tắc công việc",
+      "zh-TW": "任務規則"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -10,
+    "option": 0,
+    "values": {
+      "en-US": "Module",
+      "th": "โมดูล",
+      "vi": "Mô-đun",
+      "zh-TW": "所屬模組"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -9,
+    "option": 0,
+    "values": {
+      "en-US": "Source",
+      "th": "ที่มา",
+      "vi": "Nguồn",
+      "zh-TW": "來源"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -8,
+    "option": 0,
+    "values": {
+      "en-US": "Completed at",
+      "th": "เวลาที่เสร็จ",
+      "vi": "Thời gian hoàn thành",
+      "zh-TW": "完成時間"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -7,
+    "option": 0,
+    "values": {
+      "en-US": "Created at",
+      "th": "เวลาที่สร้าง",
+      "vi": "Thời gian tạo",
+      "zh-TW": "建立時間"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -6,
+    "option": 0,
+    "values": {
+      "en-US": "Due date",
+      "th": "วันครบกำหนด",
+      "vi": "Ngày đến hạn",
+      "zh-TW": "到期日"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -5,
+    "option": 0,
+    "values": {
+      "en-US": "Created by",
+      "th": "ผู้สร้าง",
+      "vi": "Người tạo",
+      "zh-TW": "建立者"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -4,
+    "option": 0,
+    "values": {
+      "en-US": "Assignee department",
+      "th": "แผนกของผู้รับผิดชอบ",
+      "vi": "Phòng ban người phụ trách",
+      "zh-TW": "負責人部門"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -3,
+    "option": 0,
+    "values": {
+      "en-US": "Assignee",
+      "th": "ผู้รับผิดชอบ",
+      "vi": "Người phụ trách",
+      "zh-TW": "負責人"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -2,
+    "option": 0,
+    "values": {
+      "en-US": "Status",
+      "th": "สถานะ",
+      "vi": "Trạng thái",
+      "zh-TW": "狀態"
+    }
+  },
+  {
+    "section": "field",
+    "dataset": "tasks",
+    "field": -1,
+    "option": 0,
+    "values": {
+      "en-US": "Title",
+      "th": "ชื่องาน",
+      "vi": "Tiêu đề",
+      "zh-TW": "標題"
+    }
+  },
+  {
+    "section": "module",
+    "dataset": "foo",
+    "field": 0,
+    "option": 0,
+    "values": {}
+  },
+  {
+    "section": "module",
+    "dataset": "taskEvents",
+    "field": 0,
+    "option": 0,
+    "values": {
+      "en-US": "Task event (created or completed)",
+      "th": "เหตุการณ์ของงาน (สร้างหรือเสร็จ)",
+      "vi": "Sự kiện công việc (tạo hoặc hoàn thành)",
+      "zh-TW": "任務事件（建立或完成）"
+    }
+  },
+  {
+    "section": "module",
+    "dataset": "tasks",
+    "field": 0,
+    "option": 0,
+    "values": {
+      "en-US": "Task",
+      "th": "งาน",
+      "vi": "Công việc",
+      "zh-TW": "任務"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "foo",
+    "field": -10,
+    "option": 11,
+    "values": {
+      "zh-TW": "訂單"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "foo",
+    "field": -10,
+    "option": 12,
+    "values": {
+      "zh-TW": "請假單"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "foo",
+    "field": -2,
+    "option": 1,
+    "values": {
+      "en-US": "To do",
+      "th": "รอดำเนินการ",
+      "vi": "Cần làm",
+      "zh-TW": "待辦"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "foo",
+    "field": -2,
+    "option": 2,
+    "values": {
+      "en-US": "In progress",
+      "th": "กำลังดำเนินการ",
+      "vi": "Đang làm",
+      "zh-TW": "進行中"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "foo",
+    "field": -2,
+    "option": 3,
+    "values": {
+      "en-US": "Done",
+      "th": "เสร็จแล้ว",
+      "vi": "Hoàn thành",
+      "zh-TW": "已完成"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "foo",
+    "field": -2,
+    "option": 4,
+    "values": {
+      "en-US": "Cancelled",
+      "th": "ยกเลิกแล้ว",
+      "vi": "Đã hủy",
+      "zh-TW": "已取消"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -18,
+    "option": 1,
+    "values": {
+      "en-US": "Created",
+      "th": "สร้าง",
+      "vi": "Tạo",
+      "zh-TW": "建立"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -18,
+    "option": 2,
+    "values": {
+      "en-US": "Completed",
+      "th": "เสร็จ",
+      "vi": "Hoàn thành",
+      "zh-TW": "完成"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -16,
+    "option": 1,
+    "values": {
+      "en-US": "Standalone task",
+      "th": "งานเดี่ยว",
+      "vi": "Công việc độc lập",
+      "zh-TW": "獨立任務"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -16,
+    "option": 2,
+    "values": {
+      "en-US": "Parent task",
+      "th": "งานหลัก",
+      "vi": "Công việc cha",
+      "zh-TW": "父任務"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -16,
+    "option": 3,
+    "values": {
+      "en-US": "Subtask",
+      "th": "งานย่อย",
+      "vi": "Công việc con",
+      "zh-TW": "子任務"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -11,
+    "option": 21,
+    "values": {
+      "zh-TW": "出貨提醒"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -10,
+    "option": 11,
+    "values": {
+      "zh-TW": "訂單"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -10,
+    "option": 12,
+    "values": {
+      "zh-TW": "請假單"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -9,
+    "option": 1,
+    "values": {
+      "en-US": "Personal task",
+      "th": "งานส่วนตัว",
+      "vi": "Công việc cá nhân",
+      "zh-TW": "個人任務"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -9,
+    "option": 2,
+    "values": {
+      "en-US": "Created on a record",
+      "th": "สร้างจากระเบียน",
+      "vi": "Tạo trên bản ghi",
+      "zh-TW": "記錄上建立"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -9,
+    "option": 3,
+    "values": {
+      "en-US": "Generated by a rule",
+      "th": "สร้างโดยกฎ",
+      "vi": "Do quy tắc tạo",
+      "zh-TW": "規則產生"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -4,
+    "option": 5,
+    "values": {
+      "zh-TW": "業務一"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -4,
+    "option": 6,
+    "values": {
+      "zh-TW": "舊部門"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -2,
+    "option": 1,
+    "values": {
+      "en-US": "To do",
+      "th": "รอดำเนินการ",
+      "vi": "Cần làm",
+      "zh-TW": "待辦"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -2,
+    "option": 2,
+    "values": {
+      "en-US": "In progress",
+      "th": "กำลังดำเนินการ",
+      "vi": "Đang làm",
+      "zh-TW": "進行中"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -2,
+    "option": 3,
+    "values": {
+      "en-US": "Done",
+      "th": "เสร็จแล้ว",
+      "vi": "Hoàn thành",
+      "zh-TW": "已完成"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "taskEvents",
+    "field": -2,
+    "option": 4,
+    "values": {
+      "en-US": "Cancelled",
+      "th": "ยกเลิกแล้ว",
+      "vi": "Đã hủy",
+      "zh-TW": "已取消"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -16,
+    "option": 1,
+    "values": {
+      "en-US": "Standalone task",
+      "th": "งานเดี่ยว",
+      "vi": "Công việc độc lập",
+      "zh-TW": "獨立任務"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -16,
+    "option": 2,
+    "values": {
+      "en-US": "Parent task",
+      "th": "งานหลัก",
+      "vi": "Công việc cha",
+      "zh-TW": "父任務"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -16,
+    "option": 3,
+    "values": {
+      "en-US": "Subtask",
+      "th": "งานย่อย",
+      "vi": "Công việc con",
+      "zh-TW": "子任務"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -13,
+    "option": 1,
+    "values": {
+      "en-US": "Completed on time",
+      "th": "เสร็จตรงเวลา",
+      "vi": "Hoàn thành đúng hạn",
+      "zh-TW": "準時完成"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -13,
+    "option": 2,
+    "values": {
+      "en-US": "Completed late",
+      "th": "เสร็จล่าช้า",
+      "vi": "Hoàn thành trễ hạn",
+      "zh-TW": "逾期完成"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -13,
+    "option": 3,
+    "values": {
+      "en-US": "Completed, no due date",
+      "th": "เสร็จโดยไม่มีวันครบกำหนด",
+      "vi": "Hoàn thành, không có hạn",
+      "zh-TW": "無到期日完成"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -13,
+    "option": 4,
+    "values": {
+      "en-US": "Not completed",
+      "th": "ยังไม่เสร็จ",
+      "vi": "Chưa hoàn thành",
+      "zh-TW": "未完成"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -11,
+    "option": 21,
+    "values": {
+      "zh-TW": "出貨提醒"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -10,
+    "option": 11,
+    "values": {
+      "zh-TW": "訂單"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -10,
+    "option": 12,
+    "values": {
+      "zh-TW": "請假單"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -9,
+    "option": 1,
+    "values": {
+      "en-US": "Personal task",
+      "th": "งานส่วนตัว",
+      "vi": "Công việc cá nhân",
+      "zh-TW": "個人任務"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -9,
+    "option": 2,
+    "values": {
+      "en-US": "Created on a record",
+      "th": "สร้างจากระเบียน",
+      "vi": "Tạo trên bản ghi",
+      "zh-TW": "記錄上建立"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -9,
+    "option": 3,
+    "values": {
+      "en-US": "Generated by a rule",
+      "th": "สร้างโดยกฎ",
+      "vi": "Do quy tắc tạo",
+      "zh-TW": "規則產生"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -4,
+    "option": 5,
+    "values": {
+      "zh-TW": "業務一"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -4,
+    "option": 6,
+    "values": {
+      "zh-TW": "舊部門"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -2,
+    "option": 1,
+    "values": {
+      "en-US": "To do",
+      "th": "รอดำเนินการ",
+      "vi": "Cần làm",
+      "zh-TW": "待辦"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -2,
+    "option": 2,
+    "values": {
+      "en-US": "In progress",
+      "th": "กำลังดำเนินการ",
+      "vi": "Đang làm",
+      "zh-TW": "進行中"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -2,
+    "option": 3,
+    "values": {
+      "en-US": "Done",
+      "th": "เสร็จแล้ว",
+      "vi": "Hoàn thành",
+      "zh-TW": "已完成"
+    }
+  },
+  {
+    "section": "option",
+    "dataset": "tasks",
+    "field": -2,
+    "option": 4,
+    "values": {
+      "en-US": "Cancelled",
+      "th": "ยกเลิกแล้ว",
+      "vi": "Đã hủy",
+      "zh-TW": "已取消"
+    }
+  }
+]
