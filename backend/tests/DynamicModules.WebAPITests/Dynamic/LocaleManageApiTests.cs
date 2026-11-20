@@ -117,6 +117,36 @@ public class LocaleManageApiTests : IDisposable
         ja.GetProperty("hasPrevious").GetBoolean().Should().BeFalse();
     }
 
+    /// <summary>
+    /// 不經測試的等待 helper（審查建議 1）：<see cref="WaitForSnapshotAsync"/> 每輪自己呼叫 <c>Invalidate</c>，正式寫入路徑漏登記提交後失效也會過。
+    /// 這裡只發正常請求：假時鐘不前進、快照不會因 TTL 過期，下一個請求看得到結果只可能是提交後失效生效。
+    /// </summary>
+    [Fact]
+    public async Task Writes_NextRequestSeesResult_WithoutTestInvalidate()
+    {
+        var admin = _app.AsUser();
+        async Task<string?> Login()
+        {
+            var res = await admin.GetAsync($"{I18n}/ui/ja");
+            if (res.StatusCode == HttpStatusCode.NotFound) return null;
+            res.StatusCode.Should().Be(HttpStatusCode.OK);
+            return (await res.Content.ReadFromJsonAsync<Dictionary<string, string>>())!["auth.login"];
+        }
+        async Task Ok(HttpResponseMessage res) => res.StatusCode.Should().BeOneOf([HttpStatusCode.OK, HttpStatusCode.NoContent], await res.Content.ReadAsStringAsync());
+
+        (await Login()).Should().BeNull();
+        await Ok(await ApplyAsync(admin, await PreviewOkAsync(admin, JaPartial)));
+        (await Login()).Should().Be("（日）Sign in", "套用");
+        await Ok(await ApplyAsync(admin, await PreviewOkAsync(admin, JaB)));
+        (await Login()).Should().Be("（日）ログイン", "再套用");
+        await Ok(await Post("ja", "rollback"));
+        (await Login()).Should().Be("（日）Sign in", "回到上一版");
+        await Ok(await Post("ja", "clear"));
+        (await Login()).Should().NotBe("（日）Sign in", "移除覆寫");
+        await Ok(await admin.DeleteAsync($"{I18n}/locales/ja"));
+        (await Login()).Should().BeNull("移除語系");
+    }
+
     [Fact]
     public async Task Rollback_AndBack()
     {
