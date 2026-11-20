@@ -132,6 +132,7 @@ public static partial class TemplateValidator
 
         foreach (var v in m.Views)
         {
+            // 刻意用繁中（#66）：範本驗證是靜態檢查，套件文字以繁中為準（判斷 12），同一批錯誤句全是繁中固定句。
             var at = $"{mc}: 檢視「{v.Name?.Resolve(I18nText.FallbackLocale)}」";
             if (!HasZhTw(v.Name)) errors.Add($"{at}的名稱必須有繁體中文");
             foreach (var c in v.Columns.Where(c => !fields.ContainsKey(c)))

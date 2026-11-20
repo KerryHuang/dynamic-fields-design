@@ -54,6 +54,23 @@ public class LocaleLabelTests : EffectsTestBase
     }
 
     [Fact]
+    public async Task FillLockTargetNotReadOnly_UsesDefaultLocale()
+    {
+        await DefaultLocale("en-US");
+        await NewModule("llf-src");
+        var src = await AddTwo("llf-src", FieldType.Text, "條件", "Terms");
+        await NewModule("llf-dst");
+        var open = await AddTwo("llf-dst", FieldType.Text, "可編輯", "Editable");
+        var block = (await Detail("llf-dst")).Blocks[0].Id;
+        var r = await Send(new AddFieldRequest("llf-dst", block, FieldType.Reference, Text("來源"), RefTo("llf-src") with
+        {
+            Fill = new FillConfig(FillConfig.Lock, [new FillMapping(src.Id, open.Id)])
+        }));
+        r.IsCreated.Should().BeFalse();
+        r.Errors["Config.Fill"].Should().Contain(m => m.Contains("Editable") && !m.Contains("可編輯"));
+    }
+
+    [Fact]
     public async Task CheckIndexNotice_Factory_Unchanged()
     {
         (await CheckNotices("llz")).Should().Contain("已自動啟用欄位「品項」的可篩選");

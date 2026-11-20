@@ -272,7 +272,7 @@ public sealed partial class AppExporter(
                     warnings.Add($"簽核流程「{s.Flow.NameI18n.Resolve(requestLocale.Current)}」使用流程圖格式，套件格式升版前不能匯出，已略過（流程已停用）");
                     continue;
                 }
-                var (flow, flowErrors) = AppApprovalFlowCodec.ToPackage(s.Flow, s.Definition, module, w.StatusFieldId, names, groupCode);
+                var (flow, flowErrors) = AppApprovalFlowCodec.ToPackage(s.Flow, s.Definition, module, w.StatusFieldId, names, groupCode, requestLocale.Current);
                 if (flow is null) errors.AddRange(flowErrors);
                 else flows.Add(flow);
             }

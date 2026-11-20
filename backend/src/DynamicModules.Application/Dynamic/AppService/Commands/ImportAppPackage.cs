@@ -87,7 +87,7 @@ public class ImportAppPackageHandler(
     private async Task<ServiceResult> MergeAsync(
         AppPackageData incoming, AppPackageData current, AppPackage? stored, IReadOnlyDictionary<string, AppPackageData> masters, CancellationToken ct)
     {
-        var (merged, warnings) = MasterMerger.MergeDefinition(current, incoming);
+        var (merged, warnings) = MasterMerger.MergeDefinition(current, incoming, requestLocale.Current);
         var others = masters.Where(m => m.Key != merged.Manifest.Id).ToDictionary(m => m.Key, m => m.Value);
         var validation = AppPackageValidator.Validate(merged, others);
         if (validation.Errors.Count > 0) return Invalid(validation.Errors.Select(e => $"合併後的定義：{e}"));

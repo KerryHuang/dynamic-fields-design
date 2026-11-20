@@ -134,7 +134,7 @@ public sealed partial class AppOpenPlanner(
         // 簽核流程一律保留：被略過的群組由備援頂替，逐條列出（§14.4）；已對應＝groupMap 的 map 或 create，與開啟時的 groupIds 相同
         var mappedCodes = body.GroupMap.Where(kv => kv.Value?.Mode is "map" or "create").Select(kv => kv.Key).ToHashSet();
         var substitutions = package.ApprovalFlows.SelectMany(f => AppApprovalFlowCodec.Substitutions(f, mappedCodes, package.Groups)).ToList();
-        warnings.AddRange(substitutions.Select(AppMessages.ApprovalSubstituted));
+        warnings.AddRange(substitutions.Select(s => AppMessages.ApprovalSubstituted(s, requestLocale.Current)));
         errors.AddRange(RejectTransitionErrors(package, mappedCodes));
         // 同一個應用程式重開：型別不同、不會接回的孤兒欄位先在預覽警告（§7 刪除第 6 點）
         if (package.Contributions.Count > 0) warnings.AddRange((await orphans.MatchAsync(package, ct)).Warnings);

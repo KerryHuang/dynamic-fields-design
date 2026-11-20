@@ -172,10 +172,12 @@ public class AppApprovalFlowCodecTests
 
     private static string? GroupCode(long id) => AllGroups.FirstOrDefault(kv => kv.Value == id).Key;
 
+    private static readonly LocaleContext Zh = new("zh-TW", ["zh-TW"]);
+
     private static (AppApprovalFlow? Flow, List<string> Errors) Export(ApprovalFlowInput input, Func<long, string?>? groupCode = null) =>
         AppApprovalFlowCodec.ToPackage(
             new ApprovalFlow { Key = input.Key, NameI18n = input.Name, ToOptionId = input.ToOptionId, Priority = input.Priority, Active = input.Active },
-            input.Definition, "po", 104, Names, groupCode ?? GroupCode);
+            input.Definition, "po", 104, Names, groupCode ?? GroupCode, Zh);
 
     private static ApprovalFlowInput Imported(AppApprovalFlow f)
     {
@@ -249,12 +251,24 @@ public class AppApprovalFlowCodecTests
         var missing = Names with { Field = id => id == 102 ? null : FieldNames.GetValueOrDefault(id) };
         var (flow, errors) = AppApprovalFlowCodec.ToPackage(
             new ApprovalFlow { Key = input.Key, NameI18n = input.Name, ToOptionId = input.ToOptionId, Priority = 1, Active = true },
-            input.Definition, "po", 104, missing, GroupCode);
+            input.Definition, "po", 104, missing, GroupCode, Zh);
         flow.Should().BeNull();
         errors.Should().Equal("簽核流程「採購單（大額）」引用了停用或未匯出的欄位");
 
         Export(input with { ToOptionId = 999 }).Errors.Should().Equal("簽核流程「採購單（大額）」引用了停用或未匯出的狀態");
         Export(input, _ => null).Errors.Should().Equal("簽核流程「採購單（大額）」引用了已不存在的群組");
+    }
+
+    [Fact]
+    public void ToPackage_ErrorUsesGivenLocale()
+    {
+        var input = Imported(Flow(null, Stage("lead", Group("purchaseLead"), editable: ["po.memo"])));
+        var name = new I18nText(new Dictionary<string, string> { ["zh-TW"] = "採購單（大額）", ["en-US"] = "Purchase (large)" });
+        var missing = Names with { Field = id => id == 102 ? null : FieldNames.GetValueOrDefault(id) };
+        var (_, errors) = AppApprovalFlowCodec.ToPackage(
+            new ApprovalFlow { Key = input.Key, NameI18n = name, ToOptionId = input.ToOptionId, Priority = 1, Active = true },
+            input.Definition, "po", 104, missing, GroupCode, new LocaleContext("en-US", ["en-US", "zh-TW"]));
+        errors.Should().Equal("簽核流程「Purchase (large)」引用了停用或未匯出的欄位");
     }
 
     [Fact]
@@ -266,7 +280,7 @@ public class AppApprovalFlowCodecTests
         var missing = Names with { Option = (field, option) => field == 104 && option == 202 ? "confirmed" : null };
         var (flow, errors) = AppApprovalFlowCodec.ToPackage(
             new ApprovalFlow { Key = input.Key, NameI18n = input.Name, ToOptionId = input.ToOptionId, Priority = 1, Active = true },
-            input.Definition, "po", 104, missing, GroupCode);
+            input.Definition, "po", 104, missing, GroupCode, Zh);
         flow.Should().BeNull();
         // 只指出查不到的那一個選項（202 查得到，不報），訊息帶欄位與選項，不是「所有 opt_ 一律擋」
         errors.Should().Equal("簽核流程「採購單（大額）」引用了停用或未匯出的選項（欄位 po.status 的 opt_201）");

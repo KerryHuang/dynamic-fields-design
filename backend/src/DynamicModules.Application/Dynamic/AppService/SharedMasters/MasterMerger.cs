@@ -22,11 +22,11 @@ namespace DynamicModules.Application.Dynamic.AppService.SharedMasters;
 /// </summary>
 public sealed class MasterMerger(
     IAppRepository apps, IModuleRepository modules, MasterSymbols symbols, TemplateInstantiator instantiator,
-    ISender sender, MasterLifecycle lifecycle, IUnitOfWork uow)
+    ISender sender, MasterLifecycle lifecycle, IUnitOfWork uow, Common.RequestLocale requestLocale)
 {
     private static readonly IReadOnlyDictionary<string, long> None = new Dictionary<string, long>();
 
-    private static string Label(I18nText text) => text.Resolve(I18nText.FallbackLocale);
+    private static string Label(I18nText text, LocaleContext lc) => text.Resolve(lc);
 
     private static string TypeKept(string label, string code) => $"「{label}」（{code}）的型別和匯入的不同，保留既有的";
 
@@ -50,16 +50,16 @@ public sealed class MasterMerger(
     // ---- 定義層 ----
 
     /// <summary>目前的定義（匯入的那份，沒有就是內建那份）加上匯入的：manifest、群組與其他部分保留目前的，只補模組、區塊、欄位、選項。</summary>
-    public static (AppPackageData Merged, List<string> Warnings) MergeDefinition(AppPackageData current, AppPackageData incoming)
+    public static (AppPackageData Merged, List<string> Warnings) MergeDefinition(AppPackageData current, AppPackageData incoming, LocaleContext lc)
     {
         var warnings = new List<string>();
         var result = current.Modules.ToList();
         foreach (var im in incoming.Modules)
         {
             var index = result.FindIndex(m => m.Code == im.Code);
-            if (index >= 0) { result[index] = MergeModule(result[index], im, warnings); continue; }
+            if (index >= 0) { result[index] = MergeModule(result[index], im, warnings, lc); continue; }
             var kept = im.Permissions.Where(p => current.Groups.Any(g => g.Code == p.Group)).ToList();
-            if (kept.Count < im.Permissions.Count) warnings.Add($"模組「{Label(im.Name)}」的權限用到沒合併的群組，已略過");
+            if (kept.Count < im.Permissions.Count) warnings.Add($"模組「{Label(im.Name, lc)}」的權限用到沒合併的群組，已略過");
             result.Add(im with { Permissions = kept });
         }
         if (!Same(current.Groups, incoming.Groups)) warnings.Add("群組沒有合併，保留既有的");
@@ -69,7 +69,7 @@ public sealed class MasterMerger(
         return (current with { Modules = result }, warnings);
     }
 
-    private static TemplateModule MergeModule(TemplateModule current, TemplateModule incoming, List<string> warnings)
+    private static TemplateModule MergeModule(TemplateModule current, TemplateModule incoming, List<string> warnings, LocaleContext lc)
     {
         var blocks = current.Blocks.Select(b => b with { Fields = b.Fields.ToList() }).ToList();
         var fields = blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Code);
@@ -81,7 +81,7 @@ public sealed class MasterMerger(
             {
                 if (fields.TryGetValue(f.Code, out var existing))
                 {
-                    if (existing.Type != f.Type) { warnings.Add(TypeKept(Label(existing.Label), f.Code)); continue; }
+                    if (existing.Type != f.Type) { warnings.Add(TypeKept(Label(existing.Label, lc), f.Code)); continue; }
                     var added = f.Options.Where(o => existing.Options.All(x => x.Code != o.Code))
                         .Select(o => o with { Code = Avoid(o.Code, optionCodes) }).ToList();
                     if (added.Count == 0) continue;
@@ -102,7 +102,7 @@ public sealed class MasterMerger(
             }
         }
         if (!Same(current.Rules, incoming.Rules) || !Same(current.Views, incoming.Views) || !Same(current.Permissions, incoming.Permissions))
-            warnings.Add($"模組「{Label(current.Name)}」的規則、檢視與權限沒有合併，保留既有的");
+            warnings.Add($"模組「{Label(current.Name, lc)}」的規則、檢視與權限沒有合併，保留既有的");
         return current with { Blocks = blocks };
     }
 
@@ -111,6 +111,7 @@ public sealed class MasterMerger(
     /// <summary>補進已存在的主檔；失敗回傳錯誤（呼叫端在交易內，整個匯入回滾），成功回 null。會提交。</summary>
     public async Task<ServiceResult?> MergeIntoDatabaseAsync(App master, AppPackageData incoming, List<string> warnings, CancellationToken ct)
     {
+        var lc = requestLocale.Current;
         // 合併寫入走一般的新增請求（欄位、選項、區塊）：套件文字只要求繁中，不套必填語系政策（判斷 12）
         using var packageText = Common.PackageTextScope.Begin();
         var bindings = await apps.GetBindingsAsync(master.Id, ct);
@@ -149,7 +150,7 @@ public sealed class MasterMerger(
         {
             if (!loaded.TryGetValue(im.Code, out var module))
             {
-                warnings.Add($"主檔已開啟，新的模組「{Label(im.Name)}」沒有合併");
+                warnings.Add($"主檔已開啟，新的模組「{Label(im.Name, lc)}」沒有合併");
                 continue;
             }
             var prefix = im.Code + ".";
@@ -172,7 +173,7 @@ public sealed class MasterMerger(
             TemplateOption NewOption(TemplateOption o)
             {
                 var code = Avoid(o.Code, takenOptions);
-                Collided(warnings, "選項", Label(o.Label), o.Code, code);
+                Collided(warnings, "選項", Label(o.Label, lc), o.Code, code);
                 return o with { Code = code };
             }
 
@@ -186,26 +187,26 @@ public sealed class MasterMerger(
                     if (baseFields.TryGetValue(f.Code, out var fieldId))
                     {
                         var existing = dbFields[fieldId];
-                        if (existing.Type != f.Type) { warnings.Add(TypeKept(Label(existing.LabelI18n), f.Code)); continue; }
+                        if (existing.Type != f.Type) { warnings.Add(TypeKept(Label(existing.LabelI18n, lc), f.Code)); continue; }
                         foreach (var o in f.Options)
                         {
                             if (!baseOptions.TryGetValue(o.Code, out var optionId)) optionAdds.Add((im.Code, fieldId, NewOption(o)));
                             else if (existing.Options.All(x => x.Id != optionId))
-                                warnings.Add($"選項「{Label(o.Label)}」的代號 {o.Code} 已是同模組另一個欄位的選項，沒有合併");
+                                warnings.Add($"選項「{Label(o.Label, lc)}」的代號 {o.Code} 已是同模組另一個欄位的選項，沒有合併");
                         }
                         continue;
                     }
                     var code = Avoid(f.Code, takenFields);
-                    Collided(warnings, "欄位", Label(f.Label), f.Code, code);
+                    Collided(warnings, "欄位", Label(f.Label, lc), f.Code, code);
                     if (code != f.Code) renamed[f.Code] = code;
-                    fresh.Add(f with { Code = code, Config = NotRequired(f, warnings), Options = f.Options.Select(NewOption).ToList() });
+                    fresh.Add(f with { Code = code, Config = NotRequired(f, warnings, lc), Options = f.Options.Select(NewOption).ToList() });
                 }
                 if (fresh.Count > 0) pending.Add((ib, blockId, fresh));
             }
             foreach (var (ib, blockId, fresh) in pending)
             {
                 var blockCode = blockId is null ? Avoid(ib.Code, takenBlocks) : ib.Code;
-                if (blockId is null) Collided(warnings, "區塊", Label(ib.Label), ib.Code, blockCode);
+                if (blockId is null) Collided(warnings, "區塊", Label(ib.Label, lc), ib.Code, blockCode);
                 inputs.Add(new ContributionInput(im.Code, module.Key, blockCode, ib.Label,
                     fresh.Select(f => Renamed(f, renamed)).ToList(), blockId, None, None, MasterBase: true));
                 if (blockId is null) touched.Add(module.Id);
@@ -240,13 +241,13 @@ public sealed class MasterMerger(
     }
 
     /// <summary>主檔已有資料：補上的欄位一律非必填（§9 情況 2）。</summary>
-    private static JsonElement NotRequired(TemplateField f, List<string> warnings)
+    private static JsonElement NotRequired(TemplateField f, List<string> warnings, LocaleContext lc)
     {
         if (JsonNode.Parse(f.Config.GetRawText()) is not JsonObject node || node["required"] is not JsonValue v
             || !v.TryGetValue<bool>(out var required) || !required)
             return f.Config;
         node.Remove("required");
-        warnings.Add($"「{Label(f.Label)}」在匯入檔是必填，主檔已開啟、可能已有資料，補上時改成非必填");
+        warnings.Add($"「{Label(f.Label, lc)}」在匯入檔是必填，主檔已開啟、可能已有資料，補上時改成非必填");
         return JsonSerializer.SerializeToElement(node);
     }
 

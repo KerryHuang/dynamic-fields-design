@@ -277,7 +277,7 @@ public static class FieldRules
     /// 型別相容、目的欄位不重複也不是系統計算欄位；lock 模式的目的欄位必須是唯讀。fieldId 為 0 表示新欄位。
     /// </summary>
     public static async Task<ServiceResult?> CheckFillAsync(
-        Module module, Field field, long fieldId, FieldConfig config, IModuleRepository modules, CancellationToken ct)
+        Module module, Field field, long fieldId, FieldConfig config, IModuleRepository modules, LocaleContext lc, CancellationToken ct)
     {
         if (config.Fill is not { } fill) return null;
         if (field.Type != FieldType.Reference || config.RefTarget is not { Kind: ReferenceTarget.ModuleKind } target)
@@ -299,7 +299,7 @@ public static class FieldRules
             if (IsComputed(dst.Type) || dst.Type == FieldType.Reference) return Invalid(FillKey, "目的欄位不能是系統計算欄位或參照欄位");
             if (!CopyCompatible(src, dst)) return Invalid(FillKey, "來源與目的欄位型別不相容");
             if (fill.Mode == FillConfig.Lock && !dst.Config.ReadOnly)
-                return Invalid(FillKey, $"鎖定帶值的目的欄位必須先設為唯讀：{dst.LabelI18n.Resolve(I18nText.FallbackLocale)}");
+                return Invalid(FillKey, $"鎖定帶值的目的欄位必須先設為唯讀：{dst.LabelI18n.Resolve(lc)}");
         }
         return null;
     }
