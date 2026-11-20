@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.AddSingleton<Common.RequiredTextGuard>();
         services.AddScoped<Common.RequestLocale>();
         services.AddSingleton<Dynamic.PolicyService.CachedSystemPolicy>();
+        services.AddSingleton<Common.Localization.IMessageCatalog, Common.Localization.MessageCatalog>();
         // 改營運時區時同一交易內平移日期時間索引
         services.AddScoped<Dynamic.PolicyService.IPolicyChangeHook, Dynamic.RecordService.TimeZoneChangeHook>();
         // 沒有部署出廠值時用空的；WebAPI 之後註冊讀部署設定檔的實例會蓋過它

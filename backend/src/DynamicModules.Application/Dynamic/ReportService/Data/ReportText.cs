@@ -3,18 +3,22 @@ using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.ReportService.Data;
 
-/// <summary>報表結果與欄位值顯示（FieldDisplay：布林、參照狀態）用的系統字串（spec §14 四語系）。存檔驗證的 400 訊息不在這裡，照現有慣例寫繁中。泰文與越南文待母語者校對。</summary>
+/// <summary>
+/// 報表結果與欄位值顯示（FieldDisplay：布林、參照狀態）用的系統字串（spec §14 四語系）。存檔驗證的 400 訊息不在這裡，照現有慣例寫繁中。泰文與越南文待母語者校對。
+/// 這張表是 <see cref="Common.Localization.IMessageCatalog"/> 的內建層之一；常數值帶 <c>report.</c> 前綴，是語系包 <c>server</c> 段的命名空間，
+/// 鍵是語系包契約，改名要留別名（語系包設計 §5.1）。
+/// </summary>
 public static class ReportText
 {
     public const string
-        ModuleDisabled = nameof(ModuleDisabled), DetailAsMain = nameof(DetailAsMain), NoModuleRead = nameof(NoModuleRead), NoChildRead = nameof(NoChildRead),
-        FieldGone = nameof(FieldGone), FieldGoneNamed = nameof(FieldGoneNamed), TypeChanged = nameof(TypeChanged), NoPermissionTo = nameof(NoPermissionTo),
-        HiddenField = nameof(HiddenField), NotUsable = nameof(NotUsable), TooMany = nameof(TooMany), TooManyTasks = nameof(TooManyTasks), TooManyToLoad = nameof(TooManyToLoad), SqlTimeout = nameof(SqlTimeout),
-        RowMeaning = nameof(RowMeaning), Count = nameof(Count), Sum = nameof(Sum), Avg = nameof(Avg), Min = nameof(Min), Max = nameof(Max), Ratio = nameof(Ratio),
-        CountIf = nameof(CountIf), CountIfEq = nameof(CountIfEq), Median = nameof(Median), Conditional = nameof(Conditional), ConditionalEq = nameof(ConditionalEq),
-        Title = nameof(Title), FieldPath = nameof(FieldPath), Deleted = nameof(Deleted), NoPermission = nameof(NoPermission), Blank = nameof(Blank),
-        Yes = nameof(Yes), No = nameof(No),
-        ExportTotal = nameof(ExportTotal), DedupedNote = nameof(DedupedNote), Unshared = nameof(Unshared), ReportGone = nameof(ReportGone);
+        ModuleDisabled = "report." + nameof(ModuleDisabled), DetailAsMain = "report." + nameof(DetailAsMain), NoModuleRead = "report." + nameof(NoModuleRead), NoChildRead = "report." + nameof(NoChildRead),
+        FieldGone = "report." + nameof(FieldGone), FieldGoneNamed = "report." + nameof(FieldGoneNamed), TypeChanged = "report." + nameof(TypeChanged), NoPermissionTo = "report." + nameof(NoPermissionTo),
+        HiddenField = "report." + nameof(HiddenField), NotUsable = "report." + nameof(NotUsable), TooMany = "report." + nameof(TooMany), TooManyTasks = "report." + nameof(TooManyTasks), TooManyToLoad = "report." + nameof(TooManyToLoad), SqlTimeout = "report." + nameof(SqlTimeout),
+        RowMeaning = "report." + nameof(RowMeaning), Count = "report." + nameof(Count), Sum = "report." + nameof(Sum), Avg = "report." + nameof(Avg), Min = "report." + nameof(Min), Max = "report." + nameof(Max), Ratio = "report." + nameof(Ratio),
+        CountIf = "report." + nameof(CountIf), CountIfEq = "report." + nameof(CountIfEq), Median = "report." + nameof(Median), Conditional = "report." + nameof(Conditional), ConditionalEq = "report." + nameof(ConditionalEq),
+        Title = "report." + nameof(Title), FieldPath = "report." + nameof(FieldPath), Deleted = "report." + nameof(Deleted), NoPermission = "report." + nameof(NoPermission), Blank = "report." + nameof(Blank),
+        Yes = "report." + nameof(Yes), No = "report." + nameof(No),
+        ExportTotal = "report." + nameof(ExportTotal), DedupedNote = "report." + nameof(DedupedNote), Unshared = "report." + nameof(Unshared), ReportGone = "report." + nameof(ReportGone);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -64,6 +68,9 @@ public static class ReportText
             "ยอดรวมนับแต่ละรายการเพียงครั้งเดียว รายการเดียวอาจปรากฏในหลายแถวหรือหลายกลุ่ม ผลรวมของแถวจึงอาจไม่เท่ากับยอดรวม",
             "Tổng chỉ tính mỗi bản ghi một lần. Một bản ghi có thể xuất hiện ở nhiều dòng hoặc nhiều nhóm, nên cộng các dòng có thể không bằng tổng."),
     };
+
+    /// <summary>給 <see cref="Common.Localization.BuiltinServerText"/> 合併用（鍵即常數值，已帶 <c>report.</c>）。</summary>
+    internal static IEnumerable<KeyValuePair<string, (string Zh, string En, string Th, string Vi)>> Entries => Table;
 
     /// <summary>沒有對應語系時退回繁中，與 <see cref="I18nText.FallbackLocale"/> 一致。</summary>
     public static string Get(string? locale, string key, params object[] args)

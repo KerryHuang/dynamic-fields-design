@@ -103,6 +103,16 @@ public sealed class LocaleRegistry(IServiceScopeFactory scopes, TimeProvider tim
     /// </summary>
     public LocaleContext ContextFor(string locale, string defaultLocale) => new(locale, FallbacksFor(locale, defaultLocale));
 
+    /// <summary>
+    /// 每個已安裝語系（含停用）與它的退回鏈，順序同 <see cref="Codes"/>（後端訊息 <c>AsI18n</c> 用；i4c 計畫判斷 2）：
+    /// 只讀一次快照，清單與上層關係不會在中途換成新的一份。
+    /// </summary>
+    public IReadOnlyList<LocaleContext> ContextsFor(string defaultLocale)
+    {
+        var p = Volatile.Read(ref _current);
+        return p.Codes.Select(c => new LocaleContext(c, Fallbacks(p.Infos, c, defaultLocale))).ToArray();
+    }
+
     private static bool IsStale(Published p, DateTimeOffset now) =>
         now - p.LoadedAt >= (p.Failed ? CachedSystemPolicy.FailureTtl : CachedSystemPolicy.Ttl);
 

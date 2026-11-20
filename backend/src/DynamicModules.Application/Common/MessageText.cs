@@ -7,6 +7,7 @@ namespace DynamicModules.Application.Common;
 /// <summary>
 /// 後端回給使用者的訊息（四語系，形式同 ReportText：鍵、四語、string.Format 參數）。繁中必須與搬進來之前的字面值逐字相同。
 /// 已收共用訊息、登入與 Session、記錄寫入（欄位值驗證、狀態轉移、刪除、唯讀鎖定）；其餘訊息仍是呼叫端的中文字面值，之後分段搬。泰文與越南文待母語者校對。
+/// 這張表是 <see cref="Localization.IMessageCatalog"/> 的內建層（<see cref="Localization.BuiltinServerText"/>）；鍵是語系包 <c>server</c> 段的契約，改名要留別名（語系包設計 §5.1）。
 /// </summary>
 public static class MessageText
 {
@@ -476,6 +477,9 @@ public static class MessageText
             "การตั้งค่าอีเมลยังไม่ครบ (ไม่ได้กรอกโฮสต์หรือที่อยู่ผู้ส่ง หรือต้องกรอกรหัสผ่านใหม่)",
             "Cài đặt email chưa được thiết lập xong (thiếu máy chủ hoặc địa chỉ người gửi, hoặc cần nhập lại mật khẩu)"),
     };
+
+    /// <summary>給 <see cref="Localization.BuiltinServerText"/> 合併用（鍵不加前綴）。</summary>
+    internal static IEnumerable<KeyValuePair<string, (string Zh, string En, string Th, string Vi)>> Entries => Table;
 
     /// <summary>無參數訊息的繁中原文 → 鍵；兩鍵同一句時建表就會丟例外。</summary>
     private static readonly Dictionary<string, string> KeyByZh = Table.Where(kv => !kv.Value.Zh.Contains('{'))
