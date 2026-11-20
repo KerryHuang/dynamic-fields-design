@@ -5,6 +5,7 @@ using DynamicModules.Application.Common.Localization;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.WebAPITests.Dynamic;
@@ -154,17 +155,58 @@ public class I18nUiApiTests
         Hash(noParent).Should().NotBe(Hash(withParent));
     }
 
+    /// <summary>真實 cookie 登入的使用者（i4b 審查建議 1：X-User 對不存在的帳號只是一般匿名，走不到 cookie 失效的路徑）。</summary>
+    private static async Task<HttpClient> CookieSignedIn(TestApp app, string id)
+    {
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            db.Set<AppUser>().Add(new AppUser
+            {
+                UserId = id, DisplayName = id, IsActive = true,
+                PasswordHash = new PasswordHasher<AppUser>().HashPassword(new AppUser(), "i18n-pass-1")
+            });
+            db.SaveChanges();
+        }
+        var client = app.CreateClient();
+        (await client.PostAsJsonAsync("/api/v3/dynamic/auth/login", new { userId = id, password = "i18n-pass-1" })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetAsync($"{Ui}/ja")).StatusCode.Should().Be(HttpStatusCode.OK, "前提：有效 cookie 取得到已安裝未啟用的語系");
+        return client;
+    }
+
+    private static async Task ShouldBeAnonymous(HttpClient c)
+    {
+        (await c.GetAsync("/api/v3/dynamic/me")).StatusCode.Should().Be(HttpStatusCode.Unauthorized, "前提：這個 cookie 已失效");
+        (await c.GetAsync($"{Ui}/th")).StatusCode.Should().Be(HttpStatusCode.OK, "失效的 cookie 當匿名，不回 401");
+        (await c.GetAsync($"{Ui}/ja")).StatusCode.Should().Be(HttpStatusCode.NotFound, "匿名取不到未啟用語系");
+    }
+
     [Fact]
     public async Task ExpiredCookie_TreatedAsAnonymous()
     {
-        using var app = new TestApp();
+        using var app = new TestApp(realAuth: true);
         await LocaleTestKit.InstallAsync(app, "ja", "日本語");
-        var ghost = app.AsUser("ghost");
+        var c = await CookieSignedIn(app, "i18n01");
 
-        var th = await ghost.GetAsync($"{Ui}/th");
-        th.StatusCode.Should().Be(HttpStatusCode.OK);
-        th.Headers.Contains("Set-Cookie").Should().BeFalse();
-        (await ghost.GetAsync($"{Ui}/ja")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        app.Time.Advance(TimeSpan.FromHours(9));
+
+        await ShouldBeAnonymous(c);
+    }
+
+    [Fact]
+    public async Task StaleSecurityStampCookie_TreatedAsAnonymous()
+    {
+        using var app = new TestApp(realAuth: true);
+        await LocaleTestKit.InstallAsync(app, "ja", "日本語");
+        var c = await CookieSignedIn(app, "i18n02");
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            db.Set<AppUser>().Single(u => u.UserId == "i18n02").SecurityStamp = Guid.NewGuid().ToString("N");
+            db.SaveChanges();
+        }
+
+        await ShouldBeAnonymous(c);
     }
 
     [Fact]
