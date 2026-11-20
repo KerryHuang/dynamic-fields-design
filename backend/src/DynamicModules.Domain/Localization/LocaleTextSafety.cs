@@ -10,10 +10,12 @@ public static class LocaleTextSafety
     public static string? Check(string text, int maxLength)
     {
         foreach (var c in text)
-        {
-            if (c is '\n' or '\t') continue;
-            if (char.IsControl(c) || c is >= '‪' and <= '‮' or >= '⁦' and <= '⁩') return LocalePackReasons.Control;
-        }
+            if (IsForbidden(c)) return LocalePackReasons.Control;
         return text.Length > maxLength ? LocalePackReasons.TooLong : null;
     }
+
+    /// <summary>碼位是否被禁止（換行、tab 除外的控制字元與雙向控制字元）；<see cref="UiMessageSyntax"/> 解完字面量的 Unicode 跳脫後也用它（審查必修 2）。</summary>
+    public static bool IsForbidden(int codePoint) =>
+        codePoint is not ('\n' or '\t')
+        && (codePoint is < 0x20 or (>= 0x7F and <= 0x9F) or (>= 0x202A and <= 0x202E) or (>= 0x2066 and <= 0x2069));
 }
