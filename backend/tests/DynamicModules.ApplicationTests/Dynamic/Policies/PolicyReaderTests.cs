@@ -1,4 +1,5 @@
 using DynamicModules.Application.Dynamic.PolicyService;
+using DynamicModules.ApplicationTests.Common;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -151,6 +152,25 @@ public class PolicyReaderTests : DesignerTestBase
         await Reader.Invoking(r => r.BoolAsync(Def, null, default)).Should().ThrowAsync<InvalidOperationException>();
         await Reader.Invoking(r => r.ListAsync(Def, null, default)).Should().ThrowAsync<InvalidOperationException>();
     }
+
+    /// <summary>判斷 11（語系包設計 §4.3）：啟用清單裡的語系被移除時，讀取端把它當成沒啟用；濾完為空就當成沒設。</summary>
+    [Fact]
+    public async Task LocaleRoleSet_RemovedLocale_FilteredOnRead()
+    {
+        var enabled = PolicyCatalog.LocaleEnabled;
+        await LocaleTestKit.InstallAsync(Services, "ja", "日本語");
+        await SetSystem(enabled.Code, "zh-TW,ja");
+        (await Reader.ListAsync(enabled, null, default)).Should().Equal("zh-TW", "ja");
+
+        await LocaleTestKit.RemoveAsync(Services, "ja");
+        Reader.Invalidate();
+        (await Reader.ListAsync(enabled, null, default)).Should().Equal(["zh-TW"]);
+        _logs.Should().Contain(l => l.Level == LogLevel.Warning && l.Message.Contains(enabled.Code) && l.Message.Contains("ja"));
+
+        await SetSystem(enabled.Code, "ja");
+        (await Reader.ResolveAsync(enabled, null, default)).System.Should().BeNull("濾完為空就當成沒設");
+        (await Reader.ListAsync(enabled, null, default)).Should().Equal("zh-TW", "en-US", "th", "vi");
+    }
 }
 
 /// <summary>部署設定檔提供的出廠值蓋過程式出廠值。</summary>
@@ -195,7 +215,7 @@ public class PolicyReaderEnvironmentInvalidTests : DesignerTestBase
     {
         var env = new PolicyEnvironmentDefaults(new Dictionary<string, string> { [Def.Code] = "abc" });
         var reader = new PolicyReader(Svc<ISystemSettingRepository>(), Svc<IModulePolicyRepository>(), env,
-            new PolicyOptionSource(new DynamicModules.Application.Common.FactoryInstalledLocales()),
+            new PolicyOptionSource(Svc<DynamicModules.Application.Common.LocaleRegistry>()),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<PolicyReader>.Instance);
         (await reader.IntAsync(Def, null, default)).Should().Be(20);
         PolicyJson.System(Def, await reader.ResolveAsync(Def, null, default), Def.Options).Should().NotBeNull();

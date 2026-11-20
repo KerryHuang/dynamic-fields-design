@@ -5,7 +5,6 @@ using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 using DynamicModules.TestSupport;
 
@@ -161,23 +160,12 @@ public class PolicyApiTests : IDisposable
         item.GetProperty("options").EnumerateArray().Select(e => e.GetString()).Should().Equal("zh-TW", "en-US", "th", "vi");
     }
 
-    private sealed class ThreeLocales : DynamicModules.Application.Common.IInstalledLocales
-    {
-        public IReadOnlyList<string> Codes { get; } = ["zh-TW", "en-US", "ja"];
-    }
-
     [Fact]
     public async Task LocaleOptions_FromInstalledLocales()
     {
-        // i4a 的接口：已安裝語系換掉後，語系類政策的選項跟著換
-        using var app = new TestApp
-        {
-            ExtraServices = s =>
-            {
-                s.RemoveAll<DynamicModules.Application.Common.IInstalledLocales>();
-                s.AddSingleton<DynamicModules.Application.Common.IInstalledLocales, ThreeLocales>();
-            }
-        };
+        // 已安裝語系換掉後，語系類政策的選項跟著換
+        using var app = new TestApp();
+        await LocaleTestKit.InstallAsync(app, "ja", "日本語");
         var admin = app.AsUser();
         var item = Item(await JsonOf(await admin.GetAsync($"{Base}/system/policies")), "locale.enabled");
         item.GetProperty("options").EnumerateArray().Select(e => e.GetString()).Should().Contain("ja");
