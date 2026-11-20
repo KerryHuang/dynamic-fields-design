@@ -242,6 +242,7 @@ public static partial class AppPackageValidator
                     incomplete.TryGetValue(module, out var skip) ? skip ?? w.States.Where(s => s?.Option is not null).Select(s => s.Option).ToHashSet() : []);
     }
 
+    // 刻意用繁中（#66）：套件驗證是不讀資料庫的靜態檢查，套件文字以繁中為準（p3 計畫判斷 12），訊息全是繁中固定句，名稱與句子同語系。
     private static string OptionLabel(Dictionary<string, TemplateField> fields, AppWorkflow w, string option) =>
         fields.GetValueOrDefault(Qualify(w.Module, w.StatusField ?? ""))?.Options.FirstOrDefault(o => o.Code == option)?.Label.Resolve(I18nText.FallbackLocale) ?? option;
 
@@ -286,6 +287,7 @@ public static partial class AppPackageValidator
                     s.Mode, (s.EditableFields ?? []).Count > 0 ? [-1] : [], null, ApprovalOnEmpty.Fallback)).ToList()),
             0)).ToList();
 
+        // 刻意用繁中（#66）：要和下面 ApprovalConstraints.Validate（沒給語系＝PackageLocale 繁中）產生的訊息逐字比對，兩邊必須同語系。
         var presence = status.Options.Where(o => o?.Label is not null && incomplete.Contains(o.Code)).Select(o => o.Label.Resolve(I18nText.FallbackLocale))
             .SelectMany(l => new[] { ApprovalMessages.NoFlow(l), ApprovalMessages.DirectNeedsActive(l) }).ToHashSet();
         string State(string id) => long.TryParse(id, out var n) && codeOf.TryGetValue(n, out var c) ? c : id;

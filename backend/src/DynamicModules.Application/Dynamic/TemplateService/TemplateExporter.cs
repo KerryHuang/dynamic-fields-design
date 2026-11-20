@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.TemplateService;
 /// 匯出範本（決策 6）：模組加上以它為表頭的明細模組，id 換成代號（模組＝鍵、欄位＝Field.Key、區塊 b_&lt;id&gt;、選項 o_&lt;id&gt;），
 /// 是 TemplateInstantiator 代號→id 替換的反向。表達不了的引用不匯出，記在 warnings。
 /// </summary>
-public sealed partial class TemplateExporter(IModuleRepository modules, IPermissionRepository permissions, IListViewRepository views)
+public sealed partial class TemplateExporter(IModuleRepository modules, IPermissionRepository permissions, IListViewRepository views, Common.RequestLocale requestLocale)
 {
     /// <summary>module 要含子層（GetByKeyAsync includeChildren）。</summary>
     public async Task<TemplatePackage> ExportAsync(Module module, CancellationToken ct)
@@ -41,7 +41,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
         List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets, CancellationToken ct,
         ExportCodes? codes = null, bool includeInactive = false, AppReportCodec.Names? external = null)
     {
-        var ctx = new Context(members, codeOf, refTargets, codes ?? ExportCodes.Default, includeInactive, external);
+        var ctx = new Context(members, codeOf, refTargets, codes ?? ExportCodes.Default, requestLocale.Current, includeInactive, external);
         var groups = (await permissions.ListGroupsAsync(ct)).OrderBy(g => g.Id).ToList();
         var result = new List<TemplateModule>();
         foreach (var m in members)
@@ -119,6 +119,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
         private readonly Dictionary<long, Field> _allFields = new();
         private readonly Dictionary<long, long> _optionOwner = new();
 
+        private readonly LocaleContext _lc;
         private readonly ExportCodes _codes;
         private readonly bool _includeInactive;
         private readonly AppReportCodec.Names? _external;
@@ -131,9 +132,10 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
         public string BlockCode(long id) => _codes.Block(id);
         public string OptionCode(long id) => _codes.Option(id);
 
-        public Context(List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets, ExportCodes codes,
+        public Context(List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets, ExportCodes codes, LocaleContext lc,
             bool includeInactive = false, AppReportCodec.Names? external = null)
         {
+            _lc = lc;
             _codes = codes;
             _includeInactive = includeInactive;
             _external = external;
@@ -167,7 +169,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             }
         }
 
-        private string Label(Field f) => f.LabelI18n.Resolve(I18nText.FallbackLocale);
+        private string Label(Field f) => f.LabelI18n.Resolve(_lc);
 
         private string Code(long fieldId) => _codes.Field(Fields[fieldId]);
 
@@ -308,7 +310,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             var filter = v.Filter is { ValueKind: JsonValueKind.Object } raw ? Condition(raw) : null;
             var filterLost = v.Filter is { ValueKind: JsonValueKind.Object } && filter is null;
             if (columns.Count < v.Columns.Count || sort.Count < v.Sort.Count || filterLost)
-                Warnings.Add($"檢視「{v.NameI18n.Resolve(I18nText.FallbackLocale)}」引用了停用或未匯出的欄位，已略過");
+                Warnings.Add($"檢視「{v.NameI18n.Resolve(_lc)}」引用了停用或未匯出的欄位，已略過");
             return new TemplateView(v.NameI18n, columns, filter is null ? null : JsonSerializer.SerializeToElement(filter), sort, v.IsDefault);
         }
 

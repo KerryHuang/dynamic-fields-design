@@ -20,7 +20,7 @@ public class UpdateFieldHandler(
     Dynamic.ApprovalService.PendingApprovalGuard pending, Dynamic.ApprovalService.ApprovalClosureRecheck closureRecheck,
     Dynamic.CheckService.CheckFieldGuard checkGuard, Common.Security.FieldLocks locks,
     Dynamic.EventService.EventValidator eventValidator, Dynamic.EventService.EventHiddenGuard hiddenGuard,
-    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner, RequiredTextGuard requiredText)
+    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner, RequiredTextGuard requiredText, Common.RequestLocale requestLocale)
     : IRequestHandler<UpdateFieldRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateFieldRequest request, CancellationToken ct)
@@ -52,7 +52,7 @@ public class UpdateFieldHandler(
         if (config.ReadOnly && module.Workflow?.StatusFieldId == field.Id)
             return FieldRules.Invalid("Config.ReadOnly", "狀態機的狀態欄位不能設為唯讀");
 
-        var badFill = await FieldRules.CheckFillAsync(module, field, field.Id, config, modules, ct);
+        var badFill = await FieldRules.CheckFillAsync(module, field, field.Id, config, modules, requestLocale.Current, ct);
         if (badFill is not null) return badFill;
 
         var badGuard = await FieldRules.CheckRefGuardAsync(field, config, modules, ct);

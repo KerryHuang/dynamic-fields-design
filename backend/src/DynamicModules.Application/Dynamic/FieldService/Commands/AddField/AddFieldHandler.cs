@@ -17,7 +17,7 @@ public class AddFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
     ReferenceProviderRegistry providers, RollupRecalc rollups, Rollups.FrozenRecordsLoader loader,
     Dynamic.LedgerService.ImmutableDataGuard immutable, Dynamic.ApprovalService.PendingApprovalGuard pending, Dynamic.ApprovalService.ApprovalClosureRecheck closureRecheck, Common.Security.FieldLocks locks,
-    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
+    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner, Common.RequestLocale requestLocale)
     : IRequestHandler<AddFieldRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(AddFieldRequest request, CancellationToken ct)
@@ -45,7 +45,7 @@ public class AddFieldHandler(
             module, field, config, await FieldRules.ParentOfAsync(module, modules, ct));
         if (badDynamic is not null) return badDynamic;
 
-        var badFill = await FieldRules.CheckFillAsync(module, field, 0, config, modules, ct);
+        var badFill = await FieldRules.CheckFillAsync(module, field, 0, config, modules, requestLocale.Current, ct);
         if (badFill is not null) return badFill;
 
         var badGuard = await FieldRules.CheckRefGuardAsync(field, config, modules, ct);

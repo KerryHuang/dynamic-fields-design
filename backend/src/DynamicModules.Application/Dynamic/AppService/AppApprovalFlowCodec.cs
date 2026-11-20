@@ -114,11 +114,11 @@ public static partial class AppApprovalFlowCodec
     /// </summary>
     /// <param name="groupCode">群組 Id → 套件群組代號；群組已不存在回 null。</param>
     public static (AppApprovalFlow? Flow, List<string> Errors) ToPackage(
-        ApprovalFlow flow, ApprovalDefinition current, string moduleCode, long statusFieldId, AppReportCodec.Names n, Func<long, string?> groupCode)
+        ApprovalFlow flow, ApprovalDefinition current, string moduleCode, long statusFieldId, AppReportCodec.Names n, Func<long, string?> groupCode, LocaleContext lc)
     {
         // 套件格式還沒有流程圖（fg6 升版）：照 stages 匯出會變成沒有關卡的流程，所以整份擋下並指名流程（U3）
         if (current.Shape == ApprovalShapes.Graph)
-            return (null, [AppMessages.ExportFlowError(flow.NameI18n.Resolve(I18nText.FallbackLocale), AppMessages.ExportFlowGraph)]);
+            return (null, [AppMessages.ExportFlowError(flow.NameI18n.Resolve(lc), AppMessages.ExportFlowGraph)]);
         var details = new List<string>();
         string Option(long id) => n.Option(statusFieldId, id) ?? Add(AppMessages.ExportFlowStateMissing);
         string Field(long id) => n.Field(id) ?? Add(AppMessages.ExportFlowFieldMissing);
@@ -151,13 +151,13 @@ public static partial class AppApprovalFlowCodec
         }
 
         var stages = current.Stages.Select(s => new AppApprovalStage(s.Code, s.Name, When(s.When),
-            Source(s.Approvers, AppMessages.ExportFlowStageAt(s.Name.Resolve(I18nText.FallbackLocale))), s.Mode,
+            Source(s.Approvers, AppMessages.ExportFlowStageAt(s.Name.Resolve(lc))), s.Mode,
             s.EditableFields.Count > 0 ? s.EditableFields.Select(Field).ToList() : null, s.DueHours, s.OnEmpty)).ToList();
         var fallback = current.FallbackApprovers is { } fb ? Source(fb, AppMessages.ExportFlowFallbackAt) : null;
         var package = new AppApprovalFlow(flow.Key, flow.NameI18n, flow.Active, moduleCode, Option(flow.ToOptionId), flow.Priority, current.Shape,
             When(current.When), current.RejectTo is { } rt ? Option(rt) : null, fallback, stages);
         if (details.Count == 0) return (package, []);
-        var name = flow.NameI18n.Resolve(I18nText.FallbackLocale);
+        var name = flow.NameI18n.Resolve(lc);
         return (null, details.Distinct().Select(d => AppMessages.ExportFlowError(name, d)).ToList());
     }
 

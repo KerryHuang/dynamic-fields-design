@@ -120,9 +120,9 @@ public static class AppMessages
     public static string ExportWorkflowMissing(string module) => $"模組「{module}」的狀態機未匯出，簽核設定無法單獨匯出";
 
     /// <summary>開啟預覽的頂替警告（繁中），與 <see cref="AppApprovalFlowCodec.Substitution"/> 一一對應。</summary>
-    public static string ApprovalSubstituted(AppApprovalFlowCodec.Substitution s)
+    public static string ApprovalSubstituted(AppApprovalFlowCodec.Substitution s, LocaleContext lc)
     {
-        string Zh(I18nText t) => t.Resolve(I18nText.FallbackLocale);
+        string Zh(I18nText t) => t.Resolve(lc);
         var where = s.Kind switch
         {
             AppApprovalFlowCodec.KindApprovers => $"關卡「{Zh(s.StageName!)}」的簽核人來源",
