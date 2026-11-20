@@ -9,22 +9,49 @@ const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f‪-‮⁦-⁩]/;
 const nameStart = (c: string) => /[A-Za-z_]/.test(c);
 const namePart = (c: string) => /[A-Za-z0-9_]/.test(c);
 
-/** 從 start 的 `{` 讀一段插值或字面，回下一個位置；不合法回 -1。 */
+const INVALID = -1;
+const CONTROL_CHAR = -2;
+const isForbiddenCodePoint = (cp: number) => CONTROL.test(String.fromCodePoint(cp));
+
+/** 從字面量開頭單引號之後讀到 `'}`（照 message compiler：跳脫只認 \\、\'、\uXXXX、\UXXXXXX；內有換行不合法），回下一個位置。 */
+function readLiteral(text: string, start: number): number {
+  let i = start;
+  let control = false;
+  while (i < text.length && text[i] !== "'") {
+    const c = text[i];
+    if (c === '\n' || c === '\r' || c === '\u2028' || c === '\u2029') return INVALID;
+    if (c === '\\') {
+      const next = text[i + 1];
+      if (next === '\\' || next === "'") { i += 2; continue; }
+      const digits = next === 'u' ? 4 : next === 'U' ? 6 : 0;
+      if (!digits || i + 2 + digits > text.length) return INVALID;
+      const hex = text.slice(i + 2, i + 2 + digits);
+      if (!/^[0-9A-Fa-f]+$/.test(hex)) return INVALID;
+      const cp = parseInt(hex, 16);
+      if (cp > 0x10ffff) return INVALID;
+      control ||= isForbiddenCodePoint(cp);
+      i += 2 + digits;
+      continue;
+    }
+    i++;
+  }
+  if (text[i + 1] !== '}' || i >= text.length) return INVALID;
+  return control ? CONTROL_CHAR : i + 2;
+}
+
+/** 從 start 的 `{` 讀一段插值或字面，回下一個位置；不合法回 INVALID，字面量解出控制字元回 CONTROL_CHAR。 */
 function readBrace(text: string, start: number, names: string[]): number {
   let i = start + 1;
-  if (text[i] === "'") {
-    const close = text.indexOf("'", i + 1);
-    return close >= 0 && text[close + 1] === '}' ? close + 2 : -1;
-  }
-  if (i >= text.length || !nameStart(text[i])) return -1;
+  if (text[i] === "'") return readLiteral(text, i + 1);
+  if (i >= text.length || !nameStart(text[i])) return INVALID;
   const from = i;
   while (i < text.length && namePart(text[i])) i++;
-  if (text[i] !== '}') return -1;
+  if (text[i] !== '}') return INVALID;
   names.push(text.slice(from, i));
   return i + 1;
 }
 
-function checkSyntax(text: string, allowed: ReadonlySet<string>): 'syntax' | 'placeholder' | null {
+function checkSyntax(text: string, allowed: ReadonlySet<string>): 'syntax' | 'control' | 'placeholder' | null {
   const names: string[] = [];
   let i = 0;
   while (i < text.length) {
@@ -32,6 +59,7 @@ function checkSyntax(text: string, allowed: ReadonlySet<string>): 'syntax' | 'pl
     if (c === '@' || c === '|' || c === '}' || (c === '%' && text[i + 1] === '{')) return 'syntax';
     if (c === '{') {
       const end = readBrace(text, i, names);
+      if (end === CONTROL_CHAR) return 'control';
       if (end < 0) return 'syntax';
       i = end;
       continue;
