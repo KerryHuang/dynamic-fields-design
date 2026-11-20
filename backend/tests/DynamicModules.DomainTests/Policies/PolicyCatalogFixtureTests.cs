@@ -87,6 +87,8 @@ public class PolicyCatalogFixtureTests
         PolicyCatalog.DesignMaxOptionsPerField.Factory.Should().Be("200");
         PolicyCatalog.DesignMaxViewsPerModule.Factory.Should().Be("20");
         PolicyCatalog.DesignMaxIntegrationsPerPackage.Factory.Should().Be("20");
+        PolicyCatalog.DesignMaxApprovalFlowsPerPackage.Factory.Should().Be("50");
+        (PolicyCatalog.DesignMaxApprovalFlowsPerPackage.Min, PolicyCatalog.DesignMaxApprovalFlowsPerPackage.Max).Should().Be((1, 100));
         PolicyCatalog.ModuleCreateTitleField.Factory.Should().Be("true");
         PolicyCatalog.FormDefaultColumns.Factory.Should().Be("4");
         PolicyCatalog.FormDefaultColumns.Scope.Should().Be(PolicyScope.Module);

@@ -16,9 +16,6 @@ namespace DynamicModules.Application.Dynamic.AppService;
 // 可編輯欄位的公式閉包（§9.2）與事件不推動需簽核轉移（§5.3）要解析公式與事件，留給開啟時的設計器指令（失敗整批回滾）。
 public static partial class AppPackageValidator
 {
-    /// <summary>檔案格式上限，與 MaxConversions、MaxReports 同性質（計畫可寫死清單）。</summary>
-    public const int MaxApprovalFlows = 50;
-
     /// <summary>套件裡的簽核人來源；users 帳號屬於這個資料庫，不收（§14.2）。</summary>
     private static readonly string[] PackageSources =
         [ApprovalSources.Group, ApprovalSources.Manager, ApprovalSources.UserField, ApprovalSources.InitiatorPick];
@@ -55,7 +52,6 @@ public static partial class AppPackageValidator
         if (p.ApprovalFlows.Count == 0) return;
         // 舊讀取器靜默略過會讓客戶以為單據有簽核卻沒有（§14.1），一律整份拒絕
         if (p.FormatVersion < 8) { errors.Add("approvalFlows: formatVersion 8 才支援 approvalFlows"); return; }
-        if (p.ApprovalFlows.Count > MaxApprovalFlows) errors.Add($"approvalFlows: 最多 {MaxApprovalFlows} 個");
 
         var codes = new HashSet<string>();
         for (var i = 0; i < p.ApprovalFlows.Count; i++)

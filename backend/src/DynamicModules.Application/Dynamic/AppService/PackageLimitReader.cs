@@ -27,5 +27,6 @@ public sealed class PackageLimitReader(IPolicyReader policies)
         await policies.IntAsync(PolicyCatalog.DesignMaxOptionsPerField, null, ct),
         await policies.IntAsync(PolicyCatalog.DesignMaxRulesPerModule, null, ct),
         await policies.IntAsync(PolicyCatalog.DesignMaxViewsPerModule, null, ct),
-        await policies.IntAsync(PolicyCatalog.DesignMaxIntegrationsPerPackage, null, ct));
+        await policies.IntAsync(PolicyCatalog.DesignMaxIntegrationsPerPackage, null, ct),
+        await policies.IntAsync(PolicyCatalog.DesignMaxApprovalFlowsPerPackage, null, ct));
 }
