@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import * as quasar from 'quasar';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
@@ -74,5 +74,24 @@ describe('I18nTextInput', () => {
     const w = mountInput({}, { optional: true });
     expect(w.get('[data-testid="i18n-zh-TW"]').text()).not.toContain('*');
     expect(await validate(w)).toBe(true);
+  });
+
+  it('掛載後必填語系減少：卸載的輸入框不再參與驗證', async () => {
+    setLocaleSettings({ requiredText: ['zh-TW', 'en-US'] });
+    const w = mountInput({ 'zh-TW': '名稱' });
+    expect(await validate(w)).toBe(false);
+    setLocaleSettings({ requiredText: ['zh-TW'] });
+    await flushPromises();
+    expect(w.find('[data-testid="i18n-en-US"] .q-field--error').exists()).toBe(false);
+    expect(await validate(w)).toBe(true);
+  });
+
+  it('掛載後政策更新：必填與啟用語系的輸入框跟著換', async () => {
+    const w = mountInput({});
+    expect(w.find('[data-testid="i18n-en-US"]').text()).not.toContain('*');
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US'], requiredText: ['zh-TW', 'en-US'] });
+    await flushPromises();
+    expect(w.get('[data-testid="i18n-en-US"]').text()).toContain('*');
+    expect(w.find('[data-testid="i18n-th"]').exists()).toBe(false);
   });
 });

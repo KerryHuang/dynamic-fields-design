@@ -60,6 +60,16 @@ describe('PrintTab', () => {
     setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] });
   });
 
+  it('掛載後啟用語系更新，名稱輸入框跟著換', async () => {
+    const w = await mountTab(mod());
+    await w.find('[data-testid="print-item-sheet"]').trigger('click');
+    expect(w.find('[data-testid="print-name-th"]').exists()).toBe(true);
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US'] });
+    await flushPromises();
+    expect(w.find('[data-testid="print-name-th"]').exists()).toBe(false);
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] });
+  });
+
   it('lists templates and saves an edited one under its fixed key', async () => {
     api.updatePrintTemplate.mockResolvedValue(tpl);
     const w = await mountTab(mod());

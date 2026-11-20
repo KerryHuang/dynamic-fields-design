@@ -19,7 +19,9 @@ const required = computed<Locale[]>(() => (props.optional ? [] : requiredTextLoc
 const primary = computed<Locale[]>(() => requiredTextLocales());
 const others = computed<Locale[]>(() => enabledLocales().filter((l) => !primary.value.includes(l)));
 const needed = computed(() => !props.original || !sameI18n(props.modelValue, props.original));
-const inputs = ref<{ validate(): boolean | Promise<boolean> }[]>([]);
+// 以語系為鍵收集目前掛載的必填輸入框；卸載（ref 回 null）時移除，政策更新後不會驗到已消失的舊元件
+const inputs = new Map<string, { validate(): boolean | Promise<boolean> }>();
+const setInput = (l: string, el: unknown) => { if (el) inputs.set(l, el as never); else inputs.delete(l); };
 
 function set(locale: Locale, v: string | number | null) {
   const next = { ...props.modelValue, [locale]: v == null ? '' : String(v) };
@@ -31,7 +33,7 @@ const rules = (l: Locale) => (required.value.includes(l) && needed.value ? [(v: 
 
 defineExpose({
   validate: async () => {
-    const results = await Promise.all(inputs.value.map((i) => i.validate()));
+    const results = await Promise.all([...inputs.values()].map((i) => i.validate()));
     return results.every(Boolean);
   },
 });
@@ -41,7 +43,7 @@ defineExpose({
   <div>
     <div v-for="(l, i) in primary" :key="l" :data-testid="`i18n-${l}`">
       <q-input
-        :ref="(el) => { if (el) inputs[i] = el as never; }" :model-value="modelValue[l] ?? ''"
+        :ref="(el) => setInput(l, el)" :model-value="modelValue[l] ?? ''"
         :label="required.includes(l) ? `${label} (${l}) *` : `${label} (${l})`"
         :error="(!!error && i === 0) || undefined" :error-message="i === 0 ? error : undefined" :hint="i === 0 ? hint : undefined" :maxlength="maxlength"
         :rules="rules(l)" lazy-rules="ondemand" outlined dense :class="{ 'q-mt-xs': i > 0 }"
