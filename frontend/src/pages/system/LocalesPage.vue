@@ -7,13 +7,18 @@ import {
 } from 'src/application/dynamic/queries/locale-packs-queries';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import type { LocaleAdminEntry } from 'src/domain/dynamic/locale-pack-types';
-import { formatTime } from 'src/domain/ops/ops-format';
+import { previewLocale } from 'src/i18n/locale-preview';
+import { switchLocale } from 'src/i18n/ui-messages';
+import LocaleCard from 'src/presentation/locale/LocaleCard.vue';
 import LocalePackImportDialog from 'src/presentation/locale/LocalePackImportDialog.vue';
+import LocaleTemplateExportDialog from 'src/presentation/locale/LocaleTemplateExportDialog.vue';
 import { leftoverMessages, notifyApiError } from 'src/presentation/dynamic/designer/api-error';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 
-// 最小語系頁（語系包設計 §6、§11；i4d1）：清單、匯入語系包，列尾「⋯」放回到上一版、移除覆寫、移除語系。權限與規則都在後端，這裡只做呈現。
-const { t } = useI18n();
+// 語系頁（語系包設計 §6、§11；i4d1、i4d2）：每個語系一張卡片（完整度、覆寫檢視、匯出樣板、以此語系預覽、「⋯」放回到上一版、移除覆寫、移除語系）。
+// 權限與規則都在後端，這裡只做呈現。
+const composer = useI18n({ useScope: 'global' });
+const { t } = composer;
 const $q = useQuasar();
 const admin = useInstalledLocaleAdmin();
 const rollback = useRollbackLocalePack();
@@ -29,6 +34,19 @@ const loadError = computed(() => {
 });
 const importEnabled = computed(() => admin.data.value?.importEnabled ?? false);
 const showImport = ref(false);
+const showExport = ref(false);
+const exportTarget = ref<LocaleAdminEntry | null>(null);
+function openExport(target: LocaleAdminEntry | null) {
+  exportTarget.value = target;
+  showExport.value = true;
+}
+
+// 管理員試看（M2）：沿用 switchLocale 的完整試看流程；previewLocale 不是響應式，切完自己記一份讓按鈕跟著換
+const previewing = ref<string | null>(previewLocale());
+async function startPreview(code: string) {
+  await switchLocale({ global: composer }, code, { preview: true });
+  previewing.value = previewLocale();
+}
 
 type Action = 'rollback' | 'clear' | 'remove';
 const pending = ref<{ action: Action; locale: LocaleAdminEntry } | null>(null);
@@ -60,13 +78,6 @@ function confirmRun() {
   });
 }
 
-const versionText = (l: LocaleAdminEntry) => {
-  const c = l.current;
-  if (!c) return '';
-  const time = formatTime(c.importedUtc);
-  const version = c.packVersion ?? c.fileName;
-  return version ? t('localePacks.currentVersion', { version, time }) : t('localePacks.currentEmpty', { time });
-};
 </script>
 
 <template>
@@ -76,6 +87,7 @@ const versionText = (l: LocaleAdminEntry) => {
       <div class="row items-center q-mb-md q-gutter-sm">
         <div class="text-h6">{{ t('localePacks.title') }}</div>
         <q-space />
+        <q-btn outline no-caps icon="note_add" :label="t('localePacks.newTemplate')" :disable="!admin.data.value" data-testid="locales-new-template" @click="openExport(null)" />
         <q-btn outline no-caps icon="upload" :label="t('localePacks.import')" :disable="!admin.data.value" data-testid="locales-import" @click="showImport = true" />
       </div>
       <p class="text-muted">{{ t('localePacks.publicNotice') }}</p>
@@ -86,45 +98,16 @@ const versionText = (l: LocaleAdminEntry) => {
       </div>
       <div v-if="admin.data.value && !importEnabled" class="text-warning q-mb-md" data-testid="locales-import-disabled">{{ t('localePacks.importDisabled') }}</div>
 
-      <q-list v-if="admin.data.value" bordered separator>
-        <q-item v-for="l in admin.data.value.locales" :key="l.code" :data-testid="`locale-row-${l.code}`">
-          <q-item-section>
-            <q-item-label style="overflow-wrap: anywhere">
-              <span class="text-weight-bold">{{ l.nativeName }}</span>
-              <span class="text-caption text-muted q-ml-sm">{{ l.code }}</span>
-              <q-badge outline class="q-ml-sm">{{ t(`localePacks.origin.${l.origin}`) }}</q-badge>
-              <q-badge v-if="l.enabled" color="positive" class="q-ml-xs">{{ t('localePacks.enabled') }}</q-badge>
-              <q-badge v-if="l.isDefault" color="primary" class="q-ml-xs">{{ t('localePacks.default') }}</q-badge>
-            </q-item-label>
-            <q-item-label v-if="l.overrides.ui + l.overrides.server > 0" caption>
-              {{ t('localePacks.overrides', { ui: l.overrides.ui, server: l.overrides.server }) }}
-            </q-item-label>
-            <q-item-label v-if="l.current" caption :data-testid="`locale-version-${l.code}`">{{ versionText(l) }}</q-item-label>
-          </q-item-section>
-          <q-item-section side>
-            <q-btn flat round dense icon="more_horiz" :aria-label="t('common.moreActions')" :data-testid="`locale-actions-${l.code}`">
-              <q-menu>
-                <q-list dense style="min-width: 200px">
-                  <q-item v-if="l.hasPrevious" v-close-popup clickable :disable="!importEnabled" :data-testid="`locale-rollback-${l.code}`" @click="pending = { action: 'rollback', locale: l }">
-                    <q-item-section>{{ t('localePacks.actions.rollback') }}</q-item-section>
-                  </q-item>
-                  <q-item v-if="l.overrides.ui + l.overrides.server > 0" v-close-popup clickable :disable="!importEnabled" :data-testid="`locale-clear-${l.code}`" @click="pending = { action: 'clear', locale: l }">
-                    <q-item-section>{{ t('localePacks.actions.clear') }}</q-item-section>
-                  </q-item>
-                  <q-item v-if="l.origin === 'installed'" v-close-popup clickable :disable="!importEnabled" :data-testid="`locale-remove-${l.code}`" @click="pending = { action: 'remove', locale: l }">
-                    <q-item-section>{{ t('localePacks.actions.remove') }}</q-item-section>
-                  </q-item>
-                  <q-item v-if="!importEnabled" dense>
-                    <q-item-section class="text-caption text-muted">{{ t('localePacks.importDisabledItem') }}</q-item-section>
-                  </q-item>
-                </q-list>
-              </q-menu>
-            </q-btn>
-          </q-item-section>
-        </q-item>
-      </q-list>
+      <div v-if="admin.data.value" class="row q-col-gutter-md">
+        <div v-for="l in admin.data.value.locales" :key="l.code" class="col-12 col-sm-6 col-md-4">
+          <LocaleCard :locale="l" :import-enabled="importEnabled" :previewing="previewing"
+            @export-template="openExport(l)" @preview="startPreview(l.code)" @action="(a) => (pending = { action: a, locale: l })" />
+        </div>
+      </div>
 
       <LocalePackImportDialog v-if="admin.data.value" v-model="showImport" :import-enabled="importEnabled" :pack-max-bytes="admin.data.value.packMaxBytes" />
+      <LocaleTemplateExportDialog v-if="admin.data.value" v-model="showExport" :target="exportTarget" :locales="admin.data.value.locales"
+        :pack-max-bytes="admin.data.value.packMaxBytes" />
 
       <q-dialog :model-value="!!pending" @update:model-value="pending = null">
         <q-card style="width: 420px; max-width: 100%" data-testid="locale-confirm">

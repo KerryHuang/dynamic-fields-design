@@ -2,16 +2,20 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import * as quasar from 'quasar';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
+import { installedLocales, setLocaleInfos } from 'src/i18n/locale-settings';
 import LocalePackImportDialog from './LocalePackImportDialog.vue';
 
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+// 只 mock switchLocale；語系狀態（locale-settings）走真的，驗「切之前 installedLocales() 已含新代碼」
+const switchLocale = vi.hoisted(() => vi.fn());
+vi.mock('src/i18n/ui-messages', async (orig) => ({ ...(await orig<typeof import('src/i18n/ui-messages')>()), switchLocale }));
 
 const section = (o: Record<string, unknown> = {}) => ({
-  added: 0, changed: 0, unchanged: 0, skipped: 0, sameAsBuiltin: 0, extra: 0, extraKeys: [], rejected: 0, rejectedItems: [], ...o,
+  added: 0, changed: 0, unchanged: 0, skipped: 0, sameAsBuiltin: 0, extra: 0, extraKeys: [], rejected: 0, rejectedItems: [], confirmed: 0, ...o,
 });
 const report = (o: Record<string, unknown> = {}) => ({
   previewId: 'pv-1', expiresUtc: '2026-11-21T04:00:00Z', importEnabled: true, fileName: 'ja.langpack.json', fileHash: 'abc',
@@ -22,8 +26,9 @@ const report = (o: Record<string, unknown> = {}) => ({
     { key: 'report.No', reason: 'booleanCollision', args: ['はい', 'ko'] },
   ] }),
   server: section({ added: 4, sameAsBuiltin: 3 }),
-  completeness: { ui: { have: 1790, total: 2701 }, server: { have: 160, total: 300 } },
+  completeness: { ui: { have: 1790, total: 2701 }, server: { have: 160, total: 300 }, topMissing: [] },
   designData: { count: 12 },
+  orphanedDropped: { ui: 0, server: 0 },
   warnings: [{ code: 'booleanCollisionExisting', args: ['はい', 'ja', 'ko'] }],
   ...o,
 });
@@ -328,6 +333,94 @@ describe('LocalePackImportDialog 換檔與關閉時作廢舊流程（第二輪�
     expect(disabled()).not.toBeNull();
     applyWait.resolve({ code: 'ja', isNew: true, noChanges: false, packId: 5, enabled: true });
     await tick();
+    w.unmount();
+  });
+});
+
+describe('LocalePackImportDialog 報告補強（i4d2）', () => {
+  it('builtForDiffers 警告顯示三個參數，不是 unknown 文案', async () => {
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/preview' ? report({ warnings: [{ code: 'builtForDiffers', args: ['2026.10', '2026.11', '42'] }] }) : undefined));
+    await pick();
+    const text = q('report-warnings')!.textContent!;
+    expect(text).toContain('2026.10');
+    expect(text).toContain('2026.11');
+    expect(text).toContain('42');
+    expect(text).not.toContain('注意事項');
+    w.unmount();
+  });
+
+  it('確認句數與已失效清除數有值才顯示，0 不顯示', async () => {
+    const w = await mountDialog();
+    await pick();
+    expect(q('report-confirmed')).toBeNull();
+    expect(q('report-orphaned-dropped')).toBeNull();
+    w.unmount();
+    const w2 = await mountDialog((c) => (c.url === '/i18n/packs/preview'
+      ? report({ ui: section({ confirmed: 2 }), server: section({ confirmed: 1 }), orphanedDropped: { ui: 3, server: 1 } }) : undefined));
+    await pick();
+    expect(q('report-confirmed')!.textContent).toContain('確認原文已更新 3 句');
+    expect(q('report-orphaned-dropped')!.textContent).toContain('這次套用會清掉 4 句已失效的覆寫（上一版仍保留）');
+    w2.unmount();
+  });
+
+  it('completeness.topMissing 有值時列出分類與缺數，空陣列不顯示', async () => {
+    const w = await mountDialog();
+    await pick();
+    expect(q('report-top-missing')).toBeNull();
+    w.unmount();
+    const w2 = await mountDialog((c) => (c.url === '/i18n/packs/preview'
+      ? report({ completeness: { ui: { have: 1, total: 2 }, server: { have: 1, total: 2 },
+        topMissing: [{ segment: 'ui', category: 'approval', missing: 120 }, { segment: 'server', category: 'report', missing: 7 }] } }) : undefined));
+    await pick();
+    const text = q('report-top-missing')!.textContent!;
+    expect(text).toContain('approval 缺 120 句');
+    expect(text).toContain('report 缺 7 句');
+    w2.unmount();
+  });
+});
+
+describe('LocalePackImportDialog 以此語系預覽（i4d2）', () => {
+  const effective = (locales: string[]) => ({
+    values: { 'locale.default': 'zh-TW', 'locale.enabled': ['zh-TW'] },
+    locales: locales.map((code) => ({ code, nativeName: code, quasarLang: null, fallbackCode: null, uiHash: '' })),
+  });
+  afterEach(() => { switchLocale.mockReset(); setLocaleInfos([]); });
+
+  it('套用成功且未啟用：有「以此語系預覽」；按下先更新語系清單（含新代碼）才切到試看', async () => {
+    let seen: string[] = [];
+    switchLocale.mockImplementation(async () => { seen = installedLocales(); return true; });
+    const w = await mountDialog((c) => (c.url === '/policies/effective' ? effective(['zh-TW', 'ja']) : undefined));
+    await pick();
+    q('pack-apply')!.click();
+    await tick();
+    expect(installedLocales()).not.toContain('ja');
+    q('pack-preview')!.click();
+    await tick();
+    expect(switchLocale).toHaveBeenCalledTimes(1);
+    expect(switchLocale.mock.calls[0]![1]).toBe('ja');
+    expect(switchLocale.mock.calls[0]![2]).toEqual({ preview: true });
+    expect(seen).toContain('ja');
+    w.unmount();
+  });
+
+  it('生效清單沒有這個代碼：不切、顯示載入失敗', async () => {
+    const w = await mountDialog((c) => (c.url === '/policies/effective' ? effective(['zh-TW']) : undefined));
+    await pick();
+    q('pack-apply')!.click();
+    await tick();
+    q('pack-preview')!.click();
+    await tick();
+    expect(switchLocale).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('無法載入');
+    w.unmount();
+  });
+
+  it('已啟用的語系沒有「以此語系預覽」', async () => {
+    const w = await mountDialog((c) => (c.url === '/i18n/packs/apply' ? { code: 'th', isNew: false, noChanges: false, packId: 7, enabled: true } : undefined));
+    await pick();
+    q('pack-apply')!.click();
+    await tick();
+    expect(q('pack-preview')).toBeNull();
     w.unmount();
   });
 });
