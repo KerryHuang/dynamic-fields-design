@@ -497,7 +497,6 @@ public static class MessageText
         return args.Length == 0 ? text : string.Format(CultureInfo.InvariantCulture, text, args);
     }
 
-    /// <summary>字面值是表內某句的繁中原文就換成該語系，否則原樣。只套在 <see cref="ServiceResult"/> 的訊息（<see cref="MessageRef.Resolve"/>），欄位錯誤不用。</summary>
-    public static string TranslateLiteral(string? locale, string literal) =>
-        KeyByZh.TryGetValue(literal, out var key) ? Get(locale, key) : literal;
+    /// <summary>字面值剛好是表內某句（無參數）的繁中原文時回它的鍵，否則 null（<see cref="MessageRef.Resolve(Localization.IMessageCatalog, LocaleContext, bool)"/> 用）。</summary>
+    internal static string? KeyOfZh(string literal) => KeyByZh.GetValueOrDefault(literal);
 }

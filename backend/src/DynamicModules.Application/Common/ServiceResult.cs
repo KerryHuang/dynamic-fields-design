@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Common;
@@ -17,7 +18,7 @@ public sealed class ServiceResult
     public bool IsUnprocessable { get; private init; }
     public bool IsUnauthorized { get; private init; }
     private MessageRef? MessageSource { get; init; }
-    /// <summary>繁中的訊息；回給使用者的文字由 WebAPI 依請求語系用 <see cref="MessageIn"/> 解析。</summary>
+    /// <summary>繁中，只給 log 與測試；回給使用者的文字由 WebAPI 依請求語系用 <see cref="MessageIn(IMessageCatalog, LocaleContext)"/> 解析。</summary>
     public string? Message => MessageIn(I18nText.FallbackLocale);
     /// <summary>給前端判斷用的機器代碼（如 stale）；沒有時是 null。</summary>
     public string? Code { get; private init; }
@@ -25,12 +26,19 @@ public sealed class ServiceResult
     public object? Params { get; private init; }
     public object? Data { get; private init; }
     private IReadOnlyDictionary<string, MessageRef[]> ErrorRefs { get; init; } = NoErrors;
-    /// <summary>繁中的欄位錯誤；回給使用者的由 <see cref="ErrorsIn"/> 解析。</summary>
+    /// <summary>繁中的欄位錯誤，只給 log 與測試；回給使用者的由 <see cref="ErrorsIn(IMessageCatalog, LocaleContext)"/> 解析。</summary>
     public IReadOnlyDictionary<string, string[]> Errors => ErrorsIn(I18nText.FallbackLocale);
 
     /// <summary>驗證失敗（400）：沒有其他狀態旗標，但帶有欄位錯誤。</summary>
     public bool IsInvalid => ErrorRefs.Count > 0;
 
+    /// <summary>沿請求語系的退回鏈經 catalog 解析（語系包 i4c 計畫判斷 5）。</summary>
+    public string? MessageIn(IMessageCatalog messages, LocaleContext lc) => MessageSource?.Resolve(messages, lc, translateLiteral: true);
+
+    public IReadOnlyDictionary<string, string[]> ErrorsIn(IMessageCatalog messages, LocaleContext lc) =>
+        ErrorRefs.ToDictionary(kv => kv.Key, kv => kv.Value.Select(m => m.Resolve(messages, lc)).ToArray());
+
+    /// <summary>只認內建四語的舊路徑（給 log 與測試）。</summary>
     public string? MessageIn(string? locale, IReadOnlyList<string>? fallbacks = null) =>
         MessageSource?.Resolve(locale, translateLiteral: true, fallbacks);
 

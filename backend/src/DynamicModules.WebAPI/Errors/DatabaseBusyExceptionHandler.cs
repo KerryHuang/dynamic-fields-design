@@ -15,7 +15,7 @@ public class DatabaseBusyExceptionHandler : IExceptionHandler
         if (!DatabaseBusy.Is(exception)) return false;
         context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
         context.Response.Headers.RetryAfter = "2";
-        await context.Response.WriteAsJsonAsync(new { traceId = context.TraceIdentifier, message = MessageText.Get(context.RequestServices.GetService<ICurrentLocale>()?.Locale, MessageText.DatabaseBusy) }, ct);
+        await context.Response.WriteAsJsonAsync(new { traceId = context.TraceIdentifier, message = RequestMessages.Text(context, MessageText.DatabaseBusy) }, ct);
         return true;
     }
 }

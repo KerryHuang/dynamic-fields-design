@@ -81,7 +81,7 @@ public sealed class UnhandledExceptionHandler(
     {
         var details = new ProblemDetails { Status = status };
         if (messageKey is not null)
-            details.Extensions["message"] = MessageText.Get(context.RequestServices.GetService<ICurrentLocale>()?.Locale, messageKey);
+            details.Extensions["message"] = RequestMessages.Text(context, messageKey);
         // Accept 不含 JSON 時預設 writer 會不寫（WriteAsync 反而丟例外），改 TryWriteAsync 並自己補 JSON body
         if (await problems.TryWriteAsync(new ProblemDetailsContext { HttpContext = context, ProblemDetails = details })) return;
         details.Extensions["traceId"] = context.TraceIdentifier;

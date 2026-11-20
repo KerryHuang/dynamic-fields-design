@@ -28,7 +28,7 @@ public sealed class DatabaseUnwritableExceptionHandler(IDatabaseErrors errors, I
         await context.Response.WriteAsJsonAsync(new
         {
             traceId = context.TraceIdentifier, code,
-            message = MessageText.Get(context.RequestServices.GetService<ICurrentLocale>()?.Locale, messageKey),
+            message = RequestMessages.Text(context, messageKey),
         }, ct);
         return true;
     }

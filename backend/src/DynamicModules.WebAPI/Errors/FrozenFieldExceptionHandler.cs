@@ -1,4 +1,3 @@
-using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using Microsoft.AspNetCore.Diagnostics;
 
@@ -11,8 +10,7 @@ public class FrozenFieldExceptionHandler : IExceptionHandler
     {
         if (exception is not FrozenFieldException frozen) return false;
         context.Response.StatusCode = StatusCodes.Status409Conflict;
-        var lc = context.RequestServices.GetService<RequestLocale>()?.Current;
-        var message = frozen.Text.Resolve(lc?.Locale, fallbacks: lc?.Fallbacks);
+        var message = RequestMessages.Text(context, frozen.Text);
         if (!frozen.Visible) await context.Response.WriteAsJsonAsync(new { traceId = context.TraceIdentifier, message }, ct);
         else
             await context.Response.WriteAsJsonAsync(

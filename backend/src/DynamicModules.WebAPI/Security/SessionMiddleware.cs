@@ -2,6 +2,7 @@ using System.Security.Claims;
 using DynamicModules.Application.Common;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.WebAPI.Errors;
 using Microsoft.EntityFrameworkCore;
 
 namespace DynamicModules.WebAPI.Security;
@@ -15,7 +16,7 @@ public class SessionMiddleware(RequestDelegate next)
     private const string Prefix = "/api/v3/dynamic";
     private const string AuthPrefix = Prefix + "/auth/";
 
-    public async Task InvokeAsync(HttpContext ctx, DynamicDbContext db, ICurrentLocale locale)
+    public async Task InvokeAsync(HttpContext ctx, DynamicDbContext db)
     {
         var path = (ctx.Request.Path.Value ?? "").TrimEnd('/');
         if (!path.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase) || IsAnonymous(ctx.Request.Method, path))
@@ -49,14 +50,14 @@ public class SessionMiddleware(RequestDelegate next)
             }
             if (ctx.User.Identity?.IsAuthenticated == true) await AuthCookies.SignOutAsync(ctx);
             ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await ctx.Response.WriteAsJsonAsync(new { traceId = ctx.TraceIdentifier, message = MessageText.Get(locale.Locale, MessageText.SignInRequired) });
+            await ctx.Response.WriteAsJsonAsync(new { traceId = ctx.TraceIdentifier, message = RequestMessages.Text(ctx, MessageText.SignInRequired) });
             return;
         }
 
         if (row.MustChangePassword && !optional && !IsAllowedWhileMustChange(ctx.Request.Method, path))
         {
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await ctx.Response.WriteAsJsonAsync(new { traceId = ctx.TraceIdentifier, message = MessageText.Get(locale.Locale, MessageText.PasswordChangeRequired), code = "passwordChangeRequired" });
+            await ctx.Response.WriteAsJsonAsync(new { traceId = ctx.TraceIdentifier, message = RequestMessages.Text(ctx, MessageText.PasswordChangeRequired), code = "passwordChangeRequired" });
             return;
         }
 
