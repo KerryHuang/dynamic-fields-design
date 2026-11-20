@@ -1,3 +1,4 @@
+using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
@@ -32,7 +33,9 @@ public class SaveRulesHandler(IModuleRepository modules, IUnitOfWork uow, FieldT
 
         var userIds = await modules.ListUserIdsAsync(ct);
         var errors = new Dictionary<string, string[]>();
-        for (var i = 0; i < input.Count; i++) Check(module, input[i], i, userIds, errors);
+        // 規則整批替換、沒有穩定的識別：每則既有訊息最多配給一條訊息相同的規則當「舊值」，一則舊訊息不能讓多條新規則都算沒改（§3.5）
+        var unclaimed = module.Rules.OrderBy(x => x.Sequence).Select(x => x.MessageI18n).Where(m => m is not null).Select(m => m!).ToList();
+        for (var i = 0; i < input.Count; i++) Check(module, input[i], i, userIds, errors, unclaimed);
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
         var now = time.Now;
@@ -59,7 +62,7 @@ public class SaveRulesHandler(IModuleRepository modules, IUnitOfWork uow, FieldT
         return ServiceResult.Success(module.Rules.ToResponse());
     }
 
-    private void Check(Module module, RuleInput r, int i, IReadOnlySet<string> userIds, Dictionary<string, string[]> errors)
+    private void Check(Module module, RuleInput r, int i, IReadOnlySet<string> userIds, Dictionary<string, string[]> errors, List<I18nText> unclaimed)
     {
         void Err(string prop, string message) => errors.TryAdd($"rules[{i}].{prop}", [message]);
 
@@ -73,10 +76,12 @@ public class SaveRulesHandler(IModuleRepository modules, IUnitOfWork uow, FieldT
             if (parsed.Error is not null) Err("condition", $"規則條件不正確：{parsed.Error}");
         }
 
-        // 規則整批替換、沒有穩定的識別：訊息與既有任一條規則的訊息相同就視為沒改（§3.5）
-        if (r.Kind == RuleKind.Validation
-            && requiredText.Check(r.Message, module.Rules.Select(x => x.MessageI18n).FirstOrDefault(m => r.Message?.SameAs(m) == true), "訊息") is not null)
-            Err("message", "驗證規則必須有訊息");
+        if (r.Kind == RuleKind.Validation)
+        {
+            var stored = unclaimed.FirstOrDefault(m => r.Message?.SameAs(m) == true);
+            if (stored is not null) unclaimed.Remove(stored);
+            if (requiredText.Check(r.Message, stored, "訊息") is not null) Err("message", "驗證規則必須有訊息");
+        }
 
         if (r.Kind == RuleKind.OptionFilter && optionTarget is not null
             && (r.OptionIds ?? []).Any(id => optionTarget.Options.All(o => o.Id != id)))

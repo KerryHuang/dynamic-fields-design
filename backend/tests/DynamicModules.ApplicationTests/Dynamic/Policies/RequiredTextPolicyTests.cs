@@ -9,6 +9,8 @@ using DynamicModules.Application.Dynamic.ModuleService.Commands.UpdateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.OrganizationService;
 using DynamicModules.Application.Dynamic.PolicyService;
+using DynamicModules.Application.Dynamic.RuleService.Commands.SaveRules;
+using DynamicModules.Application.Dynamic.RuleService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.ValueObjects;
@@ -111,5 +113,19 @@ public class RequiredTextPolicyTests : DesignerTestBase
         r.IsCreated.Should().BeTrue(r.Message);
         var name = (await Db.Context.Set<PermissionGroup>().AsNoTracking().ToListAsync()).Single(g => g.NameI18n.Values.ContainsKey("vi")).NameI18n;
         name.Values.Should().BeEquivalentTo(new Dictionary<string, string> { ["vi"] = "Kho", ["zh-TW"] = "Kho", ["en-US"] = "Kho" });
+    }
+
+    [Fact]
+    public async Task SaveRules_OneOldMessage_CannotCoverNewCopies()
+    {
+        await NewModule("memo");
+        var f = await MustAdd("memo", FieldType.Text, label: "備註");
+        RuleInput V(I18nText message) => new(RuleKind.Validation, J("{\"all\":[]}"), [$"field:{f.Id}"], null, message, true);
+        (await Send(new SaveRulesRequest("memo", [V(T(("zh-TW", "不可空白")))]))).IsSuccess.Should().BeTrue();
+        await SetRequired("zh-TW", "en-US");
+        // 既有一條照舊（沒改，不擋）；新增兩條沿用同一則舊訊息，各自是新文字，都要求英文
+        var r = await Send(new SaveRulesRequest("memo", [V(T(("zh-TW", "不可空白"))), V(T(("zh-TW", "不可空白"))), V(T(("zh-TW", "不可空白")))]));
+        r.IsInvalid.Should().BeTrue();
+        r.Errors.Keys.Should().BeEquivalentTo(["rules[1].message", "rules[2].message"]);
     }
 }
