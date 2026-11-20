@@ -52,4 +52,6 @@ public static class LocalePackMessages
     public static MessageRef NoPrevious => MessageRef.Of(MessageText.LocaleNoPrevious);
     public static MessageRef NoOverrides => MessageRef.Of(MessageText.LocaleNoOverrides);
     public static MessageRef BooleanCollision(string locale, string other, string word) => MessageRef.Of(MessageText.LocaleBooleanCollision, locale, other, word);
+    public static MessageRef TemplateLocaleNotInstalled(string code) => MessageRef.Of(MessageText.LocaleTemplateLocaleNotInstalled, code);
+    public static MessageRef TemplateScopeInvalid => MessageRef.Of(MessageText.LocaleTemplateScopeInvalid);
 }

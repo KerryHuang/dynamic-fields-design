@@ -21,6 +21,9 @@ public sealed record OverlayReviewSection(int BaseChanged, int ParamsChanged, in
     /// <summary>完整的「參數不符」鍵集合（不截 50 筆）。</summary>
     [JsonIgnore] internal IReadOnlySet<string> AllParamsChanged { get; init; } = new HashSet<string>(StringComparer.Ordinal);
 
+    /// <summary>完整的「執行期退回內建翻譯」鍵集合（不截 50 筆；樣板的 <c>review</c> 段）。</summary>
+    [JsonIgnore] internal IReadOnlySet<string> AllRuntimeFallback { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+
     public static OverlayReviewSection Empty { get; } = new(0, 0, 0, 0, [], [], [], []);
 }
 
@@ -74,7 +77,7 @@ public static class LocaleOverlayReview
     {
         var baseChanged = new HashSet<string>(StringComparer.Ordinal);
         var paramsSet = new HashSet<string>(StringComparer.Ordinal);
-        var fallback = new List<string>();
+        var fallback = new HashSet<string>(StringComparer.Ordinal);
         var orphaned = new List<string>();
         foreach (var (key, text) in layer)
         {
@@ -91,7 +94,7 @@ public static class LocaleOverlayReview
         return new OverlayReviewSection(baseChanged.Count, paramsSet.Count, fallback.Count, orphaned.Count,
             Listed(baseChanged), Listed(paramsSet), Listed(fallback), Listed(orphaned))
         {
-            AllBaseChanged = baseChanged, AllParamsChanged = paramsSet,
+            AllBaseChanged = baseChanged, AllParamsChanged = paramsSet, AllRuntimeFallback = fallback,
         };
     }
 

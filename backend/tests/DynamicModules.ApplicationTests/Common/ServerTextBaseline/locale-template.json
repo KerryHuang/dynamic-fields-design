@@ -1,0 +1,14 @@
+{
+  "LocaleTemplateLocaleNotInstalled": {
+    "zh-TW": "語系 {0} 沒有安裝",
+    "en-US": "The locale {0} is not installed",
+    "th": "ไม่ได้ติดตั้งภาษา {0}",
+    "vi": "Ngôn ngữ {0} chưa được cài đặt"
+  },
+  "LocaleTemplateScopeInvalid": {
+    "zh-TW": "匯出範圍只能是 ui、server，至少要選一個",
+    "en-US": "The export scope must be ui and/or server, with at least one selected",
+    "th": "ขอบเขตการส่งออกต้องเป็น ui หรือ server และต้องเลือกอย่างน้อยหนึ่งรายการ",
+    "vi": "Phạm vi xuất chỉ có thể là ui, server và phải chọn ít nhất một"
+  }
+}

@@ -128,7 +128,9 @@ public static class MessageText
         LocalePackStale = nameof(LocalePackStale), LocaleNotFound = nameof(LocaleNotFound),
         LocaleBuiltinNotRemovable = nameof(LocaleBuiltinNotRemovable), LocaleInUse = nameof(LocaleInUse),
         LocaleIsFallback = nameof(LocaleIsFallback), LocaleNoPrevious = nameof(LocaleNoPrevious),
-        LocaleNoOverrides = nameof(LocaleNoOverrides), LocaleBooleanCollision = nameof(LocaleBooleanCollision);
+        LocaleNoOverrides = nameof(LocaleNoOverrides), LocaleBooleanCollision = nameof(LocaleBooleanCollision),
+        // 翻譯樣板匯出（語系包 i4d2 計畫判斷 9）
+        LocaleTemplateLocaleNotInstalled = nameof(LocaleTemplateLocaleNotInstalled), LocaleTemplateScopeInvalid = nameof(LocaleTemplateScopeInvalid);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -551,6 +553,10 @@ public static class MessageText
             "This would make the Yes/No of {0} the same as {1} ({2}). Fix one of the locales first",
             "การดำเนินการนี้จะทำให้ \"ใช่/ไม่ใช่\" ของ {0} เหมือนกับ {1} ({2}) โปรดแก้ไขภาษาใดภาษาหนึ่งก่อน",
             "Thao tác này sẽ làm \"Có/Không\" của {0} trùng với {1} ({2}), vui lòng sửa một trong hai ngôn ngữ trước"),
+        [LocaleTemplateLocaleNotInstalled] = ("語系 {0} 沒有安裝", "The locale {0} is not installed",
+            "ไม่ได้ติดตั้งภาษา {0}", "Ngôn ngữ {0} chưa được cài đặt"),
+        [LocaleTemplateScopeInvalid] = ("匯出範圍只能是 ui、server，至少要選一個", "The export scope must be ui and/or server, with at least one selected",
+            "ขอบเขตการส่งออกต้องเป็น ui หรือ server และต้องเลือกอย่างน้อยหนึ่งรายการ", "Phạm vi xuất chỉ có thể là ui, server và phải chọn ít nhất một"),
     };
 
     /// <summary>給 <see cref="Localization.BuiltinServerText"/> 合併用（鍵不加前綴）。</summary>
