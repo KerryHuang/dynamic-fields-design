@@ -16,6 +16,11 @@
 
 ## 修訂紀錄
 
+### 2026-11-20 第四輪（codex 短核對 `e9de448d`；`.tmp/plans/20261120-i4a/plan-recheck2.answer.md`，本機；主控直接修）
+
+1. 必修 12：`ClaimAlertHandler.DigestAsync` 的語境參數改名 `mailContext`，避開 `AlertDelivery.cs:79` 既有的 `var mail` → 判斷 23 表格。
+2. 必修 13：寄信設定的測試信沒有「已存語系」（`MailSettings` 無此欄位），一律用請求語系組 `ContextFor(locale.Locale, cache.DefaultLocale)`；案例改「`X-Locale: ja` → 英文」，並驗警示通道已存 `ja` 不影響 → 判斷 23 表格、Task 8 測試。
+
 ### 2026-11-20 第三輪（codex 短核對 `1ce95100`；`.tmp/plans/20261120-i4a/plan-recheck.answer.md`，本機）
 
 1. 必修 5（static 的 composer 與 `IncidentTitles` 拿不到快取）→ static 方法不讀快取，改收呼叫端組好的 `LocaleContext`；新增 `LocaleRegistry.ContextFor(locale, defaultLocale)`；逐一列出 `AlertOutboxWriter`、`ClaimAlertHandler`、`DirectAlertQueue`、`AlertChannelHandlers` 的測試信、`SendMailSettingsTestHandler`、`OpsNotifier` 的簽章調整與測試 → 判斷 23，Task 8 的 Files 與案例。
@@ -116,10 +121,10 @@
      | 呼叫端 | 現況 | 改成 |
      |---|---|---|
      | `AlertOutboxWriter.EnqueueAsync`（`AlertOutboxWriter.cs:41-53`） | `Incident(…, channel?.MailLocale, defaultLocale, …)` | 主建構子加 `LocaleRegistry registry`；`registry.ContextFor(channel?.MailLocale ?? defaultLocale, defaultLocale)` |
-     | `ClaimAlertHandler`（`AlertDelivery.cs:27-46,63,76,79`） | `DigestAsync(now, settings, defaultLocale, ct)`；`:76` 標題與 `:79` 摘要信各自解析 | 主建構子加 `LocaleRegistry`；`Handle` 組一次 `mail = registry.ContextFor(settings.MailLocale ?? defaultLocale, defaultLocale)`，`DigestAsync` 的參數由 `string defaultLocale` 改成 `LocaleContext mail`，`:76` 用 `AlertMailText.Locale(mail)`、`:79` 傳 `mail` |
+     | `ClaimAlertHandler`（`AlertDelivery.cs:27-46,63,76,79`） | `DigestAsync(now, settings, defaultLocale, ct)`；`:76` 標題與 `:79` 摘要信各自解析 | 主建構子加 `LocaleRegistry`；`Handle` 組一次 `mailContext = registry.ContextFor(settings.MailLocale ?? defaultLocale, defaultLocale)`，`DigestAsync` 的參數由 `string defaultLocale` 改成 `LocaleContext mailContext`（不叫 `mail`：`:79` 已有區域變數 `var mail`，撞名會編譯失敗），`:76` 用 `AlertMailText.Locale(mailContext)`、`:79` 傳 `mailContext` |
      | `DirectAlertQueue`（`DirectAlertQueue.cs:39-41,163-165`） | `Direct(…, _settings?.MailLocale, policyCache.DefaultLocale, …)` | 主建構子加 `LocaleRegistry`；`registry.ContextFor(_settings?.MailLocale ?? policyCache.DefaultLocale, policyCache.DefaultLocale)` |
      | `SendSmtpTestHandler`（`AlertChannelHandlers.cs:121,138`） | `Test(settings.MailLocale, policyCache.DefaultLocale)` | 該 handler 主建構子加 `LocaleRegistry`；同上組法 |
-     | `SendMailSettingsTestHandler`（`MailSettingsHandlers.cs:120-122,138`） | `MailTest(smtp.MailLocale, locale.Locale)`（沒存語系時用請求語系） | 主建構子加 `LocaleRegistry`、`CachedSystemPolicy`；`smtp.MailLocale is { } m ? registry.ContextFor(m, cache.DefaultLocale) : registry.ContextFor(locale.Locale, cache.DefaultLocale)`（沒存時仍是請求語系，行為不變） |
+     | `SendMailSettingsTestHandler`（`MailSettingsHandlers.cs:120-122,138`） | `MailTest(smtp.MailLocale, locale.Locale)`；`MailSettings` 沒有存語系欄位，`:128` 的 `smtp.MailLocale` 就是請求語系 | 主建構子加 `LocaleRegistry`、`CachedSystemPolicy`；一律 `registry.ContextFor(locale.Locale, cache.DefaultLocale)`（請求語系，行為不變；第四輪必修 13） |
      | `OpsNotifier.NotifyAsync`（`OpsNotifier.cs:16-17,38`） | `Snapshot(await policies.ChoiceAsync(LocaleDefault…), …)` | 主建構子加 `LocaleRegistry`；`var def = await policies.ChoiceAsync(…)`，`Snapshot(registry.ContextFor(def, def), …)`（N1／N2：系統預設語系） |
      出廠時結果與現在相同：鏈是「存的語系 → 預設 → 繁中 → 其餘內建」，四語都在 `Locales` 裡，第一步就命中；存的語系已移除時鏈不含它的上層，落到預設語系（N2）。這些類別都由 DI 建立，測試沒有直接 `new`（`grep "new DirectAlertQueue(\|new OpsNotifier(\|new AlertOutboxWriter(" backend/tests` 無結果），直接呼叫的只有 `AlertChannelTests.IncidentSnapshot_UsesDefaultLocaleThenZhTw`（`AlertChannelTests.cs:574-581`，改傳 `LocaleContext`）。
    - GET（`AlertChannelHandlers.cs:33`）的現值改回**存的值**（`c.MailLocale ?? policyCache.DefaultLocale`），不再經 `AlertMailText.Locale` 換成有翻譯的語系，否則存了 `ja` 的下拉會顯示成 English。已停用的現值照 N3 顯示。
@@ -426,7 +431,7 @@ i4a 沒有待使用者裁決的題目（原 Q1 已由主控 2026-11-20 裁決：
     - `Notification_DefaultJa_SnapshotFallsBackToParent`：預設語系設 `ja` → 站內通知的 `TitleSnapshot` 是英文（`OpsNotifier`，經 `en-US`）；預設改回 `zh-TW` 是中文。
     - `RemovedMailLocale_UsesDefault`：存 `ja` 後移除 `ja`（`LocaleTestKit` 刪列＋`Invalidate`）→ 寄出的是預設語系（N2）。
   - `IncidentSnapshot_UsesDefaultLocaleThenZhTw`（`AlertChannelTests.cs:574-581`）：改傳 `new LocaleContext("en-US", […])`、`new LocaleContext("zh-TW", […])`、`new LocaleContext("ja", [])`，斷言不變（`ja` 沒有鏈時是繁中）；加一句 `new LocaleContext("ja", ["en-US","zh-TW"])` 是英文。
-  - `MailSettingsTest_*`（寄信設定的測試信）：存 `ja` → 英文；沒存語系、`X-Locale: th` → 泰文（行為不變）。
+  - `MailSettingsTest_*`（寄信設定的測試信）：`X-Locale: ja`（上層 en-US）→ 英文；`X-Locale: th` → 泰文（行為不變）；警示通道已存 `ja` 不影響這封測試信。
   - `AlertMailText_Locale_WalksChain`（純函式）：`Locale(new("ja", ["en-US","zh-TW"])) == "en-US"`；`Locale(new("ja", ["ko"])) == "zh-TW"`；`Locale(new("th", ["zh-TW"])) == "th"`。
   - `LocaleRegistryTests.ContextFor_UsesChain`：裝 `ja`（上層 `en-US`）→ `ContextFor("ja","th")` 是 `("ja", ["en-US","th","zh-TW","vi","ja"])`，與 `FallbacksFor` 相同。
   - `LedgerTab`、`designer-graph`（這兩案是 F4 的驗收，取代原本的名稱掃描）：已安裝四語時產生四語（既有斷言照過）；已安裝多一個沒有翻譯包的 `ja` 時產生的物件**沒有** `ja` 鍵；已安裝 `ja` 且測試先 `setLocaleMessage('ja', …)` 時**有** `ja` 鍵、值是日文那句（證明清單來自已安裝語系，不是寫死；判斷 16）。
