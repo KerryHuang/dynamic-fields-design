@@ -1,0 +1,6 @@
+[
+  { "code": "zh-TW", "nativeName": "繁體中文", "quasarLang": "zh-TW" },
+  { "code": "en-US", "nativeName": "English", "quasarLang": "en-US" },
+  { "code": "th", "nativeName": "ไทย", "quasarLang": "th" },
+  { "code": "vi", "nativeName": "Tiếng Việt", "quasarLang": "vi" }
+]

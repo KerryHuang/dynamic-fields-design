@@ -1,0 +1,85 @@
+{
+  "cases": [
+    {
+      "name": "出廠四語：泰文缺值退回繁中",
+      "installed": [{ "code": "zh-TW", "fallback": null }, { "code": "en-US", "fallback": null }, { "code": "th", "fallback": null }, { "code": "vi", "fallback": null }],
+      "locale": "th",
+      "default": "zh-TW",
+      "text": { "zh-TW": "訂單", "en-US": "Order" },
+      "fallbacks": ["zh-TW", "en-US", "th", "vi"],
+      "expected": "訂單"
+    },
+    {
+      "name": "預設語系英文：泰文缺值退回英文",
+      "installed": [{ "code": "zh-TW", "fallback": null }, { "code": "en-US", "fallback": null }, { "code": "th", "fallback": null }, { "code": "vi", "fallback": null }],
+      "locale": "th",
+      "default": "en-US",
+      "text": { "zh-TW": "訂單", "en-US": "Order" },
+      "fallbacks": ["en-US", "zh-TW", "th", "vi"],
+      "expected": "Order"
+    },
+    {
+      "name": "上層語系優先於預設語系（U3）：日文→英文缺值，預設泰文",
+      "installed": [{ "code": "zh-TW", "fallback": null }, { "code": "en-US", "fallback": null }, { "code": "th", "fallback": null }, { "code": "vi", "fallback": null }, { "code": "ja", "fallback": "en-US" }],
+      "locale": "ja",
+      "default": "th",
+      "text": { "zh-TW": "訂單", "th": "คำสั่งซื้อ" },
+      "fallbacks": ["en-US", "th", "zh-TW", "vi", "ja"],
+      "expected": "คำสั่งซื้อ"
+    },
+    {
+      "name": "上層語系走兩層",
+      "installed": [{ "code": "zh-TW", "fallback": null }, { "code": "en-US", "fallback": null }, { "code": "th", "fallback": null }, { "code": "vi", "fallback": null }, { "code": "zh-HK", "fallback": "zh-TW" }, { "code": "zh-Hant-HK", "fallback": "zh-HK" }],
+      "locale": "zh-Hant-HK",
+      "default": "en-US",
+      "text": { "zh-TW": "訂單", "zh-HK": "訂單（港）", "en-US": "Order" },
+      "fallbacks": ["zh-HK", "zh-TW", "en-US", "th", "vi", "zh-Hant-HK"],
+      "expected": "訂單（港）"
+    },
+    {
+      "name": "上層語系成環就停",
+      "installed": [{ "code": "zh-TW", "fallback": null }, { "code": "en-US", "fallback": null }, { "code": "th", "fallback": null }, { "code": "vi", "fallback": null }, { "code": "aa", "fallback": "bb" }, { "code": "bb", "fallback": "aa" }],
+      "locale": "aa",
+      "default": "zh-TW",
+      "text": { "bb": "B", "zh-TW": "中" },
+      "fallbacks": ["bb", "zh-TW", "en-US", "th", "vi", "aa"],
+      "expected": "B"
+    },
+    {
+      "name": "上層語系最多三層",
+      "installed": [{ "code": "zh-TW", "fallback": null }, { "code": "en-US", "fallback": null }, { "code": "th", "fallback": null }, { "code": "vi", "fallback": null }, { "code": "fe", "fallback": null }, { "code": "fd", "fallback": "fe" }, { "code": "fc", "fallback": "fd" }, { "code": "fb", "fallback": "fc" }, { "code": "fa", "fallback": "fb" }],
+      "locale": "fa",
+      "default": "zh-TW",
+      "text": { "fe": "E", "zh-TW": "中" },
+      "fallbacks": ["fb", "fc", "fd", "zh-TW", "en-US", "th", "vi", "fe", "fa"],
+      "expected": "中"
+    },
+    {
+      "name": "上層語系沒安裝就停",
+      "installed": [{ "code": "zh-TW", "fallback": null }, { "code": "en-US", "fallback": null }, { "code": "th", "fallback": null }, { "code": "vi", "fallback": null }, { "code": "ja", "fallback": "ko" }],
+      "locale": "ja",
+      "default": "en-US",
+      "text": { "ko": "주문", "zh-TW": "訂單" },
+      "fallbacks": ["en-US", "zh-TW", "th", "vi", "ja"],
+      "expected": "訂單"
+    },
+    {
+      "name": "只有沒安裝的語系有文字：回空字串（U6）",
+      "installed": [{ "code": "zh-TW", "fallback": null }, { "code": "en-US", "fallback": null }, { "code": "th", "fallback": null }, { "code": "vi", "fallback": null }],
+      "locale": "vi",
+      "default": "zh-TW",
+      "text": { "ko": "주문" },
+      "fallbacks": ["zh-TW", "en-US", "th", "vi"],
+      "expected": ""
+    },
+    {
+      "name": "只有匯入語系有文字：鏈尾的已安裝語系",
+      "installed": [{ "code": "zh-TW", "fallback": null }, { "code": "en-US", "fallback": null }, { "code": "th", "fallback": null }, { "code": "vi", "fallback": null }, { "code": "ja", "fallback": null }],
+      "locale": "vi",
+      "default": "zh-TW",
+      "text": { "ja": "受注" },
+      "fallbacks": ["zh-TW", "en-US", "th", "vi", "ja"],
+      "expected": "受注"
+    }
+  ]
+}
