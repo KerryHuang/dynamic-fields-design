@@ -16,7 +16,7 @@ namespace DynamicModules.Application.Dynamic.ExportService.Queries.ExportRecords
 /// <summary>匯出 CSV／xlsx（決策 5）：權限 PrintExport，篩選／排序／資料範圍同列表，不分頁。</summary>
 public class ExportRecordsHandler(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, FieldTypeRegistry registry,
-    IBusinessTime time, IDynamicAccessGuard guard, ReferenceResolver resolver, ExportOptions options)
+    IBusinessTime time, IDynamicAccessGuard guard, ReferenceResolver resolver, ExportOptions options, PolicyService.CachedSystemPolicy policy)
     : IRequestHandler<ExportRecordsRequest, ServiceResult>
 {
     private const string CsvType = "text/csv; charset=utf-8";
@@ -49,6 +49,7 @@ public class ExportRecordsHandler(
         var (items, _) = await records.QueryAsync(query with { Size = Math.Max(total, 1) }, ct);
 
         var locale = string.IsNullOrEmpty(request.Locale) ? "zh-TW" : request.Locale;
+        var display = policy.Display(locale);
         var fields = module.Blocks.OrderBy(b => b.Sequence).ThenBy(b => b.Id)
             .SelectMany(b => b.Fields.OrderBy(f => f.Sequence).ThenBy(f => f.Id))
             .Where(f => f.Status == FieldStatus.Active && perms.CanSee(f)).ToList();
@@ -63,7 +64,7 @@ public class ExportRecordsHandler(
         {
             var rows = parsed.Select(p => (IReadOnlyList<string>)fields.Select(f =>
             {
-                var text = Text(f, p.Values, locale, refs.GetValueOrDefault(p.Record.Id), userNames);
+                var text = Text(f, p.Values, display, refs.GetValueOrDefault(p.Record.Id), userNames);
                 // 公式注入防護套用在數字以外的所有欄位：參照標題、選項標籤等也可能來自使用者輸入
                 return FieldDisplay.IsNumericCell(f) || f.Type == FieldType.Percent ? text : CsvWriter.EscapeFormula(text);
             }).ToList());
@@ -72,7 +73,7 @@ public class ExportRecordsHandler(
 
         var xRows = parsed.Select(p => (IReadOnlyList<object>)fields.Select(f =>
         {
-            var text = Text(f, p.Values, locale, refs.GetValueOrDefault(p.Record.Id), userNames);
+            var text = Text(f, p.Values, display, refs.GetValueOrDefault(p.Record.Id), userNames);
             return FieldDisplay.IsNumericCell(f) && decimal.TryParse(text, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out var d) ? (object)d : text;
         }).ToList());
@@ -80,7 +81,7 @@ public class ExportRecordsHandler(
             $"{module.Key}-{stamp}.xlsx", XlsxType, XlsxWriter.Write(module.NameI18n.Resolve(locale), header, xRows)));
     }
 
-    private static string Text(Field f, IReadOnlyDictionary<string, System.Text.Json.JsonElement?> values, string locale,
+    private static string Text(Field f, IReadOnlyDictionary<string, System.Text.Json.JsonElement?> values, FieldDisplayContext display,
         IReadOnlyDictionary<string, ReferenceInfo>? refs, IReadOnlyDictionary<string, string> userNames) =>
-        FieldDisplay.Format(f, values.GetValueOrDefault(f.Key), locale, refs?.GetValueOrDefault(f.Key), userNames);
+        FieldDisplay.Format(f, values.GetValueOrDefault(f.Key), display, refs?.GetValueOrDefault(f.Key), userNames);
 }

@@ -39,7 +39,7 @@ public static class ReportDates
         _ => throw new ArgumentException($"未知的分桶：{bucket}", nameof(bucket)),
     };
 
-    /// <summary>儲存格是否落在區間內。日期時間欄位的 Date 已是台北牆上時間的日期，故隔天 00:00 不屬於前一天。</summary>
+    /// <summary>儲存格是否落在區間內。日期時間欄位的 Date 已是營運時區牆上時間的日期，故隔天 00:00 不屬於前一天。</summary>
     public static bool Contains((DateOnly From, DateOnly ToInclusive) range, ReportCell cell) =>
         cell is { State: "ok", Date: { } d } && d >= range.From && d <= range.ToInclusive;
 

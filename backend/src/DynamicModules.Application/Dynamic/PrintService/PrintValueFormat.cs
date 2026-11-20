@@ -15,10 +15,10 @@ internal static class PrintValueFormat
     private static readonly decimal TrimZeros = 1.000000000000000000000000000m;
 
     public static string Format(
-        Field field, JsonElement? value, string locale, ReferenceInfo? reference, IReadOnlyDictionary<string, string> userNames)
+        Field field, JsonElement? value, FieldDisplayContext display, ReferenceInfo? reference, IReadOnlyDictionary<string, string> userNames)
     {
         if (value is { ValueKind: JsonValueKind.Number } v && NumberText(field, v.GetDecimal()) is { } text) return text;
-        return FieldDisplay.Format(field, value, locale, reference, userNames);
+        return FieldDisplay.Format(field, value, display, reference, userNames);
     }
 
     private static string? NumberText(Field field, decimal n) => field.Type switch

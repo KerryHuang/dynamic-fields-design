@@ -3,7 +3,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 namespace DynamicModules.Domain.Reports;
 
 /// <summary>
-/// 任務報表的衍生值（看板設計 §7.3）：只讀任務既有欄位。日期取營運時區的日曆天（CreatedTime、CompletedTime 是台北牆上時間）。
+/// 任務報表的衍生值（看板設計 §7.3）：只讀任務既有欄位。日期取營運時區的日曆天（CreatedTime、CompletedTime 是營運時區的牆上時間）。
 /// 取消的任務不算逾期、延遲天數空白（使用者裁決 B1）；看板的「逾期」也呼叫 <see cref="IsOverdue"/>，兩邊只有一份定義。
 /// </summary>
 public static class TaskReportValues

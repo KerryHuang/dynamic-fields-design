@@ -2,6 +2,7 @@ using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
@@ -14,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.TaskRuleService;
 /// 只把變更交給 <see cref="TaskWriter"/>，由呼叫端 Flush；不保留跨呼叫的狀態。
 /// </summary>
 public sealed class TaskRuleApplier(ITaskRuleRepository rules, ITaskRepository tasks, TaskWriter writer, FieldTypeRegistry registry,
-    IBusinessTime time, ICurrentUser user, ICurrentLocale locale)
+    IBusinessTime time, ICurrentUser user, ICurrentLocale locale, CachedSystemPolicy systemPolicy)
 {
     /// <summary>寫 TaskRuleRun(occurrence)，並為條件成立的每個任務範本建立任務；標題與說明依觸發者語系解析。</summary>
     public Task GenerateAsync(TaskRule rule, Module module, long recordId, int occurrence, string recordTitle,
@@ -67,7 +68,7 @@ public sealed class TaskRuleApplier(ITaskRuleRepository rules, ITaskRepository t
             var setDue = !task.DueOverridden && (restored || TaskRuleEvaluator.Changed(def.DueFieldId, before, after));
             if (setAssignee || setDue)
                 await writer.SyncFromRuleAsync(task, setAssignee, TaskRuleEvaluator.Assignee(def, after, activeUsers),
-                    setDue, TaskRuleEvaluator.DueDate(def, module, after), ct);
+                    setDue, TaskRuleEvaluator.DueDate(def, module, after, systemPolicy.BusinessOffset), ct);
         }
     }
 
@@ -76,7 +77,7 @@ public sealed class TaskRuleApplier(ITaskRuleRepository rules, ITaskRepository t
     {
         var description = def.DescriptionI18n?.Resolve(locale.Locale);
         writer.Create(new NewTask(def.TitleI18n.Resolve(locale.Locale), string.IsNullOrWhiteSpace(description) ? null : description,
-            TaskRuleEvaluator.Assignee(def, values, activeUsers), TaskRuleEvaluator.DueDate(def, module, values),
+            TaskRuleEvaluator.Assignee(def, values, activeUsers), TaskRuleEvaluator.DueDate(def, module, values, systemPolicy.BusinessOffset),
             module.Id, recordId, recordTitle, rule.Id, occurrence, def.Code, null));
     }
 }

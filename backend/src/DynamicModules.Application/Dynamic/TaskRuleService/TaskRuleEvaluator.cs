@@ -34,10 +34,11 @@ public static class TaskRuleEvaluator
     }
 
     /// <summary>
-    /// 到期日 = 基準欄位的日期 + 偏移天數。Date 取原值；DateTime 換到 +08:00 取日期（"2027-01-31T17:00:00Z" 是 2027-02-01）。
+    /// 到期日 = 基準欄位的日期 + 偏移天數。Date 取原值；DateTime 換到營運時區取日期（+08:00 時 "2027-01-31T17:00:00Z" 是 2027-02-01）。
+    /// 已存的任務到期日改時區後不重算（設計 §10 已知限制）。
     /// 沒有基準欄位、沒有值、格式不對或超出日期範圍都回 null。
     /// </summary>
-    public static DateOnly? DueDate(TaskRuleTask def, Module module, IReadOnlyDictionary<string, JsonElement?> values)
+    public static DateOnly? DueDate(TaskRuleTask def, Module module, IReadOnlyDictionary<string, JsonElement?> values, TimeSpan businessOffset)
     {
         if (def.DueFieldId is not { } id) return null;
         var field = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == id);
@@ -48,7 +49,7 @@ public static class TaskRuleEvaluator
         DateOnly? baseDate = field.Type switch
         {
             FieldType.Date => text.Length >= 10 && DateOnly.TryParseExact(text[..10], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null,
-            FieldType.DateTime => BusinessClock.TryParseWallClock(text, out var at) ? DateOnly.FromDateTime(at) : null,
+            FieldType.DateTime => BusinessClock.TryParseWallClock(text, businessOffset, out var at) ? DateOnly.FromDateTime(at) : null,
             _ => null,
         };
         if (baseDate is not { } date) return null;

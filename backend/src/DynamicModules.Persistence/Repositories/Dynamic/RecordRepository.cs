@@ -206,4 +206,30 @@ public class RecordRepository(DynamicDbContext db, ISqlDialect dialect, IDatabas
             await db.Database.CloseConnectionAsync();
         }
     }
+
+    /// <summary>日期時間欄位（不含日期欄位）的 Id。</summary>
+    private Task<List<long>> DateTimeFieldIdsAsync(CancellationToken ct) =>
+        db.Set<Field>().Where(f => f.Type == FieldType.DateTime).Select(f => f.Id).ToListAsync(ct);
+
+    public async Task<(int Count, DateTime? Min, DateTime? Max)> DateTimeIndexOutOfShiftRangeAsync(TimeSpan delta, CancellationToken ct)
+    {
+        if (delta == TimeSpan.Zero) return (0, null, null);
+        var fieldIds = await DateTimeFieldIdsAsync(ct);
+        var rows = db.Set<RecordIndex>().Where(i => i.DateValue != null && fieldIds.Contains(i.FieldId));
+        // 界線值以 Unspecified 傳入：索引是營運時區的牆上時間（PostgreSQL 的 timestamp）
+        var bound = DateTime.SpecifyKind(delta > TimeSpan.Zero ? DateTime.MaxValue - delta : DateTime.MinValue - delta, DateTimeKind.Unspecified);
+        var outside = delta > TimeSpan.Zero ? rows.Where(i => i.DateValue > bound) : rows.Where(i => i.DateValue < bound);
+        var count = await outside.CountAsync(ct);
+        if (count == 0) return (0, null, null);
+        return (count, await outside.MinAsync(i => i.DateValue, ct), await outside.MaxAsync(i => i.DateValue, ct));
+    }
+
+    /// <summary>EF 的 ExecuteUpdate 加 AddMinutes，不寫 raw SQL；兩種資料庫已由 TimeZoneChangeTests 驗證（含上下限）。</summary>
+    public async Task<int> ShiftDateTimeIndexAsync(TimeSpan delta, CancellationToken ct)
+    {
+        if (delta == TimeSpan.Zero) return 0;
+        var minutes = delta.TotalMinutes;
+        var fieldIds = await DateTimeFieldIdsAsync(ct);
+        return await db.Set<RecordIndex>().Where(i => i.DateValue != null && fieldIds.Contains(i.FieldId)).ExecuteUpdateAsync(s => s.SetProperty(i => i.DateValue, i => i.DateValue!.Value.AddMinutes(minutes)), ct);
+    }
 }

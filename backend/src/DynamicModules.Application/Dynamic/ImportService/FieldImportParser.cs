@@ -1,9 +1,10 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using DynamicModules.Application.Dynamic.Display;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.FieldTypes;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.ImportService;
@@ -12,10 +13,12 @@ namespace DynamicModules.Application.Dynamic.ImportService;
 /// 匯入時預先查好的對照表（由呼叫端建立，parser 保持純函式）。
 /// <para><see cref="UserIdByName"/>：鍵是 DisplayName、值是 UserId；文字等於任一個都接受。</para>
 /// <para><see cref="RefKeysByTitle"/>：[欄位 Id][標題] → 同名的參照鍵（字串）；標題完全相等才算。</para>
+/// <para><see cref="BusinessOffset"/>：營運時區偏移（政策 locale.timeZone），不帶偏移的日期時間文字視為這個時區。</para>
 /// </summary>
 public sealed record ImportLookups(
     IReadOnlyDictionary<string, string> UserIdByName,
-    IReadOnlyDictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>> RefKeysByTitle);
+    IReadOnlyDictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>> RefKeysByTitle,
+    TimeSpan BusinessOffset);
 
 /// <summary>匯入值解析（FieldDisplay.Format 的反向）：只把文字轉成儲存的 JSON 形狀，驗證交給型別處理器。</summary>
 public static class FieldImportParser
@@ -37,7 +40,7 @@ public static class FieldImportParser
             FieldType.Percent => Number(text, percent: true),
             FieldType.Boolean => Boolean(text),
             FieldType.Date => Date(text),
-            FieldType.DateTime => DateTime(text),
+            FieldType.DateTime => DateTime(text, lookups.BusinessOffset),
             FieldType.Time => Time(text),
             FieldType.Enum => Enum(field, StripInjectionApostrophe(text)),
             FieldType.MultiEnum => MultiEnum(field, StripInjectionApostrophe(text)),
@@ -88,15 +91,16 @@ public static class FieldImportParser
             ? Ok(t.ToString("HH:mm", CultureInfo.InvariantCulture))
             : Fail("時間格式必須是 H:mm");
 
-    /// <summary>`yyyy-MM-dd HH:mm` 視為營運時區；ISO 8601 必須帶 Z 或偏移，轉成 +08:00 的儲存形狀。</summary>
-    private static (JsonElement?, string?) DateTime(string text)
+    /// <summary>`yyyy-MM-dd HH:mm` 視為營運時區；ISO 8601 必須帶 Z 或偏移，轉成營運偏移的儲存形狀。</summary>
+    private static (JsonElement?, string?) DateTime(string text, TimeSpan offset)
     {
         DateTimeOffset dto;
         if (System.DateTime.TryParseExact(text, "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var local))
-            dto = new DateTimeOffset(local, FieldDisplay.BusinessOffset);
+            dto = new DateTimeOffset(local, offset);
         else if (!HasOffset.IsMatch(text) || !DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out dto))
             return Fail("日期時間格式錯誤");
-        return Ok(dto.ToOffset(FieldDisplay.BusinessOffset).ToString("yyyy-MM-dd\\THH:mm:ss", CultureInfo.InvariantCulture) + "+08:00");
+        if (BusinessClock.Overflows(dto, offset)) return Fail("日期時間格式錯誤");
+        return Ok(dto.ToOffset(offset).ToString("yyyy-MM-dd\\THH:mm:ss", CultureInfo.InvariantCulture) + PolicyCatalog.FormatUtcOffset(offset));
     }
 
     private static (JsonElement?, string?) Enum(Field field, string text)

@@ -34,14 +34,14 @@ public class TaskRuleEvaluatorTests
     [InlineData(0, "2027-02-01")]
     public void DueDate_DateField_Offsets(int offset, string expected)
     {
-        var due = TaskRuleEvaluator.DueDate(Def(StartField, offset), BuildModule(), Values((StartField, "\"2027-02-01\"")));
+        var due = TaskRuleEvaluator.DueDate(Def(StartField, offset), BuildModule(), Values((StartField, "\"2027-02-01\"")), TimeSpan.FromHours(8));
         due.Should().Be(DateOnly.Parse(expected));
     }
 
     [Fact]
     public void DueDate_EndField_Plus12()
     {
-        var due = TaskRuleEvaluator.DueDate(Def(EndField, 12), BuildModule(), Values((EndField, "\"2027-02-03T09:00:00+08:00\"")));
+        var due = TaskRuleEvaluator.DueDate(Def(EndField, 12), BuildModule(), Values((EndField, "\"2027-02-03T09:00:00+08:00\"")), TimeSpan.FromHours(8));
         due.Should().Be(new DateOnly(2027, 2, 15));
     }
 
@@ -53,7 +53,7 @@ public class TaskRuleEvaluatorTests
     [InlineData("2027-02-01T23:00:00", 0, "2027-02-01")]
     public void DueDate_DateTime_UsesTaipeiDate(string value, int offset, string expected)
     {
-        var due = TaskRuleEvaluator.DueDate(Def(EndField, offset), BuildModule(), Values((EndField, $"\"{value}\"")));
+        var due = TaskRuleEvaluator.DueDate(Def(EndField, offset), BuildModule(), Values((EndField, $"\"{value}\"")), TimeSpan.FromHours(8));
         due.Should().Be(DateOnly.Parse(expected));
     }
 
@@ -61,12 +61,12 @@ public class TaskRuleEvaluatorTests
     public void DueDate_EmptyBase_Null()
     {
         var module = BuildModule();
-        TaskRuleEvaluator.DueDate(Def(null), module, Values((StartField, "\"2027-02-01\""))).Should().BeNull("沒有到期基準欄位");
-        TaskRuleEvaluator.DueDate(Def(StartField), module, Values()).Should().BeNull("記錄沒有值");
-        TaskRuleEvaluator.DueDate(Def(StartField), module, Values((StartField, "null"))).Should().BeNull();
-        TaskRuleEvaluator.DueDate(Def(999), module, Values((StartField, "\"2027-02-01\""))).Should().BeNull("欄位不在模組裡");
-        TaskRuleEvaluator.DueDate(Def(StartField), module, Values((StartField, "\"not a date\""))).Should().BeNull();
-        TaskRuleEvaluator.DueDate(Def(StartField, 3650), module, Values((StartField, "\"9999-12-30\""))).Should().BeNull("超出日期範圍不丟例外");
+        TaskRuleEvaluator.DueDate(Def(null), module, Values((StartField, "\"2027-02-01\"")), TimeSpan.FromHours(8)).Should().BeNull("沒有到期基準欄位");
+        TaskRuleEvaluator.DueDate(Def(StartField), module, Values(), TimeSpan.FromHours(8)).Should().BeNull("記錄沒有值");
+        TaskRuleEvaluator.DueDate(Def(StartField), module, Values((StartField, "null")), TimeSpan.FromHours(8)).Should().BeNull();
+        TaskRuleEvaluator.DueDate(Def(999), module, Values((StartField, "\"2027-02-01\"")), TimeSpan.FromHours(8)).Should().BeNull("欄位不在模組裡");
+        TaskRuleEvaluator.DueDate(Def(StartField), module, Values((StartField, "\"not a date\"")), TimeSpan.FromHours(8)).Should().BeNull();
+        TaskRuleEvaluator.DueDate(Def(StartField, 3650), module, Values((StartField, "\"9999-12-30\"")), TimeSpan.FromHours(8)).Should().BeNull("超出日期範圍不丟例外");
     }
 
     [Fact]

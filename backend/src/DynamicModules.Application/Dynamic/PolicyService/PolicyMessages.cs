@@ -21,6 +21,10 @@ public static class PolicyMessages
     public static string GroupUsedByPolicies(IEnumerable<string> codes) =>
         $"群組被政策設定使用：{string.Join("、", codes)}";
 
+    /// <summary>改營運時區會讓日期時間索引平移出可儲存的範圍（min、max 是超界那幾筆的索引值）。</summary>
+    public static string TimeZoneShiftOutOfRange(int count, DateTime min, DateTime max) =>
+        $"改成這個時區會讓 {count} 筆日期時間超出可儲存的範圍（{min.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)} ～ {max.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)}），請先修改這些記錄再改時區";
+
     /// <summary>存檔被擋時寫出允許範圍。</summary>
     public static string Invalid(PolicyDefinition d) => d.Kind switch
     {

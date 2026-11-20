@@ -8,23 +8,27 @@ using DynamicModules.Domain.FieldTypes.Handlers;
 
 namespace DynamicModules.Application.Dynamic.Display;
 
+/// <summary>
+/// 顯示用的環境：輸出語系與營運時區偏移（同一次輸出用同一份）。由 <c>CachedSystemPolicy.Display</c> 建立；
+/// 之後加語系退回鏈時只改這裡，不改呼叫端。
+/// </summary>
+public sealed record FieldDisplayContext(string Locale, TimeSpan BusinessOffset);
+
 /// <summary>欄位值的顯示文字（歷程與匯出共用），純函式。</summary>
 public static class FieldDisplay
 {
-    /// <summary>營運時區偏移（Asia/Taipei 無日光節約）；匯入解析日期時間也用這個。</summary>
-    public static readonly TimeSpan BusinessOffset = BusinessClock.Offset;
-
     public static string Format(
-        Field field, JsonElement? value, string locale, ReferenceInfo? reference,
+        Field field, JsonElement? value, FieldDisplayContext display, ReferenceInfo? reference,
         IReadOnlyDictionary<string, string> userNames)
     {
         if (value is not { } v || v.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) return "";
+        var locale = display.Locale;
         return field.Type switch
         {
             FieldType.Integer => Number(v, 0),
             FieldType.Decimal or FieldType.Currency => Number(v, field.Config.Scale ?? 2),
             FieldType.Percent => Number(v, field.Config.Scale ?? 2) + "%",
-            FieldType.DateTime => DateTimeText(v),
+            FieldType.DateTime => DateTimeText(v, display.BusinessOffset),
             FieldType.Boolean => Boolean(v, locale),
             FieldType.Enum => OptionLabel(field, v.GetString()!, locale),
             FieldType.MultiEnum => MultiEnum(field, v, locale),
@@ -47,8 +51,8 @@ public static class FieldDisplay
     private static string Number(JsonElement v, int scale) =>
         v.GetDecimal().ToString("F" + scale, CultureInfo.InvariantCulture);
 
-    private static string DateTimeText(JsonElement v) =>
-        BusinessClock.ParseWallClock(v.GetString()!)
+    private static string DateTimeText(JsonElement v, TimeSpan offset) =>
+        BusinessClock.ParseWallClock(v.GetString()!, offset)
             .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
     private static string Boolean(JsonElement v, string locale)

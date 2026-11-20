@@ -49,30 +49,32 @@ public partial class ReportRunner
     };
 
     private static ReportColumn MeasureColumn(
-        ReportMeasure m, IReadOnlyDictionary<string, Bound> bound, Side main, Side? child, string locale)
+        ReportMeasure m, IReadOnlyDictionary<string, Bound> bound, Side main, Side? child, FieldDisplayContext display)
     {
+        var locale = display.Locale;
         string FieldLabel(ReportFieldRef r) => ColumnLabel(bound[ReportCalculator.KeyOf(r)], locale);
         var (label, type) = m.Kind switch
         {
             "countMain" => (ReportText.Get(locale, ReportText.Count, main.Module.NameI18n.Resolve(locale)), "number"),
             "countChild" => (ReportText.Get(locale, ReportText.Count, (child ?? main).Module.NameI18n.Resolve(locale)), "number"),
             "ratio" => (ReportText.Get(locale, ReportText.Ratio, m.Condition is null ? "" : FieldLabel(m.Condition.Field)), "ratio"),
-            "countIf" => (CountIfLabel(m.Condition, bound, locale, FieldLabel), "number"),
+            "countIf" => (CountIfLabel(m.Condition, bound, display, FieldLabel), "number"),
             _ => (ReportText.Get(locale, m.Kind switch { "sum" => ReportText.Sum, "avg" => ReportText.Avg, "median" => ReportText.Median, "min" => ReportText.Min, _ => ReportText.Max }, m.Field is null ? "" : FieldLabel(m.Field)),
                 m.Field is not null && m.Kind is "min" or "max" && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field!)].Field) is "date" or "dateTime" ? "dayNumber"
                 : m.Field is not null && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field)].Field) == "percent" ? "percent" : "number"),
         };
         if (m.Condition is { } cond && m.Kind is "sum" or "avg" or "median")
-            label = EqLabel(cond, bound, locale) is { } v
+            label = EqLabel(cond, bound, display) is { } v
                 ? ReportText.Get(locale, ReportText.ConditionalEq, label, FieldLabel(cond.Field), v)
                 : ReportText.Get(locale, ReportText.Conditional, label);
         return new ReportColumn(m.Id, label, "measure", type);
     }
 
-    private static string CountIfLabel(ReportFilter? cond, IReadOnlyDictionary<string, Bound> bound, string locale, Func<ReportFieldRef, string> fieldLabel)
+    private static string CountIfLabel(ReportFilter? cond, IReadOnlyDictionary<string, Bound> bound, FieldDisplayContext display, Func<ReportFieldRef, string> fieldLabel)
     {
+        var locale = display.Locale;
         if (cond is null) return ReportText.Get(locale, ReportText.CountIf, "");
-        return EqLabel(cond, bound, locale) is { } v
+        return EqLabel(cond, bound, display) is { } v
             ? ReportText.Get(locale, ReportText.CountIfEq, fieldLabel(cond.Field), v)
             : ReportText.Get(locale, ReportText.CountIf, fieldLabel(cond.Field));
     }
@@ -80,7 +82,7 @@ public partial class ReportRunner
     /// <summary>
     /// 欄名帶出條件值（B4）：只有單一值的 eq 且值轉得成標籤才有；in、gte、多值、使用者與參照欄位等回 null，欄名退回「符合條件」字樣。
     /// </summary>
-    private static string? EqLabel(ReportFilter cond, IReadOnlyDictionary<string, Bound> bound, string locale)
+    private static string? EqLabel(ReportFilter cond, IReadOnlyDictionary<string, Bound> bound, FieldDisplayContext display)
     {
         if (cond.Op != "eq" || cond.Value is not { ValueKind: JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False } value) return null;
         var field = bound[ReportCalculator.KeyOf(cond.Field)].Field;
@@ -88,7 +90,7 @@ public partial class ReportRunner
         if (field.Type is not (FieldType.Enum or FieldType.Boolean or FieldType.Text or FieldType.Integer or FieldType.Decimal or FieldType.Currency
             or FieldType.Percent or FieldType.Date)) return null;
         if (field.Type == FieldType.Enum && !field.Options.Any(o => $"opt_{o.Id}" == value.GetString())) return null;
-        var text = FieldDisplay.Format(field, value, locale, null, new Dictionary<string, string>());
+        var text = FieldDisplay.Format(field, value, display, null, new Dictionary<string, string>());
         return text.Length == 0 ? null : text;
     }
 
@@ -175,7 +177,7 @@ public partial class ReportRunner
             FieldType.Boolean => JsonSerializer.SerializeToElement(key == "true"),
             _ => null,
         };
-        if (raw is not null) return FieldDisplay.Format(b.Field, raw, ctx.Locale, null, ctx.UserNames);
+        if (raw is not null) return FieldDisplay.Format(b.Field, raw, ctx.Display, null, ctx.UserNames);
         return b.Field.Type == FieldType.Reference ? ctx.Titles.GetValueOrDefault((b.Key, key), key) : key;
     }
 
@@ -223,7 +225,7 @@ public partial class ReportRunner
         if (c.Number is { } n) return n;
         if (c is TimedCell t) return t.At.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
         if (c.Date is { } d) return d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        if (c.Multi is { } multi) return FieldDisplay.Format(b.Field, JsonSerializer.SerializeToElement(multi), ctx.Locale, null, ctx.UserNames);
+        if (c.Multi is { } multi) return FieldDisplay.Format(b.Field, JsonSerializer.SerializeToElement(multi), ctx.Display, null, ctx.UserNames);
         return ValueLabel(b, c.Text!, ctx);
     }
 }

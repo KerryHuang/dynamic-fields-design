@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Modules;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.ValueObjects;
 
@@ -123,10 +124,10 @@ public static class ReportRules
 
     /// <summary>
     /// 依模組 metadata 與觀看者權限檢查，回傳錯誤與條件值正規化後的定義。觀看者看不到的欄位視同不存在。
-    /// 運算子與條件值沿用欄位型別 handler（與列表篩選相同），正規化後的值才存檔；不帶偏移的日期時間條件值視為台北牆上時間。
+    /// 運算子與條件值沿用欄位型別 handler（與列表篩選相同），正規化後的值才存檔；不帶偏移的日期時間條件值視為營運時區（<paramref name="businessOffset"/>）的牆上時間。
     /// </summary>
     public static (List<string> Errors, ReportDefinition? Normalized) Check(
-        ReportDefinition d, ReportModuleSet set, FieldTypeRegistry registry, IReadOnlySet<string> userIds, int maxDays)
+        ReportDefinition d, ReportModuleSet set, FieldTypeRegistry registry, IReadOnlySet<string> userIds, int maxDays, TimeSpan businessOffset)
     {
         var errors = new List<string>();
         if (set.Main is null) return (["主模組不存在或未啟用"], null);
@@ -199,7 +200,7 @@ public static class ReportRules
                 errors.Add($"欄位 {f.Field.FieldId} 不支援運算子 {f.Op}");
                 return null;
             }
-            if (NormalizeValue(field, handler, op, f.Value, registry, userIds, maxDays) is not { } value)
+            if (NormalizeValue(field, handler, op, f.Value, registry, userIds, maxDays, businessOffset) is not { } value)
             {
                 errors.Add($"欄位 {f.Field.FieldId} 的條件值格式錯誤");
                 return null;
@@ -229,7 +230,8 @@ public static class ReportRules
 
     /// <summary>回傳 null 代表格式錯誤；有效但無值（isEmpty）回 (null)。結構與 <c>ConditionParser.ParseValue</c> 相同。</summary>
     private static Norm? NormalizeValue(
-        Field field, IFieldTypeHandler handler, FilterOperator op, JsonElement? value, FieldTypeRegistry registry, IReadOnlySet<string> userIds, int maxDays)
+        Field field, IFieldTypeHandler handler, FilterOperator op, JsonElement? value, FieldTypeRegistry registry, IReadOnlySet<string> userIds, int maxDays,
+        TimeSpan businessOffset)
     {
         if (value is { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined }) value = null;
         switch (op)
@@ -243,35 +245,37 @@ public static class ReportRules
             case FilterOperator.In or FilterOperator.NotIn:
                 if (value is not { ValueKind: JsonValueKind.Array } list || list.GetArrayLength() is < 1 or > MaxListItems) return null;
                 var elementHandler = field.Type == FieldType.MultiEnum ? registry.Get(FieldType.Enum) : handler;
-                return Many(list.EnumerateArray(), field, elementHandler, registry, userIds);
+                return Many(list.EnumerateArray(), field, elementHandler, registry, userIds, businessOffset);
             case FilterOperator.Between:
                 return value is { ValueKind: JsonValueKind.Array } pair && pair.GetArrayLength() == 2
-                    ? Many(pair.EnumerateArray(), field, handler, registry, userIds) : null;
+                    ? Many(pair.EnumerateArray(), field, handler, registry, userIds, businessOffset) : null;
             default:
-                return value is { } v && One(v, field, handler, registry, userIds) is { } one ? new Norm(one) : null;
+                return value is { } v && One(v, field, handler, registry, userIds, businessOffset) is { } one ? new Norm(one) : null;
         }
     }
 
     private static Norm? Many(
-        IEnumerable<JsonElement> items, Field field, IFieldTypeHandler handler, FieldTypeRegistry registry, IReadOnlySet<string> userIds)
+        IEnumerable<JsonElement> items, Field field, IFieldTypeHandler handler, FieldTypeRegistry registry, IReadOnlySet<string> userIds,
+        TimeSpan businessOffset)
     {
         var result = new List<JsonElement>();
         foreach (var item in items)
         {
-            if (One(item, field, handler, registry, userIds) is not { } one) return null;
+            if (One(item, field, handler, registry, userIds, businessOffset) is not { } one) return null;
             result.Add(one);
         }
         return new Norm(JsonSerializer.SerializeToElement(result));
     }
 
-    private static JsonElement? One(JsonElement value, Field field, IFieldTypeHandler handler, FieldTypeRegistry registry, IReadOnlySet<string> userIds)
+    private static JsonElement? One(
+        JsonElement value, Field field, IFieldTypeHandler handler, FieldTypeRegistry registry, IReadOnlySet<string> userIds, TimeSpan businessOffset)
     {
         if (field.Type == FieldType.DateTime && value.ValueKind == JsonValueKind.String)
         {
             var s = value.GetString()!;
-            // 只給日期是一整天（runner 的 Span）；沒帶偏移的時間就是台北牆上時間，補上 +08:00 再走 handler
+            // 只給日期是一整天（runner 的 Span）；沒帶偏移的時間就是營運時區的牆上時間，補上營運偏移再走 handler
             if (DateOnly.TryParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) return value;
-            if (NoOffsetDateTime.IsMatch(s)) value = JsonSerializer.SerializeToElement(s + "+08:00");
+            if (NoOffsetDateTime.IsMatch(s)) value = JsonSerializer.SerializeToElement(s + PolicyCatalog.FormatUtcOffset(businessOffset));
         }
         var normalizer = handler.Type switch
         {

@@ -25,7 +25,7 @@ public sealed record ImportPlan(Module Module, List<ImportColumn> Columns, List<
 /// </summary>
 public class ImportPlanner(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IDynamicAccessGuard guard,
-    ReferenceProviderRegistry providers, RecordCreator creator, IPolicyReader policies)
+    ReferenceProviderRegistry providers, RecordCreator creator, IPolicyReader policies, CachedSystemPolicy systemPolicy)
 {
     public const string FileKey = "file";
     public const string ComputedColumn = "系統計算的欄位";
@@ -87,7 +87,7 @@ public class ImportPlanner(
             }
         }
 
-        var lookups = new ImportLookups(await UsersAsync(ct), await ReferenceTitlesAsync(mapped, csv.Rows, ct));
+        var lookups = new ImportLookups(await UsersAsync(ct), await ReferenceTitlesAsync(mapped, csv.Rows, ct), systemPolicy.BusinessOffset);
         var rows = new List<ImportRowPlan>();
         foreach (var row in csv.Rows)
         {

@@ -16,7 +16,8 @@ public partial class ReportRunner
 {
     private const string DatasetMemoryOnly = "datasetMemoryOnly";
 
-    private async Task<SourceLoad> LoadTasksAsync(ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, CancellationToken ct)
+    private async Task<SourceLoad> LoadTasksAsync(
+        ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, TimeSpan offset, CancellationToken ct)
     {
         SourceLoad Fail(string state, string message) => new(FailResult(state, message, basis, frozen), null);
         var dataset = d.Dataset!;
@@ -49,7 +50,7 @@ public partial class ReportRunner
             }
         foreach (var b in bound.Values)
             if (UnusableMessage(b, locale) is { } message) return Fail(Restricted, message);
-        if (FieldWithChangedType(d, bound) is { } changed)
+        if (FieldWithChangedType(d, bound, offset) is { } changed)
             return Fail(FieldMissingState, ReportText.Get(locale, ReportText.TypeChanged, ColumnLabel(changed, locale)));
 
         var (_, resolved, applied) = await ResolveRangeAsync(d, o, basis, ct);
@@ -67,7 +68,7 @@ public partial class ReportRunner
 
         var blanks = bound.Values.Where(b => F.BlankLabels.ContainsKey(b.Field.Id))
             .ToDictionary(b => b.Key, b => F.BlankLabels[b.Field.Id].Resolve(locale));
-        var ctx = new RunContext(locale, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), blanks);
+        var ctx = new RunContext(locale, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), blanks, offset);
         // tasks 一個任務一列；taskEvents 每個任務一列「建立」，完成（且有完成時間，J15）再一列「完成」。
         // 事件列的 MainId 是 taskId*2（建立）、taskId*2+1（完成），每列不重複、去重照舊；TaskIdOf 對回任務 Id
         var events = dataset == ReportDatasets.TaskEvents;
@@ -76,7 +77,7 @@ public partial class ReportRunner
         {
             var cells = new Dictionary<string, ReportCell>(bound.Count);
             foreach (var b in bound.Values) cells[b.Key] = ApplyBucket(b, TaskCell(b.Field.Id, item, side, basis, ev), ctx);
-            if (!d.Filters.All(f => Matches(f, cells[ReportCalculator.KeyOf(f.Field)], basis))) return;
+            if (!d.Filters.All(f => Matches(f, cells[ReportCalculator.KeyOf(f.Field)], basis, offset))) return;
             if (resolved is { } window && !ReportDates.Contains(window, cells[ReportCalculator.KeyOf(d.PrimaryDateField!)])) return;
             rows.Add(new ReportRow(mainId, null, cells));
         }

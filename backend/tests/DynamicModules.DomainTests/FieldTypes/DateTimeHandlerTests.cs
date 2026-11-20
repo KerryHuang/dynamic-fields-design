@@ -91,4 +91,18 @@ public class DateTimeHandlerTests
             Run(FieldType.Time, bad).Error.Should().Be(FieldErrors.TimeFormat);
         Run(FieldType.Time, "null").IsValid.Should().BeTrue();
     }
+
+    [Fact]
+    public void Normalize_UsesGivenOffset()
+    {
+        var handler = new DynamicModules.Domain.FieldTypes.Handlers.DateTimeHandler(() => TimeSpan.FromHours(7));
+        var r = handler.Normalize(J("\"2026-11-11T02:00:00Z\""), F(FieldType.DateTime), Ctx());
+        r.Value!.Value.GetString().Should().Be("2026-11-11T09:00:00+07:00");
+        handler.ToIndex(r.Value.Value, F(FieldType.DateTime)).Single().DateValue.Should().Be(new DateTime(2026, 11, 11, 9, 0, 0));
+
+        // 負偏移的下限溢位回欄位錯誤，不丟例外
+        var west = new DynamicModules.Domain.FieldTypes.Handlers.DateTimeHandler(() => TimeSpan.FromHours(-12));
+        var low = west.Normalize(J("\"0001-01-01T05:00:00Z\""), F(FieldType.DateTime), Ctx());
+        (low.IsValid, low.Error).Should().Be((false, FieldErrors.DateTimeFormat));
+    }
 }

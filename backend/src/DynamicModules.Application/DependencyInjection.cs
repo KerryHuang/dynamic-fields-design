@@ -47,6 +47,8 @@ public static class DependencyInjection
         services.AddScoped<ISystemIdentity, SystemIdentity>();
         services.AddScoped<Dynamic.PolicyService.IPolicyReader, Dynamic.PolicyService.PolicyReader>();
         services.AddSingleton<Dynamic.PolicyService.CachedSystemPolicy>();
+        // 改營運時區時同一交易內平移日期時間索引
+        services.AddScoped<Dynamic.PolicyService.IPolicyChangeHook, Dynamic.RecordService.TimeZoneChangeHook>();
         // 沒有部署出廠值時用空的；WebAPI 之後註冊讀部署設定檔的實例會蓋過它
         services.TryAddSingleton(Dynamic.PolicyService.PolicyEnvironmentDefaults.Empty);
         services.AddScoped<FieldLocks>();
@@ -101,7 +103,8 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.Rollups.RollupRecalc>();
         services.AddScoped<Dynamic.RecordService.RecordCreator>();
         services.AddScoped<Dynamic.ImportService.ImportPlanner>();
-        services.AddSingleton(FieldTypeRegistry.CreateDefault());
+        // 日期時間欄位的營運時區偏移從全系統政策快照讀（每次呼叫取當下的值）
+        services.AddSingleton(sp => FieldTypeRegistry.CreateDefault(() => sp.GetRequiredService<Dynamic.PolicyService.CachedSystemPolicy>().BusinessOffset));
         services.AddSingleton<Dynamic.ExportService.ExportOptions>();
         services.AddSingleton<Dynamic.ReportService.ReportOptions>();
         services.AddScoped<Dynamic.ReportService.ReportRunner>();

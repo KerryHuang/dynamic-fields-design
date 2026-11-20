@@ -111,7 +111,7 @@ public partial class ReportRunner
             case FieldType.Date:
                 return DateCell(v);
             case FieldType.DateTime:
-                return v.ValueKind == JsonValueKind.String && TryWallClock(v.GetString()!, out var at) ? new TimedCell(at) : EmptyCell;
+                return v.ValueKind == JsonValueKind.String && TryWallClock(v.GetString()!, ctx.BusinessOffset, out var at) ? new TimedCell(at) : EmptyCell;
             case FieldType.MultiEnum:
                 var options = v.EnumerateArray().Select(e => e.GetString()!).ToList();
                 return options.Count == 0 ? EmptyCell : new ReportCell(Ok, null, null, null, options);
@@ -138,7 +138,7 @@ public partial class ReportRunner
             : EmptyCell;
 
     /// <summary>
-    /// 同 BusinessClock.TryParseWallClock：帶偏移的值換成台北牆上時間，不帶偏移的值本身就是台北牆上時間（spec §6.4）。
+    /// 同 BusinessClock.TryParseWallClock：帶偏移的值換成營運時區的牆上時間，不帶偏移的值本身就是營運時區的牆上時間（spec §6.4）。
     /// </summary>
-    private static bool TryWallClock(string s, out DateTime at) => BusinessClock.TryParseWallClock(s, out at);
+    private static bool TryWallClock(string s, TimeSpan offset, out DateTime at) => BusinessClock.TryParseWallClock(s, offset, out at);
 }

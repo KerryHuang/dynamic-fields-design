@@ -60,6 +60,16 @@ public interface IRecordRepository
     /// <see cref="AggregateOverflowException"/>。呼叫端要先把變更存進資料庫（同一個交易內）。
     /// </summary>
     Task<AggregateResult> AggregateAsync(AggregateQuery query, CancellationToken ct);
+    /// <summary>
+    /// 改營運時區前的邊界檢查：日期時間欄位的索引（DateValue 不為 null）平移 <paramref name="delta"/> 後會超出 DateTime 範圍的筆數，
+    /// 與這些列的最小、最大索引值；沒有超界時 Count 是 0、Min／Max 是 null。
+    /// </summary>
+    Task<(int Count, DateTime? Min, DateTime? Max)> DateTimeIndexOutOfShiftRangeAsync(TimeSpan delta, CancellationToken ct);
+    /// <summary>
+    /// 改營運時區時把日期時間欄位的索引平移 <paramref name="delta"/>（日期欄位不動）；回傳更新的列數。
+    /// 交易內的 ExecuteUpdate，呼叫端要先用 <see cref="DateTimeIndexOutOfShiftRangeAsync"/> 確認不會超界。
+    /// </summary>
+    Task<int> ShiftDateTimeIndexAsync(TimeSpan delta, CancellationToken ct);
 }
 
 public sealed class AggregateOverflowException(Exception inner) : Exception("加總超出可計算範圍", inner);

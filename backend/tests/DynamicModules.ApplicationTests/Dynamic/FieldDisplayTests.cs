@@ -25,12 +25,14 @@ public class FieldDisplayTests
         return new FieldOption { Id = id, LabelI18n = label, Sequence = seq, Active = active };
     }
 
+    private static readonly TimeSpan Taipei = TimeSpan.FromHours(8);
+
     private static string Fmt(Field f, object? v, string locale = "zh-TW", ReferenceInfo? r = null,
-        IReadOnlyDictionary<string, string>? users = null) =>
-        FieldDisplay.Format(f, v is null ? null : J(v), locale, r, users ?? NoUsers);
+        IReadOnlyDictionary<string, string>? users = null, TimeSpan? offset = null) =>
+        FieldDisplay.Format(f, v is null ? null : J(v), new FieldDisplayContext(locale, offset ?? Taipei), r, users ?? NoUsers);
 
     [Fact]
-    public void Null_IsEmpty() => FieldDisplay.Format(F(FieldType.Text), null, "zh-TW", null, NoUsers).Should().Be("");
+    public void Null_IsEmpty() => FieldDisplay.Format(F(FieldType.Text), null, new FieldDisplayContext("zh-TW", Taipei), null, NoUsers).Should().Be("");
 
     [Theory]
     [InlineData(FieldType.Text)]
@@ -67,6 +69,10 @@ public class FieldDisplayTests
     [Fact]
     public void DateTime_NoOffset_IsTaipeiWallClock() =>
         Fmt(F(FieldType.DateTime), "2026-11-04T23:00:00").Should().Be("2026-11-04 23:00");
+
+    [Fact]
+    public void DateTime_UsesGivenOffset() =>
+        Fmt(F(FieldType.DateTime), "2026-11-11T10:00:00+08:00", offset: TimeSpan.FromHours(7)).Should().Be("2026-11-11 09:00");
 
     [Fact]
     public void DateTime_StoredFormat() =>

@@ -19,7 +19,7 @@ namespace DynamicModules.Application.Dynamic.ReportService;
 public partial class ReportRunner
 {
     /// <summary>只看形狀，不看內容：已停用或刪除的選項、已刪除的使用者仍算對得上，比對時只是不符合。通過後 <see cref="Matches"/> 不會因值的形狀丟例外。</summary>
-    private bool ConditionFits(ReportFilter f, Field field)
+    private bool ConditionFits(ReportFilter f, Field field, TimeSpan offset)
     {
         if (!Operators.TryGetValue(f.Op, out var op) || !registry.Get(field.Type).OperatorsFor(field).Contains(op)) return false;
         var value = f.Value is { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined } ? null : f.Value;
@@ -34,20 +34,20 @@ public partial class ReportRunner
             case FilterOperator.Contains or FilterOperator.StartsWith:
                 return value is { ValueKind: JsonValueKind.String };
             case FilterOperator.In or FilterOperator.NotIn:
-                return value is { ValueKind: JsonValueKind.Array } list && list.EnumerateArray().All(e => ScalarFits(field, e));
+                return value is { ValueKind: JsonValueKind.Array } list && list.EnumerateArray().All(e => ScalarFits(field, e, offset));
             case FilterOperator.Between:
-                return value is { ValueKind: JsonValueKind.Array } pair && pair.GetArrayLength() == 2 && pair.EnumerateArray().All(e => ScalarFits(field, e));
+                return value is { ValueKind: JsonValueKind.Array } pair && pair.GetArrayLength() == 2 && pair.EnumerateArray().All(e => ScalarFits(field, e, offset));
             default:
-                return value is { } v && ScalarFits(field, v);
+                return value is { } v && ScalarFits(field, v, offset);
         }
     }
 
     /// <summary>值的形狀要對得上 <see cref="ValueCell"/> 給這個欄位的格子：日期、數字，其餘是可比對的純量。</summary>
-    private static bool ScalarFits(Field field, JsonElement v)
+    private static bool ScalarFits(Field field, JsonElement v, TimeSpan offset)
     {
         if (ReportRules.IsDateLike(field))
             return v.ValueKind == JsonValueKind.String
-                && (DateOnly.TryParseExact(v.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _) || TryWallClock(v.GetString()!, out _));
+                && (DateOnly.TryParseExact(v.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _) || TryWallClock(v.GetString()!, offset, out _));
         if (field.Type is FieldType.Integer or FieldType.Decimal or FieldType.Currency or FieldType.Percent or FieldType.Formula or FieldType.Rollup)
             return v.ValueKind == JsonValueKind.Number && v.TryGetDecimal(out _);
         return v.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False;
@@ -59,7 +59,7 @@ public partial class ReportRunner
     /// 平鋪 AND 清單裡的一個條件，語意同列表篩選：ne、notIn 包含空值，比較類不含空值。
     /// 看不到或已刪除的目標一律不符合，猜中或猜錯目標的值結果都一樣。
     /// </summary>
-    private static bool Matches(ReportFilter f, ReportCell c, DateOnly basis)
+    private static bool Matches(ReportFilter f, ReportCell c, DateOnly basis, TimeSpan offset)
     {
         if (c.State is Restricted or Missing) return false;
         var op = Operators[f.Op];
@@ -71,7 +71,7 @@ public partial class ReportRunner
             return c.Date is { } d && (c is TimedCell bt ? bt.At : d.ToDateTime(TimeOnly.MinValue)) < basis.ToDateTime(TimeOnly.MinValue);
 
         var v = f.Value ?? throw new ArgumentException($"運算子 {f.Op} 需要條件值");
-        if (c.Date is { } date) return MatchDate(op, v, c is TimedCell t ? t.At : date.ToDateTime(TimeOnly.MinValue), basis);
+        if (c.Date is { } date) return MatchDate(op, v, c is TimedCell t ? t.At : date.ToDateTime(TimeOnly.MinValue), basis, offset);
         if (c.Number is { } number) return MatchNumber(op, v, number);
 
         IReadOnlyList<string> texts = c.Multi ?? [c.Text!];
@@ -113,15 +113,15 @@ public partial class ReportRunner
         _ => throw new ArgumentException($"數字值不支援運算子 {op}"),
     };
 
-    private static bool MatchDate(FilterOperator op, JsonElement v, DateTime at, DateOnly basis)
+    private static bool MatchDate(FilterOperator op, JsonElement v, DateTime at, DateOnly basis, TimeSpan offset)
     {
         switch (op)
         {
             case FilterOperator.WithinNextDays: return InDays(at, basis, basis.AddDays(v.GetInt32()));
             case FilterOperator.WithinLastDays: return InDays(at, basis.AddDays(-v.GetInt32()), basis);
-            case FilterOperator.Between: return at >= Span(v[0]).From && at < Span(v[1]).Until;
+            case FilterOperator.Between: return at >= Span(v[0], offset).From && at < Span(v[1], offset).Until;
         }
-        var (from, until) = Span(v);
+        var (from, until) = Span(v, offset);
         return op switch
         {
             FilterOperator.Eq => at >= from && at < until,
@@ -138,12 +138,12 @@ public partial class ReportRunner
         at >= from.ToDateTime(TimeOnly.MinValue) && at < toInclusive.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
     /// <summary>條件值涵蓋的時間：只給日期是一整天，上界是隔天 00:00 之前（spec §6.4）；有時間就是那一刻。</summary>
-    private static (DateTime From, DateTime Until) Span(JsonElement v)
+    private static (DateTime From, DateTime Until) Span(JsonElement v, TimeSpan offset)
     {
         var s = v.GetString() ?? throw new ArgumentException("日期條件值必須是文字");
         if (DateOnly.TryParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
             return (d.ToDateTime(TimeOnly.MinValue), d.AddDays(1).ToDateTime(TimeOnly.MinValue));
-        if (!TryWallClock(s, out var at)) throw new FormatException($"日期條件值格式錯誤：{s}");
+        if (!TryWallClock(s, offset, out var at)) throw new FormatException($"日期條件值格式錯誤：{s}");
         return (at, at.AddTicks(1));
     }
 }

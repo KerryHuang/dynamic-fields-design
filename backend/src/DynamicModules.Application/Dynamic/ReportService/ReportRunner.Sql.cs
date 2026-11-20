@@ -42,7 +42,7 @@ public partial class ReportRunner
     private static bool TextMayTruncate(Field f) =>
         f.Type is FieldType.Text or FieldType.Phone or FieldType.Email or FieldType.Url or FieldType.Time or FieldType.AutoNumber;
 
-    private sealed class SqlPlanner(IReadOnlyDictionary<string, Bound> bound, DateOnly basis)
+    private sealed class SqlPlanner(IReadOnlyDictionary<string, Bound> bound, DateOnly basis, TimeSpan offset)
     {
         public readonly List<string> Reasons = [];
         private readonly Dictionary<long, Field> _used = [];
@@ -187,9 +187,9 @@ public partial class ReportRunner
                 case FilterOperator.WithinNextDays: return Range(field, midnight, basis.AddDays(v.GetInt32() + 1).ToDateTime(TimeOnly.MinValue));
                 case FilterOperator.WithinLastDays: return Range(field, basis.AddDays(-v.GetInt32()).ToDateTime(TimeOnly.MinValue), basis.AddDays(1).ToDateTime(TimeOnly.MinValue));
                 case FilterOperator.BeforeToday: return Range(field, null, midnight);
-                case FilterOperator.Between: return Range(field, Span(v[0]).From, Span(v[1]).Until);
+                case FilterOperator.Between: return Range(field, Span(v[0], offset).From, Span(v[1], offset).Until);
             }
-            var (from, until) = Span(v);
+            var (from, until) = Span(v, offset);
             return op switch
             {
                 FilterOperator.Eq => Range(field, from, until),
@@ -210,10 +210,10 @@ public partial class ReportRunner
     /// 只處理「沒有子模組、不下鑽、不是明細」的聚合報表（子模組合併與參照欄位的 SQL 路徑尚未支援，走縮小後的記憶體路徑）。
     /// </summary>
     private SqlPlanning PlanAggregate(
-        ReportDefinition d, ReportRunOptions o, IReadOnlyDictionary<string, Bound> bound, Side mainSide, DateOnly basis,
+        ReportDefinition d, ReportRunOptions o, IReadOnlyDictionary<string, Bound> bound, Side mainSide, DateOnly basis, TimeSpan offset,
         (DateOnly From, DateOnly ToInclusive)? window)
     {
-        var planner = new SqlPlanner(bound, basis);
+        var planner = new SqlPlanner(bound, basis, offset);
         var reasons = planner.Reasons;
         if (d.Child is not null) reasons.Add("mergedNotSupported");
         if (o.DrillGroupKeys is not null) reasons.Add("drill");
@@ -258,10 +258,10 @@ public partial class ReportRunner
     /// 表達不了的條件直接略過（不縮小，只會多載入）。沒有任何條件時回 null。
     /// </summary>
     private ReportSqlNarrowing? NarrowingFor(
-        ReportDefinition d, ReportRunOptions o, IReadOnlyDictionary<string, Bound> bound, DateOnly basis,
+        ReportDefinition d, ReportRunOptions o, IReadOnlyDictionary<string, Bound> bound, DateOnly basis, TimeSpan offset,
         (DateOnly From, DateOnly ToInclusive)? window)
     {
-        var planner = new SqlPlanner(bound, basis);
+        var planner = new SqlPlanner(bound, basis, offset);
         var conditions = new List<ReportSqlCondition>();
         foreach (var f in d.Filters.Where(f => f.Field.Source == "main"))
             if (planner.Condition(f) is { } c) conditions.Add(c);
@@ -322,7 +322,7 @@ public partial class ReportRunner
         ReportDefinition d, ReportRunOptions o, IReadOnlyDictionary<string, Bound> bound, Side mainSide, Side? childSide, RunContext ctx,
         DateOnly basis, (DateOnly, DateOnly)? resolved, bool frozen, ReportAppliedRange? applied, List<string> reasons, CancellationToken ct)
     {
-        var planning = PlanAggregate(d, o, bound, mainSide, basis, resolved);
+        var planning = PlanAggregate(d, o, bound, mainSide, basis, ctx.BusinessOffset, resolved);
         if (planning.Query is not { } query)
         {
             reasons.AddRange(planning.Reasons);
@@ -350,9 +350,9 @@ public partial class ReportRunner
     /// <summary>縮小後備載入：回 null 表示不縮小（沒有可用的精確條件、回填未完成或探測沒過），呼叫端載入整個模組。</summary>
     private async Task<ReportNarrowedRecords?> TryNarrowAsync(
         ReportDefinition d, ReportRunOptions o, IReadOnlyDictionary<string, Bound> bound, Side mainSide, Side? childSide, Field? link,
-        DateOnly basis, (DateOnly, DateOnly)? resolved, List<string> reasons, CancellationToken ct)
+        DateOnly basis, TimeSpan offset, (DateOnly, DateOnly)? resolved, List<string> reasons, CancellationToken ct)
     {
-        if (NarrowingFor(d, o, bound, basis, resolved) is not { } narrowing) return null;
+        if (NarrowingFor(d, o, bound, basis, offset, resolved) is not { } narrowing) return null;
         if (await IndexGateAsync(narrowing.Stamps, ct) is { } gate)
         {
             if (gate != "indexBackfillPending") reasons.Add($"narrowSkipped:{gate}");
@@ -438,7 +438,7 @@ public partial class ReportRunner
             var b = bound[ReportCalculator.KeyOf(g.Field)];
             return new ReportColumn(b.Key, ColumnLabel(b, locale), "group", g.Bucket is null ? ValueTypeOf(b.Field) : "text");
         }));
-        columns.AddRange(d.Measures.Select(m => MeasureColumn(m, bound, mainSide, childSide, locale)));
+        columns.AddRange(d.Measures.Select(m => MeasureColumn(m, bound, mainSide, childSide, ctx.Display)));
         var labeled = LabeledGroups(calc.Groups, d, bound, ctx);
         return new ReportResult(calc.RowCount == 0 ? Empty : Ok, null, ReportText.Get(locale, ReportText.RowMeaning, mainSide.Module.NameI18n.Resolve(locale)),
             columns, labeled, calc.Total, null, calc.DedupedNote, basis, applied, frozen, null, false, null, null, false, "sql", []);

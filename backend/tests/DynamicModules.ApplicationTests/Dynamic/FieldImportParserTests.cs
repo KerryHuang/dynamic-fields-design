@@ -12,7 +12,7 @@ public class FieldImportParserTests
 {
     private static readonly ImportLookups None = new(
         new Dictionary<string, string>(),
-        new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>>());
+        new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>>(), TimeSpan.FromHours(8));
 
     private static Field F(FieldType type, FieldConfig? config = null, params FieldOption[] options) =>
         new() { Id = 7, Key = "f", Type = type, Config = config ?? new FieldConfig(), Options = [.. options] };
@@ -136,7 +136,7 @@ public class FieldImportParserTests
     public void Parse_User_ByIdOrName()
     {
         var l = new ImportLookups(new Dictionary<string, string> { ["王小明"] = "u01" },
-            new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>>());
+            new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>>(), TimeSpan.FromHours(8));
         var f = F(FieldType.User);
         P(f, "王小明", l).Should().Be(("\"u01\"", null));
         P(f, "u01", l).Should().Be(("\"u01\"", null));
@@ -151,7 +151,7 @@ public class FieldImportParserTests
             ["甲"] = ["12"], ["乙"] = ["1", "2"],
         };
         var l = new ImportLookups(new Dictionary<string, string>(),
-            new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>> { [7] = titles });
+            new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>> { [7] = titles }, TimeSpan.FromHours(8));
         var module = F(FieldType.Reference, new FieldConfig { RefTarget = new ReferenceTarget("module", "m") });
         var entity = F(FieldType.Reference, new FieldConfig { RefTarget = new ReferenceTarget("entity", "e") });
 
@@ -180,7 +180,7 @@ public class FieldImportParserTests
             new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<string>>>
             {
                 [7] = new Dictionary<string, IReadOnlyList<string>> { ["+甲"] = ["12"] },
-            });
+            }, TimeSpan.FromHours(8));
         P(F(FieldType.User), "'@小明", l).Should().Be(("\"u01\"", null));
         P(F(FieldType.Reference, new FieldConfig { RefTarget = new ReferenceTarget("module", "m") }), "'+甲", l)
             .Should().Be(("12", null));
@@ -193,4 +193,11 @@ public class FieldImportParserTests
     [InlineData(FieldType.Date)]
     [InlineData(FieldType.Reference)]
     public void Parse_Empty_IsNull(FieldType type) => P(F(type), "  ").Should().Be((null, null));
+
+    [Fact]
+    public void DateTime_LocalTextUsesBusinessOffset()
+    {
+        var l = None with { BusinessOffset = TimeSpan.FromHours(7) };
+        P(F(FieldType.DateTime), "2026-11-11 09:00", l).Should().Be(("\"2026-11-11T09:00:00+07:00\"", null));
+    }
 }

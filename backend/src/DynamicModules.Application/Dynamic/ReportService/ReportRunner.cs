@@ -27,7 +27,7 @@ public partial class ReportRunner(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IDynamicAccessGuard guard,
     ReferenceResolver resolver, FieldTypeRegistry registry, IBusinessTime time, ReportOptions options,
     AuthSettings auth, ISystemSettingRepository settings, IReportQueryRepository queries, IPolicyReader policies,
-    TaskReportSource taskReports)
+    TaskReportSource taskReports, CachedSystemPolicy systemPolicy)
 {
     public const long EntityTitleFieldId = 0;
 
@@ -41,7 +41,7 @@ public partial class ReportRunner(
     private static readonly Dictionary<string, FilterOperator> Operators =
         Enum.GetValues<FilterOperator>().ToDictionary(o => JsonNamingPolicy.CamelCase.ConvertName(o.ToString()));
 
-    /// <summary>日期時間欄位的格子：Date 是台北牆上日期，At 留給條件比對到時分。</summary>
+    /// <summary>日期時間欄位的格子：Date 是營運時區的牆上日期，At 留給條件比對到時分。</summary>
     private sealed record TimedCell(DateTime At) : ReportCell(Ok, null, null, DateOnly.FromDateTime(At), null);
 
     /// <summary>一個模組與目前使用者對它的權限；Perms 為 null 表示參照目標模組不可讀。</summary>
@@ -59,10 +59,16 @@ public partial class ReportRunner(
         public bool MayBeUnavailable => Via is not null || Field.Type == FieldType.Reference || Restrictable;
     }
 
-    /// <summary>一次執行的上下文：語系、使用者姓名、參照標題（key 是欄位鍵與參照鍵）、空值的顯示字（key 是欄位鍵；模組來源為空）。</summary>
+    /// <summary>
+    /// 一次執行的上下文：語系、使用者姓名、參照標題（key 是欄位鍵與參照鍵）、空值的顯示字（key 是欄位鍵；模組來源為空），
+    /// 以及營運時區偏移（執行開始時取一次，SQL 路徑與記憶體路徑用同一個值）。
+    /// </summary>
     private sealed record RunContext(
         string Locale, IReadOnlyDictionary<string, string> UserNames, Dictionary<(string, string), string> Titles,
-        IReadOnlyDictionary<string, string> Buckets, IReadOnlyDictionary<string, string> BlankLabels);
+        IReadOnlyDictionary<string, string> Buckets, IReadOnlyDictionary<string, string> BlankLabels, TimeSpan BusinessOffset)
+    {
+        public FieldDisplayContext Display => new(Locale, BusinessOffset);
+    }
 
     /// <summary>
     /// 資料來源載入並套完條件後的列，以及共用尾段（下鑽、計算、輸出）需要的上下文。RowModule 決定「每列代表什麼」。
@@ -95,17 +101,20 @@ public partial class ReportRunner(
         var basis = await BasisDateAsync(ct);
         var frozen = basis != time.Today;
         var locale = string.IsNullOrEmpty(o.Locale) ? I18nText.FallbackLocale : o.Locale;
+        // 同一次執行只取一次營運時區偏移
+        var offset = systemPolicy.BusinessOffset;
 
         // 1–6 由資料來源載入、組格子、套條件；不認得的資料來源 fail closed
-        var load = ReportDatasets.IsModule(d.Dataset) ? await LoadModuleAsync(d, o, basis, frozen, locale, ct)
-            : ReportDatasets.IsTask(d.Dataset) ? await LoadTasksAsync(d, o, basis, frozen, locale, ct)
+        var load = ReportDatasets.IsModule(d.Dataset) ? await LoadModuleAsync(d, o, basis, frozen, locale, offset, ct)
+            : ReportDatasets.IsTask(d.Dataset) ? await LoadTasksAsync(d, o, basis, frozen, locale, offset, ct)
             : new SourceLoad(FailResult(ModuleDisabledState, ReportText.Get(locale, ReportText.ModuleDisabled), basis, frozen), null);
         if (load.Done is { } done) return done;
         return Finish(d, o, basis, frozen, locale, load.Rows!);
     }
 
     /// <summary>模組來源：步驟 1–6（授權、綁欄位、SQL 路徑、載入、組格子、套條件）。</summary>
-    private async Task<SourceLoad> LoadModuleAsync(ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, CancellationToken ct)
+    private async Task<SourceLoad> LoadModuleAsync(
+        ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, TimeSpan offset, CancellationToken ct)
     {
         SourceLoad Fail(string state, string message) => new(FailResult(state, message, basis, frozen), null);
         string T(string key, params object[] args) => ReportText.Get(locale, key, args);
@@ -200,12 +209,12 @@ public partial class ReportRunner(
         }
 
         // 權限都過了才重驗型別，訊息只會帶看得到的名稱；公式的結果型別在存檔後可能變，對不上就明講，不回假的 empty、0% 或日期序號加總
-        if (FieldWithChangedType(d, bound) is { } changed)
+        if (FieldWithChangedType(d, bound, offset) is { } changed)
             return Fail(FieldMissingState, T(ReportText.TypeChanged, ColumnLabel(changed, locale)));
 
         // 日期區間與執行上下文在載入前就定好：SQL 路徑與記憶體路徑共用
         var (_, resolved, applied) = await ResolveRangeAsync(d, o, basis, ct);
-        var ctx = new RunContext(locale, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), new Dictionary<string, string>());
+        var ctx = new RunContext(locale, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), new Dictionary<string, string>(), offset);
 
         // 5a. 能在資料庫端聚合就不載入記錄；不能（或證明不了與記憶體路徑相同）就帶著原因走記憶體路徑
         var fallbackReasons = new List<string>();
@@ -221,7 +230,7 @@ public partial class ReportRunner(
         var tooManyToLoad = () => Fail(TooManyState, T(ReportText.TooManyToLoad));
         // 縮小：只載入符合主模組精確條件的記錄（設計 §8.1）；MemoryOnly 是對照用的純記憶體路徑，不縮小
         var narrowed = options.Engine == ReportEngineMode.MemoryOnly ? null
-            : await TryNarrowAsync(d, o, bound, mainSide, childSide, link, basis, resolved, fallbackReasons, ct);
+            : await TryNarrowAsync(d, o, bound, mainSide, childSide, link, basis, offset, resolved, fallbackReasons, ct);
         if (narrowed?.FallbackReason == ReportSqlOutcome.TimeoutReason) return new SourceLoad(SqlTimeoutResult(locale, basis, frozen), null);
         IReadOnlyList<Record> mainRows = narrowed?.Main
             ?? await records.ListForReportAsync(main.Id, mainSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
@@ -241,7 +250,7 @@ public partial class ReportRunner(
 
         // 6. 條件先套主模組與其帶出欄位，再過濾子記錄（spec §6.2）；日期區間作用在主要日期欄位那一邊
         bool Passes(string source, IReadOnlyDictionary<string, ReportCell> cells) =>
-            d.Filters.Where(f => f.Field.Source == source).All(f => Matches(f, cells[ReportCalculator.KeyOf(f.Field)], basis))
+            d.Filters.Where(f => f.Field.Source == source).All(f => Matches(f, cells[ReportCalculator.KeyOf(f.Field)], basis, offset))
             && (resolved is not { } window || d.PrimaryDateField!.Source != source
                 || ReportDates.Contains(window, cells[ReportCalculator.KeyOf(d.PrimaryDateField)]));
 
@@ -282,7 +291,7 @@ public partial class ReportRunner(
                 : rows.Where(r => d.Groups.Select((g, i) => ReportCalculator.KeysOf(r.Cells[ReportCalculator.KeyOf(g.Field)]).Contains(drill[i])).All(x => x)).ToList();
 
         var multiGroup = d.Groups.Any(g => bound[ReportCalculator.KeyOf(g.Field)].Field.Type == FieldType.MultiEnum);
-        var calc = ReportCalculator.Calculate(rows, drilling ? [] : d.Groups, d.Measures, d.Child is not null, (f, c) => Matches(f, c, basis), multiGroup);
+        var calc = ReportCalculator.Calculate(rows, drilling ? [] : d.Groups, d.Measures, d.Child is not null, (f, c) => Matches(f, c, basis, ctx.BusinessOffset), multiGroup);
 
         // 任務資料來源下鑽固定列任務（使用者裁決 B3），不看報表自己的明細欄
         var fieldColumns = (drilling && taskIdOf is not null ? TaskDrillColumns(d) : FieldColumnsFor(d, drilling))
@@ -295,7 +304,7 @@ public partial class ReportRunner(
                 var b = bound[ReportCalculator.KeyOf(g.Field)];
                 return new ReportColumn(b.Key, ColumnLabel(b, locale), "group", g.Bucket is null ? ValueTypeOf(b.Field) : "text");
             }));
-            columns.AddRange(d.Measures.Select(m => MeasureColumn(m, bound, mainSide, childSide, locale)));
+            columns.AddRange(d.Measures.Select(m => MeasureColumn(m, bound, mainSide, childSide, ctx.Display)));
         }
         columns.AddRange(fieldColumns.Select(b => new ReportColumn(b.Key, ColumnLabel(b, locale), "field", ValueTypeOf(b.Field))));
 
@@ -393,7 +402,7 @@ public partial class ReportRunner(
     }
 
     /// <summary>定義裡第一個對不上欄位目前型別的位置：量值種類、主要日期、分桶、條件的運算子與值形狀。全部對得上回 null。</summary>
-    private Bound? FieldWithChangedType(ReportDefinition d, IReadOnlyDictionary<string, Bound> bound)
+    private Bound? FieldWithChangedType(ReportDefinition d, IReadOnlyDictionary<string, Bound> bound, TimeSpan offset)
     {
         Bound Of(ReportFieldRef r) => bound[ReportCalculator.KeyOf(r)];
         foreach (var m in d.Measures.Where(m => m.Field is not null))
@@ -406,7 +415,7 @@ public partial class ReportRunner(
         foreach (var g in d.Groups.Where(g => g.Bucket is not null))
             if (!ReportRules.IsDateLike(Of(g.Field).Field)) return Of(g.Field);
         foreach (var f in d.Filters.Concat(d.Measures.Where(m => m.Condition is not null).Select(m => m.Condition!)))
-            if (!ConditionFits(f, Of(f.Field).Field)) return Of(f.Field);
+            if (!ConditionFits(f, Of(f.Field).Field, offset)) return Of(f.Field);
         return null;
     }
 }

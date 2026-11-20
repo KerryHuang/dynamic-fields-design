@@ -21,7 +21,8 @@ namespace DynamicModules.Application.Dynamic.PrintService;
 /// </summary>
 public class PrintRecordHandler(
     IModuleRepository modules, IRecordRepository records, IPrintTemplateRepository templates, IDynamicAccessGuard guard,
-    ReferenceResolver resolver, IPermissionRepository permissions, IBusinessTime time, ApprovalService.ApprovalReadGrant grant)
+    ReferenceResolver resolver, IPermissionRepository permissions, IBusinessTime time, ApprovalService.ApprovalReadGrant grant,
+    PolicyService.CachedSystemPolicy policy)
     : IRequestHandler<PrintRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(PrintRecordRequest request, CancellationToken ct)
@@ -45,6 +46,7 @@ public class PrintRecordHandler(
         if (template is not { Active: true }) return ServiceResult.NotFound(PrintTemplateRules.NotFound);
 
         var locale = string.IsNullOrEmpty(request.Locale) ? "zh-TW" : request.Locale;
+        var display = policy.Display(locale);
         var body = PrintTemplateSanitizer.Sanitize(template.Body);
         // 舊資料或繞過儲存驗證寫入的範本：迴圈標記跨標籤會在展開後拼出未淨化的標籤，直接拒絕
         if (PrintTemplateEngine.HasLoopMarkerInsideTag(body))
@@ -61,7 +63,7 @@ public class PrintRecordHandler(
         {
             "_title" => titleVisible ? record.Title : "",
             "_printedAt" => time.Now.ToString("yyyy-MM-dd HH:mm"),
-            _ => ValueOf(visible, key, headerValues, refs.GetValueOrDefault(record.Id), locale, userNames),
+            _ => ValueOf(visible, key, headerValues, refs.GetValueOrDefault(record.Id), display, userNames),
         };
 
         var loops = new Dictionary<string, IReadOnlyList<Func<string, string?>>>();
@@ -84,7 +86,7 @@ public class PrintRecordHandler(
                 {
                     var values = RecordValueProcessor.Parse(r.ValuesJson);
                     var shown = rowRefs.GetValueOrDefault(r.Id);
-                    return (Func<string, string?>)(key => ValueOf(childVisible, key, values, shown, locale, userNames));
+                    return (Func<string, string?>)(key => ValueOf(childVisible, key, values, shown, display, userNames));
                 }).ToList();
             }
         }
@@ -112,9 +114,9 @@ public class PrintRecordHandler(
 
     private static string? ValueOf(
         Dictionary<string, Field> visible, string key, IReadOnlyDictionary<string, System.Text.Json.JsonElement?> values,
-        IReadOnlyDictionary<string, ReferenceInfo>? refs, string locale, IReadOnlyDictionary<string, string> userNames) =>
+        IReadOnlyDictionary<string, ReferenceInfo>? refs, FieldDisplayContext display, IReadOnlyDictionary<string, string> userNames) =>
         visible.TryGetValue(key, out var field)
-            ? PrintValueFormat.Format(field, values.GetValueOrDefault(key), locale, refs?.GetValueOrDefault(key), userNames)
+            ? PrintValueFormat.Format(field, values.GetValueOrDefault(key), display, refs?.GetValueOrDefault(key), userNames)
             : null;
 }
 

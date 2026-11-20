@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using DynamicModules.Application.Dynamic.ImportService;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -91,5 +92,48 @@ public class BusinessTimeZoneApiTests : IDisposable
         _app.Time.Advance(TimeSpan.FromSeconds(11));
         await Ping();
         Cache.BusinessOffset.Should().Be(TimeSpan.FromHours(9), "恢復後重新讀到資料庫的值");
+    }
+
+    /// <summary>TestApp 的 IBusinessTime 是 ActingBusinessTime（包 Clock）：顯示用的偏移只看快照，不受裝飾器影響（Task 4）。</summary>
+    [Fact]
+    public async Task Export_FollowsZoneUnderActingDecorator()
+    {
+        var admin = _app.AsUser();
+        var key = await CreateModule(admin);
+        var at = await AddField(admin, key, "datetime");
+        await Activate(admin, key);
+        var title = await TitleKey(admin, key);
+        var created = await JsonOf(await admin.PostAsJsonAsync($"{Base}/modules/{key}/records",
+            new { values = new Dictionary<string, object> { [title] = "x", [at.Key] = "2026-11-11T09:00:00+08:00" } }));
+        var id = created.GetProperty("id").GetInt64();
+        (await admin.PutAsJsonAsync($"{Base}/records/{id}", new
+        {
+            values = new Dictionary<string, object> { [at.Key] = "2026-11-11T10:00:00+08:00" },
+            rowVersion = created.GetProperty("rowVersion").GetString(),
+        })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        async Task<string> ExportCell()
+        {
+            var res = await admin.GetAsync($"{Base}/modules/{key}/export?format=csv");
+            res.StatusCode.Should().Be(HttpStatusCode.OK);
+            var csv = CsvReader.Read(await res.Content.ReadAsByteArrayAsync(), 1000);
+            csv.Error.Should().BeNull();
+            return csv.Rows.Single().Cells[csv.Header.ToList().IndexOf("欄位")];
+        }
+        async Task<string?> HistoryNewText()
+        {
+            var res = await admin.GetAsync($"{Base}/records/{id}/history?currentPage=1&pagesSize=50");
+            res.StatusCode.Should().Be(HttpStatusCode.OK);
+            return (await JsonOf(res)).GetProperty("items").EnumerateArray()
+                .First(h => h.TryGetProperty("fieldKey", out var f) && f.GetString() == at.Key).GetProperty("newText").GetString();
+        }
+
+        (await admin.PutAsJsonAsync($"{Base}/system/policies/locale.timeZone", new { value = "+07:00" })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ExportCell()).Should().Be("2026-11-11 09:00");
+        (await HistoryNewText()).Should().Be("2026-11-11 09:00");
+
+        (await admin.PutAsJsonAsync($"{Base}/system/policies/locale.timeZone", new { value = "+08:00" })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ExportCell()).Should().Be("2026-11-11 10:00");
+        (await HistoryNewText()).Should().Be("2026-11-11 10:00");
     }
 }

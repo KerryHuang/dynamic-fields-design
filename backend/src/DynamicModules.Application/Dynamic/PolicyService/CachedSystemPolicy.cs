@@ -72,6 +72,9 @@ public sealed class CachedSystemPolicy(IServiceScopeFactory scopes, TimeProvider
     /// <summary>營運時區偏移（政策 locale.timeZone）；唯一來源，<c>IBusinessTime</c> 不帶偏移。</summary>
     public TimeSpan BusinessOffset => Volatile.Read(ref _current).BusinessOffset;
 
+    /// <summary>欄位值顯示用的環境（語系＋目前的營運時區偏移）。</summary>
+    public Display.FieldDisplayContext Display(string locale) => new(locale, BusinessOffset);
+
     public async Task<int> IntAsync(PolicyDefinition def, CancellationToken ct)
     {
         Expect(def, PolicyKind.Integer);

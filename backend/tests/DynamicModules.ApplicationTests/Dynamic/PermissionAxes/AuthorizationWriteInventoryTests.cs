@@ -103,6 +103,7 @@ public class AuthorizationWriteInventoryTests
         new($"{Repo}RecordRepository.cs", "ReplaceIndexAsync"),       // 記錄索引重建
         new($"{Repo}RecordRepository.cs", "ReplaceFieldIndexAsync"),  // 單一欄位的記錄索引重建
         new($"{Repo}RecordRepository.cs", "ClearFieldIndexAsync"),    // 單一欄位的記錄索引清除
+        new($"{Repo}RecordRepository.cs", "ShiftDateTimeIndexAsync"), // 改營運時區時平移日期時間索引
         new($"{Repo}RuleHealthRepository.cs", "BumpFailureAsync"),    // 規則健康（RuleHealth）失敗計數
         new($"{Repo}RuleHealthRepository.cs", "ResetStreakAsync"),    // 規則健康連續失敗歸零
         new($"{Repo}RuleHealthRepository.cs", "PruneFailuresAsync"),  // 規則失敗列（RuleFailure）修剪
