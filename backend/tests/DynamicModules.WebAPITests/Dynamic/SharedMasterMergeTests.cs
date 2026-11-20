@@ -216,6 +216,37 @@ public class SharedMasterMergeTests : IDisposable
         await _rig.ImportMergeOkAsync(bp.ToJsonString());
     }
 
+    /// <summary>
+    /// 審查必修：檔案層合併只看存下的套件，看不到設計器後來加的欄位。原套件 6 欄、上限 7，設計器先加 1 欄，
+    /// 再匯入多 1 欄的主檔：檔案層 7 欄通過，資料庫實際 8 欄，要依資料庫的合併結果擋下，整個匯入回滾。
+    /// </summary>
+    [Fact]
+    public async Task MergingPastTheFieldLimitInTheDatabase_IsRejected_AndRolledBack()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        var (exported, _) = await _rig.ExportAsync("bp");
+        var bp = Node(exported.GetRawText());
+        var baseCount = MainFields(bp).Count;
+        (await _rig.Admin.PutAsJsonAsync($"{Base}/system/policies/design.maxFieldsPerModule", new { value = baseCount + 1 }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        await _rig.AddDesignerFieldAsync(Partner, _rig.BlockId("bp", "partner.main"), "text", "官網");
+        MainFields(bp).Add(Field("grade", "enum", "等級", null, ("gold", "金牌")));
+        var before = (Counts(_rig), FieldNames(_rig, "bp"), OptionNames(_rig, "bp"),
+            _rig.Db(db => db.Set<AppPackage>().Single(p => p.Key == "bp").Json));
+
+        var res = await _rig.Admin.PostAsync($"{SharedMasterRig.Apps}/packages/import",
+            new StringContent(bp.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+
+        var body = await res.Content.ReadAsStringAsync();
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, body);
+        body.Should().Contain($"欄位最多 {baseCount + 1} 個");
+        (Counts(_rig), FieldNames(_rig, "bp"), OptionNames(_rig, "bp"),
+            _rig.Db(db => db.Set<AppPackage>().Single(p => p.Key == "bp").Json)).Should().BeEquivalentTo(before, "整個匯入回滾，沒有補進一半");
+        FieldNames(_rig, "bp").Should().NotContain("partner.grade");
+        await _rig.AssertIntegrityAsync();
+    }
+
     /// <summary>匯入的選項代號已是同模組另一個欄位的基本選項時不合併，但要列在警告裡，不靜默略過。</summary>
     [Fact]
     public async Task AnImportedOptionCodeTakenByAnotherBaseField_IsSkippedWithAWarning()

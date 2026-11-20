@@ -103,6 +103,9 @@ public class ImportAppPackageHandler(
             // 資料庫匯出的主檔若不合乎主檔套件格式（例如基本區塊有指向外部實體的參照），存它會讓之後每次再匯入都被退回；
             // 這時退回存定義層的合併並警告
             var fromDb = (await exporter.ExportAsync(app, ct)).Package;
+            // 檔案層合併看不到設計器後來加的欄位、選項，政策上限要以資料庫的最終結果為準；超標就退回，交易整個回滾
+            if (await limits.ErrorsAsync(fromDb, ct) is { Count: > 0 } dbLimitErrors)
+                return Invalid(dbLimitErrors.Select(e => $"合併後的主檔：{e}"));
             var dbErrors = AppPackageValidator.Validate(fromDb, others).Errors;
             if (dbErrors.Count == 0) merged = fromDb;
             else warnings = [.. warnings, $"資料庫裡的主檔不合乎主檔套件格式（{dbErrors[0]}），存下的是檔案層的合併結果，之後的匯出可能與資料庫不同"];
