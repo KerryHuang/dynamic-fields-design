@@ -9,7 +9,7 @@ import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import type { LocaleAdminEntry } from 'src/domain/dynamic/locale-pack-types';
 import { formatTime } from 'src/domain/ops/ops-format';
 import LocalePackImportDialog from 'src/presentation/locale/LocalePackImportDialog.vue';
-import { notifyApiError } from 'src/presentation/dynamic/designer/api-error';
+import { leftoverMessages, notifyApiError } from 'src/presentation/dynamic/designer/api-error';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 
 // 最小語系頁（語系包設計 §6、§11；i4d1）：清單、匯入語系包，列尾「⋯」放回到上一版、移除覆寫、移除語系。權限與規則都在後端，這裡只做呈現。
@@ -21,6 +21,12 @@ const clear = useClearLocaleOverrides();
 const remove = useRemoveLocale();
 
 const forbidden = computed(() => isForbidden(admin.error.value));
+// 首次清單失敗（非 403）顯示後端訊息並可重試；已有資料時背景重抓失敗不蓋掉清單
+const loadError = computed(() => {
+  const e = admin.error.value as unknown as ApiError | null;
+  if (!e || forbidden.value || admin.data.value) return null;
+  return leftoverMessages(e, []).join('；') || t('dynamic.loadFailed');
+});
 const importEnabled = computed(() => admin.data.value?.importEnabled ?? false);
 const showImport = ref(false);
 
@@ -73,6 +79,11 @@ const versionText = (l: LocaleAdminEntry) => {
         <q-btn outline no-caps icon="upload" :label="t('localePacks.import')" :disable="!admin.data.value" data-testid="locales-import" @click="showImport = true" />
       </div>
       <p class="text-muted">{{ t('localePacks.publicNotice') }}</p>
+      <div v-if="loadError" class="text-negative q-mb-md" style="overflow-wrap: anywhere" data-testid="locales-load-error">
+        {{ loadError }}
+        <q-btn flat dense no-caps color="primary" class="q-ml-sm" :label="t('dynamic.reload')" :loading="admin.isFetching.value"
+          data-testid="locales-retry" @click="admin.refetch()" />
+      </div>
       <div v-if="admin.data.value && !importEnabled" class="text-warning q-mb-md" data-testid="locales-import-disabled">{{ t('localePacks.importDisabled') }}</div>
 
       <q-list v-if="admin.data.value" bordered separator>

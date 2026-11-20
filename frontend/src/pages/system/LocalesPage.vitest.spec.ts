@@ -109,6 +109,20 @@ describe('LocalesPage 清單', () => {
   it('403 顯示沒有權限，不列清單', async () => {
     const w = await mountPage({ forbidden: true });
     expect(document.querySelector('[data-testid^="locale-row-"]')).toBeNull();
+    expect(q('locales-load-error')).toBeNull();
+    w.unmount();
+  });
+
+  it('首次清單 500：顯示後端訊息與重試，重試成功後列出清單（第二輪審查建議 3）', async () => {
+    let fail = true;
+    const w = await mountPage({ reply: (c) => (c.url === '/i18n/locales' && c.method === 'get' && fail ? new HttpFail(500, { message: '資料庫暫時連不上' }) : undefined) });
+    expect(q('locales-load-error')!.textContent).toContain('資料庫暫時連不上');
+    expect(document.querySelector('[data-testid^="locale-row-"]')).toBeNull();
+    fail = false;
+    q('locales-retry')!.click();
+    await tick();
+    expect(q('locales-load-error')).toBeNull();
+    expect(document.querySelectorAll('[data-testid^="locale-row-"]')).toHaveLength(4);
     w.unmount();
   });
 });
