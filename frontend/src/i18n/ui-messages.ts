@@ -214,8 +214,11 @@ export async function switchLocale(i18n: I18nWithT, code: LocaleCode, opts: { pr
     return false;
   }
   if (!stillWanted()) return false;
-  if (opts.preview) setPreviewLocale(code);
-  else if (previewLocale()) setPreviewLocale(null);
+  if (opts.preview) {
+    setPreviewLocale(code);
+    // sessionStorage 寫不進（額滿、不可用）就不試看：沒有標記的話快取排除與登出恢復都會失效
+    if (previewLocale() !== code) return false;
+  } else if (previewLocale()) setPreviewLocale(null);
   applyLocale(code, i18n.global.locale, !opts.preview && opts.remember !== false);
   cacheCurrent(i18n);
   return true;

@@ -9,7 +9,7 @@ import LocaleSwitcher from 'src/presentation/locale/LocaleSwitcher.vue';
 import { setLocaleInfos, setLocaleSettings } from './locale-settings';
 import { BUILTIN_LOCALES, LOCALE_KEY, applyDocumentLocale, applyLocale, quasarPacks, readLocale } from './locale';
 import { PREVIEW_KEY } from './locale-preview';
-import { endPreview, readUiCache, refreshLoadedMessages, resetUiMessagesForTests } from './ui-messages';
+import { endPreview, readUiCache, refreshLoadedMessages, resetUiMessagesForTests, writeUiCache } from './ui-messages';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { createPinia, setActivePinia } from 'pinia';
 
@@ -289,6 +289,24 @@ describe('LocaleSwitcher 載入文字與試看（i4b 判斷 17、19）', () => {
     await flushPromises();
     expect(i18n.global.locale.value).toBe('zh-TW');
     expect(sessionStorage.getItem(PREVIEW_KEY)).toBeNull();
+  });
+
+  it('試看標記寫不進 sessionStorage：不切換、不寫一般快取（i4b 修正輪短核對）', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, JA]);
+    vi.spyOn(dynamicApi, 'getUiMessages').mockImplementation(async (code) => ({ hash: code === 'ja' ? 'J' : '', messages: { 'menu.home': code } }));
+    const i18n = zhOnly();
+    mount(LocaleSwitcher, { attachTo: document.body, props: { allowPreview: true }, global: plugins(i18n) });
+    writeUiCache('zh-TW', 'Z', { 'menu.home': '首頁' });
+    const setItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, k: string, v: string) {
+      if (this === sessionStorage) throw new DOMException('full', 'QuotaExceededError');
+      setItem.call(this, k, v);
+    });
+    await open();
+    el('locale-preview-ja')!.click();
+    await flushPromises();
+    expect(i18n.global.locale.value).toBe('zh-TW');
+    expect(readUiCache()?.code).toBe('zh-TW');
   });
 
   it('allowPreview 但沒有未啟用語系：沒有分隔線', async () => {
