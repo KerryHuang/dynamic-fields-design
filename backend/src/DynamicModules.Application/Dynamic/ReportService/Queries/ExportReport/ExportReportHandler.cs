@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.ReportService.Queries.ExportReport;
 /// 有明細欄位就匯出明細，否則匯出分組表（最後一列總計）。帶報表頁目前的期間與部門篩選（與畫面一致）。
 /// </summary>
 public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader, ReportRunner runner, IBusinessTime time, ReportLimitReader limitReader,
-    RequestLocale requestLocale)
+    RequestLocale requestLocale, Common.Localization.IMessageCatalog messages)
     : IRequestHandler<ExportReportRequest, ServiceResult>
 {
     private const string XlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -38,7 +38,7 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
         if (result.State is not ("ok" or "empty"))
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["report"] = [result.Message ?? result.State] });
 
-        var (header, rows) = result.DetailRows is not null ? Detail(result) : Grouped(result, ReportText.Get(requestLocale.For(request.Locale).Locale, ReportText.ExportTotal));
+        var (header, rows) = result.DetailRows is not null ? Detail(result) : Grouped(result, messages.Get(requestLocale.For(request.Locale), ReportText.ExportTotal));
         // 明細表沒有位置放量值，總計接在明細下方，每個量值一列
         if (result.DetailRows is not null && result.Total is { Count: > 0 } total)
         {
@@ -50,7 +50,7 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
         {
             // spec §6.3：列相加對不上總計時必須說明，使用者接受去重的代價
             rows.Add([]);
-            rows.Add([ReportText.Get(requestLocale.For(request.Locale).Locale, ReportText.DedupedNote)]);
+            rows.Add([messages.Get(requestLocale.For(request.Locale), ReportText.DedupedNote)]);
         }
         var content = XlsxWriter.Write(report.Name, header, rows);
         return ServiceResult.Success(new ExportFile($"report-{report.Id}-{time.Now:yyyyMMdd-HHmm}.xlsx", XlsxType, content));

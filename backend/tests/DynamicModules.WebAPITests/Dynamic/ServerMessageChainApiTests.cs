@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using ClosedXML.Excel;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Localization;
+using DynamicModules.Application.Dynamic.ReportService.Data;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +15,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 namespace DynamicModules.WebAPITests.Dynamic;
 
 /// <summary>
-/// 後端訊息走退回鏈（語系包 i4c 計畫 Task 2–4）：裝了 ja（上層 en-US）、啟用、預設 th 時，回應、驗證錯誤、middleware 與例外處理的訊息
+/// 後端訊息走退回鏈（語系包 i4c 計畫 Task 2–8）：裝了 ja（上層 en-US）、啟用、預設 th 時，回應、驗證錯誤、middleware 與例外處理的訊息
 /// 都沿「ja → 上層 → 預設 → 繁中」取；沒裝新語系時四語與改表前的基準檔逐字相同。
 /// </summary>
 [Trait("Category", "Postgres")]
@@ -255,6 +257,142 @@ public sealed class ServerMessageChainApiTests : IDisposable
         var zh = await Inputs("zh-TW");
         zh.Should().Equal(must.Key);
         (await Inputs("ja")).Should().Equal(zh);
+    }
+
+    // ---- 報表、儀表板、欄位值顯示（i4c 計畫 Task 6）----
+
+    /// <summary>主模組（標題、金額、狀態列舉、是否）＋參照它的子模組；兩筆記錄，一筆沒有狀態（分組出現空白）、一筆有兩筆子記錄（去重說明）。</summary>
+    private async Task<(string Main, string Child, long Link, long Amount, long Status, string BoolKey, long RecordId)> ReportWorld()
+    {
+        var main = await CreateModule(_admin);
+        var amount = await AddField(_admin, main, "decimal", new { scale = 0 });
+        var status = await AddField(_admin, main, "enum");
+        var flag = await AddField(_admin, main, "boolean");
+        var option = (await JsonOf(await _admin.PostAsJsonAsync($"{Base}/fields/{status.Id}/options",
+            new { label = new Dictionary<string, string> { ["zh-TW"] = "新單" } }))).GetProperty("id").GetInt64();
+        var child = await CreateModule(_admin);
+        var link = await AddField(_admin, child, "reference", new { refTarget = new { kind = "module", key = main } });
+        await Activate(_admin, main);
+        await Activate(_admin, child);
+        var (title, childTitle) = (await TitleKey(_admin, main), await TitleKey(_admin, child));
+        async Task<long> Add(string module, Dictionary<string, object> values)
+        {
+            var res = await _admin.PostAsJsonAsync($"{Base}/modules/{module}/records", new { values });
+            res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+            return (await JsonOf(res)).GetProperty("id").GetInt64();
+        }
+        var id = await Add(main, new() { [title] = "A", [amount.Key] = 100, [status.Key] = $"opt_{option}", [flag.Key] = true });
+        await Add(main, new() { [title] = "B", [amount.Key] = 50, [flag.Key] = false });
+        foreach (var t in new[] { "c1", "c2" }) await Add(child, new() { [childTitle] = t, [link.Key] = id });
+        return (main, child, link.Id, amount.Id, status.Id, flag.Key, id);
+    }
+
+    private static object FieldRef(long id) => new { source = "main", fieldId = id, viaFieldId = (long?)null };
+
+    private async Task<long> Report(string main, long status, object[] measures, object? child = null)
+    {
+        var res = await _admin.PostAsJsonAsync($"{Base}/reports", new
+        {
+            name = "報表",
+            definition = new Dictionary<string, object?>
+            {
+                ["version"] = 1, ["mainModuleKey"] = main, ["child"] = child, ["columns"] = Array.Empty<object>(),
+                ["groups"] = new object[] { new { field = FieldRef(status), bucket = (string?)null } }, ["measures"] = measures,
+                ["filters"] = Array.Empty<object>(), ["primaryDateField"] = null, ["dateRange"] = null, ["sort"] = Array.Empty<object>(), ["viz"] = "table"
+            }
+        });
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+        return (await JsonOf(res)).GetProperty("id").GetInt64();
+    }
+
+    private static object CountMeasure => new { id = "n", kind = "countMain", field = (object?)null, condition = (object?)null };
+
+    [Fact]
+    public async Task ReportRun_Ja_EnglishLabels()
+    {
+        await Japanese();
+        var w = await ReportWorld();
+        var id = await Report(w.Main, w.Status, [CountMeasure]);
+
+        var res = await Client("ja").PostAsJsonAsync($"{Base}/reports/{id}/run", new { range = (object?)null });
+        var body = await res.Content.ReadAsStringAsync();
+        res.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        var run = JsonDocument.Parse(body).RootElement;
+        run.GetProperty("columns").EnumerateArray().Single(c => c.GetProperty("key").GetString() == "n").GetProperty("label").GetString()
+            .Should().Be(En(ReportText.Count, "測試模組"));
+        run.GetProperty("groups").EnumerateArray().Select(g => g.GetProperty("groupLabels")[0].GetString()).Should().Contain(En(ReportText.Blank));
+        run.GetProperty("rowMeaning").GetString().Should().Be(En(ReportText.RowMeaning, "測試模組"));
+    }
+
+    [Fact]
+    public async Task ReportExport_Ja_TotalRowEnglish()
+    {
+        await Japanese();
+        var w = await ReportWorld();
+        var id = await Report(w.Main, w.Status, [new { id = "s", kind = "sum", field = FieldRef(w.Amount), condition = (object?)null }],
+            child: new { moduleKey = w.Child, linkFieldId = w.Link });
+
+        var res = await Client("ja").GetAsync($"{Base}/reports/{id}/export");
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        using var wb = new XLWorkbook(await res.Content.ReadAsStreamAsync());
+        var cells = wb.Worksheet(1).CellsUsed().Select(c => c.GetString()).ToList();
+        cells.Should().Contain(En(ReportText.ExportTotal)).And.Contain(En(ReportText.DedupedNote));
+    }
+
+    [Fact]
+    public async Task DashboardCard_Ja_UnsharedEnglish()
+    {
+        await Japanese();
+        var w = await ReportWorld();
+        var report = await Report(w.Main, w.Status, [CountMeasure]);
+        var sales = _app.AsUser("sales01");
+        _app.GrantBusinessGroups(w.Main);
+        (await _admin.PutAsJsonAsync($"{Base}/reports/{report}/shares", new { groupIds = new[] { DashboardTestKit.GroupId(_app, "sales") } })).EnsureSuccessStatusCode();
+        var dashboard = (await JsonOf(await sales.PostAsJsonAsync(DashboardTestKit.Dashboards,
+            new { name = "我的", layout = DashboardTestKit.Layout(DashboardTestKit.Card("c", report)) }))).GetProperty("id").GetInt64();
+        (await _admin.PutAsJsonAsync($"{Base}/reports/{report}/shares", new { groupIds = Array.Empty<long>() })).EnsureSuccessStatusCode();
+
+        var ja = Client("ja", "sales01");
+        var result = await DashboardTestKit.RunCard(ja, dashboard, "c");
+        result.GetProperty("state").GetString().Should().Be("unshared");
+        result.GetProperty("message").GetString().Should().Be(En(ReportText.Unshared));
+    }
+
+    [Fact]
+    public async Task RecordExport_Ja_BooleanEnglish()
+    {
+        await Japanese();
+        var w = await ReportWorld();
+        var res = await Client("ja").GetAsync($"{Base}/modules/{w.Main}/export?format=csv");
+        var csv = await res.Content.ReadAsStringAsync();
+        res.StatusCode.Should().Be(HttpStatusCode.OK, csv);
+        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(1).ToList();
+        lines.Should().Contain(l => l.Contains("," + En(ReportText.Yes))).And.Contain(l => l.Contains("," + En(ReportText.No)));
+        csv.Should().NotContain(Texts[ReportText.Yes]["zh-TW"]);
+    }
+
+    [Fact]
+    public async Task Print_Ja_BooleanEnglish()
+    {
+        await Japanese();
+        var w = await ReportWorld();
+        var title = await TitleKey(_admin, w.Main);
+        var put = await _admin.PutAsJsonAsync($"{Base}/records/{w.RecordId}", new
+        {
+            values = new Dictionary<string, object> { [title] = "<script>x</script>" },
+            rowVersion = (await JsonOf(await _admin.GetAsync($"{Base}/records/{w.RecordId}"))).GetProperty("rowVersion").GetString()
+        });
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+        var template = await _admin.PostAsJsonAsync($"{Base}/modules/{w.Main}/print-templates", new
+        {
+            key = "pt", name = new Dictionary<string, string> { ["zh-TW"] = "列印" }, body = $"<p>{{{{{w.BoolKey}}}}}</p><p>{{{{{title}}}}}</p>", active = true
+        });
+        template.IsSuccessStatusCode.Should().BeTrue(await template.Content.ReadAsStringAsync());
+
+        var res = await Client("ja").GetAsync($"{Base}/records/{w.RecordId}/print/pt");
+        var html = await res.Content.ReadAsStringAsync();
+        res.StatusCode.Should().Be(HttpStatusCode.OK, html);
+        html.Should().Contain($"<p>{En(ReportText.Yes)}</p>").And.NotContain("<script>x</script>");
     }
 
     [Fact]

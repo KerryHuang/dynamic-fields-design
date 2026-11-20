@@ -13,14 +13,14 @@ namespace DynamicModules.Application.Dynamic.DashboardService;
 /// </summary>
 public class DashboardCardRunner(
     DashboardAccess access, ReportAccess reportAccess, IReportRepository reports, ReportRunner runner, ReportLimitReader limitReader,
-    Common.RequestLocale requestLocale)
+    Common.RequestLocale requestLocale, Common.Localization.IMessageCatalog messages)
 {
     private const string UnsharedState = "unshared", ReportGoneState = "reportGone";
 
     public async Task<ServiceResult> RunAsync(
         long dashboardId, string cardId, ReportDateRange? filter, IReadOnlyList<string>? drill, string? requestedLocale, CancellationToken ct)
     {
-        var locale = requestLocale.For(requestedLocale).Locale;
+        var lc = requestLocale.For(requestedLocale);
         var limits = await limitReader.GetAsync(ct);
         if (ReportRules.CheckRange(filter, limits.MaxRangeDays) is { } rangeError) return ServiceResult.Invalid(ReportRules.ToErrors("filterRange", [rangeError]));
         var viewer = await reportAccess.ViewerAsync(ct);
@@ -30,14 +30,14 @@ public class DashboardCardRunner(
         if (card is null) return ServiceResult.NotFound("卡片不存在");
 
         var basis = await runner.BasisDateAsync(ct);
-        ReportResult Fail(string state, string key) => new(state, ReportText.Get(locale, key), "", [], null, null, null, false, basis, null);
+        ReportResult Fail(string state, string key) => new(state, messages.Get(lc, key), "", [], null, null, null, false, basis, null);
         var report = await reports.GetAsync(card.ReportId, ct);
         if (report is null) return Result(limits, drill, Fail(ReportGoneState, ReportText.ReportGone));
         // 指派版給的卡片（在目前指派版面內，或個人版上伺服器標過來源）不看分享；其他卡片要這個人現在還看得到定義
         var fromAssigned = scope.IsFromAssigned(card, scope.AssignedReportIds());
         if (!fromAssigned && !ReportAccess.CanView(report, viewer)) return Result(limits, drill, Fail(UnsharedState, ReportText.Unshared));
 
-        return Result(limits, drill, await ExecuteAsync(report, card, filter, drill, locale, ct));
+        return Result(limits, drill, await ExecuteAsync(report, card, filter, drill, lc.Locale, ct));
     }
 
     /// <summary>
@@ -46,18 +46,18 @@ public class DashboardCardRunner(
     /// </summary>
     public async Task<ServiceResult> PreviewAsync(DashboardCard card, ReportDateRange? filter, string? requestedLocale, CancellationToken ct)
     {
-        var locale = requestLocale.For(requestedLocale).Locale;
+        var lc = requestLocale.For(requestedLocale);
         var limits = await limitReader.GetAsync(ct);
         if (ReportRules.CheckRange(filter, limits.MaxRangeDays) is { } rangeError) return ServiceResult.Invalid(ReportRules.ToErrors("filterRange", [rangeError]));
         var viewer = await reportAccess.ViewerAsync(ct);
         var report = await reports.GetAsync(card.ReportId, ct);
-        if (report is null) return Result(limits, null, await FailAsync(ReportGoneState, ReportText.ReportGone, locale, ct));
-        if (!ReportAccess.CanView(report, viewer)) return Result(limits, null, await FailAsync(UnsharedState, ReportText.Unshared, locale, ct));
-        return Result(limits, null, await ExecuteAsync(report, card, filter, null, locale, ct));
+        if (report is null) return Result(limits, null, await FailAsync(ReportGoneState, ReportText.ReportGone, lc, ct));
+        if (!ReportAccess.CanView(report, viewer)) return Result(limits, null, await FailAsync(UnsharedState, ReportText.Unshared, lc, ct));
+        return Result(limits, null, await ExecuteAsync(report, card, filter, null, lc.Locale, ct));
     }
 
-    private async Task<ReportResult> FailAsync(string state, string key, string locale, CancellationToken ct) =>
-        new(state, ReportText.Get(locale, key), "", [], null, null, null, false, await runner.BasisDateAsync(ct), null);
+    private async Task<ReportResult> FailAsync(string state, string key, Domain.ValueObjects.LocaleContext lc, CancellationToken ct) =>
+        new(state, messages.Get(lc, key), "", [], null, null, null, false, await runner.BasisDateAsync(ct), null);
 
     private async Task<ReportResult> ExecuteAsync(
         Domain.Entities.Dynamic.Report report, DashboardCard card, ReportDateRange? filter, IReadOnlyList<string>? drill, string locale, CancellationToken ct)

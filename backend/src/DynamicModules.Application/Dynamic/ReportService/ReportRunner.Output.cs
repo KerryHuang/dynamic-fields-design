@@ -28,14 +28,14 @@ public partial class ReportRunner
             .DistinctBy(ReportCalculator.KeyOf);
     }
 
-    private static string ColumnLabel(Bound b, LocaleContext lc)
+    private string ColumnLabel(Bound b, LocaleContext lc)
     {
         var field = b.Field.LabelI18n.Resolve(lc);
         if (b.Via is not null)
             return b.Target!.Perms is null
-                ? ReportText.Get(lc.Locale, ReportText.HiddenField)
-                : ReportText.Get(lc.Locale, ReportText.FieldPath, b.Via.LabelI18n.Resolve(lc), field);
-        return b.Ref.ViaFieldId is not null ? ReportText.Get(lc.Locale, ReportText.FieldPath, field, ReportText.Get(lc.Locale, ReportText.Title)) : field;
+                ? messages.Get(lc, ReportText.HiddenField)
+                : messages.Get(lc, ReportText.FieldPath, b.Via.LabelI18n.Resolve(lc), field);
+        return b.Ref.ViaFieldId is not null ? messages.Get(lc, ReportText.FieldPath, field, messages.Get(lc, ReportText.Title)) : field;
     }
 
     private static string ValueTypeOf(Field f) => f.Type switch
@@ -48,35 +48,35 @@ public partial class ReportRunner
         _ => "text",
     };
 
-    private static ReportColumn MeasureColumn(
+    private ReportColumn MeasureColumn(
         ReportMeasure m, IReadOnlyDictionary<string, Bound> bound, Side main, Side? child, FieldDisplayContext display)
     {
         var lc = new LocaleContext(display.Locale, display.LocaleFallbacks ?? [I18nText.FallbackLocale]);
         string FieldLabel(ReportFieldRef r) => ColumnLabel(bound[ReportCalculator.KeyOf(r)], lc);
         var (label, type) = m.Kind switch
         {
-            "countMain" => (ReportText.Get(lc.Locale, ReportText.Count, main.Module.NameI18n.Resolve(lc)), "number"),
-            "countChild" => (ReportText.Get(lc.Locale, ReportText.Count, (child ?? main).Module.NameI18n.Resolve(lc)), "number"),
-            "ratio" => (ReportText.Get(lc.Locale, ReportText.Ratio, m.Condition is null ? "" : FieldLabel(m.Condition.Field)), "ratio"),
+            "countMain" => (messages.Get(lc, ReportText.Count, main.Module.NameI18n.Resolve(lc)), "number"),
+            "countChild" => (messages.Get(lc, ReportText.Count, (child ?? main).Module.NameI18n.Resolve(lc)), "number"),
+            "ratio" => (messages.Get(lc, ReportText.Ratio, m.Condition is null ? "" : FieldLabel(m.Condition.Field)), "ratio"),
             "countIf" => (CountIfLabel(m.Condition, bound, display, FieldLabel), "number"),
-            _ => (ReportText.Get(lc.Locale, m.Kind switch { "sum" => ReportText.Sum, "avg" => ReportText.Avg, "median" => ReportText.Median, "min" => ReportText.Min, _ => ReportText.Max }, m.Field is null ? "" : FieldLabel(m.Field)),
+            _ => (messages.Get(lc, m.Kind switch { "sum" => ReportText.Sum, "avg" => ReportText.Avg, "median" => ReportText.Median, "min" => ReportText.Min, _ => ReportText.Max }, m.Field is null ? "" : FieldLabel(m.Field)),
                 m.Field is not null && m.Kind is "min" or "max" && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field!)].Field) is "date" or "dateTime" ? "dayNumber"
                 : m.Field is not null && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field)].Field) == "percent" ? "percent" : "number"),
         };
         if (m.Condition is { } cond && m.Kind is "sum" or "avg" or "median")
             label = EqLabel(cond, bound, display) is { } v
-                ? ReportText.Get(lc.Locale, ReportText.ConditionalEq, label, FieldLabel(cond.Field), v)
-                : ReportText.Get(lc.Locale, ReportText.Conditional, label);
+                ? messages.Get(lc, ReportText.ConditionalEq, label, FieldLabel(cond.Field), v)
+                : messages.Get(lc, ReportText.Conditional, label);
         return new ReportColumn(m.Id, label, "measure", type);
     }
 
-    private static string CountIfLabel(ReportFilter? cond, IReadOnlyDictionary<string, Bound> bound, FieldDisplayContext display, Func<ReportFieldRef, string> fieldLabel)
+    private string CountIfLabel(ReportFilter? cond, IReadOnlyDictionary<string, Bound> bound, FieldDisplayContext display, Func<ReportFieldRef, string> fieldLabel)
     {
         var lc = new LocaleContext(display.Locale, display.LocaleFallbacks ?? [I18nText.FallbackLocale]);
-        if (cond is null) return ReportText.Get(lc.Locale, ReportText.CountIf, "");
+        if (cond is null) return messages.Get(lc, ReportText.CountIf, "");
         return EqLabel(cond, bound, display) is { } v
-            ? ReportText.Get(lc.Locale, ReportText.CountIfEq, fieldLabel(cond.Field), v)
-            : ReportText.Get(lc.Locale, ReportText.CountIf, fieldLabel(cond.Field));
+            ? messages.Get(lc, ReportText.CountIfEq, fieldLabel(cond.Field), v)
+            : messages.Get(lc, ReportText.CountIf, fieldLabel(cond.Field));
     }
 
     /// <summary>
@@ -94,7 +94,7 @@ public partial class ReportRunner
         return text.Length == 0 ? null : text;
     }
 
-    private static List<ReportGroupResult> LabeledGroups(
+    private List<ReportGroupResult> LabeledGroups(
         IReadOnlyList<ReportGroupResult> groups, ReportDefinition d, IReadOnlyDictionary<string, Bound> bound, RunContext ctx)
     {
         var fields = d.Groups.Select(g => bound[ReportCalculator.KeyOf(g.Field)]).ToList();
@@ -159,11 +159,11 @@ public partial class ReportRunner
     private static int OptionSequence(Field f, string key) =>
         f.Options.FirstOrDefault(o => $"opt_{o.Id}" == key)?.Sequence ?? int.MaxValue;
 
-    private static string GroupLabel(Bound b, string key, RunContext ctx)
+    private string GroupLabel(Bound b, string key, RunContext ctx)
     {
-        if (key.Length == 0) return ctx.BlankLabels.GetValueOrDefault(b.Key) ?? ReportText.Get(ctx.Locale, ReportText.Blank);
-        if (b.MayBeUnavailable && key == ReportCalculator.MissingKey) return ReportText.Get(ctx.Locale, ReportText.Deleted);
-        if (b.MayBeUnavailable && key == ReportCalculator.RestrictedKey) return ReportText.Get(ctx.Locale, ReportText.NoPermission);
+        if (key.Length == 0) return ctx.BlankLabels.GetValueOrDefault(b.Key) ?? messages.Get(ctx.Lc, ReportText.Blank);
+        if (b.MayBeUnavailable && key == ReportCalculator.MissingKey) return messages.Get(ctx.Lc, ReportText.Deleted);
+        if (b.MayBeUnavailable && key == ReportCalculator.RestrictedKey) return messages.Get(ctx.Lc, ReportText.NoPermission);
         return ValueLabel(b, key, ctx);
     }
 
@@ -182,7 +182,7 @@ public partial class ReportRunner
     }
 
     /// <summary>明細的顯示值與排序後的列（同順序；任務來源用列換出 TaskIds）。</summary>
-    private static (List<IReadOnlyList<object?>> Values, List<ReportRow> Ordered) DetailRows(
+    private (List<IReadOnlyList<object?>> Values, List<ReportRow> Ordered) DetailRows(
         IReadOnlyList<ReportRow> rows, IReadOnlyList<Bound> columns, ReportDefinition d, IReadOnlyDictionary<string, Bound> bound, RunContext ctx)
     {
         var sorts = d.Sort.Where(s => bound.ContainsKey(s.Key) && d.Measures.All(m => m.Id != s.Key)).ToList();
@@ -214,12 +214,12 @@ public partial class ReportRunner
     }
 
     /// <summary>明細一格：數字回 decimal，其餘回顯示文字，沒有值回 null。</summary>
-    private static object? Display(Bound b, ReportCell c, RunContext ctx)
+    private object? Display(Bound b, ReportCell c, RunContext ctx)
     {
         switch (c.State)
         {
-            case Restricted: return ReportText.Get(ctx.Locale, ReportText.NoPermission);
-            case Missing: return ReportText.Get(ctx.Locale, ReportText.Deleted);
+            case Restricted: return messages.Get(ctx.Lc, ReportText.NoPermission);
+            case Missing: return messages.Get(ctx.Lc, ReportText.Deleted);
             case Empty: return ctx.BlankLabels.GetValueOrDefault(b.Key);
         }
         if (c.Number is { } n) return n;

@@ -28,7 +28,8 @@ public record ModuleCatalog(List<CatalogField> Fields, List<CatalogVia> Via, Lis
 /// 設計器的欄位目錄：只列觀看者看得到、存檔也不會被 <see cref="Data.ReportRules"/> 拒絕的欄位
 /// （非彙總類、帶出欄位不再是參照、參照目標可讀）。
 /// </summary>
-public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGuard guard, RequestLocale requestLocale)
+public class GetReportCatalogHandler(
+    IModuleRepository modules, IDynamicAccessGuard guard, RequestLocale requestLocale, Common.Localization.IMessageCatalog messages)
     : IRequestHandler<GetReportCatalogRequest, ServiceResult>
 {
     private sealed record Side(Module Module, EffectivePermissions Perms);
@@ -109,8 +110,8 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
     /// 既有實體目標只有標題可帶，FieldId 固定為 <see cref="ReportRunner.EntityTitleFieldId"/>。
     /// 顯示的是標題，但存的與比對的是鍵，所以標成參照：設計器用記錄挑選器，運算子與條件值都是鍵。
     /// </summary>
-    private static CatalogField EntityTitle(string entityKey, LocaleContext lc) =>
-        new(ReportRunner.EntityTitleFieldId, ReportText.Get(lc.Locale, ReportText.Title), FieldType.Reference, true, false, false, false, null, ReferenceTarget.EntityKind, entityKey);
+    private CatalogField EntityTitle(string entityKey, LocaleContext lc) =>
+        new(ReportRunner.EntityTitleFieldId, messages.Get(lc, ReportText.Title), FieldType.Reference, true, false, false, false, null, ReferenceTarget.EntityKind, entityKey);
 
     internal static CatalogField ToField(Field f, LocaleContext lc) =>
         new(f.Id, f.LabelI18n.Resolve(lc), f.Type, ReportFieldEligibility.CanGroup(f), ReportFieldEligibility.CanSum(f),

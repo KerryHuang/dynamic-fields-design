@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -10,9 +11,15 @@ namespace DynamicModules.Application.Dynamic.Display;
 
 /// <summary>
 /// 顯示用的環境：輸出語系、營運時區偏移與語系退回鏈（同一次輸出用同一份）。由 <c>CachedSystemPolicy.Display</c> 建立；
-/// LocaleFallbacks 為 null 時退回繁中（同 I18nText.Resolve）。
+/// LocaleFallbacks 為 null 時退回繁中（同 I18nText.Resolve）。系統字（是／否、已刪除、無權限）經 Messages 沿同一條鏈取；
+/// null 用只看內建層的 <see cref="BuiltinMessageCatalog"/>（測試直接建的情況，語系包 i4c 計畫判斷 4、7）。
 /// </summary>
-public sealed record FieldDisplayContext(string Locale, TimeSpan BusinessOffset, IReadOnlyList<string>? LocaleFallbacks = null);
+public sealed record FieldDisplayContext(
+    string Locale, TimeSpan BusinessOffset, IReadOnlyList<string>? LocaleFallbacks = null, IMessageCatalog? Messages = null)
+{
+    internal string Text(string key) =>
+        (Messages ?? BuiltinMessageCatalog.Instance).Get(new Domain.ValueObjects.LocaleContext(Locale, LocaleFallbacks ?? []), key);
+}
 
 /// <summary>欄位值的顯示文字（歷程與匯出共用），純函式。</summary>
 public static class FieldDisplay
@@ -22,18 +29,17 @@ public static class FieldDisplay
         IReadOnlyDictionary<string, string> userNames)
     {
         if (value is not { } v || v.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) return "";
-        var locale = display.Locale;
         return field.Type switch
         {
             FieldType.Integer => Number(v, 0),
             FieldType.Decimal or FieldType.Currency => Number(v, field.Config.Scale ?? 2),
             FieldType.Percent => Number(v, field.Config.Scale ?? 2) + "%",
             FieldType.DateTime => DateTimeText(v, display.BusinessOffset),
-            FieldType.Boolean => Boolean(v, locale),
+            FieldType.Boolean => Boolean(v, display),
             FieldType.Enum => OptionLabel(field, v.GetString()!, display),
             FieldType.MultiEnum => MultiEnum(field, v, display),
             FieldType.User => userNames.GetValueOrDefault(v.GetString()!, v.GetString()!),
-            FieldType.Reference => ReferenceText(ReferenceHandler.KeyOf(v) ?? v.GetRawText(), reference, locale),
+            FieldType.Reference => ReferenceText(ReferenceHandler.KeyOf(v) ?? v.GetRawText(), reference, display),
             FieldType.Formula or FieldType.Rollup => Computed(field, v),
             FieldType.Attachment => string.Join("; ", AttachmentValue.Parse(v).Select(f => f.Name)),
             _ => v.GetString() ?? v.GetRawText(),
@@ -64,10 +70,7 @@ public static class FieldDisplay
             : s;
     }
 
-    private static string Boolean(JsonElement v, string locale)
-    {
-        return ReportText.Get(locale, v.GetBoolean() ? ReportText.Yes : ReportText.No);
-    }
+    private static string Boolean(JsonElement v, FieldDisplayContext display) => display.Text(v.GetBoolean() ? ReportText.Yes : ReportText.No);
 
     private static string OptionLabel(Field field, string id, FieldDisplayContext display)
     {
@@ -83,11 +86,11 @@ public static class FieldDisplay
         return string.Join("; ", ordered.Select(id => OptionLabel(field, id, display)));
     }
 
-    private static string ReferenceText(string key, ReferenceInfo? reference, string locale) => reference?.State switch
+    private static string ReferenceText(string key, ReferenceInfo? reference, FieldDisplayContext display) => reference?.State switch
     {
         ReferenceInfo.Ok => reference.Title ?? key,
-        ReferenceInfo.Restricted => ReportText.Get(locale, ReportText.NoPermission),
-        ReferenceInfo.Missing => ReportText.Get(locale, ReportText.Deleted),
+        ReferenceInfo.Restricted => display.Text(ReportText.NoPermission),
+        ReferenceInfo.Missing => display.Text(ReportText.Deleted),
         _ => key,
     };
 

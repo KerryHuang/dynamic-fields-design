@@ -157,6 +157,30 @@ public class FieldDisplayTests
         Fmt(f, "K1").Should().Be("K1");
     }
 
+    // 語系包 i4c 計畫 Task 6：是否、參照的系統字經 catalog 沿鏈取；catalog 為 null 用內建 catalog，鏈照傳入的
+    [Fact]
+    public async Task Boolean_Ja_FollowsChain()
+    {
+        var catalog = (await Common.MessageCatalogTests.CreateAsync()).Catalog;
+        string Show(FieldDisplayContext c) => FieldDisplay.Format(F(FieldType.Boolean), J(true), c, null, NoUsers);
+        Show(new FieldDisplayContext("ja", Taipei, ["en-US", "zh-TW"], catalog)).Should().Be("Yes");
+        Show(new FieldDisplayContext("ja", Taipei, ["en-US", "zh-TW"])).Should().Be("Yes");
+        Show(new FieldDisplayContext("ja", Taipei, ["zh-TW"])).Should().Be("是");
+        Show(new FieldDisplayContext("ja", Taipei)).Should().Be("是");
+    }
+
+    [Fact]
+    public async Task Reference_Deleted_Ja_FollowsChain()
+    {
+        var catalog = (await Common.MessageCatalogTests.CreateAsync()).Catalog;
+        string Show(FieldDisplayContext c, string state) =>
+            FieldDisplay.Format(F(FieldType.Reference), J("K1"), c, new ReferenceInfo("K1", null, state), NoUsers);
+        Show(new FieldDisplayContext("ja", Taipei, ["en-US", "zh-TW"], catalog), ReferenceInfo.Missing).Should().Be("(Deleted)");
+        Show(new FieldDisplayContext("ja", Taipei, ["en-US", "zh-TW"]), ReferenceInfo.Restricted).Should().Be("(No permission)");
+        Show(new FieldDisplayContext("ja", Taipei, ["zh-TW"]), ReferenceInfo.Missing).Should().Be("（已刪除）");
+        Show(new FieldDisplayContext("ja", Taipei), ReferenceInfo.Restricted).Should().Be("（無權限）");
+    }
+
     [Fact]
     public void Reference_ModuleTargetStoredAsNumber()
     {

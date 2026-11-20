@@ -343,7 +343,7 @@ public partial class ReportRunner
         }
         // 分組數上限沿用記憶體路徑的 MaxRows，訊息相同（近乎唯一的欄位分組會產生與記錄數同量的分組）
         if (outcome.Groups.Count > options.MaxRows)
-            return new ReportResult(TooManyState, ReportText.Get(ctx.Locale, ReportText.TooMany), "", [], null, null, null, false, basis, null, frozen,
+            return new ReportResult(TooManyState, messages.Get(ctx.Lc, ReportText.TooMany), "", [], null, null, null, false, basis, null, frozen,
                 Engine: "sql", FallbackReasons: []);
         return BuildSqlResult(d, query, outcome, bound, mainSide, childSide, ctx, basis, frozen, applied);
     }
@@ -373,8 +373,8 @@ public partial class ReportRunner
         return result;
     }
 
-    private static ReportResult SqlTimeoutResult(LocaleContext lc, DateOnly basis, bool frozen) =>
-        new(TooManyState, ReportText.Get(lc.Locale, ReportText.SqlTimeout), "", [], null, null, null, false, basis, null, frozen,
+    private ReportResult SqlTimeoutResult(LocaleContext lc, DateOnly basis, bool frozen) =>
+        new(TooManyState, messages.Get(lc, ReportText.SqlTimeout), "", [], null, null, null, false, basis, null, frozen,
             Engine: "sql", FallbackReasons: []);
 
     // ---- 結果：SQL 的原始列 → 與記憶體路徑相同的計算結果 ----
@@ -441,7 +441,7 @@ public partial class ReportRunner
         }));
         columns.AddRange(d.Measures.Select(m => MeasureColumn(m, bound, mainSide, childSide, ctx.Display)));
         var labeled = LabeledGroups(calc.Groups, d, bound, ctx);
-        return new ReportResult(calc.RowCount == 0 ? Empty : Ok, null, ReportText.Get(lc.Locale, ReportText.RowMeaning, mainSide.Module.NameI18n.Resolve(lc)),
+        return new ReportResult(calc.RowCount == 0 ? Empty : Ok, null, messages.Get(lc, ReportText.RowMeaning, mainSide.Module.NameI18n.Resolve(lc)),
             columns, labeled, calc.Total, null, calc.DedupedNote, basis, applied, frozen, null, false, null, null, false, "sql", []);
     }
 }

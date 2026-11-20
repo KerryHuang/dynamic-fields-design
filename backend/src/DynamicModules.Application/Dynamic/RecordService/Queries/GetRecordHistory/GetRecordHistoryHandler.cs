@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.RecordService.Queries.GetRecordHist
 public class GetRecordHistoryHandler(
     IModuleRepository modules, IRecordRepository records, IRecordHistoryRepository histories,
     IPermissionRepository permissions, IDynamicAccessGuard guard, ReferenceResolver resolver, PolicyService.CachedSystemPolicy policy,
-    RequestLocale requestLocale)
+    RequestLocale requestLocale, Common.Localization.IMessageCatalog messages)
     : IRequestHandler<GetRecordHistoryRequest, ServiceResult>
 {
     private const int DefaultPagesSize = 20;
@@ -57,7 +57,7 @@ public class GetRecordHistoryHandler(
 
         var lc = requestLocale.For(request.Locale);
         var locale = lc.Locale;
-        var display = policy.Display(locale);
+        var display = policy.Display(locale, messages);
         var userNames = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => u.DisplayName);
         var fieldsById = sources.SelectMany(s => s.Module.Blocks.SelectMany(b => b.Fields)).ToDictionary(f => f.Id);
         var (oldRefs, newRefs) = await ResolveReferencesAsync(items, sourceOf, fieldsById, ct);

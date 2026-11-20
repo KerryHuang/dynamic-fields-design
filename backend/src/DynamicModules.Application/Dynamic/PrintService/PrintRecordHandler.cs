@@ -22,7 +22,7 @@ namespace DynamicModules.Application.Dynamic.PrintService;
 public class PrintRecordHandler(
     IModuleRepository modules, IRecordRepository records, IPrintTemplateRepository templates, IDynamicAccessGuard guard,
     ReferenceResolver resolver, IPermissionRepository permissions, IBusinessTime time, ApprovalService.ApprovalReadGrant grant,
-    PolicyService.CachedSystemPolicy policy, RequestLocale requestLocale)
+    PolicyService.CachedSystemPolicy policy, RequestLocale requestLocale, Common.Localization.IMessageCatalog messages)
     : IRequestHandler<PrintRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(PrintRecordRequest request, CancellationToken ct)
@@ -47,7 +47,7 @@ public class PrintRecordHandler(
 
         var lc = requestLocale.For(request.Locale);
         var locale = lc.Locale;
-        var display = policy.Display(locale);
+        var display = policy.Display(locale, messages);
         var body = PrintTemplateSanitizer.Sanitize(template.Body);
         // 舊資料或繞過儲存驗證寫入的範本：迴圈標記跨標籤會在展開後拼出未淨化的標籤，直接拒絕
         if (PrintTemplateEngine.HasLoopMarkerInsideTag(body))

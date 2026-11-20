@@ -17,7 +17,7 @@ namespace DynamicModules.Application.Dynamic.ExportService.Queries.ExportRecords
 public class ExportRecordsHandler(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, FieldTypeRegistry registry,
     IBusinessTime time, IDynamicAccessGuard guard, ReferenceResolver resolver, ExportOptions options, PolicyService.CachedSystemPolicy policy,
-    RequestLocale requestLocale)
+    RequestLocale requestLocale, Common.Localization.IMessageCatalog messages)
     : IRequestHandler<ExportRecordsRequest, ServiceResult>
 {
     private const string CsvType = "text/csv; charset=utf-8";
@@ -52,7 +52,7 @@ public class ExportRecordsHandler(
         // 沒指定語系用請求語系、指定了停用或不認得的用預設語系（D4）
         var lc = requestLocale.For(request.Locale);
         var locale = lc.Locale;
-        var display = policy.Display(locale);
+        var display = policy.Display(locale, messages);
         var fields = module.Blocks.OrderBy(b => b.Sequence).ThenBy(b => b.Id)
             .SelectMany(b => b.Fields.OrderBy(f => f.Sequence).ThenBy(f => f.Id))
             .Where(f => f.Status == FieldStatus.Active && perms.CanSee(f)).ToList();

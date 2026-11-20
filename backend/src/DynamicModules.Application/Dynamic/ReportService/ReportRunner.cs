@@ -67,10 +67,10 @@ public partial class ReportRunner(
     /// </summary>
     private sealed record RunContext(
         LocaleContext Lc, IReadOnlyDictionary<string, string> UserNames, Dictionary<(string, string), string> Titles,
-        IReadOnlyDictionary<string, string> Buckets, IReadOnlyDictionary<string, string> BlankLabels, TimeSpan BusinessOffset)
+        IReadOnlyDictionary<string, string> Buckets, IReadOnlyDictionary<string, string> BlankLabels, TimeSpan BusinessOffset, IMessageCatalog Messages)
     {
         public string Locale => Lc.Locale;
-        public FieldDisplayContext Display => new(Lc.Locale, BusinessOffset, Lc.Fallbacks);
+        public FieldDisplayContext Display => new(Lc.Locale, BusinessOffset, Lc.Fallbacks, Messages);
     }
 
     /// <summary>
@@ -111,7 +111,7 @@ public partial class ReportRunner(
         // 1–6 由資料來源載入、組格子、套條件；不認得的資料來源 fail closed
         var load = ReportDatasets.IsModule(d.Dataset) ? await LoadModuleAsync(d, o, basis, frozen, lc, offset, ct)
             : ReportDatasets.IsTask(d.Dataset) ? await LoadTasksAsync(d, o, basis, frozen, lc, offset, ct)
-            : new SourceLoad(FailResult(ModuleDisabledState, ReportText.Get(lc.Locale, ReportText.ModuleDisabled), basis, frozen), null);
+            : new SourceLoad(FailResult(ModuleDisabledState, messages.Get(lc, ReportText.ModuleDisabled), basis, frozen), null);
         if (load.Done is { } done) return done;
         return Finish(d, o, basis, frozen, lc, load.Rows!);
     }
@@ -121,7 +121,7 @@ public partial class ReportRunner(
         ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, LocaleContext lc, TimeSpan offset, CancellationToken ct)
     {
         SourceLoad Fail(string state, string message) => new(FailResult(state, message, basis, frozen), null);
-        string T(string key, params object[] args) => ReportText.Get(lc.Locale, key, args);
+        string T(string key, params object[] args) => messages.Get(lc, key, args);
         var disabled = () => Fail(ModuleDisabledState, T(ReportText.ModuleDisabled));
         var hiddenField = () => Fail(Restricted, HiddenMessage(lc));
 
@@ -218,7 +218,7 @@ public partial class ReportRunner(
 
         // 日期區間與執行上下文在載入前就定好：SQL 路徑與記憶體路徑共用
         var (_, resolved, applied) = await ResolveRangeAsync(d, o, basis, ct);
-        var ctx = new RunContext(lc, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), new Dictionary<string, string>(), offset);
+        var ctx = new RunContext(lc, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), new Dictionary<string, string>(), offset, messages);
 
         // 5a. 能在資料庫端聚合就不載入記錄；不能（或證明不了與記憶體路徑相同）就帶著原因走記憶體路徑
         var fallbackReasons = new List<string>();
@@ -282,10 +282,10 @@ public partial class ReportRunner(
     }
 
     /// <summary>共用尾段（步驟 7 以後）：下鑽、計算、欄位與分組標籤。資料來源只要交出套完條件的列。</summary>
-    private static ReportResult Finish(ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, LocaleContext lc, SourceRows source)
+    private ReportResult Finish(ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, LocaleContext lc, SourceRows source)
     {
         var (bound, rows, mainSide, childSide, rowModule, ctx, applied, fallbackReasons, taskIdOf) = source;
-        string T(string key, params object[] args) => ReportText.Get(lc.Locale, key, args);
+        string T(string key, params object[] args) => messages.Get(lc, key, args);
 
         // 7. 下鑽只留該分組的列；各欄位值的 key 判斷與分組相同
         var drilling = o.DrillGroupKeys is not null;
@@ -361,11 +361,11 @@ public partial class ReportRunner(
         return refs;
     }
 
-    private static (Bound?, string?) Bind(
+    private (Bound?, string?) Bind(
         ReportFieldRef r, string key, Side main, Side? child, IReadOnlyDictionary<string, Side> targets, LocaleContext lc)
     {
         var source = r.Source == "main" ? main : r.Source == "child" ? child : null;
-        if (source is null) return (null, ReportText.Get(lc.Locale, ReportText.FieldGone));
+        if (source is null) return (null, messages.Get(lc, ReportText.FieldGone));
         if (r.ViaFieldId is null)
             return source.Active(r.FieldId) is { } direct
                 ? (new Bound(r, key, source, direct, null, null), null)
@@ -374,25 +374,25 @@ public partial class ReportRunner(
         if (source.Active(r.ViaFieldId) is not { Type: FieldType.Reference, Config.RefTarget: { } refTarget } via)
             return (null, MissingMessage(source, r.ViaFieldId.Value, lc));
         if (refTarget.Kind == ReferenceTarget.EntityKind)
-            return r.FieldId == EntityTitleFieldId ? (new Bound(r, key, source, via, null, null), null) : (null, ReportText.Get(lc.Locale, ReportText.FieldGone));
+            return r.FieldId == EntityTitleFieldId ? (new Bound(r, key, source, via, null, null), null) : (null, messages.Get(lc, ReportText.FieldGone));
         var target = targets[refTarget.Key];
         return target.Active(r.FieldId) is { } field
             ? (new Bound(r, key, source, field, via, target), null)
             : (null, MissingMessage(target, r.FieldId, lc));
     }
 
-    private static string MissingMessage(Side side, long fieldId, LocaleContext lc) =>
+    private string MissingMessage(Side side, long fieldId, LocaleContext lc) =>
         side.Perms is { } p && side.Fields.TryGetValue(fieldId, out var f) && p.CanSee(f)
-            ? ReportText.Get(lc.Locale, ReportText.FieldGoneNamed, f.LabelI18n.Resolve(lc))
-            : ReportText.Get(lc.Locale, ReportText.FieldGone);
+            ? messages.Get(lc, ReportText.FieldGoneNamed, f.LabelI18n.Resolve(lc))
+            : messages.Get(lc, ReportText.FieldGone);
 
-    private static string HiddenMessage(LocaleContext lc) =>
-        ReportText.Get(lc.Locale, ReportText.NoPermissionTo, ReportText.Get(lc.Locale, ReportText.HiddenField));
+    private string HiddenMessage(LocaleContext lc) =>
+        messages.Get(lc, ReportText.NoPermissionTo, messages.Get(lc, ReportText.HiddenField));
 
-    private static string? UnusableMessage(Bound b, LocaleContext lc)
+    private string? UnusableMessage(Bound b, LocaleContext lc)
     {
         var hidden = HiddenMessage(lc);
-        string NotUsable() => ReportText.Get(lc.Locale, ReportText.NotUsable, b.Field.LabelI18n.Resolve(lc));
+        string NotUsable() => messages.Get(lc, ReportText.NotUsable, b.Field.LabelI18n.Resolve(lc));
         var sourcePerms = b.Source.Perms!;
         if (b.Target is null)
         {

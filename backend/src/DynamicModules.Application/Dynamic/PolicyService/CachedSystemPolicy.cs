@@ -107,8 +107,9 @@ public sealed class CachedSystemPolicy(
     /// </summary>
     public IReadOnlyList<string> FallbacksFor(string locale) => registry.FallbacksFor(locale, DefaultLocale);
 
-    /// <summary>欄位值顯示用的環境（語系＋目前的營運時區偏移＋該語系的退回鏈）。</summary>
-    public Display.FieldDisplayContext Display(string locale) => new(locale, BusinessOffset, FallbacksFor(locale));
+    /// <summary>欄位值顯示用的環境（語系＋目前的營運時區偏移＋該語系的退回鏈）；系統字經 <paramref name="messages"/>（正式呼叫端一律傳，不在這裡依賴 catalog 以免成環）。</summary>
+    public Display.FieldDisplayContext Display(string locale, Common.Localization.IMessageCatalog? messages = null) =>
+        new(locale, BusinessOffset, FallbacksFor(locale), messages);
 
     public async Task<int> IntAsync(PolicyDefinition def, CancellationToken ct)
     {
