@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Localization;
 using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Common.Security;
@@ -28,7 +29,7 @@ public partial class ReportRunner(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IDynamicAccessGuard guard,
     ReferenceResolver resolver, FieldTypeRegistry registry, IBusinessTime time, ReportOptions options,
     AuthSettings auth, ISystemSettingRepository settings, IReportQueryRepository queries, IPolicyReader policies,
-    TaskReportSource taskReports, CachedSystemPolicy systemPolicy, RequestLocale requestLocale)
+    TaskReportSource taskReports, CachedSystemPolicy systemPolicy, RequestLocale requestLocale, IMessageCatalog messages)
 {
     public const long EntityTitleFieldId = 0;
 

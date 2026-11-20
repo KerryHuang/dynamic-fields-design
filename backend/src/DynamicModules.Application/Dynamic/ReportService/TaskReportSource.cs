@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -17,7 +18,7 @@ public sealed record TaskReportItem(TaskItem Task, bool RecordAccessible, long? 
 /// 目錄依使用者與資料來源快取；一個 scope 跑多個請求時（Demo 產生器、測試）要呼叫 <see cref="Reset"/>。
 /// </summary>
 public sealed class TaskReportSource(ITaskRepository tasks, ITaskRuleRepository rules, IOrganizationRepository org,
-    IModuleRepository modules, TaskVisibilityService visibility, TaskAccess access, ICurrentUser user)
+    IModuleRepository modules, TaskVisibilityService visibility, TaskAccess access, ICurrentUser user, IMessageCatalog messages)
 {
     /// <summary>不帶隱藏欄位、動作含 Read 與 PrintExport、範圍 All：任務欄位沒有欄位權限，匯出看得到的任務不另查模組權限（U9）。</summary>
     public static EffectivePermissions Permissions { get; } = new(
@@ -43,7 +44,8 @@ public sealed class TaskReportSource(ITaskRepository tasks, ITaskRuleRepository 
         var list = readable.OrderBy(m => m.Id).ToList();
         var ruleList = new List<TaskRule>();
         foreach (var m in list) ruleList.AddRange(await rules.ListByModuleAsync(m.Id, ct));
-        var catalog = TaskReportFields.Build(dataset, await org.ListAsync(ct), list, ruleList);
+        // 標籤對每個已安裝語系各產生一句，之後照常經 LabelI18n.Resolve(lc) 取（語系包 i4c 計畫判斷 9）
+        var catalog = TaskReportFields.Build(dataset, await org.ListAsync(ct), list, ruleList, k => messages.AsI18n(k));
         _catalogs[key] = catalog;
         return catalog;
     }

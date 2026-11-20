@@ -22,6 +22,35 @@ public static class TaskReportFields
 
     public static long StatusOption(TaskItemStatus s) => (long)s + 1;
 
+    /// <summary>
+    /// 文字鍵（語系包 i4c 計畫判斷 9）：值就是後端訊息 catalog 的鍵，文字在 Application 的 <c>ReportText</c>。
+    /// 前綴 <c>report.</c> 是語系包 <c>server</c> 段的命名空間；鍵只在這裡定義一次，Application 的表直接引用。
+    /// </summary>
+    public static class TextKeys
+    {
+        public const string
+            FieldTitle = "report.TaskFieldTitle", FieldStatus = "report.TaskFieldStatus", FieldAssignee = "report.TaskFieldAssignee",
+            FieldAssigneeDepartment = "report.TaskFieldAssigneeDepartment", FieldCreator = "report.TaskFieldCreator",
+            FieldDueDate = "report.TaskFieldDueDate", FieldCreatedTime = "report.TaskFieldCreatedTime",
+            FieldCompletedTime = "report.TaskFieldCompletedTime", FieldSource = "report.TaskFieldSource",
+            FieldModule = "report.TaskFieldModule", FieldRule = "report.TaskFieldRule", FieldOverdue = "report.TaskFieldOverdue",
+            FieldCompletion = "report.TaskFieldCompletion", FieldCompletionDays = "report.TaskFieldCompletionDays",
+            FieldDelayDays = "report.TaskFieldDelayDays", FieldLevel = "report.TaskFieldLevel",
+            FieldEventKind = "report.TaskFieldEventKind", FieldEventDate = "report.TaskFieldEventDate",
+            StatusTodo = "report.TaskStatusTodo", StatusInProgress = "report.TaskStatusInProgress",
+            StatusDone = "report.TaskStatusDone", StatusCancelled = "report.TaskStatusCancelled",
+            SourcePersonal = "report.TaskSourcePersonal", SourceRecord = "report.TaskSourceRecord",
+            SourceRule = "report.TaskSourceRule", CompletionOnTime = "report.TaskCompletionOnTime",
+            CompletionLate = "report.TaskCompletionLate", CompletionNoDue = "report.TaskCompletionNoDue",
+            CompletionNotDone = "report.TaskCompletionNotDone", LevelStandalone = "report.TaskLevelStandalone",
+            LevelParent = "report.TaskLevelParent", LevelChild = "report.TaskLevelChild", EventCreated = "report.TaskEventCreated",
+            EventCompleted = "report.TaskEventCompleted", BlankAssignee = "report.TaskBlankAssignee",
+            BlankAssigneeDepartment = "report.TaskBlankAssigneeDepartment", BlankCreator = "report.TaskBlankCreator",
+            BlankModule = "report.TaskBlankModule", BlankRule = "report.TaskBlankRule", DatasetTasks = "report.TaskDatasetTasks",
+            DatasetTaskEvents = "report.TaskDatasetTaskEvents";
+    }
+
+
     private static readonly HashSet<long> TaskCodes = [.. Enumerable.Range(1, 16).Select(i => (long)-i)];
     private static readonly HashSet<long> EventCodes = [EventKind, EventDate, Level, Status, Assignee, AssigneeDepartment, Creator, Source, Module, Rule];
     private static readonly long[] TaskDrill = [Title, Status, Assignee, DueDate, CompletedTime, Module];
@@ -41,87 +70,96 @@ public static class TaskReportFields
     /// <summary>下鑽固定欄（使用者裁決 B3：不給記錄標題）。</summary>
     public static IReadOnlyList<long> DrillColumns(string dataset) => dataset == ReportDatasets.TaskEvents ? EventDrill : TaskDrill;
 
-    /// <summary>空值在分組、明細、下鑽、匯出顯示的字（B2）；條件「為空」照樣成立。</summary>
-    public static IReadOnlyDictionary<long, I18nText> BlankLabels { get; } = new Dictionary<long, I18nText>
+    /// <summary>空值在分組、明細、下鑽、匯出顯示的字（B2）的文字鍵；條件「為空」照樣成立。</summary>
+    public static IReadOnlyDictionary<long, string> BlankLabelKeys { get; } = new Dictionary<long, string>
     {
-        [Assignee] = T("未指派", "Unassigned", "ยังไม่มอบหมาย", "Chưa giao"),
-        [AssigneeDepartment] = T("（無部門）", "(No department)", "(ไม่มีแผนก)", "(Không có phòng ban)"),
-        [Creator] = T("系統", "System", "ระบบ", "Hệ thống"),
-        [Module] = T("（無）", "(None)", "(ไม่มี)", "(Không có)"),
-        [Rule] = T("（無）", "(None)", "(ไม่มี)", "(Không có)"),
+        [Assignee] = TextKeys.BlankAssignee,
+        [AssigneeDepartment] = TextKeys.BlankAssigneeDepartment,
+        [Creator] = TextKeys.BlankCreator,
+        [Module] = TextKeys.BlankModule,
+        [Rule] = TextKeys.BlankRule,
     };
 
-    private static readonly Dictionary<long, (FieldType Type, string Key, I18nText Label)> Definitions = new()
+    private static readonly Dictionary<long, (FieldType Type, string Key, string Label)> Definitions = new()
     {
-        [Title] = (FieldType.Textarea, "title", T("標題", "Title", "ชื่องาน", "Tiêu đề")),
-        [Status] = (FieldType.Enum, "status", T("狀態", "Status", "สถานะ", "Trạng thái")),
-        [Assignee] = (FieldType.User, "assignee", T("負責人", "Assignee", "ผู้รับผิดชอบ", "Người phụ trách")),
-        [AssigneeDepartment] = (FieldType.Enum, "assigneeDepartment", T("負責人部門", "Assignee department", "แผนกของผู้รับผิดชอบ", "Phòng ban người phụ trách")),
-        [Creator] = (FieldType.User, "creator", T("建立者", "Created by", "ผู้สร้าง", "Người tạo")),
-        [DueDate] = (FieldType.Date, "dueDate", T("到期日", "Due date", "วันครบกำหนด", "Ngày đến hạn")),
-        [CreatedTime] = (FieldType.DateTime, "createdTime", T("建立時間", "Created at", "เวลาที่สร้าง", "Thời gian tạo")),
-        [CompletedTime] = (FieldType.DateTime, "completedTime", T("完成時間", "Completed at", "เวลาที่เสร็จ", "Thời gian hoàn thành")),
-        [Source] = (FieldType.Enum, "source", T("來源", "Source", "ที่มา", "Nguồn")),
-        [Module] = (FieldType.Enum, "module", T("所屬模組", "Module", "โมดูล", "Mô-đun")),
-        [Rule] = (FieldType.Enum, "rule", T("任務規則", "Task rule", "กฎงาน", "Quy tắc công việc")),
-        [Overdue] = (FieldType.Boolean, "overdue", T("是否逾期", "Overdue", "เกินกำหนดหรือไม่", "Quá hạn")),
-        [Completion] = (FieldType.Enum, "completion", T("完成狀況", "Completion", "สถานะการเสร็จ", "Tình trạng hoàn thành")),
-        [CompletionDays] = (FieldType.Integer, "completionDays", T("完成天數", "Days to complete", "จำนวนวันที่ใช้", "Số ngày hoàn thành")),
-        [DelayDays] = (FieldType.Integer, "delayDays", T("延遲天數", "Days late", "จำนวนวันที่ล่าช้า", "Số ngày trễ")),
-        [Level] = (FieldType.Enum, "level", T("層級", "Level", "ระดับ", "Cấp")),
-        [EventKind] = (FieldType.Enum, "eventKind", T("事件種類", "Event type", "ประเภทเหตุการณ์", "Loại sự kiện")),
-        [EventDate] = (FieldType.DateTime, "eventDate", T("事件日期", "Event date", "วันที่ของเหตุการณ์", "Ngày sự kiện")),
+        [Title] = (FieldType.Textarea, "title", TextKeys.FieldTitle),
+        [Status] = (FieldType.Enum, "status", TextKeys.FieldStatus),
+        [Assignee] = (FieldType.User, "assignee", TextKeys.FieldAssignee),
+        [AssigneeDepartment] = (FieldType.Enum, "assigneeDepartment", TextKeys.FieldAssigneeDepartment),
+        [Creator] = (FieldType.User, "creator", TextKeys.FieldCreator),
+        [DueDate] = (FieldType.Date, "dueDate", TextKeys.FieldDueDate),
+        [CreatedTime] = (FieldType.DateTime, "createdTime", TextKeys.FieldCreatedTime),
+        [CompletedTime] = (FieldType.DateTime, "completedTime", TextKeys.FieldCompletedTime),
+        [Source] = (FieldType.Enum, "source", TextKeys.FieldSource),
+        [Module] = (FieldType.Enum, "module", TextKeys.FieldModule),
+        [Rule] = (FieldType.Enum, "rule", TextKeys.FieldRule),
+        [Overdue] = (FieldType.Boolean, "overdue", TextKeys.FieldOverdue),
+        [Completion] = (FieldType.Enum, "completion", TextKeys.FieldCompletion),
+        [CompletionDays] = (FieldType.Integer, "completionDays", TextKeys.FieldCompletionDays),
+        [DelayDays] = (FieldType.Integer, "delayDays", TextKeys.FieldDelayDays),
+        [Level] = (FieldType.Enum, "level", TextKeys.FieldLevel),
+        [EventKind] = (FieldType.Enum, "eventKind", TextKeys.FieldEventKind),
+        [EventDate] = (FieldType.DateTime, "eventDate", TextKeys.FieldEventDate),
     };
 
-    // 與前端 status.* 同字（K2），改時兩邊一起改
-    private static readonly (long Id, I18nText Label)[] StatusOptions =
+    private static readonly (long Id, string Label)[] StatusOptions =
     [
-        (StatusOption(TaskItemStatus.Todo), T("待辦", "To do", "รอดำเนินการ", "Cần làm")),
-        (StatusOption(TaskItemStatus.InProgress), T("進行中", "In progress", "กำลังดำเนินการ", "Đang làm")),
-        (StatusOption(TaskItemStatus.Done), T("已完成", "Done", "เสร็จแล้ว", "Hoàn thành")),
-        (StatusOption(TaskItemStatus.Cancelled), T("已取消", "Cancelled", "ยกเลิกแล้ว", "Đã hủy")),
+        (StatusOption(TaskItemStatus.Todo), TextKeys.StatusTodo),
+        (StatusOption(TaskItemStatus.InProgress), TextKeys.StatusInProgress),
+        (StatusOption(TaskItemStatus.Done), TextKeys.StatusDone),
+        (StatusOption(TaskItemStatus.Cancelled), TextKeys.StatusCancelled),
     ];
 
-    private static readonly (long Id, I18nText Label)[] SourceOptions =
+    private static readonly (long Id, string Label)[] SourceOptions =
     [
-        (SourcePersonal, T("個人任務", "Personal task", "งานส่วนตัว", "Công việc cá nhân")),
-        (SourceRecord, T("記錄上建立", "Created on a record", "สร้างจากระเบียน", "Tạo trên bản ghi")),
-        (SourceRule, T("規則產生", "Generated by a rule", "สร้างโดยกฎ", "Do quy tắc tạo")),
+        (SourcePersonal, TextKeys.SourcePersonal),
+        (SourceRecord, TextKeys.SourceRecord),
+        (SourceRule, TextKeys.SourceRule),
     ];
 
-    private static readonly (long Id, I18nText Label)[] CompletionOptions =
+    private static readonly (long Id, string Label)[] CompletionOptions =
     [
-        (CompletionOnTime, T("準時完成", "Completed on time", "เสร็จตรงเวลา", "Hoàn thành đúng hạn")),
-        (CompletionLate, T("逾期完成", "Completed late", "เสร็จล่าช้า", "Hoàn thành trễ hạn")),
-        (CompletionNoDue, T("無到期日完成", "Completed, no due date", "เสร็จโดยไม่มีวันครบกำหนด", "Hoàn thành, không có hạn")),
-        (CompletionNotDone, T("未完成", "Not completed", "ยังไม่เสร็จ", "Chưa hoàn thành")),
+        (CompletionOnTime, TextKeys.CompletionOnTime),
+        (CompletionLate, TextKeys.CompletionLate),
+        (CompletionNoDue, TextKeys.CompletionNoDue),
+        (CompletionNotDone, TextKeys.CompletionNotDone),
     ];
 
-    private static readonly (long Id, I18nText Label)[] LevelOptions =
+    private static readonly (long Id, string Label)[] LevelOptions =
     [
-        (LevelStandalone, T("獨立任務", "Standalone task", "งานเดี่ยว", "Công việc độc lập")),
-        (LevelParent, T("父任務", "Parent task", "งานหลัก", "Công việc cha")),
-        (LevelChild, T("子任務", "Subtask", "งานย่อย", "Công việc con")),
+        (LevelStandalone, TextKeys.LevelStandalone),
+        (LevelParent, TextKeys.LevelParent),
+        (LevelChild, TextKeys.LevelChild),
     ];
 
-    private static readonly (long Id, I18nText Label)[] EventOptions =
+    private static readonly (long Id, string Label)[] EventOptions =
     [
-        (EventCreated, T("建立", "Created", "สร้าง", "Tạo")),
-        (EventCompleted, T("完成", "Completed", "เสร็จ", "Hoàn thành")),
+        (EventCreated, TextKeys.EventCreated),
+        (EventCompleted, TextKeys.EventCompleted),
     ];
 
-    /// <summary>資料來源名（目錄端點、「每列代表什麼」）。</summary>
-    public static IReadOnlyDictionary<string, I18nText> DatasetNames { get; } = new Dictionary<string, I18nText>
+    /// <summary>資料來源名（目錄端點、「每列代表什麼」）的文字鍵。</summary>
+    public static IReadOnlyDictionary<string, string> DatasetNameKeys { get; } = new Dictionary<string, string>
     {
-        [ReportDatasets.Tasks] = T("任務", "Task", "งาน", "Công việc"),
-        [ReportDatasets.TaskEvents] = T("任務事件（建立或完成）", "Task event (created or completed)", "เหตุการณ์ของงาน (สร้างหรือเสร็จ)", "Sự kiện công việc (tạo hoặc hoàn thành)"),
+        [ReportDatasets.Tasks] = TextKeys.DatasetTasks,
+        [ReportDatasets.TaskEvents] = TextKeys.DatasetTaskEvents,
     };
+
+    /// <summary>全部文字鍵（欄位名、固定選項、空值字、資料來源名）；測試用來確認每個鍵都在 catalog。</summary>
+    public static IReadOnlyList<string> AllTextKeys =>
+    [
+        .. Definitions.Values.Select(d => d.Label),
+        .. new[] { StatusOptions, SourceOptions, CompletionOptions, LevelOptions, EventOptions }.SelectMany(o => o).Select(o => o.Label),
+        .. BlankLabelKeys.Values, .. DatasetNameKeys.Values,
+    ];
 
     /// <summary>
     /// 不入庫的模組：Id 0、Key ""、NameI18n 是資料來源名；欄位是 <see cref="Selectable"/> 與 <see cref="DrillColumns"/> 的聯集。
     /// 部門、模組、規則的選項依傳入的實體（呼叫端決定觀看者看得到哪些），選項 Id 就是實體 Id。
+    /// 欄位名、固定選項、模組名稱都由 <paramref name="text"/> 依文字鍵（<see cref="TextKeys"/>）產生，Domain 不放文字。
     /// </summary>
-    public static ModuleEntity Build(string dataset, IReadOnlyList<Department> departments, IReadOnlyList<ModuleEntity> modules, IReadOnlyList<TaskRule> rules)
+    public static ModuleEntity Build(string dataset, IReadOnlyList<Department> departments, IReadOnlyList<ModuleEntity> modules, IReadOnlyList<TaskRule> rules,
+        Func<string, I18nText> text)
     {
         var codes = Selectable(dataset).Union(DrillColumns(dataset)).OrderByDescending(c => c).ToList();
         var fields = codes.Select((code, i) =>
@@ -129,14 +167,14 @@ public static class TaskReportFields
             var (type, key, label) = Definitions[code];
             return new Field
             {
-                Id = code, Key = key, LabelI18n = label, Type = type, Sequence = i, Status = FieldStatus.Active,
+                Id = code, Key = key, LabelI18n = text(label), Type = type, Sequence = i, Status = FieldStatus.Active,
                 Options = code switch
                 {
-                    Status => Fixed(StatusOptions),
-                    Source => Fixed(SourceOptions),
-                    Completion => Fixed(CompletionOptions),
-                    Level => Fixed(LevelOptions),
-                    EventKind => Fixed(EventOptions),
+                    Status => Fixed(StatusOptions, text),
+                    Source => Fixed(SourceOptions, text),
+                    Completion => Fixed(CompletionOptions, text),
+                    Level => Fixed(LevelOptions, text),
+                    EventKind => Fixed(EventOptions, text),
                     AssigneeDepartment => [.. departments.OrderBy(d => d.SortOrder).ThenBy(d => d.Id)
                         .Select((d, n) => new FieldOption { Id = d.Id, LabelI18n = d.NameI18n, Sequence = n, Active = d.Active })],
                     Module => [.. modules.Select((m, n) => new FieldOption { Id = m.Id, LabelI18n = m.NameI18n, Sequence = n, Active = true })],
@@ -147,15 +185,12 @@ public static class TaskReportFields
         }).ToList();
         return new ModuleEntity
         {
-            Id = 0, Key = "", NameI18n = DatasetNames.GetValueOrDefault(dataset) ?? new I18nText(), Status = ModuleStatus.Active,
+            Id = 0, Key = "", NameI18n = DatasetNameKeys.TryGetValue(dataset, out var name) ? text(name) : new I18nText(), Status = ModuleStatus.Active,
             Blocks = [new Block { Fields = fields }],
         };
     }
 
     // FieldOption.Active 預設 false，固定選項要明設
-    private static List<FieldOption> Fixed((long Id, I18nText Label)[] options) =>
-        [.. options.Select((o, n) => new FieldOption { Id = o.Id, LabelI18n = o.Label, Sequence = n, Active = true })];
-
-    private static I18nText T(string zh, string en, string th, string vi) =>
-        new([KeyValuePair.Create("zh-TW", zh), KeyValuePair.Create("en-US", en), KeyValuePair.Create("th", th), KeyValuePair.Create("vi", vi)]);
+    private static List<FieldOption> Fixed((long Id, string Label)[] options, Func<string, I18nText> text) =>
+        [.. options.Select((o, n) => new FieldOption { Id = o.Id, LabelI18n = text(o.Label), Sequence = n, Active = true })];
 }

@@ -1,5 +1,4 @@
 using DynamicModules.Domain.Entities.Dynamic;
-using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
@@ -11,10 +10,13 @@ public class TaskReportFieldsTests
 {
     private static I18nText Zh(string s) => new([KeyValuePair.Create("zh-TW", s)]);
 
+    /// <summary>解析函式：只有繁中、值是鍵（文字本身由 Application 的快照驗，語系包 i4c 計畫判斷 9）。</summary>
+    private static I18nText Text(string key) => new([KeyValuePair.Create("zh-TW", key)]);
+
     private static Module Build(string dataset = ReportDatasets.Tasks) => F.Build(dataset,
         [new Department { Id = 5, NameI18n = Zh("業務一"), Active = true }, new Department { Id = 6, NameI18n = Zh("舊部門"), Active = false }],
         [new Module { Id = 11, Key = "order", NameI18n = Zh("訂單") }, new Module { Id = 12, Key = "leave", NameI18n = Zh("請假單") }],
-        [new TaskRule { Id = 21, ModuleId = 11, NameI18n = Zh("出貨提醒") }]);
+        [new TaskRule { Id = 21, ModuleId = 11, NameI18n = Zh("出貨提醒") }], Text);
 
     private static IReadOnlyList<Field> Fields(Module m) => m.Blocks.SelectMany(b => b.Fields).ToList();
 
@@ -36,7 +38,7 @@ public class TaskReportFieldsTests
         Of(m, F.DelayDays).Type.Should().Be(FieldType.Integer);
         Of(m, F.Module).Type.Should().Be(FieldType.Enum);
         Fields(m).Should().OnlyContain(f => f.Status == FieldStatus.Active);
-        m.NameI18n.Resolve("zh-TW").Should().Be("任務");
+        m.NameI18n.Resolve("zh-TW").Should().Be(F.DatasetNameKeys[ReportDatasets.Tasks]);
     }
 
     [Fact]
@@ -75,24 +77,23 @@ public class TaskReportFieldsTests
     public void Title_CannotGroup() => ReportFieldEligibility.CanGroup(Of(Build(), F.Title)).Should().BeFalse();
 
     [Fact]
-    public void Labels_FourLocales()
+    public void Labels_FromResolver()
     {
         var fields = Fields(Build()).Concat(Fields(Build(ReportDatasets.TaskEvents))).ToList();
-        foreach (var locale in BuiltinLocales.Codes)
+        var keys = F.AllTextKeys.ToHashSet();
+        foreach (var f in fields)
         {
-            foreach (var f in fields)
-            {
-                f.LabelI18n.Values.GetValueOrDefault(locale).Should().NotBeNullOrEmpty($"欄位 {f.Id} 的 {locale}");
-                // 實體選項的名稱來自實體本身；固定選項要四語
-                if (f.Id is not (F.AssigneeDepartment or F.Module or F.Rule))
-                    foreach (var o in f.Options)
-                        o.LabelI18n.Values.GetValueOrDefault(locale).Should().NotBeNullOrEmpty($"欄位 {f.Id} 選項 {o.Id} 的 {locale}");
-            }
-            foreach (var (id, text) in F.BlankLabels)
-                text.Values.GetValueOrDefault(locale).Should().NotBeNullOrEmpty($"空值 {id} 的 {locale}");
+            keys.Should().Contain(f.LabelI18n.Resolve("zh-TW"), $"欄位 {f.Id} 的標籤來自解析函式");
+            if (f.Id is F.AssigneeDepartment or F.Module or F.Rule)
+                f.Options.Should().OnlyContain(o => !keys.Contains(o.LabelI18n.Resolve("zh-TW")), $"欄位 {f.Id} 的選項是實體名稱，原樣帶過");
+            else
+                foreach (var o in f.Options) keys.Should().Contain(o.LabelI18n.Resolve("zh-TW"), $"欄位 {f.Id} 選項 {o.Id} 的標籤來自解析函式");
         }
-        F.BlankLabels.Keys.Should().BeEquivalentTo(new[] { F.Assignee, F.AssigneeDepartment, F.Creator, F.Module, F.Rule });
-        F.BlankLabels[F.Assignee].Resolve("zh-TW").Should().Be("未指派");
+        Of(Build(), F.Status).LabelI18n.Resolve("zh-TW").Should().Be(F.TextKeys.FieldStatus);
+        Of(Build(), F.Status).Options.Select(o => o.LabelI18n.Resolve("zh-TW"))
+            .Should().Equal(F.TextKeys.StatusTodo, F.TextKeys.StatusInProgress, F.TextKeys.StatusDone, F.TextKeys.StatusCancelled);
+        F.BlankLabelKeys.Keys.Should().BeEquivalentTo(new[] { F.Assignee, F.AssigneeDepartment, F.Creator, F.Module, F.Rule });
+        F.BlankLabelKeys[F.Assignee].Should().Be(F.TextKeys.BlankAssignee);
         F.Restrictable.Should().BeEquivalentTo(new[] { F.Module, F.Rule });
     }
 

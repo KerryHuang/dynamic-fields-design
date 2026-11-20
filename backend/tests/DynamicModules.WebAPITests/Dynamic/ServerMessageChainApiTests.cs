@@ -120,6 +120,20 @@ public sealed class ServerMessageChainApiTests : IDisposable
     }
 
     [Fact]
+    public async Task TaskReport_Ja_ParentEnglish()
+    {
+        await Japanese();
+        var ja = Client("ja");
+        var datasets = JsonDocument.Parse(await ja.GetStringAsync($"{Base}/reports/datasets")).RootElement;
+        datasets.EnumerateArray().Select(d => d.GetProperty("name").GetString()).Should().Equal("Task", "Task event (created or completed)");
+
+        var fields = JsonDocument.Parse(await ja.GetStringAsync($"{Base}/reports/datasets/tasks/catalog")).RootElement.GetProperty("fields").EnumerateArray().ToList();
+        var status = fields.Single(f => f.GetProperty("id").GetInt64() == -2);
+        status.GetProperty("label").GetString().Should().Be("Status");
+        status.GetProperty("options").EnumerateArray().Select(o => o.GetProperty("label").GetString()).Should().Equal("To do", "In progress", "Done", "Cancelled");
+    }
+
+    [Fact]
     public async Task Factory_FourLocales_Unchanged()
     {
         foreach (var l in new[] { "zh-TW", "en-US", "th", "vi" })

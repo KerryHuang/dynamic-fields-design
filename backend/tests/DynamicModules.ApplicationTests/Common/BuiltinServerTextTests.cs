@@ -18,7 +18,7 @@ public class BuiltinServerTextTests
     public static readonly string[] Locales = ["zh-TW", "en-US", "th", "vi"];
 
     /// <summary>明列的基準檔；Task 4、7 各加一個。</summary>
-    private static readonly string[] BaselineFiles = ["message-report.json"];
+    private static readonly string[] BaselineFiles = ["message-report.json", "task-report.json"];
 
     /// <summary>repo 根目錄（往上找到有 shared/locale-chain-cases.json 的那層）。</summary>
     public static string RepoRoot()

@@ -67,8 +67,8 @@ public partial class ReportRunner
             ? await taskReports.ExpandDepartmentsAsync(selected, o.IncludeSubDepartments, ct) : null;
         if (departmentScope is not null) items = [.. items.Where(i => i.AssigneeDepartmentId is { } dept && departmentScope.Contains(dept))];
 
-        var blanks = bound.Values.Where(b => F.BlankLabels.ContainsKey(b.Field.Id))
-            .ToDictionary(b => b.Key, b => F.BlankLabels[b.Field.Id].Resolve(lc));
+        var blanks = bound.Values.Where(b => F.BlankLabelKeys.ContainsKey(b.Field.Id))
+            .ToDictionary(b => b.Key, b => messages.Get(lc, F.BlankLabelKeys[b.Field.Id]));
         var ctx = new RunContext(lc, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), blanks, offset);
         // tasks 一個任務一列；taskEvents 每個任務一列「建立」，完成（且有完成時間，J15）再一列「完成」。
         // 事件列的 MainId 是 taskId*2（建立）、taskId*2+1（完成），每列不重複、去重照舊；TaskIdOf 對回任務 Id
