@@ -1,6 +1,7 @@
 using System.Globalization;
 using DynamicModules.Application.Dynamic.OpsService.Health;
 using DynamicModules.Domain.Localization;
+using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.OpsService.Alerts;
 
@@ -139,9 +140,12 @@ public static class AlertMailText
         [HealthCheckCatalog.SecurityLoginFailures] = ("Failed sign-ins", "การเข้าสู่ระบบล้มเหลว", "Số lần đăng nhập thất bại"),
     };
 
-    /// <summary>信件語系：通道存的語系有翻譯表就用它（已存的語言之後被停用也照常寄），否則用系統預設語系（政策 locale.default）；預設語系沒有翻譯表時退繁中。</summary>
-    public static string Locale(string? mailLocale, string defaultLocale) =>
-        mailLocale is not null && Locales.Contains(mailLocale) ? mailLocale : Locales.Contains(defaultLocale) ? defaultLocale : "zh-TW";
+    /// <summary>
+    /// 信件文字用哪張表：沿語系與退回鏈（<see cref="Common.LocaleRegistry.ContextFor"/>）找第一個這張表有翻譯的，都沒有就繁中（i4a 計畫判斷 23）。
+    /// 通道存的語系之後被停用也照常寄；存的語系已移除時鏈不含它的上層，落到系統預設語系（N2）。
+    /// </summary>
+    public static string Locale(LocaleContext mail) =>
+        new[] { mail.Locale }.Concat(mail.Fallbacks).FirstOrDefault(l => Locales.Contains(l)) ?? "zh-TW";
 
     public static string Get(string locale, string key, params object[] args)
     {

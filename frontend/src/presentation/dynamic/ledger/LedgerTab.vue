@@ -13,15 +13,14 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import {
   buildLedgerBody, newReversalField, numberFields, reversalCandidates, swapPartners, type LedgerDraft,
 } from 'src/domain/dynamic/ledger-draft';
-import type { DesignerField, I18nText, Locale, ModuleDetail } from 'src/domain/dynamic/types';
+import type { DesignerField, I18nText, ModuleDetail } from 'src/domain/dynamic/types';
+import { installedLocales } from 'src/i18n/locale-settings';
 import { errorFor, messagesOutside } from 'src/presentation/dynamic/designer/api-error';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
 
-const LOCALES: Locale[] = ['zh-TW', 'en-US', 'th', 'vi'];
-
 const props = defineProps<{ module: ModuleDetail }>();
-const { t, locale } = useI18n();
+const { t, locale, availableLocales } = useI18n();
 const $q = useQuasar();
 
 const key = computed(() => props.module.key);
@@ -87,8 +86,9 @@ const removeSwap = (i: number) => patch({ swap: draft.value.swap.filter((_, j) =
 // ---- create the reversal field ----
 const addField = useDesignerMutation(
   () => {
-    // the label carries all four languages, so the field reads right whichever one the user works in
-    const label = Object.fromEntries(LOCALES.map((l) => [l, t('ledger.reversalFieldLabel', {}, { locale: l })])) as I18nText;
+    // 標籤帶每個已安裝語系（前端有翻譯包的；沒有包的語系 t() 會拿到繁中，寧可空著，i4a 計畫判斷 16），不論使用者用哪個語言都讀得懂
+    const locales = installedLocales().filter((l) => availableLocales.includes(l));
+    const label = Object.fromEntries(locales.map((l) => [l, t('ledger.reversalFieldLabel', {}, { locale: l })])) as I18nText;
     return dynamicApi.addField(key.value, newReversalField(props.module.blocks[0]!.id, key.value, label));
   },
   () => key.value,

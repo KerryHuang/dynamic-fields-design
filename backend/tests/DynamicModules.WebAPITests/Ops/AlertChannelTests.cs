@@ -8,6 +8,7 @@ using DynamicModules.Application.Dynamic.OpsService.Scheduling;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
+using DynamicModules.Domain.ValueObjects;
 using DynamicModules.TestSupport;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
@@ -573,11 +574,166 @@ public class AlertChannelTests
     [Fact]
     public void IncidentSnapshot_UsesDefaultLocaleThenZhTw()
     {
-        var en = IncidentTitles.Snapshot("en-US", "ops.title.adminChanged", new Dictionary<string, object> { ["change"] = "granted" });
-        var zh = IncidentTitles.Snapshot("zh-TW", "ops.title.adminChanged", new Dictionary<string, object> { ["change"] = "granted" });
-        var unknown = IncidentTitles.Snapshot("ja", "ops.title.adminChanged", new Dictionary<string, object> { ["change"] = "granted" });
+        var p = new Dictionary<string, object> { ["change"] = "granted" };
+        var en = IncidentTitles.Snapshot(new LocaleContext("en-US", ["en-US", "zh-TW", "th", "vi"]), "ops.title.adminChanged", p);
+        var zh = IncidentTitles.Snapshot(new LocaleContext("zh-TW", ["zh-TW", "en-US", "th", "vi"]), "ops.title.adminChanged", p);
+        var unknown = IncidentTitles.Snapshot(new LocaleContext("ja", []), "ops.title.adminChanged", p);
         en.Should().NotBe(zh);
         unknown.Should().Be(zh);
+        IncidentTitles.Snapshot(new LocaleContext("ja", ["en-US", "zh-TW"]), "ops.title.adminChanged", p).Should().Be(en);
+    }
+
+    [Fact]
+    public void AlertMailText_Locale_WalksChain()
+    {
+        AlertMailText.Locale(new LocaleContext("ja", ["en-US", "zh-TW"])).Should().Be("en-US");
+        AlertMailText.Locale(new LocaleContext("ja", ["ko"])).Should().Be("zh-TW");
+        AlertMailText.Locale(new LocaleContext("th", ["zh-TW"])).Should().Be("th");
+    }
+
+    // ── 新裝的語系（語系包 i4a 計畫判斷 23）：ja 的上層是 en-US；信件文字只有內建四語，寄出退回鏈上第一個有翻譯的 ──
+
+    private static readonly string[] WithJa = ["zh-TW", "en-US", "th", "vi", "ja"];
+
+    private static async Task InstallJa(TestApp app, bool enable = true)
+    {
+        await LocaleTestKit.InstallAsync(app, "ja", "日本語", fallback: "en-US");
+        if (enable)
+            (await app.AsUser().PutAsJsonAsync("/api/v3/dynamic/system/policies/locale.enabled", new { value = WithJa })).EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task MailLocale_InstalledAndEnabled_Saves_TestMailFollowsParent()
+    {
+        var mail = new FakeMailSender();
+        using var app = App(mail);
+        SetTime(app, T0);
+        await InstallJa(app);
+        await Configure(app, b => b["mailLocale"] = "ja");
+        (await app.AsUser().GetFromJsonAsync<JsonElement>(Channel)).GetProperty("mailLocale").GetProperty("value").GetString().Should().Be("ja");
+        (await app.AsUser().PostAsync($"{Channel}/test", null)).EnsureSuccessStatusCode();
+        mail.Sent.Last().Subject.Should().Be("[Formwright] Alert channel test email");
+    }
+
+    [Fact]
+    public async Task MailLocale_InstalledNotEnabled_Or_NotInstalled_400()
+    {
+        using var app = App(new FakeMailSender());
+        await InstallJa(app, enable: false);
+        foreach (var code in new[] { "ja", "ko" })
+        {
+            var res = await PutChannel(app, b => b["mailLocale"] = code);
+            res.StatusCode.Should().Be(HttpStatusCode.BadRequest, code);
+            (await Json(res)).GetProperty("errors").TryGetProperty("mailLocale", out _).Should().BeTrue();
+        }
+    }
+
+    [Fact]
+    public async Task Outbox_JaChannel_EnglishMail()
+    {
+        using var app = App(new FakeMailSender());
+        SetTime(app, T0);
+        await InstallJa(app);
+        await Configure(app, b => b["mailLocale"] = "ja");
+        await Open(app, "fp-ja-outbox");
+        (await Outbox(app)).Single().Subject.Should().StartWith("[Formwright][Warning] Health check");
+    }
+
+    [Fact]
+    public async Task Digest_JaChannel_EnglishLines()
+    {
+        var mail = new FakeMailSender();
+        using var app = App(mail);
+        SetTime(app, T0);
+        await SetPolicy(app, PolicyCatalog.OpsAlertEmailMaxPerHour, "1");
+        await InstallJa(app);
+        await Configure(app, b => b["mailLocale"] = "ja");
+        await Open(app, "fp-ja-d1");
+        await Open(app, "fp-ja-d2");
+        await Dispatch(app);
+        app.Time.Advance(TimeSpan.FromMinutes(51));
+        await Dispatch(app);
+        var digest = mail.Sent.Last();
+        digest.Subject.Should().Be("[Formwright] 1 more alerts in the past hour");
+        digest.Body.Should().Contain("Free disk space").And.NotContain("健康檢查");
+    }
+
+    [Fact]
+    public async Task Notification_DefaultJa_SnapshotFallsBackToParent()
+    {
+        using var app = App(new FakeMailSender());
+        SetTime(app, T0);
+        await InstallJa(app);
+        async Task<string> Snapshot(string fp)
+        {
+            var id = await Open(app, fp);
+            await using var scope = app.Services.CreateAsyncScope();
+            return (await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<Notification>().AsNoTracking()
+                .Where(n => n.SourceType == OpsNotifier.SourceType && n.SourceId == id).ToListAsync()).First().TitleSnapshot;
+        }
+        (await app.AsUser().PutAsJsonAsync("/api/v3/dynamic/system/policies/locale.default", new { value = "ja" })).EnsureSuccessStatusCode();
+        (await Snapshot("fp-ja-note")).Should().StartWith("Health check");
+        (await app.AsUser().PutAsJsonAsync("/api/v3/dynamic/system/policies/locale.default", new { value = "zh-TW" })).EnsureSuccessStatusCode();
+        (await Snapshot("fp-zh-note")).Should().StartWith("健康檢查");
+    }
+
+    [Fact]
+    public async Task Direct_JaChannel_EnglishMail()
+    {
+        var mail = new FakeMailSender();
+        var full = new DiskFullSwitch();
+        using var app = new TestApp
+        {
+            ExtraServices = s =>
+            {
+                FakeDisk(s, new FakeDiskSpace());
+                UseFakeMail(s, mail);
+            },
+        };
+        app.Interceptors.Add(full);
+        var watchdog = app.Services.GetRequiredService<OpsWatchdog>();
+        await InstallJa(app);
+        await Configure(app, b => b["mailLocale"] = "ja");
+        app.Time.Advance(TimeSpan.FromMinutes(5));
+        await watchdog.TickAsync(CancellationToken.None);
+        await watchdog.SendDirectAsync(CancellationToken.None); // 直送先讀到通道設定（信件語系取自上一次讀到的）
+        full.On = true;
+        app.Time.Advance(TimeSpan.FromMinutes(5));
+        await watchdog.TickAsync(CancellationToken.None);
+        await watchdog.SendDirectAsync(CancellationToken.None);
+        mail.Sent.Should().ContainSingle().Which.Subject.Should().StartWith("[Formwright][Critical]");
+    }
+
+    [Fact]
+    public async Task RemovedMailLocale_UsesDefault()
+    {
+        using var app = App(new FakeMailSender());
+        SetTime(app, T0);
+        await InstallJa(app);
+        await Configure(app, b => b["mailLocale"] = "ja");
+        await LocaleTestKit.RemoveAsync(app, "ja");
+        await Open(app, "fp-ja-removed");
+        (await Outbox(app)).Single().Subject.Should().StartWith("[Formwright][警告] 健康檢查");
+    }
+
+    [Fact]
+    public async Task MailSettingsTest_JaHeader_FollowsParent_ChannelLocaleIgnored()
+    {
+        var mail = new FakeMailSender();
+        using var app = App(mail);
+        await InstallJa(app);
+        await Configure(app, b => b["mailLocale"] = "ja");
+        async Task<string> Subject(string header)
+        {
+            var client = app.AsUser();
+            client.DefaultRequestHeaders.Add("X-Locale", header);
+            (await client.PostAsync($"{Mail}/test", null)).EnsureSuccessStatusCode();
+            app.Time.Advance(TimeSpan.FromSeconds(31));
+            return mail.Calls.Last().Mail.Subject;
+        }
+        (await Subject("ja")).Should().Be("[Formwright] Email settings test email");
+        (await Subject("th")).Should().Be("[Formwright] อีเมลทดสอบการตั้งค่าอีเมล");
+        (await Subject("zh-TW")).Should().Be("[Formwright] 寄信設定測試信", "告警通道存的 ja 不影響寄信設定測試信");
     }
 
     [Fact]

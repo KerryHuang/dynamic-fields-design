@@ -3,6 +3,7 @@ using System.Text;
 using DynamicModules.Application.Dynamic.OpsService.Incidents;
 using DynamicModules.Application.Dynamic.OpsService.Monitor;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.OpsService.Alerts;
 
@@ -11,7 +12,7 @@ public sealed record DigestItem(long? IncidentId, IncidentSeverity Severity, Inc
 
 /// <summary>
 /// 組告警信（維運設計 §17.2.6「信件內容」「長度預算」）：只用標題代碼與白名單參數組標題，不放正規化訊息、原始訊息、stack、記錄值（C2）。
-/// 語系用通道的 <c>MailLocale</c>（O2-U14），寫入佇列時組好存成快照。
+/// 語系用通道的 <c>MailLocale</c>（O2-U14）與它的退回鏈（呼叫端組好的 <see cref="LocaleContext"/>），寫入佇列時組好存成快照。
 /// </summary>
 public static class AlertMailComposer
 {
@@ -19,9 +20,9 @@ public static class AlertMailComposer
     public const int TitleMaxInBody = 500, DigestLineMax = 70, DigestMaxLines = 50, DigestHeadMax = 200, DigestTailReserve = 200;
 
     /// <summary>一般告警信：主旨「[Formwright][嚴重] 標題（#編號）」；內文類別、處理者、狀況、次數、首次與最近時間、版本、事件連結。</summary>
-    public static AlertMail Incident(OpsIncident i, AlertTransition transition, string? mailLocale, string defaultLocale, string edition, AlertMailOptions options)
+    public static AlertMail Incident(OpsIncident i, AlertTransition transition, LocaleContext mail, string edition, AlertMailOptions options)
     {
-        var locale = AlertMailText.Locale(mailLocale, defaultLocale);
+        var locale = AlertMailText.Locale(mail);
         var title = IncidentTitles.Text(locale, i.TitleKey, IncidentTitles.FromJson(i.TitleParamsJson));
         var severity = AlertMailText.Label(locale, "severity." + Camel(i.Severity));
         var subject = FitSubject(t => AlertMailText.Get(locale, AlertMailText.Subject, severity, t, i.Id), title);
@@ -43,10 +44,10 @@ public static class AlertMailComposer
     /// 直送信（資料庫寫不進時，§17.2.6）：還沒有事件編號，主旨不帶編號；內文註明這是看門狗直送、連到監控頁的健康分頁。
     /// </summary>
     public static AlertMail Direct(string titleKey, IReadOnlyDictionary<string, object>? titleParams, IncidentSeverity severityValue,
-        IncidentCategory category, AlertTransition transition, DateTime checkedUtc, string version, string? mailLocale, string defaultLocale,
+        IncidentCategory category, AlertTransition transition, DateTime checkedUtc, string version, LocaleContext mail,
         string edition, AlertMailOptions options)
     {
-        var locale = AlertMailText.Locale(mailLocale, defaultLocale);
+        var locale = AlertMailText.Locale(mail);
         var title = IncidentTitles.Text(locale, titleKey, titleParams);
         var severity = AlertMailText.Label(locale, "severity." + Camel(severityValue));
         var subject = FitSubject(t => AlertMailText.Get(locale, AlertMailText.SubjectDirect, severity, t), title);
@@ -68,9 +69,9 @@ public static class AlertMailComposer
     /// 摘要信：「過去一小時另有 N 則告警」，依嚴重度再依時間排列，每行最多 70 字、最多 50 行；
     /// 下一行會讓內文超過 4000 − 200 字就停，結尾「另有 M 則」（M 為 0 時不寫）。
     /// </summary>
-    public static AlertMail Digest(IReadOnlyList<DigestItem> items, string? mailLocale, string defaultLocale)
+    public static AlertMail Digest(IReadOnlyList<DigestItem> items, LocaleContext mail)
     {
-        var locale = AlertMailText.Locale(mailLocale, defaultLocale);
+        var locale = AlertMailText.Locale(mail);
         var subject = AlertMailText.Get(locale, AlertMailText.DigestSubject, items.Count);
         var body = new StringBuilder(Cut(AlertMailText.Get(locale, AlertMailText.DigestIntro, items.Count), DigestHeadMax)).AppendLine();
         var listed = 0;
@@ -87,16 +88,16 @@ public static class AlertMailComposer
         return new AlertMail(subject, FitBody(body.ToString().TrimEnd(), locale));
     }
 
-    public static AlertMail Test(string? mailLocale, string defaultLocale)
+    public static AlertMail Test(LocaleContext mail)
     {
-        var locale = AlertMailText.Locale(mailLocale, defaultLocale);
+        var locale = AlertMailText.Locale(mail);
         return new AlertMail(AlertMailText.Get(locale, AlertMailText.TestSubject), AlertMailText.Get(locale, AlertMailText.TestBody));
     }
 
     /// <summary>寄信設定的測試信（寄到寄件地址本身）。</summary>
-    public static AlertMail MailTest(string? locale, string defaultLocale)
+    public static AlertMail MailTest(LocaleContext mail)
     {
-        var l = AlertMailText.Locale(locale, defaultLocale);
+        var l = AlertMailText.Locale(mail);
         return new AlertMail(AlertMailText.Get(l, AlertMailText.MailTestSubject), AlertMailText.Get(l, AlertMailText.MailTestBody));
     }
 

@@ -11,8 +11,6 @@ export type LocaleCode = string;
  */
 export const BUILTIN_LOCALES: LocaleInfo[] = builtinLocales.map((l) => ({ ...l, fallbackCode: null }));
 
-/** 選單用各語言的自稱（暫留給還沒改讀 useLocales() 的使用點，i4a Task 8 刪除）。 */
-export const LOCALES: { code: LocaleCode; label: string }[] = BUILTIN_LOCALES.map((l) => ({ code: l.code, label: l.nativeName }));
 /** 伺服器連不上、還沒取得預設語系時的翻譯包退回（不是語系政策的預設）。 */
 export const FALLBACK_LOCALE: LocaleCode = 'zh-TW';
 export const LOCALE_KEY = 'formwright.locale';

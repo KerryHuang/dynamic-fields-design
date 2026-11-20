@@ -145,6 +145,25 @@ describe('LocaleSwitcher', () => {
   });
 });
 
+describe('LocaleSwitcher 新裝的語系', () => {
+  it('裝了 ja 且啟用：多一項「日本語」，點選後切換', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US' }]);
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi', 'ja'] });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const w = mount(LocaleSwitcher, { attachTo: document.body, global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], i18n] } });
+    (document.body.querySelector('[data-testid="locale-open"]') as HTMLElement).click();
+    await flushPromises();
+    expect([...document.body.querySelectorAll('[data-testid^="locale-option-"]')].map((e) => e.textContent?.trim()))
+      .toEqual(['繁體中文', 'English', 'ไทย', 'Tiếng Việt', '日本語']);
+    (document.body.querySelector('[data-testid="locale-option-ja"]') as HTMLElement).click();
+    await flushPromises();
+    expect(i18n.global.locale.value).toBe('ja');
+    setLocaleInfos(BUILTIN_LOCALES);
+    setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] });
+    w.unmount();
+  });
+});
+
 describe('LocaleSwitcher 掛載後政策更新', () => {
   it('啟用語系變了，已掛載的選單跟著列新的', async () => {
     setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] });

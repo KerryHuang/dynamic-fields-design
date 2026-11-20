@@ -1,5 +1,4 @@
-import { LOCALES } from 'src/i18n/locale';
-import type { LocaleInfo } from 'src/i18n/locale-settings';
+import { installedLocales, nativeName, type LocaleInfo } from 'src/i18n/locale-settings';
 import { joinList } from 'src/i18n/translate';
 
 export type PolicyKind = 'integer' | 'boolean' | 'choice' | 'roleSet' | 'codeList' | 'recipients' | 'utcOffset';
@@ -58,14 +57,17 @@ function formatBytes(n: number): string {
 /** 收件人項目（admins、group:<id>、user:<userId>）→ 顯示名稱；對不到的項目由呼叫端以 missing 顯示。 */
 export type RecipientNames = ReadonlyMap<string, string>;
 
-/** 語系類政策（locale.default、enabled、requiredText）：選項全是語系代碼，顯示各語言自稱、不進翻譯（判斷 24）。calendar.weekStart 同分類但不是語系。 */
+/**
+ * 語系類政策（locale.default、enabled、requiredText）：選項全是已安裝語系的代碼，顯示各語言自稱、不進翻譯（p3 判斷 24、i4a 判斷 19）。
+ * calendar.weekStart 同分類但不是語系。
+ */
 export const isLocalePolicy = (meta: PolicyMeta): boolean =>
   meta.category === 'locale' && (meta.kind === 'choice' || meta.kind === 'roleSet')
-  && !!meta.options?.length && meta.options.every((o) => LOCALES.some((l) => l.code === o));
+  && !!meta.options?.length && meta.options.every((o) => installedLocales().includes(o));
 
-/** 選項顯示文字：語系類用各語言自稱，其餘取 policies.choices。 */
+/** 選項顯示文字：語系類用 API 給的自稱（找不到回代碼），其餘取 policies.choices。 */
 export const choiceLabel = (meta: PolicyMeta, o: string, t: Translate): string =>
-  isLocalePolicy(meta) ? LOCALES.find((l) => l.code === o)?.label ?? o : t(`policies.choices.${o}`);
+  isLocalePolicy(meta) ? nativeName(o) : t(`policies.choices.${o}`);
 
 export function policyValueText(meta: PolicyMeta, v: PolicyValue, t: Translate, names?: RecipientNames | undefined): string {
   switch (meta.kind) {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { BUILTIN_LOCALES } from 'src/i18n/locale';
+import { setLocaleInfos } from 'src/i18n/locale-settings';
 import { tFor } from 'src/i18n/translate';
-import { groupByCategory, policyRangeText, policyValueText, samePolicyValue, type SystemPolicy } from './policy-types';
+import { choiceLabel, groupByCategory, isLocalePolicy, policyRangeText, policyValueText, samePolicyValue, type SystemPolicy } from './policy-types';
 
 const t = tFor('zh-TW');
 
@@ -55,6 +57,13 @@ describe('語系類政策顯示各語言自稱（不走 policies.choices 翻譯�
   it('choice 與 roleSet 的現值', () => {
     expect(policyValueText(meta('locale.default', 'choice'), 'en-US', t)).toBe('English');
     expect(policyValueText(meta('locale.enabled', 'roleSet'), ['zh-TW', 'th'], t)).toBe('繁體中文、ไทย');
+  });
+  it('新裝的語系：選項含 ja 仍是語系類，標籤是 API 給的自稱', () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US' }]);
+    const m = { code: 'locale.enabled', category: 'locale', kind: 'roleSet' as const, options: ['zh-TW', 'en-US', 'th', 'vi', 'ja'] };
+    expect(isLocalePolicy(m)).toBe(true);
+    expect(choiceLabel(m, 'ja', t)).toBe('日本語');
+    setLocaleInfos(BUILTIN_LOCALES);
   });
   it('calendar.weekStart 這種非語系的 locale 類 choice 仍走翻譯', () => {
     expect(policyValueText({ code: 'calendar.weekStart', category: 'locale', kind: 'choice', options: ['monday', 'sunday'] }, 'monday', t)).toBe(t('policies.choices.monday'));

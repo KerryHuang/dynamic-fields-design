@@ -1,10 +1,9 @@
 import { i18n } from 'src/boot/i18n';
-import type { LocaleCode } from 'src/i18n/locale';
 
 export type Translate = (key: string, params?: Record<string, unknown>) => string;
 
 /** 指定語系的翻譯函式；給沒有元件實例可用 useI18n 的純函式（欄位顯示、驗證訊息）。 */
-export const tFor = (locale: string): Translate => (key, params) => i18n.global.t(key, params ?? {}, { locale: locale as LocaleCode });
+export const tFor = (locale: string): Translate => (key, params) => i18n.global.t(key, params ?? {}, { locale });
 
 /** 目前介面語系。 */
 export const currentLocale = (): string => i18n.global.locale.value;

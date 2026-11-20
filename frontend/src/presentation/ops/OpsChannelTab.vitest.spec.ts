@@ -3,7 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import * as quasar from 'quasar';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
-import { setLocaleSettings } from 'src/i18n/locale-settings';
+import { BUILTIN_LOCALES } from 'src/i18n/locale';
+import { setLocaleInfos, setLocaleSettings } from 'src/i18n/locale-settings';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import OpsChannelTab from './OpsChannelTab.vue';
@@ -24,7 +25,7 @@ async function mountTab(c: ReturnType<typeof channel>) {
 type Opt = { value: string | null; label: string; disable?: boolean };
 const optionsOf = (w: Awaited<ReturnType<typeof mountTab>>) => w.findAllComponents({ name: 'QSelect' }).find((c) => c.props('label') === '信件語系')!.props('options') as Opt[];
 
-afterEach(() => { vi.restoreAllMocks(); setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] }); });
+afterEach(() => { vi.restoreAllMocks(); setLocaleInfos(BUILTIN_LOCALES); setLocaleSettings({ enabled: ['zh-TW', 'en-US', 'th', 'vi'] }); });
 
 describe('OpsChannelTab 信件語言', () => {
   it('只列啟用語系，出廠項顯示預設語系', async () => {
@@ -33,6 +34,15 @@ describe('OpsChannelTab 信件語言', () => {
     const o = optionsOf(w);
     expect(o.map((x) => x.value)).toEqual([null, 'zh-TW', 'en-US']);
     expect(o[0]!.label).toContain('English');
+  });
+
+  it('啟用新裝的 ja：下拉有「日本語」', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: 'en-US' }]);
+    setLocaleSettings({ enabled: ['zh-TW', 'ja'] });
+    const w = await mountTab(channel('ja', false));
+    const o = optionsOf(w);
+    expect(o.map((x) => x.value)).toEqual([null, 'zh-TW', 'ja']);
+    expect(o.find((x) => x.value === 'ja')!.label).toBe('日本語');
   });
 
   it('已存的語言之後被停用：仍列出並標已停用、不可新選', async () => {

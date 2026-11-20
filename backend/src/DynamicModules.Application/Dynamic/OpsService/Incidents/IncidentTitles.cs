@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DynamicModules.Application.Dynamic.OpsService.Alerts;
+using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.OpsService.Incidents;
 
@@ -56,10 +57,10 @@ public static partial class IncidentTitles
             e => e.Value.ValueKind == JsonValueKind.Number ? (object)e.Value.GetInt64() : e.Value.GetString() ?? "", StringComparer.Ordinal);
     }
 
-    /// <summary>系統預設語系的標題（通知 TitleSnapshot 的退路，截斷 200 字）；預設語系沒有翻譯表時退繁中。</summary>
-    public static string Snapshot(string defaultLocale, string titleKey, IReadOnlyDictionary<string, object>? p)
+    /// <summary>系統預設語系的標題（通知 TitleSnapshot 的退路，截斷 200 字）；預設語系沒有翻譯表時沿它的退回鏈找，都沒有退繁中。</summary>
+    public static string Snapshot(LocaleContext systemDefault, string titleKey, IReadOnlyDictionary<string, object>? p)
     {
-        var text = Text(AlertMailText.Locale(null, defaultLocale), titleKey, p);
+        var text = Text(AlertMailText.Locale(systemDefault), titleKey, p);
         return text.Length <= 200 ? text : text[..200];
     }
 
