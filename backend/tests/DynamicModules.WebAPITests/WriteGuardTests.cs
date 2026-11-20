@@ -26,7 +26,7 @@ public class WriteGuardTests : IClassFixture<TestApp>
     }
 
     [Fact]
-    public async Task FakeBusinessTime_IsUnspecified_LikeTaipeiBusinessTime()
+    public async Task FakeBusinessTime_IsUnspecified_LikeZoneBusinessTime()
     {
         new FakeBusinessTime().Now.Kind.Should().Be(DateTimeKind.Unspecified);
         new FakeBusinessTime { Fixed = DateTime.UtcNow }.Now.Kind.Should().Be(DateTimeKind.Unspecified);

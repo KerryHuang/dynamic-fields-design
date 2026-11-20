@@ -201,6 +201,9 @@ public class RequestContextTests
             s.AddScoped<IPolicyReader>(sp => new CountingReader(sp.GetRequiredService<PolicyReader>(), seen));
         })).CreateClient();
         client.DefaultRequestHeaders.Add("X-User", "admin");
+        // 全系統政策快照（p3 Task 3）在啟動時一次讀齊全部全系統政策，之後 60 秒內不再讀；這裡只看啟動之後的請求
+        await client.GetAsync($"{Base}/me");
+        seen.Clear();
         for (var i = 0; i < 5; i++) await client.GetAsync($"{Base}/me");
         seen.Should().NotContain("ops.slowRequestMs");
     }

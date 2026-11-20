@@ -295,7 +295,7 @@ public class TestApp : WebApplicationFactory<Program>
     }
 }
 
-/// <summary>業務時間的假時鐘；Now 一律 Kind=Unspecified，與正式的 TaipeiBusinessTime 相同（PostgreSQL 的 timestamp 欄位不收 Kind=Utc）。</summary>
+/// <summary>業務時間的假時鐘；Now 一律 Kind=Unspecified，與正式的 ZoneBusinessTime 相同（PostgreSQL 的 timestamp 欄位不收 Kind=Utc）。</summary>
 public sealed class FakeBusinessTime : IBusinessTime
 {
     public DateTime? Fixed { get; set; }

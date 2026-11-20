@@ -27,14 +27,20 @@ public class GetSystemPoliciesHandler(IPolicyReader reader) : IRequestHandler<Ge
 
 public class UpdateSystemPolicyHandler(
     ISystemSettingRepository settings, IPolicyReader reader, IUnitOfWork uow, IAccountRepository accounts, IPermissionRepository permissions,
-    AuditContext audit)
+    AuditContext audit, IEnumerable<IPolicyChangeHook> hooks, CachedSystemPolicy cache, AfterCommitActions afterCommit)
     : IRequestHandler<UpdateSystemPolicyRequest, ServiceResult>
 {
+    /// <summary>
+    /// 交易內（<c>ITransactionalRequest</c>）的順序：讀舊生效值 → 寫設定 → SaveChanges → 讀新生效值 → hooks → 登記快照更新。
+    /// 設定的讀取是 AsNoTracking，SaveChanges 之前查不到新值，所以 hooks 在 SaveChanges 之後；hook 拒絕時外層交易整個回滾，
+    /// 快照的更新登記在 <see cref="AfterCommitActions"/>，提交後才套用、回滾就丟掉（計畫判斷 20）。
+    /// </summary>
     public async Task<ServiceResult> Handle(UpdateSystemPolicyRequest request, CancellationToken ct)
     {
         if (PolicyCatalog.Find(request.Code) is not { } def) return ServiceResult.NotFound(PolicyMessages.NotFound);
         // 稽核的舊值與新值：null＝出廠值（維運設計 §17.2.1）
         var old = await settings.GetValueAsync(def.SettingKey, ct);
+        var oldEffective = (await reader.ResolveAsync(def, null, ct)).Effective;
         string? canonicalValue = null;
         if (request.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } value)
         {
@@ -50,8 +56,19 @@ public class UpdateSystemPolicyHandler(
         }
         await uow.CommitAsync(ct);
         reader.Invalidate();
+        var resolution = await reader.ResolveAsync(def, null, ct);
+        var newEffective = resolution.Effective;
+        if (newEffective != oldEffective)
+            foreach (var hook in hooks)
+                if (await hook.BeforeCommitAsync(def, oldEffective, newEffective, ct) is { } rejected) return rejected;
+        if (def.Scope == PolicyScope.System)
+        {
+            // 交易內（已持有寫入鎖）配發序號：序號順序等於提交順序
+            var seq = cache.NextSequence();
+            afterCommit.Add("policy-cache", () => cache.Apply(def, newEffective, seq));
+        }
         audit.Describe(new { Value = old }, new { Value = canonicalValue });
-        return ServiceResult.Success(PolicyJson.System(def, await reader.ResolveAsync(def, null, ct)));
+        return ServiceResult.Success(PolicyJson.System(def, resolution));
     }
 
     internal static ServiceResult PolicyValueInvalid(PolicyDefinition def, JsonElement value) =>

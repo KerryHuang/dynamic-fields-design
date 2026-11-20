@@ -7,6 +7,7 @@ using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AppService.SharedMasters;
 using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.DemoService;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Application.Dynamic.TemplateService;
@@ -98,7 +99,7 @@ if (databaseProvider == DatabaseProvider.Postgres && string.IsNullOrWhiteSpace(b
     startupWarnings.Add($"Database:Provider=Postgres 沒有設定 Attachments:Root，附件暫存在 {attachmentSettings.Root}，重開機可能遺失；正式環境請設定");
 // 鎖定判斷用真實時間；IBusinessTime 會被 ActingScope 覆寫，不能用
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<IBusinessTime, TaipeiBusinessTime>();
+builder.Services.AddSingleton<IBusinessTime, ZoneBusinessTime>();
 // 須在 ICurrentUser、IBusinessTime 註冊之後：Demo 資料產生器靠它在範圍內切換身分與時間
 builder.Services.AddActingOverrides();
 builder.Services.AddSingleton<IDemoDataRunner, DemoDataRunner>();
@@ -184,6 +185,8 @@ if (app.Services.GetRequiredService<AuthSettings>().DemoLoginEnabled)
 
 // 第一個：例外處理之前就定好 request id
 app.UseMiddleware<RequestContextMiddleware>();
+// 緊接在 RequestContext 之後：重載的 log 才帶 requestId
+app.UseMiddleware<SystemPolicyRefreshMiddleware>();
 if (trustForwardedHeaders) app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseAuthentication();
@@ -222,6 +225,8 @@ static async Task InitializeDatabaseAsync(WebApplication app, string? databaseDi
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
     await db.Database.MigrateAsync();
+    // 全系統政策快照（營運時區等）在索引回填與 Demo 資料之前載入；讀不到時沿用部署出廠值，不擋啟動
+    await app.Services.GetRequiredService<CachedSystemPolicy>().EnsureFreshAsync(CancellationToken.None);
     await SeedData.EnsureSeededAsync(db);
     await AdminBootstrap.EnsureAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordService>(), app.Configuration,
         app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(AdminBootstrap)));
