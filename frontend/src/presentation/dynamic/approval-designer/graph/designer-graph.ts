@@ -8,7 +8,7 @@ import type { SchemaField } from 'src/domain/dynamic/types';
 import type { FlowBasicErrors } from '../FlowBasicFields.vue';
 import { truncateEdgeLabel } from 'src/presentation/dynamic/approval/progress-graph';
 import { conditionSummary } from 'src/presentation/dynamic/rules/condition-summary';
-import { i18n } from 'src/boot/i18n';
+import { i18n } from 'src/i18n/instance';
 import { installedLocales } from 'src/i18n/locale-settings';
 import { joinList, tFor, type Translate } from 'src/i18n/translate';
 import type { EdgeTrialState, NodeTrial, TrialOverlay } from './designer-trial';

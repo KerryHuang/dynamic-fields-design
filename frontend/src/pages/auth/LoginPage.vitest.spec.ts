@@ -11,10 +11,11 @@ import { useIdentityStore } from 'src/stores/use-identity-store';
 import { resetSessionSettings } from 'src/application/dynamic/session-settings';
 import { businessOffset, setBusinessOffset } from 'src/domain/dynamic/business-time';
 import { installAuthGuard } from 'src/router/auth-guard';
+import { resetStartupForTests, startLocale } from 'src/i18n/startup';
 import LoginPage from './LoginPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { getAuthOptions: vi.fn(), login: vi.fn(), demoLogin: vi.fn(), getMe: vi.fn(), getEffectivePolicies: vi.fn() },
+  dynamicApi: { getAuthOptions: vi.fn(), getUiMessages: vi.fn(), login: vi.fn(), demoLogin: vi.fn(), getMe: vi.fn(), getEffectivePolicies: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
 
@@ -253,5 +254,53 @@ describe('LoginPage', () => {
         expect(api.login).toHaveBeenCalledTimes(1);
       } finally { onlineManager.setOnline(true); }
     });
+  });
+});
+
+describe('LoginPage 首屏共用啟動那次 auth/options（i4b 計畫判斷 12）', () => {
+  beforeEach(() => { vi.clearAllMocks(); resetStartupForTests(); localStorage.clear(); });
+  afterEach(() => { mounted?.unmount(); mounted = undefined; vi.useRealTimers(); });
+
+  async function boot() {
+    setActivePinia(createPinia());
+    resetSessionSettings();
+    api.getMe.mockRejectedValue({ status: 401 });
+    api.getUiMessages.mockResolvedValue({ hash: '', messages: {} });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', fallbackLocale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    await startLocale(i18n);
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/login', component: LoginPage, meta: { public: true } }, { path: '/:p(.*)*', component: { template: '<i/>' } }],
+    });
+    installAuthGuard(router);
+    await router.push('/login');
+    mounted = mount(LoginPage, {
+      attachTo: document.body,
+      global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], i18n, router, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
+    });
+    await flushPromises();
+  }
+  const generating = { ...off, demoLoginEnabled: true, demoGenerating: true, defaultLocale: 'zh-TW', enabledLocales: ['zh-TW'], locales: [] };
+
+  it('boot＋guard＋登入頁：auth/options 1 次、/me 1 次；產生中每 2 秒輪詢是新請求', async () => {
+    vi.useFakeTimers();
+    api.getAuthOptions.mockResolvedValueOnce(generating as never)
+      .mockResolvedValueOnce({ ...generating, demoGenerating: false, demoAccounts: [{ userId: 'sales01', displayName: '業務一' }] } as never);
+    await boot();
+    expect(api.getAuthOptions).toHaveBeenCalledTimes(1);
+    expect(api.getMe).toHaveBeenCalledTimes(1);
+    expect(q('demo-generating')).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(2000);
+    await flushPromises();
+    expect(api.getAuthOptions).toHaveBeenCalledTimes(2);
+    expect(q('demo-account-sales01')).not.toBeNull();
+    expect(api.getMe).toHaveBeenCalledTimes(1);
+  });
+
+  it('啟動那次失敗：登入頁自己發 1 次，不被鎖住', async () => {
+    api.getAuthOptions.mockRejectedValueOnce(new Error('down')).mockResolvedValue({ ...on, defaultLocale: 'zh-TW', enabledLocales: ['zh-TW'], locales: [] } as never);
+    await boot();
+    expect(api.getAuthOptions).toHaveBeenCalledTimes(2);
+    expect(q('demo-account-sales01')).not.toBeNull();
   });
 });

@@ -8,8 +8,11 @@ import { useThemeStore } from 'src/stores/use-theme-store';
 import { resetSessionSettings } from 'src/application/dynamic/session-settings';
 import { businessOffset, setBusinessOffset } from 'src/domain/dynamic/business-time';
 import * as quasar from 'quasar';
-import { BUILTIN_LOCALES, LOCALE_KEY, applyLocale } from 'src/i18n/locale';
+import { BUILTIN_LOCALES, OFFLINE_LOCALES } from 'src/i18n/locale';
 import { defaultLocale, enabledLocales, installedLocales, nativeName, setLocaleInfos, setLocaleSettings } from 'src/i18n/locale-settings';
+import { resetStartupForTests, startLocale } from 'src/i18n/startup';
+import { createI18n } from 'vue-i18n';
+import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { handleUnauthorized, installAuthGuard, safeRedirect } from './auth-guard';
 
 const page = { template: '<i/>' };
@@ -25,25 +28,29 @@ let meResponse: { status: number; data: unknown };
 let meCalls: number;
 let effResponse: { status: number; data: unknown };
 let effCalls: number;
-let optionsResponse: { status: number; data: unknown };
-let uiLocale: { value: string };
+let optionsResponse: { status: number; data: unknown } | 'never';
+let optionsCalls: number;
 const effective = (zone: string) => ({ status: 200, data: { values: { 'locale.timeZone': zone } } });
 
 function setup() {
   setActivePinia(createPinia());
   resetSessionSettings();
+  resetStartupForTests();
   meCalls = 0;
   effCalls = 0;
+  optionsCalls = 0;
   http.defaults.adapter = async (config) => {
     if (config.url === '/me') meCalls++;
     if (config.url === '/policies/effective') effCalls++;
+    if (config.url === '/auth/options') optionsCalls++;
+    if (config.url?.startsWith('/i18n/ui/')) return { data: {}, status: 200, statusText: 'OK', headers: { 'x-ui-hash': '' }, config };
     const r = config.url === '/policies/effective' ? effResponse : config.url === '/auth/options' ? optionsResponse : meResponse;
+    if (r === 'never') return new Promise(() => {});
     if (r.status >= 400) return Promise.reject({ config, response: r });
     return { data: r.data, status: r.status, statusText: 'OK', headers: {}, config };
   };
   const router = createRouter({ history: createMemoryHistory(), routes });
-  uiLocale = { value: 'zh-TW' };
-  installAuthGuard(router, uiLocale);
+  installAuthGuard(router);
   return router;
 }
 
@@ -317,40 +324,22 @@ describe('auth guard 語系政策', () => {
     meResponse = { status: 401, data: { message: '請先登入' } };
   });
 
-  it('沒記過語系時套用預設語系，不寫入 localStorage', async () => {
+  // 「記的語系已停用就套預設」等決定語系的規則在 src/i18n/startup.ts（startup.vitest.spec.ts）；guard 只設定語系資訊與政策
+  it('設定預設與啟用語系，不套語系', async () => {
     optionsResponse = en(['zh-TW', 'en-US']);
     const router = setup();
     await router.push('/login');
-    expect(uiLocale.value).toBe('en-US');
-    expect(localStorage.getItem(LOCALE_KEY)).toBeNull();
     expect(defaultLocale()).toBe('en-US');
     expect(enabledLocales()).toEqual(['zh-TW', 'en-US']);
   });
 
-  it('記的語系仍啟用時沿用，不改', async () => {
-    optionsResponse = en(['zh-TW', 'en-US']);
-    localStorage.setItem(LOCALE_KEY, 'zh-TW');
-    const router = setup();
-    await router.push('/login');
-    expect(uiLocale.value).toBe('zh-TW');
-  });
-
-  it('記的語系已停用時改用預設語系', async () => {
-    optionsResponse = en(['zh-TW', 'en-US']);
-    localStorage.setItem(LOCALE_KEY, 'th');
-    const router = setup();
-    await router.push('/login');
-    expect(uiLocale.value).toBe('en-US');
-    expect(localStorage.getItem(LOCALE_KEY)).toBe('th');
-  });
-
-  it('伺服器連不上時維持繁中、內建四語可選（自稱取自內建清單）', async () => {
+  it('Offline_ListsOfflineLocales：伺服器連不上時預設繁中、OFFLINE_LOCALES 可選（自稱取自內建清單）', async () => {
     setLocaleInfos([]);
     optionsResponse = { status: 500, data: null };
     const router = setup();
     await router.push('/login');
-    expect(uiLocale.value).toBe('zh-TW');
     expect(defaultLocale()).toBe('zh-TW');
+    expect(enabledLocales()).toEqual(OFFLINE_LOCALES.map((l) => l.code));
     expect(enabledLocales()).toEqual(['zh-TW', 'en-US', 'th', 'vi']);
     expect(nativeName('th')).toBe('ไทย');
   });
@@ -363,25 +352,32 @@ describe('auth guard 語系政策', () => {
     expect(enabledLocales()).toEqual(['zh-TW', 'ja']);
   });
 
-  it('記過 ja 但 ja 沒啟用時套用預設語系', async () => {
+  it('ConsumesStartupOutcome：先 startLocale 再跑 guard，auth/options 共 1 次', async () => {
     optionsResponse = en(['zh-TW', 'en-US']);
-    localStorage.setItem(LOCALE_KEY, 'ja');
     const router = setup();
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', fallbackLocale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    await startLocale(i18n);
     await router.push('/login');
-    expect(uiLocale.value).toBe('en-US');
+    expect(optionsCalls).toBe(1);
+    expect(defaultLocale()).toBe('en-US');
   });
 
-  it('完整啟動：記住的 ja 先載同名的 Quasar 包，拿到語系資訊（quasarLang: null）後改套 en-US', async () => {
-    const setLang = vi.spyOn(quasar.Quasar.lang, 'set').mockImplementation(() => {});
-    localStorage.setItem(LOCALE_KEY, 'ja');
-    optionsResponse = { status: 200, data: { defaultLocale: 'zh-TW', enabledLocales: ['zh-TW', 'en-US', 'ja'], locales: [...BUILTIN_LOCALES.slice(0, 2), JA] } };
-    const router = setup();
-    applyLocale('ja', uiLocale, false); // boot/i18n.ts 的做法
-    await vi.waitFor(() => expect(setLang.mock.calls.at(-1)?.[0].isoName).toBe('ja'));
-    await router.push('/login');
-    await vi.waitFor(() => expect(setLang.mock.calls.at(-1)?.[0].isoName).toBe('en-US'));
-    expect(uiLocale.value).toBe('ja');
-    setLang.mockRestore();
+  it('OptionsNeverResolve_NavigationCompletes：auth/options 永不回，3000 ms 後導覽完成', async () => {
+    vi.useFakeTimers();
+    try {
+      optionsResponse = 'never';
+      const router = setup();
+      let done = false;
+      void router.push('/dynamic/order').then(() => { done = true; });
+      await vi.advanceTimersByTimeAsync(2999);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(() => expect(done).toBe(true));
+      expect(router.currentRoute.value.path).toBe('/login');
+      expect(enabledLocales()).toEqual(OFFLINE_LOCALES.map((l) => l.code));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('登入後載入全系統生效值時更新三個語系設定', async () => {

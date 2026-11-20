@@ -1,4 +1,4 @@
-import { i18n } from 'src/boot/i18n';
+import { i18n } from 'src/i18n/instance';
 
 export type Translate = (key: string, params?: Record<string, unknown>) => string;
 

@@ -3,8 +3,7 @@ import type { Router } from 'vue-router';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
 import { loadSessionSettings, resetSessionSettings, sessionSettingsLoaded } from 'src/application/dynamic/session-settings';
-import { BUILTIN_LOCALES, FALLBACK_LOCALE, applyDocumentLocale, applyLocale, readLocale } from 'src/i18n/locale';
-import { setLocaleInfos, setLocaleSettings, toLocaleCodes, type LocaleInfo } from 'src/i18n/locale-settings';
+import { applyStartupOptions, startupOutcome, takeStartupAuthOptions } from 'src/i18n/startup';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { useThemeStore } from 'src/stores/use-theme-store';
 
@@ -18,48 +17,32 @@ const loginLocation = (redirect: string) => ({ path: '/login', query: redirect =
 const SERVICE_UNAVAILABLE = '/service-unavailable';
 
 /**
- * 登入前就要知道語系資訊與預設、啟用語系（GET auth/options）：瀏覽器沒記過語系、或記的語系已停用時套用預設（不寫入 localStorage）。
- * 取不到時（伺服器連不上）維持繁中、內建四語可選（語系包 i4a 計畫判斷 22），之後登入後的全系統生效值會再更新。
- * 拿到語系資訊後一律對目前語系重套 Quasar 語言包：boot 時還沒有資訊，記住的語系先載了代碼同名的包（判斷 17）。
+ * 登入前就要知道語系資訊與預設、啟用語系：消費啟動那一次 auth/options（最晚在啟動預算到時 resolve，不另打 API）。
+ * 決定語系與載入介面文字在 src/i18n/startup.ts，這裡不套語系、不等文字。
  */
-async function loadLocaleSettings(locale: { value: string } | undefined): Promise<void> {
-  let infos: LocaleInfo[] = BUILTIN_LOCALES;
-  let def = FALLBACK_LOCALE;
-  let enabled = BUILTIN_LOCALES.map((l) => l.code);
-  try {
-    const o = await dynamicApi.getAuthOptions();
-    setLocaleInfos(o.locales);
-    const list = toLocaleCodes(o.enabledLocales);
-    const d = toLocaleCodes([o.defaultLocale])[0];
-    if (d && list.length) { infos = o.locales; def = d; enabled = list; }
-  } catch {
-    /* 維持繁中 */
-  }
-  setLocaleInfos(infos);
-  setLocaleSettings({ defaultLocale: def, enabled });
-  if (!locale) return;
-  const stored = readLocale();
-  if (!stored || !enabled.includes(stored)) applyLocale(def, locale, false);
-  else applyDocumentLocale(locale.value);
+async function loadLocaleSettings(): Promise<void> {
+  applyStartupOptions((await startupOutcome()).options);
 }
 
 /**
  * First navigation loads the session from GET /me. Only a 401 means signed out; any other failure (500, network) says nothing
  * about the cookie, so keep the store, probe again next time and show the retry page.
  */
-export function installAuthGuard(router: Router, locale?: { value: string }) {
+export function installAuthGuard(router: Router) {
   let sessionLoaded = false;
   router.beforeEach(async (to) => {
     if (to.path === SERVICE_UNAVAILABLE) return true;
     const identity = useIdentityStore();
     if (!sessionLoaded) {
-      await loadLocaleSettings(locale);
+      await loadLocaleSettings();
       try {
         const me = await dynamicApi.getMe();
         identity.setSession(me.userId, me.mustChangePassword);
         identity.setDemoAccount(me.isDemoAccount === true);
         // 版面載入前就知道能不能存，Demo 訪客不會在空窗內打到儲存 API
         if (me.theme) useThemeStore().applyMe(me.theme);
+        // 已登入就用不到登入頁那份啟動結果，丟掉，免得之後登出時登入頁拿到舊資料
+        takeStartupAuthOptions();
         sessionLoaded = true;
       } catch (e) {
         if ((e as ApiError | null)?.status !== 401) {

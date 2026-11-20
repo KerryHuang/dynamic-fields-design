@@ -3,6 +3,7 @@ import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { STARTUP_BUDGET_MS, type LocaleCode } from './locale';
 import { localeInfo, type LocaleInfo } from './locale-settings';
+import { previewLocale } from './locale-preview';
 
 // 介面文字執行期載入（語系包設計 §8.2–8.4、i4b 計畫判斷 11、14–16）。前端只打包繁中；其他語系（含繁中的覆寫）從
 // GET i18n/ui/{code} 取得扁平文字，預編譯後轉巢狀再 setLocaleMessage。i18n 實例一律當參數（測試用乾淨實例），
@@ -100,7 +101,13 @@ export const loadedHash = (code: LocaleCode): string | undefined => slots.get(co
 export function loadUiMessages(code: LocaleCode, hash?: string): Promise<UiMessages> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('ui messages timeout')), UI_FETCH_TIMEOUT_MS); });
-  return Promise.race([dynamicApi.getUiMessages(code, hash), timeout]).finally(() => clearTimeout(timer));
+  let req: Promise<UiMessages>;
+  try {
+    req = dynamicApi.getUiMessages(code, hash);
+  } catch (e) {
+    req = Promise.reject(e instanceof Error ? e : new Error(String(e)));
+  }
+  return Promise.race([req, timeout]).finally(() => clearTimeout(timer));
 }
 
 /** 語系資訊給的目標雜湊；空字串（內建清單、伺服器連不上）＝不知道。 */
@@ -109,11 +116,11 @@ const targetOf = (code: LocaleCode): string | undefined => localeInfo(code)?.uiH
 const upToDate = (i18n: I18nLike, code: LocaleCode, target: string | undefined) =>
   hasUiMessages(i18n, code) && (target === undefined || slots.get(code)?.loaded === target);
 
-/** 把目前語系已裝上的文字寫進瀏覽器快取（沒取過伺服器文字就不寫）。 */
+/** 把目前語系已裝上的文字寫進瀏覽器快取（試看中的語系、沒取過伺服器文字就不寫）。 */
 export function cacheCurrent(i18n: I18nLike): void {
   const code = i18n.global.locale.value;
   const s = slots.get(code);
-  if (s?.loaded !== undefined && s.flat) writeUiCache(code, s.loaded, s.flat);
+  if (s?.loaded !== undefined && s.flat && previewLocale() !== code) writeUiCache(code, s.loaded, s.flat);
 }
 
 /**
@@ -164,10 +171,10 @@ export async function ensureCurrentMessages(i18n: I18nLike, code: LocaleCode): P
   if (!hasUiMessages(i18n, code)) throw new Error(`ui messages not available: ${code}`);
 }
 
-/** 60 秒換新（判斷 15）：對已載入過的語系，伺服器給的雜湊和已裝上的不同就重取；不提示、失敗下一輪再試。 */
+/** 60 秒換新（判斷 15）：對目前語系與已載入過的語系，伺服器給的雜湊和已裝上的不同就重取；不提示、失敗下一輪再試。 */
 export async function refreshLoadedMessages(i18n: I18nLike, infos: LocaleInfo[]): Promise<void> {
   const jobs = infos
-    .filter((l) => slots.get(l.code)?.loaded !== undefined && l.uiHash)
+    .filter((l) => (l.code === i18n.global.locale.value || slots.get(l.code)?.loaded !== undefined) && l.uiHash)
     .map((l) => {
       const s = slot(l.code);
       s.wanted = l.uiHash;

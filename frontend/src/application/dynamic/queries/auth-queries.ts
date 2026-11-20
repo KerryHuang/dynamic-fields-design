@@ -1,15 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import type { AuthUser } from 'src/domain/dynamic/types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import { takeStartupAuthOptions } from 'src/i18n/startup';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { resetSessionSettings } from '../session-settings';
 import { SECRET_MUTATION, useSecretMutation } from './secret-mutation';
 
-/** Polls while the server is generating demo accounts so they appear without a reload. */
+/**
+ * Polls while the server is generating demo accounts so they appear without a reload. 第一次掛載重用啟動那次的 auth/options
+ * （首屏只打一次，i4b 計畫判斷 12），之後的輪詢與重取都是新請求。
+ */
 export function useAuthOptions() {
   return useQuery({
     queryKey: ['auth-options'],
-    queryFn: dynamicApi.getAuthOptions,
+    queryFn: () => takeStartupAuthOptions() ?? dynamicApi.getAuthOptions(),
     refetchInterval: (q) => (q.state.data?.demoGenerating ? 2000 : false),
   });
 }

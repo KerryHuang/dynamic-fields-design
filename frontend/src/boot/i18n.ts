@@ -1,21 +1,11 @@
 import { defineBoot } from '#q-app';
-import { createI18n } from 'vue-i18n';
-import enUS from 'shared/i18n/en-US/ui.json';
-import th from 'shared/i18n/th/ui.json';
-import vi from 'shared/i18n/vi/ui.json';
-import zhTW from 'shared/i18n/zh-TW/ui.json';
-import { FALLBACK_LOCALE, applyLocale, readLocale } from 'src/i18n/locale';
+import { i18n } from 'src/i18n/instance';
+import { startLocale } from 'src/i18n/startup';
 
-export const i18n = createI18n({
-  legacy: false,
-  locale: FALLBACK_LOCALE,
-  fallbackLocale: FALLBACK_LOCALE,
-  // 鍵型別放寬成字串：語系代碼是資料（已安裝語系），不是這四個翻譯包的聯集
-  messages: { 'zh-TW': zhTW, 'en-US': enUS, th, vi } as Record<string, typeof zhTW>,
-});
+export { i18n };
 
-export default defineBoot(({ app }) => {
+export default defineBoot(async ({ app }) => {
   app.use(i18n);
-  // 沿用這個瀏覽器上次的選擇；沒記過先用翻譯包退回，第一次導覽取得預設語系政策後再套用（auth-guard）。啟動時不重寫 localStorage
-  applyLocale(readLocale() ?? FALLBACK_LOCALE, i18n.global.locale, false);
+  // 有瀏覽器快取時不等網路；沒有時最多等 STARTUP_BUDGET_MS（Quasar 等 boot 完成才掛載 App）
+  await startLocale(i18n);
 });

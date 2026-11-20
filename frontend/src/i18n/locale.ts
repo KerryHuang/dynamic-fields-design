@@ -14,6 +14,9 @@ export const BUILTIN_LOCALES: LocaleInfo[] = Object.values(builtinLocaleFiles)
   .sort((a, b) => a.order - b.order)
   .map(({ code, nativeName, quasarLang }) => ({ code, nativeName, quasarLang, fallbackCode: null, uiHash: '' }));
 
+/** 伺服器連不上（取不到 auth/options）時語言選單列的語系（i4b 待決 Q1：維持內建四語）；改成只列繁中時只改這一行。 */
+export const OFFLINE_LOCALES: LocaleInfo[] = BUILTIN_LOCALES;
+
 /** 伺服器連不上、還沒取得預設語系時的翻譯包退回（不是語系政策的預設）。 */
 export const FALLBACK_LOCALE: LocaleCode = 'zh-TW';
 export const LOCALE_KEY = 'formwright.locale';
