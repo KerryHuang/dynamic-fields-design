@@ -247,6 +247,21 @@ public class AppTaskRulePackageTests
             .Should().Contain("taskRules[t7-lead-follow].tasks[call].title: zh-TW 必須是 1 到 200 字");
     }
 
+    /// <summary>套件格式 2–8 仍只收內建四語的語系鍵（舊格式不放寬，語系包設計 §10.5；放寬是 i4f）。</summary>
+    [Fact]
+    public void Structure_JapaneseKey_StillRejectedInFormat8()
+    {
+        var json = Package(Rule, formatVersion: 8).Replace("\"name\": { \"zh-TW\": \"潛在客戶\" }", "\"name\": { \"zh-TW\": \"潛在客戶\", \"ja\": \"見込み客\" }");
+        Errors(json).Should().ContainSingle().Which.Should().Contain("不支援的語系：ja");
+    }
+
+    [Fact]
+    public void TaskRule_DescriptionJapanese_Rejected()
+    {
+        Errors(Package(With(Rule, "\"title\": { \"zh-TW\": \"打電話\" }", "\"title\": { \"zh-TW\": \"打電話\" }, \"description\": { \"ja\": \"電話する\" }")))
+            .Should().Contain("taskRules[t7-lead-follow].tasks[call].description: 不支援的語系：ja");
+    }
+
     [Fact]
     public void DuplicateCodes_Rejected()
     {

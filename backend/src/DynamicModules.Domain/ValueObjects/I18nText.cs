@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DynamicModules.Domain.Localization;
 
 namespace DynamicModules.Domain.ValueObjects;
 
@@ -8,8 +9,6 @@ namespace DynamicModules.Domain.ValueObjects;
 public class I18nText
 {
     public const string FallbackLocale = "zh-TW";
-
-    public static readonly string[] SupportedLocales = ["zh-TW", "en-US", "th", "vi"];
 
     private readonly Dictionary<string, string> _values;
 
@@ -22,15 +21,16 @@ public class I18nText
     public void Set(string locale, string text) => _values[locale] = text;
 
     /// <summary>
-    /// 取指定語系文字（判斷 13）：要求的語系 → <paramref name="fallbacks"/> 依序（null 時只有繁中）→ <see cref="SupportedLocales"/> 順序中
-    /// 第一個有值的 → 空字串。缺值與空字串都往下退。請求的輸出由呼叫端組好退回鏈（系統預設語系 → 繁中）傳入。
+    /// 取指定語系文字（判斷 13）：要求的語系 → <paramref name="fallbacks"/> 依序（null 時只有繁中）→ <see cref="BuiltinLocales"/> 順序中
+    /// 第一個有值的（安全網）→ 空字串。缺值與空字串都往下退。請求的輸出由呼叫端組好退回鏈（<see cref="LocaleChain"/>）傳入；
+    /// 沒安裝的語系鍵不會被挑中（U6：存起來但不顯示）。
     /// </summary>
     public string Resolve(string locale, IReadOnlyList<string>? fallbacks)
     {
         if (Text(locale) is { } text) return text;
         foreach (var f in fallbacks ?? [FallbackLocale])
             if (Text(f) is { } t) return t;
-        foreach (var l in SupportedLocales)
+        foreach (var l in BuiltinLocales.Codes)
             if (Text(l) is { } t) return t;
         return "";
     }
@@ -43,12 +43,15 @@ public class I18nText
 
     private string? Text(string locale) => _values.TryGetValue(locale, out var text) && !string.IsNullOrEmpty(text) ? text : null;
 
-    /// <summary>格式正確：沒有不支援的語系鍵，且至少一個語系有非空白文字。必填哪些語系由 Application 依政策 locale.requiredText 檢查。</summary>
+    /// <summary>
+    /// 格式正確：沒有格式不對的語系鍵（<see cref="LocaleCode"/>；沒安裝的語系也收，M1），且至少一個語系有非空白文字。
+    /// 必填哪些語系由 Application 依政策 locale.requiredText 檢查。
+    /// </summary>
     public bool IsWellFormed(out string? error)
     {
-        if (UnknownLocale(_values.Keys) is { } unknown)
+        if (InvalidLocale(_values.Keys) is { } invalid)
         {
-            error = $"不支援的語系：{unknown}";
+            error = $"不支援的語系：{invalid}";
             return false;
         }
         if (!_values.Values.Any(v => !string.IsNullOrWhiteSpace(v)))
@@ -60,10 +63,8 @@ public class I18nText
         return true;
     }
 
-    /// <summary>
-    /// 第一個不支援的語系鍵；全部支援回 null。支援語系的判斷只寫在這裡（判斷 23），i4a 改成代碼格式檢查。
-    /// </summary>
-    public static string? UnknownLocale(IEnumerable<string> keys) => keys.FirstOrDefault(k => !SupportedLocales.Contains(k));
+    /// <summary>第一個格式不對的語系鍵（不是正規形式的語系代碼）；全部合法回 null。不判斷有沒有安裝（語系包設計 §17.4 M1）。</summary>
+    public static string? InvalidLocale(IEnumerable<string> keys) => keys.FirstOrDefault(k => !LocaleCode.IsValid(k));
 
     /// <summary>這個語系有非空白文字。</summary>
     public bool HasText(string locale) => !string.IsNullOrWhiteSpace(_values.GetValueOrDefault(locale));

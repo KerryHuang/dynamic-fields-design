@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
+using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.ValueObjects;
 
@@ -79,7 +80,7 @@ public static class FieldImportParser
 
     // 各語系匯出的布林文字（FieldDisplay 用 ReportText）都要能原樣匯回。
     private static bool IsDisplayed(string text, string key) =>
-        I18nText.SupportedLocales.Any(l => text.Equals(ReportText.Get(l, key), StringComparison.OrdinalIgnoreCase));
+        BuiltinLocales.Codes.Any(l => text.Equals(ReportText.Get(l, key), StringComparison.OrdinalIgnoreCase));
 
     private static (JsonElement?, string?) Date(string text) =>
         System.DateTime.TryParseExact(text, DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)

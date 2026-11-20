@@ -1,4 +1,4 @@
-using DynamicModules.Domain.ValueObjects;
+using DynamicModules.Domain.Localization;
 
 namespace DynamicModules.Domain.Policies;
 
@@ -91,10 +91,9 @@ public static class PolicyCatalog
         new("locale.timeZone", "locale", PolicyKind.UtcOffset, PolicyScope.System, "+08:00", Options: UtcOffsets);
 
     /// <summary>
-    /// 語系類政策的出廠選項：程式支援的語系（判斷 22、23）。政策登記只從這裡取用程式支援的語系清單；
-    /// 執行期的選項一律經 Application 的 <c>PolicyOptionSource</c>（i4a 換成已安裝語系）。
+    /// 語系類政策的出廠選項：內建語系（判斷 22、23）。執行期的選項一律經 Application 的 <c>PolicyOptionSource</c> 取已安裝語系。
     /// </summary>
-    public static IReadOnlyList<string> FactoryLocales { get; } = I18nText.SupportedLocales;
+    public static IReadOnlyList<string> FactoryLocales { get; } = BuiltinLocales.Codes;
 
     /// <summary>A18：預設語系。沒選過語言的人看到的語系，也是請求沒指定語系時的回應語系。</summary>
     public static readonly PolicyDefinition LocaleDefault =

@@ -83,7 +83,7 @@ public static partial class AppPackageValidator
     /// <summary>說明和設計器的 CheckText(required:false) 同一套規則：zh-TW 可以不填，只擋不支援的語系、null 值、超過 4000 字。</summary>
     private static void CheckDescription(I18nText text, string at, List<string> errors)
     {
-        if (I18nText.UnknownLocale(text.Values.Keys) is { } unknown) { errors.Add($"{at}: 不支援的語系：{unknown}"); return; }
+        if (NonFormatLocale(text) is { } unknown) { errors.Add($"{at}: 不支援的語系：{unknown}"); return; }
         foreach (var (locale, value) in text.Values)
             if (value is null) errors.Add($"{at}: 語系 {locale} 的文字不能是空值");
             else if (value.Trim().Length > TaskEditParser.DescriptionMax) errors.Add($"{at}: {locale} 不能超過 {TaskEditParser.DescriptionMax} 字");

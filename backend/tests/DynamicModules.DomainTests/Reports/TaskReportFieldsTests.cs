@@ -1,4 +1,5 @@
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Localization;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
@@ -77,7 +78,7 @@ public class TaskReportFieldsTests
     public void Labels_FourLocales()
     {
         var fields = Fields(Build()).Concat(Fields(Build(ReportDatasets.TaskEvents))).ToList();
-        foreach (var locale in I18nText.SupportedLocales)
+        foreach (var locale in BuiltinLocales.Codes)
         {
             foreach (var f in fields)
             {

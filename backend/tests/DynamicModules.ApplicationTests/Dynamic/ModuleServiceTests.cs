@@ -176,12 +176,21 @@ public class ModuleServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CreateModule_SectionWithUnsupportedLocale_ReturnsValidationError()
+    public async Task CreateModule_SectionWithMalformedLocale_ReturnsValidationError()
+    {
+        var result = await Send(new CreateModuleRequest("order", Name(), null, Section(("zh-TW", "主檔"), ("zh_TW", "x"))));
+
+        result.IsSuccess.Should().BeFalse();
+        result.Errors["Section"].Should().Contain("不支援的語系：zh_TW");
+    }
+
+    [Fact]
+    public async Task CreateModule_SectionWithUninstalledLocale_Accepted()
     {
         var result = await Send(new CreateModuleRequest("order", Name(), null, Section(("zh-TW", "主檔"), ("ja", "マスタ"))));
 
-        result.IsSuccess.Should().BeFalse();
-        result.Errors["Section"].Should().Contain("不支援的語系：ja");
+        result.IsSuccess.Should().BeTrue();
+        ((ModuleResponse)result.Data!).Section!.Values.Should().ContainKey("ja");
     }
 
     [Fact]

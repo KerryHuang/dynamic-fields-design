@@ -30,10 +30,22 @@ public class I18nTextTests
         Make(("en-US", "Order")).IsWellFormed(out var ok).Should().BeTrue();
         ok.Should().BeNull();
         Make(("zh-TW", "a"), ("en-US", "b"), ("th", "c"), ("vi", "d")).IsWellFormed(out _).Should().BeTrue();
-        Make(("jp", "x")).IsWellFormed(out var unknown).Should().BeFalse();
-        unknown.Should().Be("不支援的語系：jp");
-        I18nText.UnknownLocale(["zh-TW", "ja"]).Should().Be("ja");
-        I18nText.UnknownLocale(["zh-TW", "en-US"]).Should().BeNull();
+        // M1：只驗代碼格式，沒安裝的語系也收
+        Make(("ja", "受注")).IsWellFormed(out _).Should().BeTrue();
+        Make(("jp", "x")).IsWellFormed(out _).Should().BeTrue();
+        Make(("JP", "x")).IsWellFormed(out var invalid).Should().BeFalse();
+        invalid.Should().Be("不支援的語系：JP");
+        Make(("zh_TW", "x")).IsWellFormed(out _).Should().BeFalse();
+        I18nText.InvalidLocale(["zh-TW", "ja", "e"]).Should().Be("e");
+        I18nText.InvalidLocale(["zh-TW", "ja"]).Should().BeNull();
+    }
+
+    [Fact]
+    public void Resolve_SafetyNet_OnlyBuiltinLocales()
+    {
+        // 安全網只看內建語系：只有沒安裝的語系有文字時回空字串（U6）
+        Make(("ko", "x")).Resolve("vi").Should().Be("");
+        Make(("vi", "Đơn")).Resolve("th").Should().Be("Đơn");
     }
 
     [Fact]

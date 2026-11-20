@@ -111,7 +111,7 @@ public sealed class TaskRuleValidator(
     }
 
     /// <summary>
-    /// 多語系文字：每個語系的值不超過上限、不能有不支援的語系；必填時要有政策 locale.requiredText 的每個語系
+    /// 多語系文字：每個語系的值不超過上限、語系代碼格式正確（沒安裝的語系也收，M1）；必填時要有政策 locale.requiredText 的每個語系
     /// （<paramref name="stored"/> 是同代碼舊任務的值，沒改不重驗，§3.5）。
     /// </summary>
     private void CheckText(I18nText? text, I18nText? stored, string key, bool required, int max, string tooLong, Action<string, string> err)
@@ -121,7 +121,7 @@ public sealed class TaskRuleValidator(
             if (required) err(key, TaskMessages.TitleRequired);
             return;
         }
-        if (I18nText.UnknownLocale(text.Values.Keys) is { } unknown)
+        if (I18nText.InvalidLocale(text.Values.Keys) is { } unknown)
         {
             err(key, $"不支援的語系：{unknown}");
             return;

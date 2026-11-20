@@ -171,12 +171,21 @@ public static partial class AppPackageValidator
         return errors;
     }
 
-    /// <summary>zh-TW 必填、語系鍵合法、每語系 1 到 200 字。v1 的 HasZhTw 不擋不支援的語系鍵，v2 在這一層就擋。</summary>
+    /// <summary>
+    /// 套件格式 2–8 收的語系鍵（格式定義，語系包設計 §10.5「舊格式不放寬」；放寬是 i4f）。不引用內建語系：之後內建語系變多，舊格式仍是這四個。
+    /// </summary>
+    internal static readonly string[] FormatLocales = ["zh-TW", "en-US", "th", "vi"];
+
+    /// <summary>格式不收的第一個語系鍵；全部收回 null。</summary>
+    private static string? NonFormatLocale(I18nText text) => text.Values.Keys.FirstOrDefault(k => !FormatLocales.Contains(k));
+
+    /// <summary>zh-TW 必填、語系鍵在 <see cref="FormatLocales"/>、每語系 1 到 200 字。v1 的 HasZhTw 不擋不支援的語系鍵，v2 在這一層就擋。</summary>
     private static void CheckText(I18nText? text, string at, List<string> errors)
     {
         if (text is null) { errors.Add($"{at}: 缺少名稱"); return; }
         // 套件仍要求繁中，不跟政策 locale.requiredText（判斷 12）
         if (!text.HasText(I18nText.FallbackLocale)) errors.Add($"{at}: {I18nText.FallbackLocale} 為必填");
+        else if (NonFormatLocale(text) is { } unknown) errors.Add($"{at}: 不支援的語系：{unknown}");
         else if (!text.IsWellFormed(out var error)) errors.Add($"{at}: {error}");
         foreach (var (locale, value) in text.Values)
             if (value.Length is 0 or > 200) errors.Add($"{at}: {locale} 必須是 1 到 200 字");
