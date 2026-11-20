@@ -266,3 +266,41 @@ public class PolicyPutNullElementTests : DesignerTestBase
         Db.Context.Set<ModulePolicy>().Count().Should().Be(0);
     }
 }
+
+/// <summary>三層來源（部署出廠值、全系統值、模組覆寫）有無的 2×2×2 組合：生效值照「覆寫 → 全系統 → 部署出廠 → 程式出廠」取，各層回報值也要對。</summary>
+public class PolicyReaderFallbackMatrixTests : DesignerTestBase
+{
+    private static readonly PolicyDefinition Def = PolicyCatalog.TaskMaxRulesPerModule;
+
+    [Theory]
+    //           部署出廠 全系統 覆寫   → 出廠  系統  覆寫  生效
+    [InlineData(false, false, false, "20", null, null, "20")]
+    [InlineData(false, false, true, "20", null, "50", "50")]
+    [InlineData(false, true, false, "20", "5", null, "5")]
+    [InlineData(false, true, true, "20", "5", "50", "50")]
+    [InlineData(true, false, false, "9", null, null, "9")]
+    [InlineData(true, false, true, "9", null, "50", "50")]
+    [InlineData(true, true, false, "9", "5", null, "5")]
+    [InlineData(true, true, true, "9", "5", "50", "50")]
+    public async Task Resolve_AcrossLayerCombinations(bool hasEnv, bool hasSystem, bool hasOverride,
+        string factory, string? system, string? overrideValue, string effective)
+    {
+        await NewModule("pm");
+        var moduleId = (await Db.Context.Set<Module>().AsNoTracking().SingleAsync(m => m.Key == "pm")).Id;
+        if (hasSystem) Db.Context.Add(new SystemSetting { Key = Def.SettingKey, Value = "5" });
+        if (hasOverride) Db.Context.Add(new ModulePolicy { ModuleId = moduleId, Code = Def.Code, Value = "50", ModifiedUserId = "admin" });
+        await Db.Context.SaveChangesAsync();
+
+        var env = hasEnv
+            ? new PolicyEnvironmentDefaults(new Dictionary<string, string> { [Def.Code] = "9" })
+            : PolicyEnvironmentDefaults.Empty;
+        var reader = new PolicyReader(Svc<ISystemSettingRepository>(), Svc<IModulePolicyRepository>(), env,
+            new PolicyOptionSource(Svc<DynamicModules.Application.Common.LocaleRegistry>()),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PolicyReader>.Instance);
+
+        (await reader.ResolveAsync(Def, moduleId, default)).Should().Be(new PolicyResolution(factory, system, overrideValue, effective));
+        (await reader.IntAsync(Def, moduleId, default)).Should().Be(int.Parse(effective));
+        // 不指定模組時不看覆寫
+        (await reader.ResolveAsync(Def, null, default)).Effective.Should().Be(system ?? factory);
+    }
+}
