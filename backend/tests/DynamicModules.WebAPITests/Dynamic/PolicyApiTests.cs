@@ -93,6 +93,35 @@ public class PolicyApiTests : IDisposable
         (await PutSystem(admin, Rules, new { value = 2.5 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    /// <summary>A38、A39（語系包 i4d1 計畫判斷 14）：只限全系統、範圍與出廠值。</summary>
+    [Fact]
+    public async Task LocalePackPolicies_Listed_WithRange()
+    {
+        var admin = _app.AsUser();
+        var list = await JsonOf(await admin.GetAsync($"{Base}/system/policies"));
+
+        var size = Item(list, "locale.packMaxBytes");
+        size.GetProperty("kind").GetString().Should().Be("integer");
+        size.GetProperty("scope").GetString().Should().Be("system");
+        size.GetProperty("category").GetString().Should().Be("locale");
+        size.GetProperty("factory").GetInt32().Should().Be(5242880);
+        size.GetProperty("min").GetInt32().Should().Be(1024);
+        size.GetProperty("max").GetInt32().Should().Be(20971520);
+        size.GetProperty("unit").GetString().Should().Be("bytes");
+
+        var count = Item(list, "locale.maxInstalled");
+        count.GetProperty("scope").GetString().Should().Be("system");
+        count.GetProperty("factory").GetInt32().Should().Be(10);
+        count.GetProperty("min").GetInt32().Should().Be(4);
+        count.GetProperty("max").GetInt32().Should().Be(30);
+        count.GetProperty("unit").GetString().Should().Be("count");
+
+        var low = await PutSystem(admin, "locale.maxInstalled", new { value = 3 });
+        low.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await FirstError(low, "value")).Should().Be("必須是 4 到 30 的整數");
+        (await PutSystem(admin, "locale.maxInstalled", new { value = 4 })).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     [Fact]
     public async Task System_TimeZone_RoundTrip()
     {

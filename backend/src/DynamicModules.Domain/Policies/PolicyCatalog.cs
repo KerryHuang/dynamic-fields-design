@@ -107,6 +107,17 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition LocaleRequiredText =
         new("locale.requiredText", "locale", PolicyKind.RoleSet, PolicyScope.System, "zh-TW", Options: FactoryLocales);
 
+    /// <summary>A38：語系包檔案大小上限（語系包設計 §13.1、§14；技術上限 20 MB）。匯入語系包時檢查，Excel 翻譯樣板（i4e）共用。</summary>
+    public static readonly PolicyDefinition LocalePackMaxBytes =
+        new("locale.packMaxBytes", "locale", PolicyKind.Integer, PolicyScope.System, "5242880", 1024, 20971520, Unit: "bytes");
+
+    /// <summary>
+    /// A39：已安裝語系數上限（含內建四種，所以下限是 4；技術上限 30）。每個語系都在伺服器記憶體裡留一份合併表。
+    /// 改嚴只擋新安裝：改成比目前已安裝數小不擋存檔，既有語系照常可用。
+    /// </summary>
+    public static readonly PolicyDefinition LocaleMaxInstalled =
+        new("locale.maxInstalled", "locale", PolicyKind.Integer, PolicyScope.System, "10", 4, 30, Unit: "count");
+
     /// <summary>選項是語系清單的政策（預設、啟用、必填語系）；一週起始日同在 locale 分類但不是。</summary>
     public static bool IsLocaleOptions(PolicyDefinition def) => ReferenceEquals(def.Options, FactoryLocales);
 
@@ -426,6 +437,7 @@ public static class PolicyCatalog
          TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled, TaskNotifySubtasksDone,
          TaskSupervisorScope, TaskSupervisorScopeRecursive, TaskMaxSubtasksPerTask,
          NotificationRetentionDays, NotificationReminderScanMinutes, CalendarWeekStart, LocaleTimeZone, LocaleDefault, LocaleEnabled, LocaleRequiredText,
+         LocalePackMaxBytes, LocaleMaxInstalled,
          OrganizationMaxDepth,
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection, OpsUpkeepMinutes, OpsAuditRetentionDays,

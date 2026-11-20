@@ -171,6 +171,8 @@
 | A35 | 任務：每個父任務的子任務數（含已完成、已取消；`task.maxSubtasksPerTask`，技術上限 200；看板設計 §10.1） | 50 | S | st1a |
 | A36 | 簽核：逾期待簽的提醒間隔（設計 §12、§20.4 第 26 條；`approval.overdueReminderHours`，技術上限 720 小時，可依模組覆寫） | 24 小時 | M | a3e（已接上） |
 | A37 | 簽核：每個分支節點的分支數（流程圖設計 §15；`approval.maxBranches`，技術範圍 2–10，可依模組覆寫） | 5 | M | fg1a |
+| A38 | 地區與語系：語系包檔案大小上限（`locale.packMaxBytes`，技術範圍 1 KB–20 MB；Excel 翻譯樣板共用；[語系包設計](2026-11-17-language-packs-design.md) §13.1、§14） | 5 MB | S | i4d1 |
+| A39 | 地區與語系：已安裝語系數上限（`locale.maxInstalled`，含內建四種，技術範圍 4–30；改小只擋之後的新安裝；語系包設計 §14） | 10 | S | i4d1 |
 | A40 | 任務：子任務都完成或取消時通知父任務的誰（`task.notify.subtasksDone`，選項同 A13：負責人、建立者；看板設計 §10.7.2） | 負責人 | M | st1b |
 
 補盤（2026-11-11，使用者裁決補盤缺漏也要排進修正）另併入既有項：A31 營運時區 Asia/Taipei 的其他寫死處（`TaipeiBusinessTime.cs`、`FieldImportParser.cs`、`ReportRules.cs` 補 "+08:00"、前端 `field-type-registry.ts`、`FilterValueInput.vue`）併入 A17 一起改；A7 的「明天到期」另一處 `TaskRepositories.cs:105` 併入 p1 的 A6／A7。
