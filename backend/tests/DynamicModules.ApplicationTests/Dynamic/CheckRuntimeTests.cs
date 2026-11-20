@@ -9,7 +9,9 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.DeleteRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Policies;
+using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using MediatR;
@@ -328,27 +330,37 @@ public class CheckRuntimeTests : EffectsTestBase
         var s = await BuildStock("crq");
         await StockCheck(s);
         var moduleId = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == s.Move).Id;
-        // 技術下限 1000：直接寫 1001 筆各自一組的記錄（品項都不同、數量為正，沒有違規），不走建檔流程
+        // 技術下限 1000：直接寫 1001 筆各自一組的記錄（品項都不同），不走建檔流程。
+        // 第 1、1000、1001 組各放一筆違規（數量 -1、-2、-3），用違規數證明實際掃到幾組，空集合不會通過
         Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().AddRange(Enumerable.Range(0, 1001).Select(i =>
         {
             var rec = new DynamicModules.Domain.Entities.Dynamic.Record
             {
                 ModuleId = moduleId, OwnerUserId = "admin", RowVersion = Guid.NewGuid().ToString(),
-                ValuesJson = JsonSerializer.Serialize(Vals((s.MoveItem, $"\"I{i}\""), (s.MoveQty, "1"), (s.MoveWhere, "\"w1\"")))
+                ValuesJson = JsonSerializer.Serialize(Vals((s.MoveItem, $"\"I{i}\""), (s.MoveQty, i switch { 0 => "-1", 999 => "-2", 1000 => "-3", _ => "1" }), (s.MoveWhere, "\"w1\"")))
             };
             rec.StampCreated("admin", new DateTime(2026, 11, 3, 9, 0, 0));
             return rec;
         }));
         await Db.Context.SaveChangesAsync();
+        // 直接寫表不經建檔流程，檢查的聚合讀索引，索引要自己補；沒補的話每組都聚合成 0，違規永遠掃不出來
+        var withFields = (await Svc<IModuleRepository>().GetByKeyAsync(s.Move, true, CancellationToken.None))!;
+        foreach (var record in Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().Where(r => r.ModuleId == moduleId).ToList())
+        {
+            var rows = RecordIndexer.Build(withFields, RecordValueProcessor.Parse(record.ValuesJson), Svc<FieldTypeRegistry>());
+            foreach (var row in rows) row.RecordId = record.Id;
+            Db.Context.AddRange(rows);
+        }
+        await Db.Context.SaveChangesAsync();
         Db.Context.ChangeTracker.Clear();
 
         var full = (CheckScanResponse)(await Send(new ScanCheckRequest(s.Move + "-min"))).Data!;
-        full.Violations.Should().BeEmpty();
+        full.Violations.Select(v => v.Value).Should().Equal([-1m, -2m, -3m], "出廠 20000 組，1001 組全掃到");
         full.Truncated.Should().BeFalse("出廠 20000 組，1001 組掃得完");
 
         await SetPolicy(PolicyCatalog.CheckScanMaxGroups, 1000);
         var cut = (CheckScanResponse)(await Send(new ScanCheckRequest(s.Move + "-min"))).Data!;
-        cut.Violations.Should().BeEmpty();
+        cut.Violations.Select(v => v.Value).Should().Equal([-1m, -2m], "只掃前 1000 組：第 1000 組掃到、第 1001 組沒掃");
         cut.Truncated.Should().BeTrue("調嚴到 1000 組，第 1000 組就截斷");
     }
 
