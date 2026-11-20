@@ -126,6 +126,55 @@ public class ImportApiTests(TestApp app) : IClassFixture<TestApp>
         app.BodyBytesRead.Should().BeLessThan(1024 * 1024, "超過請求上限時不該把主體收進來");
     }
 
+    /// <summary>
+    /// 審查建議：沒有 Content-Length 的串流 multipart（chunked）不能靠標頭擋，要靠請求主體上限在讀到上限時停下。
+    /// 測試主機（TestServer）沒有 Kestrel 的主體上限，這裡驗的是同一個過濾器設的 multipart 長度上限；Kestrel 那層要真的起 Kestrel 才測得到，這裡不涵蓋。
+    /// </summary>
+    [Fact]
+    public async Task Import_HugeChunkedBody_StopsReadingAtTheLimit()
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        var (key, _) = await Module(admin);
+        app.ResetBodyCount();
+
+        var file = new StreamContent(new UnknownLengthStream(10 * 1024 * 1024));
+        file.Headers.ContentType = new MediaTypeHeaderValue("text/csv");
+        var body = new MultipartFormDataContent { { file, "file", "import.csv" } };
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/modules/{key}/import") { Content = body };
+        req.Headers.TransferEncodingChunked = true;
+
+        req.Content.Headers.ContentLength.Should().BeNull("要測的是沒有 Content-Length 的請求");
+        var res = await admin.SendAsync(req);
+
+        // 測試主機回的是表單讀取失敗的 400；重點是讀到上限就停
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("2162688");
+        app.BodyBytesRead.Should().BeLessThan(2_162_688 + 64 * 1024, "出廠值的請求上限 2 MB＋64KB（2,162,688 位元組），讀到上限就停，不收完 10 MB");
+    }
+
+    /// <summary>長度未知（不能 seek）的資料流，讓 HttpClient 算不出 Content-Length。</summary>
+    private sealed class UnknownLengthStream(long total) : Stream
+    {
+        private long _left = total;
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var n = (int)Math.Min(count, _left);
+            buffer.AsSpan(offset, n).Fill((byte)'x');
+            _left -= n;
+            return n;
+        }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
     [Fact]
     public async Task Import_NoFile_400File()
     {
