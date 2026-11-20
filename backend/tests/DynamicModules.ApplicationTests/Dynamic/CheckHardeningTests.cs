@@ -157,6 +157,7 @@ public class CheckHardeningTests : EffectsTestBase
         var qty = await MustAdd("chb", FieldType.Decimal, label: "數量");
         await Send(new DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule.ActivateModuleRequest("chb"));
         var moduleId = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == "chb").Id;
+        var version = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Id == moduleId).Version;
         // 技術下限 1000：直接寫 1001 筆空記錄，不走建檔流程
         Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().AddRange(Enumerable.Range(0, 1001).Select(_ =>
         {
@@ -174,5 +175,11 @@ public class CheckHardeningTests : EffectsTestBase
 
         r.IsConflict.Should().BeTrue(r.Message + string.Join(";", r.Errors.Select(e => e.Key + e.Value[0])));
         r.Message.Should().Be("這個模組有 1001 筆記錄，超過 1000 筆，一次回填索引會長時間占住寫入鎖；請在低峰時段分次處理");
+
+        // 被拒絕後整筆回滾：檢查沒建、欄位沒被改成可篩選、模組版本沒動
+        Db.Context.ChangeTracker.Clear();
+        Db.Context.Set<ModuleCheck>().AsNoTracking().Any(c => c.Key == "chb-cap").Should().BeFalse();
+        Db.Context.Set<Field>().AsNoTracking().Single(f => f.Id == item.Id).Config.IsFilterable.Should().BeFalse();
+        Db.Context.Set<Module>().AsNoTracking().Single(m => m.Id == moduleId).Version.Should().Be(version);
     }
 }

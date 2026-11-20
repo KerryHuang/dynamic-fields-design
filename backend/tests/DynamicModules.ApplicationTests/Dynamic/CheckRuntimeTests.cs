@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.CheckService;
+using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
@@ -9,6 +10,7 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
+using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -318,6 +320,72 @@ public class CheckRuntimeTests : EffectsTestBase
         var scan = (CheckScanResponse)(await Send(new ScanCheckRequest(s.Move + "-min"))).Data!;
         scan.Violations.Should().ContainSingle();
         scan.Truncated.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Scan_GroupPolicy_TightenedTruncates()
+    {
+        var s = await BuildStock("crq");
+        await StockCheck(s);
+        var moduleId = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == s.Move).Id;
+        // 技術下限 1000：直接寫 1001 筆各自一組的記錄（品項都不同、數量為正，沒有違規），不走建檔流程
+        Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().AddRange(Enumerable.Range(0, 1001).Select(i =>
+        {
+            var rec = new DynamicModules.Domain.Entities.Dynamic.Record
+            {
+                ModuleId = moduleId, OwnerUserId = "admin", RowVersion = Guid.NewGuid().ToString(),
+                ValuesJson = JsonSerializer.Serialize(Vals((s.MoveItem, $"\"I{i}\""), (s.MoveQty, "1"), (s.MoveWhere, "\"w1\"")))
+            };
+            rec.StampCreated("admin", new DateTime(2026, 11, 3, 9, 0, 0));
+            return rec;
+        }));
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        var full = (CheckScanResponse)(await Send(new ScanCheckRequest(s.Move + "-min"))).Data!;
+        full.Violations.Should().BeEmpty();
+        full.Truncated.Should().BeFalse("出廠 20000 組，1001 組掃得完");
+
+        await SetPolicy(PolicyCatalog.CheckScanMaxGroups, 1000);
+        var cut = (CheckScanResponse)(await Send(new ScanCheckRequest(s.Move + "-min"))).Data!;
+        cut.Violations.Should().BeEmpty();
+        cut.Truncated.Should().BeTrue("調嚴到 1000 組，第 1000 組就截斷");
+    }
+
+    /// <summary>A29 的組數是整個請求累計：表頭與明細各一組、各自不超過 1，加起來 2 就擋。</summary>
+    [Fact]
+    public async Task Write_GroupPolicy_CountsAcrossModules()
+    {
+        await NewModule("crx-head");
+        var kind = await MustAdd("crx-head", FieldType.Text, new FieldConfig { IsFilterable = true }, "類別");
+        var amount = await MustAdd("crx-head", FieldType.Decimal, new FieldConfig { IsFilterable = true }, "金額");
+        await NewModule("crx-line");
+        await MustAdd("crx-line", FieldType.Reference, RefTo("crx-head", ReferenceRelation.Detail), "表頭");
+        var item = await MustAdd("crx-line", FieldType.Text, new FieldConfig { IsFilterable = true }, "品項");
+        var qty = await MustAdd("crx-line", FieldType.Decimal, new FieldConfig { IsFilterable = true }, "數量");
+        (await Send(new ActivateModuleRequest("crx-line"))).IsSuccess.Should().BeTrue();
+        (await Send(new ActivateModuleRequest("crx-head"))).IsSuccess.Should().BeTrue();
+        foreach (var (module, group, sum) in new[] { ("crx-head", kind.Id, amount.Id), ("crx-line", item.Id, qty.Id) })
+        {
+            var def = new CheckDefinition([group], "sum", sum, null, new CheckAssert("gte", new CheckLimit(0, null, null)), Text("不足"));
+            var created = await Send(new CreateCheckRequest(new CheckInput(module + "-min", Text("min"), module, true, def)));
+            created.IsCreated.Should().BeTrue(string.Join(";", created.Errors.Select(e => e.Key + e.Value[0])));
+        }
+        var headTitle = (await Detail("crx-head")).TitleFieldId!.Value;
+        var lineTitle = (await Detail("crx-line")).TitleFieldId!.Value;
+        CreateRecordRequest Request() => new("crx-head", Vals((headTitle, "\"h\""), (kind.Id, "\"A\""), (amount.Id, "5")),
+            Details: new() { ["crx-line"] = [new DetailRowInput(null, Vals((lineTitle, "\"l\""), (item.Id, "\"X\""), (qty.Id, "3")), null)] });
+        await SetPolicy(PolicyCatalog.CheckMaxGroupsPerWrite, 1);
+
+        var r = await Run(Request());
+        r.IsConflict.Should().BeTrue(r.Message + string.Join(";", r.Errors.Select(e => e.Key + e.Value[0])));
+        r.Message.Should().Be("這次請求牽涉的檢查組數超過 1，請分批處理");
+        var ids = Db.Context.Set<Module>().AsNoTracking().Where(m => m.Key == "crx-head" || m.Key == "crx-line").Select(m => m.Id).ToList();
+        Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().AsNoTracking().Count(x => ids.Contains(x.ModuleId))
+            .Should().Be(0, "被擋的寫入整筆回滾");
+
+        await SetPolicy(PolicyCatalog.CheckMaxGroupsPerWrite, 2);
+        (await Run(Request())).IsCreated.Should().BeTrue();
     }
 
     [Fact]
