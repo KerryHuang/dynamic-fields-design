@@ -9,9 +9,10 @@ import { BUILTIN_LOCALES } from 'src/i18n/locale';
 import { enabledLocales, installedLocales, localeChain, nativeName, requiredTextLocales, setLocaleInfos, setLocaleSettings } from 'src/i18n/locale-settings';
 import zhTW from 'shared/i18n/zh-TW/ui.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import { installUiMessages, loadedHash, readUiCache, resetUiMessagesForTests } from 'src/i18n/ui-messages';
 import { useBusinessTimeWatch } from './use-business-time-watch';
 
-vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getEffectivePolicies: vi.fn() } }));
+vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getEffectivePolicies: vi.fn(), getUiMessages: vi.fn() } }));
 vi.mock('quasar', async (importOriginal) => ({ ...(await importOriginal<typeof import('quasar')>()), Dialog: { create: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
@@ -19,10 +20,10 @@ let reload: ReturnType<typeof vi.fn>;
 const create = vi.mocked(quasar.Dialog.create);
 const original = window.location;
 
-function mountWatch(qc = new QueryClient()) {
+function mountWatch(qc = new QueryClient(), i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } })) {
   const Host = defineComponent({ setup: () => { useBusinessTimeWatch(); return () => h('i'); } });
   mount(Host, {
-    global: { plugins: [[quasar.Quasar, { components: quasar }], createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } }), [VueQueryPlugin, { queryClient: qc }]] },
+    global: { plugins: [[quasar.Quasar, { components: quasar }], i18n, [VueQueryPlugin, { queryClient: qc }]] },
   });
   return qc;
 }
@@ -120,5 +121,72 @@ describe('useBusinessTimeWatch', () => {
     expect(localeChain('ja')[0]).toBe('zh-TW');
     await refetch({ nativeName: 'にほんご', fallbackCode: 'en-US' });
     expect(localeChain('ja')[0]).toBe('en-US');
+  });
+
+  describe('介面文字雜湊改變時背景換新（i4b 判斷 15）', () => {
+    const values = { 'locale.timeZone': '+08:00' };
+    const withTh = (uiHash: string) => ({ values, locales: BUILTIN_LOCALES.map((l) => (l.code === 'th' ? { ...l, uiHash } : l)) });
+    // 目前語系 th、已裝上雜湊 A
+    const thLoaded = () => {
+      const i18n = createI18n({ legacy: false, locale: 'th', fallbackLocale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+      installUiMessages(i18n, 'th', { 'menu.home': 'บ้าน-A' }, 'A');
+      return i18n;
+    };
+    const refetch = async (qc: QueryClient) => {
+      vi.setSystemTime(Date.now() + 60_000); // 下一輪（60 秒後），dataUpdatedAt 一定不同
+      await qc.refetchQueries({ queryKey: ['effective-policies', ''] });
+      await flushPromises();
+    };
+    beforeEach(() => { resetUiMessagesForTests(); localStorage.clear(); vi.useFakeTimers({ toFake: ['Date'] }); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('雜湊變了：取新版、換上新句子、寫快取，不提示', async () => {
+      const i18n = thLoaded();
+      api.getEffectivePolicies.mockResolvedValue(withTh('B'));
+      api.getUiMessages.mockResolvedValue({ hash: 'B', messages: { 'menu.home': 'บ้าน-B' } });
+      mountWatch(new QueryClient(), i18n);
+      await flushPromises();
+      expect(api.getUiMessages).toHaveBeenCalledWith('th', 'B');
+      expect(i18n.global.t('menu.home')).toBe('บ้าน-B');
+      expect(readUiCache()).toMatchObject({ code: 'th', hash: 'B' });
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it('雜湊沒變不取', async () => {
+      const i18n = thLoaded();
+      api.getEffectivePolicies.mockResolvedValue(withTh('A'));
+      mountWatch(new QueryClient(), i18n);
+      await flushPromises();
+      expect(api.getUiMessages).not.toHaveBeenCalled();
+    });
+
+    it('政策值不變（同一個參考）、只有 uiHash 變也換', async () => {
+      const i18n = thLoaded();
+      api.getEffectivePolicies.mockResolvedValue(withTh('A'));
+      const qc = mountWatch(new QueryClient(), i18n);
+      await flushPromises();
+      api.getEffectivePolicies.mockResolvedValue(withTh('B'));
+      api.getUiMessages.mockResolvedValue({ hash: 'B', messages: { 'menu.home': 'บ้าน-B' } });
+      await refetch(qc);
+      expect(i18n.global.t('menu.home')).toBe('บ้าน-B');
+    });
+
+    it.each([
+      ['文字請求失敗', () => api.getUiMessages.mockRejectedValueOnce(new Error('down'))],
+      ['打到舊台回 A', () => api.getUiMessages.mockResolvedValueOnce({ hash: 'A', messages: { 'menu.home': 'บ้าน-A' } })],
+    ])('連回兩次 B（%s）：第二輪回應完全相同也會重取，回 B 後換上', async (_, firstRound) => {
+      const i18n = thLoaded();
+      const same = withTh('B');
+      api.getEffectivePolicies.mockResolvedValue(same);
+      firstRound();
+      const qc = mountWatch(new QueryClient(), i18n);
+      await flushPromises();
+      expect(i18n.global.t('menu.home')).toBe('บ้าน-A');
+      expect(loadedHash('th')).toBe('A');
+      api.getUiMessages.mockResolvedValue({ hash: 'B', messages: { 'menu.home': 'บ้าน-B' } });
+      await refetch(qc);
+      expect(api.getUiMessages).toHaveBeenCalledTimes(2);
+      expect(i18n.global.t('menu.home')).toBe('บ้าน-B');
+    });
   });
 });

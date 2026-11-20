@@ -4,6 +4,7 @@ import { watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { businessOffset, setBusinessOffset } from 'src/domain/dynamic/business-time';
 import { applyLocalePolicies } from 'src/i18n/locale-settings';
+import { refreshLoadedMessages } from 'src/i18n/ui-messages';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
 /**
@@ -11,7 +12,8 @@ import { dynamicApi } from 'src/services/api/dynamic-api';
  * （已開著的表單與列表是用舊偏移算的）。同一個新值只提示一次。與 useEffectivePolicies(null) 共用快取。
  */
 export function useBusinessTimeWatch(): void {
-  const { t } = useI18n();
+  const composer = useI18n({ useScope: 'global' });
+  const { t } = composer;
   const query = useQuery({
     queryKey: ['effective-policies', ''],
     queryFn: () => dynamicApi.getEffectivePolicies(null),
@@ -20,9 +22,15 @@ export function useBusinessTimeWatch(): void {
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
-  // 語系政策或語系資訊變了只更新設定、不提示：新設定從下一次開啟的輸入框起生效。看整份回應：結構共享會讓只有 locales 變時
-  // values 仍是同一個參考
-  watch(() => query.data.value, (eff) => { if (eff?.values) applyLocalePolicies(eff.values, eff.locales); }, { immediate: true });
+  // 語系政策或語系資訊變了只更新設定、不提示：新設定從下一次開啟的輸入框起生效。介面文字的雜湊（uiHash）變了就背景換上新翻譯。
+  // 看 dataUpdatedAt（每次成功重取都變）：結構共享會讓回應相同時資料是同一個參考，上一輪文字沒取成時要靠下一輪重試（i4b 判斷 15）；
+  // 也看資料本身：同一毫秒內兩次重取時 dataUpdatedAt 不變
+  watch(() => [query.dataUpdatedAt.value, query.data.value], () => {
+    const eff = query.data.value;
+    if (!eff?.values) return;
+    applyLocalePolicies(eff.values, eff.locales);
+    void refreshLoadedMessages({ global: composer }, eff.locales ?? []);
+  }, { immediate: true });
   let prompted: string | null = null;
   watch(() => query.data.value?.values?.['locale.timeZone'], (zone) => {
     if (typeof zone !== 'string' || zone === businessOffset() || zone === prompted) return;
