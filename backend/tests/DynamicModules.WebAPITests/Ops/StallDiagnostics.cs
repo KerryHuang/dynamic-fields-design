@@ -12,19 +12,63 @@ internal static class StallDiagnostics
 {
     public static async Task WithinAsync(TestApp app, params (string Name, Task Task)[] branches)
     {
+        using var probe = new ContextProbe(SynchronizationContext.Current);
         try
         {
             await SchedulerTestKit.Within(Task.WhenAll(branches.Select(b => b.Task)));
         }
         catch (TimeoutException e)
         {
-            throw new TimeoutException(await DescribeAsync(app, branches), e);
+            throw new TimeoutException(await DescribeAsync(app, branches, probe.Describe()), e);
         }
     }
 
-    private static async Task<string> DescribeAsync(TestApp app, (string Name, Task Task)[] branches)
+    /// <summary>每 500 ms 往測試的同步內容與執行緒池各丟一個空工作，記排隊延遲：分辨「xUnit 的執行緒被占滿」與「執行緒池飢餓」。</summary>
+    private sealed class ContextProbe : IDisposable
     {
-        var sb = new StringBuilder("並行案例逾時（票 #72 診斷）\n");
+        private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _slow = new();
+        private readonly Timer _timer;
+        private readonly SynchronizationContext? _context;
+        private double _maxContext, _maxPool;
+        private int _contextPending;
+
+        public ContextProbe(SynchronizationContext? context)
+        {
+            _context = context;
+            _timer = new Timer(_ => Tick(), null, 0, 500);
+        }
+
+        private void Tick()
+        {
+            var sent = _clock.Elapsed.TotalMilliseconds;
+            ThreadPool.UnsafeQueueUserWorkItem(_ => Record(ref _maxPool, "pool", sent), null);
+            if (_context is null || Interlocked.CompareExchange(ref _contextPending, 1, 0) != 0) return;
+            _context.Post(_ =>
+            {
+                Record(ref _maxContext, "context", sent);
+                Volatile.Write(ref _contextPending, 0);
+            }, null);
+        }
+
+        private void Record(ref double max, string what, double sent)
+        {
+            var now = _clock.Elapsed.TotalMilliseconds;
+            var delay = now - sent;
+            if (delay > max) max = delay;
+            if (delay > 1000 && _slow.Count < 40) _slow.Enqueue($"{what} 於 {sent / 1000:F1}s 排入、等了 {delay / 1000:F1}s");
+        }
+
+        public string Describe() =>
+            $"  同步內容探針：{_context?.GetType().Name ?? "(none)"} 最大延遲 {_maxContext / 1000:F1}s（尚未執行={Volatile.Read(ref _contextPending)}）；" +
+            $"執行緒池最大延遲 {_maxPool / 1000:F1}s\n" + string.Concat(_slow.Select(x => $"    {x}\n"));
+
+        public void Dispose() => _timer.Dispose();
+    }
+
+    private static async Task<string> DescribeAsync(TestApp app, (string Name, Task Task)[] branches, string probe)
+    {
+        var sb = new StringBuilder("並行案例逾時（票 #72 診斷）\n").Append(probe);
         foreach (var (name, task) in branches) sb.AppendLine($"  分支 {name}：{task.Status}");
         ThreadPool.GetAvailableThreads(out var worker, out var io);
         ThreadPool.GetMinThreads(out var minWorker, out _);
