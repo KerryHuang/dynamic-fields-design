@@ -1,5 +1,7 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.OrganizationService;
+using DynamicModules.Application.Dynamic.PolicyService;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Organization;
 using FluentAssertions;
@@ -74,13 +76,56 @@ public class DepartmentTests : DesignerTestBase
         long? parent = null;
         for (var i = 1; i <= 10; i++) parent = await Create($"d{i}", parent);
 
-        Err(await Send(new CreateDepartmentRequest(Input("d11", parent))), "parentId").Should().Be(OrganizationMessages.TooDeep);
+        Err(await Send(new CreateDepartmentRequest(Input("d11", parent))), "parentId").Should().Be("部門最多 10 層");
 
         // 搬移整棵子樹也算深度：x→y 兩層搬到第 9 層底下就是 11 層
         var x = await Create("x");
         await Create("y", x);
         var ninth = (await List()).Single(d => d.Code == "d9").Id;
-        Err(await Send(new UpdateDepartmentRequest(x, Input("x", ninth))), "parentId").Should().Be(OrganizationMessages.TooDeep);
+        Err(await Send(new UpdateDepartmentRequest(x, Input("x", ninth))), "parentId").Should().Be("部門最多 10 層");
+    }
+
+    private async Task SetMaxDepth(int value) =>
+        (await Send(new UpdateSystemPolicyRequest(PolicyCatalog.OrganizationMaxDepth.Code, System.Text.Json.JsonSerializer.SerializeToElement(value))))
+            .IsSuccess.Should().BeTrue();
+
+    [Fact]
+    public async Task Depth_UsesPolicy()
+    {
+        await SetMaxDepth(2);
+        var a = await Create("a");
+        var b = await Create("b", a);
+
+        Err(await Send(new CreateDepartmentRequest(Input("c", b))), "parentId").Should().Be("部門最多 2 層");
+    }
+
+    [Fact]
+    public async Task Depth_Lowered_RenameDeepDepartmentAllowed()
+    {
+        var a = await Create("a");
+        var b = await Create("b", a);
+        var c = await Create("c", b);
+        await SetMaxDepth(2);
+
+        // 已超過上限的第 3 層部門：上級沒變，照常可改其他欄位
+        (await Send(new UpdateDepartmentRequest(c, Input("c", b, sort: 5)))).IsSuccess.Should().BeTrue();
+
+        // 把一個第 1 層部門移到第 2 層底下（變第 3 層）→ 擋
+        var x = await Create("x");
+        Err(await Send(new UpdateDepartmentRequest(x, Input("x", b))), "parentId").Should().Be("部門最多 2 層");
+    }
+
+    [Fact]
+    public async Task Cycle_StillCheckedWhenParentUnchanged()
+    {
+        // 上級沒變卻已形成循環的資料無法經 API 構造；改測拆段後「改上級成自己的子部門」仍回循環錯誤，且不被層數條件吃掉
+        await SetMaxDepth(1);
+        var a = await Create("a");
+        await SetMaxDepth(10);
+        var b = await Create("b", a);
+        await SetMaxDepth(1);
+
+        Err(await Send(new UpdateDepartmentRequest(a, Input("a", b))), "parentId").Should().Be(OrganizationMessages.Cycle);
     }
 
     [Fact]
