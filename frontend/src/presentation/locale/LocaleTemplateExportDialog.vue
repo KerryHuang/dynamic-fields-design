@@ -28,13 +28,17 @@ const busy = ref(false);
 const error = ref<string | null>(null);
 const tooLarge = ref<{ size: string; max: string } | null>(null);
 
+// 關閉、重開都會推進世代；匯出回來先核對世代，舊請求的成功（下載、關閉）、失敗與 busy 一律不寫到新開的對話框（同匯入對話框）
+let generation = 0;
+
 function reset() {
+  generation++;
   scopeUi.value = true; scopeServer.value = true; onlyMissing.value = false; onlyChanged.value = false;
   source.value = 'zh-TW'; reference.value = 'en-US';
   code.value = ''; nativeName.value = ''; fallback.value = ''; quasarLang.value = '';
   busy.value = false; error.value = null; tooLarge.value = null;
 }
-watch(() => props.modelValue, (open) => { if (open) reset(); }, { immediate: true });
+watch(() => props.modelValue, (open) => { if (open) reset(); else generation++; }, { immediate: true });
 
 const isNew = computed(() => !props.target);
 const targetCode = computed(() => props.target?.code ?? code.value.trim());
@@ -64,9 +68,11 @@ async function doDownload() {
       ...(quasarLang.value.trim() ? { quasarLang: quasarLang.value.trim() } : {}),
     } : {}),
   };
+  const gen = generation;
   busy.value = true; error.value = null; tooLarge.value = null;
   try {
     const { blob, fileName } = await dynamicApi.exportLocaleTemplate(targetCode.value, options);
+    if (gen !== generation) return;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -80,9 +86,10 @@ async function doDownload() {
     $q.notify({ type: 'positive', message: t('localePacks.export.done', { file: fileName }) });
     emit('update:modelValue', false);
   } catch (e) {
+    if (gen !== generation) return;
     error.value = isForbidden(e) ? t('dynamic.forbidden') : (leftoverMessages(e as ApiError, []).join('；') || t('localePacks.export.failed'));
   } finally {
-    busy.value = false;
+    if (gen === generation) busy.value = false;
   }
 }
 </script>
