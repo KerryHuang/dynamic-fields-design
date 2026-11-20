@@ -222,4 +222,41 @@ public sealed class LocaleDefaultApiTests : IDisposable
         // 套件群組名稱只有繁中：以預設語系 en-US 解析（退回繁中）後寫進 en-US
         groups.Should().Contain(g => g.NameI18n.Values.ContainsKey("en-US"));
     }
+
+    private async Task<I18nTextValues> GroupName(long id)
+    {
+        using var scope = _app.Services.CreateScope();
+        var g = await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<PermissionGroup>().AsNoTracking().SingleAsync(x => x.Id == id);
+        return new(g.NameI18n.Values);
+    }
+
+    private sealed record I18nTextValues(IReadOnlyDictionary<string, string> Values);
+
+    /// <summary>D4：建立與改名群組時，給了不認得（xx）或停用（th）的語系 → 用預設語系 en-US，不回 400（審查修正 3）。</summary>
+    [Theory]
+    [InlineData("xx")]
+    [InlineData("th")]
+    public async Task CreateGroup_UnknownOrDisabledLocale_WritesDefaultLocale(string locale)
+    {
+        await EnglishDefault();
+        var res = await _admin.PostAsJsonAsync($"{Base}/admin/groups", new { name = "Warehouse", locale });
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+        var name = await GroupName((await JsonOf(res)).GetProperty("id").GetInt64());
+        name.Values.Should().Contain("en-US", "Warehouse").And.NotContainKey(locale);
+    }
+
+    [Theory]
+    [InlineData("xx")]
+    [InlineData("th")]
+    public async Task RenameGroup_UnknownOrDisabledLocale_WritesDefaultLocale(string locale)
+    {
+        await EnglishDefault();
+        var created = await _admin.PostAsJsonAsync($"{Base}/admin/groups", new { name = "Store", locale = "zh-TW" });
+        created.EnsureSuccessStatusCode();
+        var id = (await JsonOf(created)).GetProperty("id").GetInt64();
+        var res = await _admin.PutAsJsonAsync($"{Base}/admin/groups/{id}", new { name = "Depot", locale });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var name = await GroupName(id);
+        name.Values.Should().Contain("en-US", "Depot").And.NotContainKey(locale);
+    }
 }
