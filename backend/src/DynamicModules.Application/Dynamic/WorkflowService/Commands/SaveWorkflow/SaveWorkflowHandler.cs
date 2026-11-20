@@ -26,8 +26,8 @@ public class SaveWorkflowHandler(
         if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
         var input = request.Workflow;
 
-        var errors = new Dictionary<string, string[]>();
-        void Err(string key, string message) => errors.TryAdd(key, [message]);
+        var errors = new Dictionary<string, MessageRef[]>();
+        void Err(string key, string message) => errors.TryAdd(key, [MessageRef.Literal(message)]);
 
         if (module.Kind != ModuleKind.Standalone || ModuleRelations.IsDetail(module))
             Err("moduleKey", "明細模組與擴充模組不能設定狀態機");
@@ -54,8 +54,9 @@ public class SaveWorkflowHandler(
         if (!stateIds.Contains(input.InitialOptionId)) Err("initialOptionId", "起始狀態必須是狀態清單內的狀態");
 
         var groupIds = (await permissions.ListGroupsAsync(ct)).Select(g => g.Id).ToHashSet();
-        if ((transitions.Count > maxTransitions && transitions.Count > oldTransitions)
-            || transitions.Any(t => t.From == t.To || !stateIds.Contains(t.From) || !stateIds.Contains(t.To))
+        if (transitions.Count > maxTransitions && transitions.Count > oldTransitions)
+            errors.TryAdd("transitions", [WorkflowMessages.TooManyTransitions(maxTransitions)]);
+        else if (transitions.Any(t => t.From == t.To || !stateIds.Contains(t.From) || !stateIds.Contains(t.To))
             || transitions.Select(t => (t.From, t.To)).Distinct().Count() != transitions.Count
             || transitions.Any(t => t.GroupIds is null || t.GroupIds.Any(g => !groupIds.Contains(g))))
             Err("transitions", WorkflowMessages.Transitions);

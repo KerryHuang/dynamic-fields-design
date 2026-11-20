@@ -98,6 +98,11 @@ public class DesignLimitPolicyTests : DesignerTestBase
         (await Send(new SaveWorkflowRequest("doc", Input((0, 1), (1, 0))))).IsSuccess.Should().BeTrue();
         var more = await Send(new SaveWorkflowRequest("doc", Input((0, 1), (1, 2), (2, 0))));
         more.IsInvalid.Should().BeTrue();
-        more.Errors.Should().ContainKey("transitions");
+        more.Errors["transitions"].Should().Equal("每個流程最多 1 條轉換");
+
+        // 條數沒超過時，其他轉換錯誤仍是原本的共用句（使用者 2026-11-20 裁決只有條數另給帶上限的訊息）
+        var self = await Send(new SaveWorkflowRequest("doc", Input((0, 0))));
+        self.IsInvalid.Should().BeTrue();
+        self.Errors["transitions"].Should().Equal("轉移的兩端必須是不同的狀態、不重複，群組必須存在");
     }
 }
