@@ -4,6 +4,7 @@ import enUS from 'shared/i18n/en-US/ui.json';
 import th from 'shared/i18n/th/ui.json';
 import vi from 'shared/i18n/vi/ui.json';
 import zhTW from 'shared/i18n/zh-TW/ui.json';
+import { checkUiMessage } from './message-check';
 
 function leaves(o: unknown, path = ''): Record<string, string> {
   if (typeof o === 'string') return { [path]: o };
@@ -44,6 +45,19 @@ describe('四語系訊息檔', () => {
     for (const [k, v] of Object.entries(leaves(msgs))) {
       baseCompile(v, { onError: (e) => bad.push(`${k}: ${e.message}`) });
     }
+    expect(bad).toEqual([]);
+  });
+  // 語系包匯入用同一套規則擋句子：內建四語自己必須全部通過（佔位符名稱以該鍵四語聯集為準）
+  it('四份內建檔每句都通過匯入用的語法檢查', () => {
+    const all = [leaves(zhTW), en, leaves(th), leaves(vi)];
+    const names = (k: string) => new Set(all.flatMap((m) => (m[k] ? (placeholders(m[k]).map((p) => p.slice(1, -1))) : [])));
+    const bad: string[] = [];
+    all.forEach((m, i) => {
+      for (const [k, v] of Object.entries(m)) {
+        const r = checkUiMessage(v, names(k));
+        if (r) bad.push(`${i}:${k}:${r}`);
+      }
+    });
     expect(bad).toEqual([]);
   });
 });
