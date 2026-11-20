@@ -67,7 +67,7 @@ GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0
 
 ## 不並行的工作
 - 獨占資源：本機 Demo 埠（9180）、瀏覽器（chrome-devtools）、本機 Demo DB；同時只給一條線用，另一條線要走查就等前一條收掉。
-- 共用檔：i18n 語系檔（`frontend/src/i18n/*.json`）、前端路由與選單、後端 DI 註冊、DbContext 與 EF migration、`backend/apps/*.app.json`。單元計畫要列出會碰到哪幾個；兩條平行線碰到同一個就照順序做，不並行實作。
+- 共用檔：i18n 語系檔（`shared/i18n/<code>/ui.json`）、前端路由與選單、後端 DI 註冊、DbContext 與 EF migration、`backend/apps/*.app.json`。單元計畫要列出會碰到哪幾個；兩條平行線碰到同一個就照順序做，不並行實作。
 - 平行線（另一個 worktree）只能做和進行中單元沒有共用檔的工作，例如簽核 a3 進行中時做任務看板 kb；兩條線的重測試錯開，不同時跑（使用者 2026-11-14 裁決）。
 - 兩件會加 EF migration 的實作：model snapshot 會衝突。
 - 兩件都動 `backend/apps/*.app.json` 的工作。
