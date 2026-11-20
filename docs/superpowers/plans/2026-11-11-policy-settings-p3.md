@@ -25,7 +25,7 @@
 5. 必修 5：Task 12 列出 17 個 `I18nTextInput` 入口的處置與原值來源，補父元件測試（只改其他設定可存、改文字才要求補語系、新增照擋）→ Task 12。
 6. 建議：故障時沿用舊值沒有時間上限、冷啟動讀不到用出廠值，寫進設計 §10 與 `docs/deploy.md`；登出與 session 過期後重置「已載入」；Task 12 的 grep 白名單分類 → Task 3、5、12。
 7. 使用者 D1–D5 裁決（主控已寫回說明）的範圍補進 Files、測試、驗收：D2 → Task 12；D3 → Task 11b；D4 → Task 10；D5 → Task 9。
-8. 新的行為分岔 N1、N2 列在「待決」（不阻擋開工）。
+8. 第二輪新分岔 N1–N3 已由使用者 2026-11-20 裁決（見「待決」）。
 
 ### 2026-11-20（依現況檢查 S1–S12 與 i4 對照修訂）
 
@@ -114,9 +114,9 @@
 - **D4 已裁決（使用者 2026-11-20）：比照標頭**，查詢參數帶停用或不認得的語系時改用預設語系；併入 Task 10。原題：查詢參數帶了已停用的語系（例 `?locale=th`）時，要照參數輸出，還是比照 `X-Locale` 當成預設語系。判斷 14 只寫了標頭。
 - **D5 已裁決（使用者 2026-11-20）：補進每個必填語系**（沿用現做法、擴成全部必填語系）；併入 Task 9。原題：建立群組時，名稱除了寫進目前語系，現在會另存一份到繁中（`CreateGroupHandler.cs:22`，「其他語系看到空白名稱」）。必填改成非繁中後，要改成「寫進每個必填語系」（英文名稱欄會是中文字），還是只寫目前語系、靠退回鏈顯示。
 
-- **N1（Task 11b 前，新分岔）**：D3 要把約 50 處 `Resolve(I18nText.FallbackLocale)` 改成請求語系，但其中 9 行是**寫進資料庫、稽核或 log 的固定繁中文字**，程式註解明寫刻意固定：簽核改道與分支取消的說明（`ApprovalEngine.cs:191`、`ApprovalGraphEngine.cs:277,283`）、簽核歷程說明（`ApproverResolver.cs:179`）、`FrozenFieldException.Message`（`FieldLocks.cs:73`）、匯入套件與樣板的稽核目標名稱（`ImportAppPackage.cs:46`、`ImportTemplateHandler.cs:30`）、記錄標題用的選項標籤（`TitleTemplate.cs:118`、`UpdateOptionHandler.cs:29`，兩處必須一致）。改成請求語系，同一份資料會依操作者的語言存成不同語言；維持繁中，必填改成非繁中後這些地方會走到「第一個有值的語系」；也可以改用系統預設語系。Task 11b 在裁決前不動這 9 行。
-- **N2（Task 12 前，新分岔）**：站內通知標題快照的退路 `IncidentTitles.ZhTw`（`IncidentTitles.cs:62`，用 `AlertMailText.FactoryLocale`）不在 D2「警示信語言」的範圍。要不要一起改成系統預設語系？Task 12 刪 `FactoryLocale` 時，這裡先改成引用 `I18nText.FallbackLocale`，行為不變。
-- **N3（Task 12 前，新分岔）**：D2 說警示信語言的下拉「只列啟用語系」，已存的語言停用後照常寄。那這時下拉要怎麼顯示已存的停用語言：列出來並標「已停用」（看得到現值，但違反「只列啟用」的字面）、不列（下拉會顯示成空白或代碼，使用者看不出現在寄什麼語言），還是只在下拉旁顯示一行「目前：ไทย（已停用）」。
+- **N1 已裁決（使用者 2026-11-20）：這 9 行改用系統預設語系**（`LocaleContext` 的預設語系＋退回鏈），不跟請求語系；`TitleTemplate.cs:118` 與 `UpdateOptionHandler.cs:29` 一起改、維持一致；併入 Task 11b，補一案「預設英文時，越南文介面退回簽核 → 歷程說明存英文」。原題：D3 要把約 50 處 `Resolve(I18nText.FallbackLocale)` 改成請求語系，但其中 9 行是**寫進資料庫、稽核或 log 的固定繁中文字**，程式註解明寫刻意固定：簽核改道與分支取消的說明（`ApprovalEngine.cs:191`、`ApprovalGraphEngine.cs:277,283`）、簽核歷程說明（`ApproverResolver.cs:179`）、`FrozenFieldException.Message`（`FieldLocks.cs:73`）、匯入套件與樣板的稽核目標名稱（`ImportAppPackage.cs:46`、`ImportTemplateHandler.cs:30`）、記錄標題用的選項標籤（`TitleTemplate.cs:118`、`UpdateOptionHandler.cs:29`，兩處必須一致）。改成請求語系，同一份資料會依操作者的語言存成不同語言；維持繁中，必填改成非繁中後這些地方會走到「第一個有值的語系」；也可以改用系統預設語系。Task 11b 在裁決前不動這 9 行。
+- **N2 已裁決（使用者 2026-11-20）：改用系統預設語系**，`IncidentTitles` 的退路改成「要求的語系 → 預設語系 → 繁中」；併入 Task 12。原題：站內通知標題快照的退路 `IncidentTitles.ZhTw`（`IncidentTitles.cs:62`，用 `AlertMailText.FactoryLocale`）不在 D2「警示信語言」的範圍。要不要一起改成系統預設語系？Task 12 刪 `FactoryLocale` 時，這裡先改成引用 `I18nText.FallbackLocale`，行為不變。
+- **N3 已裁決（使用者 2026-11-20）：列出並標「已停用」**，只能維持不能新選；規範見 `.claude/rules/frontend.md`。原題：D2 說警示信語言的下拉「只列啟用語系」，已存的語言停用後照常寄。那這時下拉要怎麼顯示已存的停用語言：列出來並標「已停用」（看得到現值，但違反「只列啟用」的字面）、不列（下拉會顯示成空白或代碼，使用者看不出現在寄什麼語言），還是只在下拉旁顯示一行「目前：ไทย（已停用）」。
 
 ---
 
@@ -610,7 +610,7 @@ D4 已裁決：查詢參數帶停用語系時用預設語系。
   - 選單排序：`SchemaService/Queries/GetMenu/GetMenuHandler.cs:22`（依請求語系的名稱排序）。
   - 群組影響：`Persistence/Repositories/Dynamic/AccountRepository.cs:88,92,103`、`Domain/Repositories/Dynamic/IAccountRepository.cs:49`（`GetGroupImpactAsync` 多收 `LocaleContext`，由 handler 傳入；註解同步）。
 - 移到 Task 9（是必填檢查，不是輸出）：`TaskRuleService/TaskRuleValidator.cs:130`（任務標題必填改走 `RequiredTextGuard`）。若 Task 9 已做完，這裡只確認。
-- 寫進資料庫、稽核或 log 的固定繁中文字（**新分岔 N1，裁決前不動**，行為與現在相同）：`ApprovalService/ApprovalEngine.cs:191`（改道說明，程式註解寫「comment 是固定繁中，只留給資料庫與稽核」）、`ApprovalService/ApprovalGraphEngine.cs:277,283`（分支取消說明）、`ApprovalService/ApproverResolver.cs:179`（「寫進簽核歷程的說明（資料庫）固定繁中」）、`Common/Security/FieldLocks.cs:73`（`Exception.Message` 給記錄與測試）、`AppService/Commands/ImportAppPackage.cs:46` 與 `TemplateService/Commands/ImportTemplate/ImportTemplateHandler.cs:30`（稽核目標名稱）、`Domain/Modules/TitleTemplate.cs:118` 與 `FieldService/Commands/UpdateOption/UpdateOptionHandler.cs:29`（記錄標題用的選項標籤，兩處要一致，否則改名判斷會錯）。
+- 寫進資料庫、稽核或 log 的固定繁中文字（N1 已裁決：改用系統預設語系，不是請求語系）：`ApprovalService/ApprovalEngine.cs:191`（改道說明，程式註解寫「comment 是固定繁中，只留給資料庫與稽核」）、`ApprovalService/ApprovalGraphEngine.cs:277,283`（分支取消說明）、`ApprovalService/ApproverResolver.cs:179`（「寫進簽核歷程的說明（資料庫）固定繁中」）、`Common/Security/FieldLocks.cs:73`（`Exception.Message` 給記錄與測試）、`AppService/Commands/ImportAppPackage.cs:46` 與 `TemplateService/Commands/ImportTemplate/ImportTemplateHandler.cs:30`（稽核目標名稱）、`Domain/Modules/TitleTemplate.cs:118` 與 `FieldService/Commands/UpdateOption/UpdateOptionHandler.cs:29`（記錄標題用的選項標籤，兩處要一致，否則改名判斷會錯）。
 - 不改：`Module.cs:41,46`、`SectionTextJsonConverter.cs:16,23`（舊資料與套件格式的相容讀法）、`TemplateValidator.cs:276`（套件必有繁中，判斷 12）、`ServiceResult.cs:21,29`（給 log 與測試的繁中 `Message`／`Errors`）。
 - Test: `backend/tests/DynamicModules.ApplicationTests/Dynamic/Policies/LocaleLabelTests.cs`（加案例）、`backend/tests/DynamicModules.WebAPITests/Dynamic/LocaleChainApiTests.cs`（加案例）
 
@@ -622,10 +622,10 @@ D4 已裁決：查詢參數帶停用語系時用預設語系。
   - 出廠值時既有測試的訊息斷言不改。
 - [ ] **Step 2: 跑測試確認失敗**：`cd backend && dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~LocaleLabelTests"`；`dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~LocaleChainApiTests"`
 - [ ] **Step 3: 實作**
-- [ ] **Step 4: 跑測試確認通過**：同 Step 2；另跑 ApplicationTests `--filter "FullyQualifiedName~App|FullyQualifiedName~Template|FullyQualifiedName~Master|FullyQualifiedName~Delete|FullyQualifiedName~Import|FullyQualifiedName~ModuleService|FullyQualifiedName~Approval|FullyQualifiedName~Group"`；WebAPITests `--filter "FullyQualifiedName~App|FullyQualifiedName~Menu|FullyQualifiedName~AdminGroup"`；PostgreSQL：WebAPITests `LocaleChainApiTests`、ApplicationTests `FullyQualifiedName~AccountRepository`；`grep -rn "Resolve(I18nText.FallbackLocale)\|Resolve(Domain.ValueObjects.I18nText.FallbackLocale)" backend/src` 只剩 N1 列出的 9 行
+- [ ] **Step 4: 跑測試確認通過**：同 Step 2；另跑 ApplicationTests `--filter "FullyQualifiedName~App|FullyQualifiedName~Template|FullyQualifiedName~Master|FullyQualifiedName~Delete|FullyQualifiedName~Import|FullyQualifiedName~ModuleService|FullyQualifiedName~Approval|FullyQualifiedName~Group"`；WebAPITests `--filter "FullyQualifiedName~App|FullyQualifiedName~Menu|FullyQualifiedName~AdminGroup"`；PostgreSQL：WebAPITests `LocaleChainApiTests`、ApplicationTests `FullyQualifiedName~AccountRepository`；`grep -rn "Resolve(I18nText.FallbackLocale)\|Resolve(Domain.ValueObjects.I18nText.FallbackLocale)" backend/src` 為 0（N1 那 9 行改用預設語系）
 - [ ] **Step 5: Commit**（`feat(policy): 其餘以繁中解析的訊息改用請求語系與退回鏈（D3）`）
 
-**驗收**：Step 4 全過（含 PostgreSQL）；grep 只剩 N1 那幾處；交付說明列出 N1 待裁決。
+**驗收**：Step 4 全過（含 PostgreSQL）；grep 為 0；N1 測試案例通過。
 
 ### Task 12: 前端語系改從 API 取
 
@@ -638,7 +638,7 @@ D2 已裁決：警示信語言跟啟用與預設語系（`OpsChannelTab`、`Aler
 - Modify: `frontend/src/router/auth-guard.ts`（第一次導覽取 `getAuthOptions()` → `setLocaleSettings({ defaultLocale, enabled })`，沒記過或記的已停用時 `applyLocale(default, …, false)`）、`frontend/src/application/dynamic/session-settings.ts`（`loadSessionSettings` 同一次 `getEffectivePolicies(null)` 一併 `setLocaleSettings({ requiredText })`）、`use-business-time-watch.ts`（每次拿到生效值一併更新 `requiredText`，不提示）
 - Modify: `frontend/src/presentation/locale/LocaleSwitcher.vue`（只列啟用）、`frontend/src/presentation/dynamic/designer/I18nTextInput.vue`、`frontend/src/domain/dynamic/i18n-text.ts`、`frontend/src/domain/dynamic/event-draft.ts:125`、`task-rule-draft.ts:128,148`、`check-draft.ts:48`、`frontend/src/presentation/dynamic/designer/OptionEditor.vue`、`frontend/src/presentation/dynamic/list/ViewMenu.vue`、`frontend/src/presentation/dynamic/print/PrintTab.vue`、`frontend/src/domain/dynamic/menu-nav.ts`
 - Modify（其他寫死 `'zh-TW'`）：`frontend/src/presentation/dynamic/field-type-registry.ts:246`（篩選選項標籤改用目前語系）、`frontend/src/presentation/dynamic/details/detail-rows.ts:104` 與 `frontend/src/presentation/dynamic/build-zod-schema.ts:32` 的 `locale = 'zh-TW'` 預設參數（改成必傳或 `currentLocale()`，以呼叫端為準）、`frontend/src/pages/system/dynamic-modules/ModuleEditorPage.vue`（分區文字「繁中空白就清掉 section」的判斷改成「沒有任何語系有值」）
-- Modify（D2 警示信語言）：前端 `frontend/src/presentation/ops/OpsChannelTab.vue:7,25,28`（選項改 `enabledLocales()`；「出廠」那一項顯示目前的預設語系；已存的語言之後被停用時，下拉怎麼顯示依 N3）；後端 `OpsService/Alerts/AlertMailText.cs:12,14,143`（刪 `FactoryLocale` 常數；`Locale(string? mailLocale, string defaultLocale)`：`mailLocale` 有翻譯表（`Locales`）就用它，否則用 `defaultLocale`）、`OpsService/Alerts/AlertChannelHandlers.cs:32,69`（GET 的出廠值回 `cache.DefaultLocale`；PUT 驗證改成「必須是啟用語系」，訊息照舊 `OptionInvalid`）、`OpsService/Alerts/AlertContracts.cs:18`（寄信時傳 `cache.DefaultLocale`）。`IncidentTitles.cs:62` 的 `ZhTw`（站內通知標題快照的退路）不在 D2 範圍，見新分岔 N2。
+- Modify（D2 警示信語言）：前端 `frontend/src/presentation/ops/OpsChannelTab.vue:7,25,28`（選項改 `enabledLocales()`；「出廠」那一項顯示目前的預設語系；已存的語言之後被停用時，下拉保留該項並標「已停用」、不可新選（N3））；後端 `OpsService/Alerts/AlertMailText.cs:12,14,143`（刪 `FactoryLocale` 常數；`Locale(string? mailLocale, string defaultLocale)`：`mailLocale` 有翻譯表（`Locales`）就用它，否則用 `defaultLocale`）、`OpsService/Alerts/AlertChannelHandlers.cs:32,69`（GET 的出廠值回 `cache.DefaultLocale`；PUT 驗證改成「必須是啟用語系」，訊息照舊 `OptionInvalid`）、`OpsService/Alerts/AlertContracts.cs:18`（寄信時傳 `cache.DefaultLocale`）。`IncidentTitles.cs:62` 的 `ZhTw`（站內通知標題快照的退路）依 N2 改用預設語系退回。
 - Modify: `frontend/src/i18n/*.json`（`designer.zhRequired` → `designer.localeRequired`「{locale} 必填」四語；`ops.channel.localeDisabled`「已停用」四語）
 - 不改：`LedgerTab.vue` 與 `approval-designer/graph/designer-graph.ts:68` 的 `LOCALES`（產生四語文字，判斷 14）；`services/api/http.ts:29-31`、`services/ops/error-reporter.ts:116` 的 `X-Locale: currentLocale()`（目前語系已是預設或使用者選的）
 - Test: `frontend/src/i18n/locale-settings.vitest.spec.ts`（新）、`frontend/src/i18n/locale.vitest.spec.ts`、`frontend/src/domain/dynamic/i18n-text.vitest.spec.ts`、`frontend/src/presentation/dynamic/designer/I18nTextInput.vitest.spec.ts`、`frontend/src/presentation/locale/LocaleSwitcher.vitest.spec.ts`（新）、`event-draft`／`task-rule-draft`／`check-draft` 的 spec、`frontend/src/presentation/dynamic/designer/OptionEditor.vitest.spec.ts`（新）、`ViewMenu.vitest.spec.ts`、`PrintTab.vitest.spec.ts`、`menu-nav.vitest.spec.ts`、`auth-guard.vitest.spec.ts`、`use-business-time-watch.vitest.spec.ts`、`frontend/src/presentation/ops/OpsChannelTab.vitest.spec.ts`（新）；後端 `backend/tests/DynamicModules.WebAPITests/Ops/AlertChannelTests.cs`（D2）；父元件測試見下方「編輯入口」
@@ -680,7 +680,7 @@ D2 已裁決：警示信語言跟啟用與預設語系（`OpsChannelTab`、`Aler
   - `menu-nav`：沒有繁中的分區以英文分組。
   - `use-business-time-watch`：生效值的 `locale.requiredText` 變成 `['zh-TW','en-US']` → `requiredTextLocales()` 跟著變，不呼叫 `Dialog.create`。
   - 編輯入口表的父元件測試（每個入口三案，見上）。
-  - `OpsChannelTab`（D2）：啟用 `['zh-TW','en-US']` 時語言選項只有兩種加「出廠（English）」（預設 `en-US`）；存檔不改信件語言時不送 `mailLocale`（已存 `th` 又停用時照常寄泰文，後端測試驗）；已停用語言的下拉顯示依 N3 補一案。
+  - `OpsChannelTab`（D2）：啟用 `['zh-TW','en-US']` 時語言選項只有兩種加「出廠（English）」（預設 `en-US`）；存檔不改信件語言時不送 `mailLocale`（已存 `th` 又停用時照常寄泰文，後端測試驗）；已存 `th` 又停用時，下拉顯示「ไทย（已停用）」且不在可選清單（N3）。
   - `AlertChannelTests`（D2，後端）：預設 `en-US`、`MailLocale` 是 null 時測試信是英文、GET 的出廠值是 `en-US`；已存 `th` 後停用 `th`，告警信仍是泰文；PUT `mailLocale: "th"`（已停用）→ 400。
 - [ ] **Step 2: 跑測試確認失敗**：`cd frontend && bunx vitest run src/i18n src/domain/dynamic src/presentation/dynamic src/presentation/locale src/presentation/organization src/presentation/ops src/pages/system/dynamic-modules src/router src/application/dynamic --maxWorkers=2`；`cd backend && dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~AlertChannelTests"`
 - [ ] **Step 3: 實作**
@@ -715,7 +715,7 @@ D2 已裁決：警示信語言跟啟用與預設語系（`OpsChannelTab`、`Aler
 2. **現況檢查 S1–S12 與 i4**：逐條對應見修訂紀錄 2026-11-20。
 3. **型別一致**：`PolicyKind.UtcOffset`／`'utcOffset'`、`UtcOffsetOf`／`FormatUtcOffset`／`FactoryBusinessOffset`、`CachedSystemPolicy`（`Get`、`BusinessOffset`、`EnsureFreshAsync`、`Apply`、`Display`、`DefaultLocale`、`EnabledLocales`、`RequiredTextLocales`、`LocaleFallbacks`）、`IPolicyChangeHook.BeforeCommitAsync`、`ShiftDateTimeIndexAsync`、`FieldDisplayContext`、`IInstalledLocales`、`PolicyOptionSource`、`RequiredTextGuard.Check`、`I18nText.Resolve(locale, fallbacks)`；前端 `setBusinessOffset`、`loadSessionSettings`、`setLocaleSettings`、`missingRequired`、`useBusinessTimeWatch`、`businessDayStartUtc` 在使用處名稱一致。`IBusinessTime` 不加 `Offset`；沒有 `SystemPolicySnapshot`。
 4. **Review Focus**：七條都有指定測試與所屬 Task。
-5. **待決**：D1–D5 已於 2026-11-20 由使用者裁決（見上）；第二輪新增 N1–N3，各標了要在哪個 Task 前問，不阻擋其他 Task。
+5. **待決**：D1–D5 已於 2026-11-20 由使用者裁決（見上）；N1–N3 也已裁決，無待決。
 
 ## 使用者裁決
 
