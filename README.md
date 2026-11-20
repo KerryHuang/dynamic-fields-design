@@ -2,7 +2,7 @@
 
 **不寫程式，自己設計進銷存、CRM 與生產管理的業務系統。**
 
-[線上 Demo](https://dynamic-modules-demo.onrender.com)｜[操作手冊](docs/manual.md)｜[Demo 腳本](docs/demo.md)｜[English](README.en.md)
+[線上 Demo](https://formwright-demo.onrender.com)｜[操作手冊](docs/manual.md)｜[Demo 腳本](docs/demo.md)｜[English](README.en.md)
 
 ![首頁儀表板：業務一登入後看到的訂單統計與前 5 大客戶](docs/images/readme/dashboard.png)
 
@@ -51,7 +51,7 @@ Formwright 讓你在畫面上自己定義模組與欄位，系統自動長出列
 
 ## 快速試用
 
-**線上 Demo**：開 [dynamic-modules-demo.onrender.com](https://dynamic-modules-demo.onrender.com)，在登入頁點一個 Demo 帳號即可。幾個例子：
+**線上 Demo**：開 [formwright-demo.onrender.com](https://formwright-demo.onrender.com)，在登入頁點一個 Demo 帳號即可。幾個例子：
 
 | 帳號 | 看得到什麼 |
 |---|---|

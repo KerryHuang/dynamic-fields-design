@@ -1,6 +1,6 @@
 ---
 name: formwright-demo-verify
-description: Use when checking a Formwright change in a browser — on a local Demo (http://127.0.0.1:9180, before merge) or the live Demo site (https://dynamic-modules-demo.onrender.com, after deploy) — or reproducing a reported UI problem.
+description: Use when checking a Formwright change in a browser — on a local Demo (http://127.0.0.1:9180, before merge) or the live Demo site (https://formwright-demo.onrender.com, after deploy) — or reproducing a reported UI problem.
 ---
 
 # Formwright Demo 實機驗證
@@ -8,7 +8,7 @@ description: Use when checking a Formwright change in a browser — on a local D
 兩個場地，步驟相同：
 
 - **本機**：`http://127.0.0.1:9180`，用 `scripts/unattended/local-demo.sh` 啟動。在合併前做，是主要驗證。
-- **線上**：`https://dynamic-modules-demo.onrender.com`。每天台北 02:00 排程部署（推 main 不會部署）；要當天冒煙先跑 `gh workflow run demo-refresh.yml`。
+- **線上**：`https://formwright-demo.onrender.com`。每天台北 02:00 排程部署（推 main 不會部署）；要當天冒煙先跑 `gh workflow run demo-refresh.yml`。
 
 ## 規則
 

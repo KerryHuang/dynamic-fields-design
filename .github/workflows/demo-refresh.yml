@@ -51,7 +51,7 @@ jobs:
       - name: 觸發部署並等新版上線
         env:
           DEMO_DEPLOY_HOOK: ${{ secrets.DEMO_DEPLOY_HOOK }}
-          DEMO_URL: ${{ vars.DEMO_URL || 'https://dynamic-modules-demo.onrender.com' }}
+          DEMO_URL: ${{ vars.DEMO_URL || 'https://formwright-demo.onrender.com' }}
           EXPECTED: ${{ github.sha }}
         run: |
           if [ -z "$DEMO_DEPLOY_HOOK" ]; then
@@ -59,6 +59,12 @@ jobs:
             echo "映像已推上 GHCR；沒有設定 DEMO_DEPLOY_HOOK，略過部署。" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          # 去掉前後空白與換行；值不對時 curl 只回 exit 3，看不出原因
+          DEMO_DEPLOY_HOOK=$(printf '%s' "$DEMO_DEPLOY_HOOK" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+          case "$DEMO_DEPLOY_HOOK" in
+            https://*) ;;
+            *) echo "::error::DEMO_DEPLOY_HOOK 格式不對（應為 https://api.render.com/deploy/…）"; exit 1 ;;
+          esac
           curl -fsS -X POST "$DEMO_DEPLOY_HOOK" > /dev/null
           echo "已觸發部署，等 $DEMO_URL/api/version 的 commit 變成 $EXPECTED（最多 15 分鐘）。" >> "$GITHUB_STEP_SUMMARY"
           # 部署期間舊實例會繼續服務，所以比對版本的 commit，不只看健康檢查（#59）

@@ -2,7 +2,7 @@
 
 **Design your own inventory, CRM and production-management system, no coding required.**
 
-[Live demo](https://dynamic-modules-demo.onrender.com) | [User manual](docs/manual.md) (zh-TW) | [Demo script](docs/demo.md) (zh-TW) | [繁體中文](README.md)
+[Live demo](https://formwright-demo.onrender.com) | [User manual](docs/manual.md) (zh-TW) | [Demo script](docs/demo.md) (zh-TW) | [繁體中文](README.md)
 
 ![Home dashboard: order statistics and top 5 customers as seen by a sales user](docs/images/readme/dashboard.png)
 
@@ -51,7 +51,7 @@ Planned items are not implemented yet; see the [roadmap](docs/roadmap.md) (zh-TW
 
 ## Quick start
 
-**Live demo**: open [dynamic-modules-demo.onrender.com](https://dynamic-modules-demo.onrender.com) and click a demo account on the login page. A few examples:
+**Live demo**: open [formwright-demo.onrender.com](https://formwright-demo.onrender.com) and click a demo account on the login page. A few examples:
 
 | Account | What it can see |
 |---|---|

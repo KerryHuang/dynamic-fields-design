@@ -1,6 +1,6 @@
 # Formwright 表匠操作手冊
 
-這份手冊說明怎麼用 Formwright：在設計器建一個功能（模組）、加欄位、設公式與規則、分配權限，然後讓使用者在自動產生的列表與表單上操作。想先看實際畫面，可以直接開[線上 Demo](https://dynamic-modules-demo.onrender.com)。設計理由見[設計文件](superpowers/specs/2026-11-03-dynamic-modules-design.md)。
+這份手冊說明怎麼用 Formwright：在設計器建一個功能（模組）、加欄位、設公式與規則、分配權限，然後讓使用者在自動產生的列表與表單上操作。想先看實際畫面，可以直接開[線上 Demo](https://formwright-demo.onrender.com)。設計理由見[設計文件](superpowers/specs/2026-11-03-dynamic-modules-design.md)。
 
 ## 1. 開始之前
 
