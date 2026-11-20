@@ -4,7 +4,6 @@ import { baseCompile } from '@intlify/message-compiler';
 const MAX_TEXT_LENGTH = 2000;
 
 // 雙向控制字元（U+202A–202E、U+2066–2069）與其他控制字元（換行、tab 除外）
-// eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f‪-‮⁦-⁩]/;
 
 const nameStart = (c: string) => /[A-Za-z_]/.test(c);

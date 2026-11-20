@@ -25,6 +25,7 @@ import type {
   TaskScheduleResult, TaskViewConfig, TaskViewDetail, TaskViewKind, TaskViewList, TaskViewShareKind, TaskViewShareTargets,
 } from 'src/domain/dynamic/task-board-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
+import type { ApplyLocalePackResult, LocaleAdminList, LocalePackReportData } from 'src/domain/dynamic/locale-pack-types';
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import type {
   AuditAction, AuditDetail, AuditFilter, AuditList, HealthCheckConfig, HealthCheckState, HealthCheckUpdate, HealthResults, IncidentDetail, IncidentFilter,
@@ -599,6 +600,15 @@ export const dynamicApi = {
     http.put<ModulePolicy>(`/modules/${encodeURIComponent(moduleKey)}/policies/${encodeURIComponent(code)}`, { value }).then(data),
   getEffectivePolicies: (moduleKey: string | null) =>
     http.get<EffectivePolicies>('/policies/effective', moduleKey ? { params: { module: moduleKey } } : undefined).then(data),
+  /** 語系包匯入與語系管理（系統管理員）；預覽的本文是檔案原始位元組。 */
+  getLocaleAdmin: () => http.get<LocaleAdminList>('/i18n/locales').then(data),
+  previewLocalePack: (bytes: ArrayBuffer, fileName: string) =>
+    http.post<LocalePackReportData>('/i18n/packs/preview', bytes, { params: { fileName }, headers: { 'Content-Type': 'application/octet-stream' } }).then(data),
+  applyLocalePack: (previewId: string, fileHash: string) =>
+    http.post<ApplyLocalePackResult>('/i18n/packs/apply', { previewId, fileHash }).then(data),
+  rollbackLocalePack: (code: string) => http.post<{ code: string; packId: number }>(`/i18n/locales/${encodeURIComponent(code)}/rollback`).then(data),
+  clearLocaleOverrides: (code: string) => http.post<{ code: string; packId: number }>(`/i18n/locales/${encodeURIComponent(code)}/clear`).then(data),
+  removeLocale: (code: string) => http.delete(`/i18n/locales/${encodeURIComponent(code)}`).then(data),
   getTaskSummary: () => http.get<TaskCounts>('/tasks/summary').then(data)
     .then((c) => ({ dueToday: c.dueToday ?? 0, overdue: c.overdue ?? 0 })),
   getNotifications: (take = 20) =>
