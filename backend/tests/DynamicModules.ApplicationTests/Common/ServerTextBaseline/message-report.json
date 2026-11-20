@@ -1,0 +1,1370 @@
+{
+  "AppClosedNoRewrite": {
+    "zh-TW": "應用程式已關閉，這項變更會改寫既有資料，請先重新開啟應用程式",
+    "en-US": "The app is closed. This change would rewrite existing data. Reopen the app first",
+    "th": "แอปพลิเคชันถูกปิด การเปลี่ยนแปลงนี้จะเขียนทับข้อมูลเดิม โปรดเปิดแอปพลิเคชันอีกครั้งก่อน",
+    "vi": "Ứng dụng đã đóng. Thay đổi này sẽ ghi đè dữ liệu hiện có, vui lòng mở lại ứng dụng trước"
+  },
+  "AppClosedReadOnly": {
+    "zh-TW": "應用程式已關閉，資料唯讀",
+    "en-US": "The app is closed and its data is read-only",
+    "th": "แอปพลิเคชันถูกปิด ข้อมูลเป็นแบบอ่านอย่างเดียว",
+    "vi": "Ứng dụng đã đóng, dữ liệu chỉ đọc"
+  },
+  "ApprovalAddSignLimit": {
+    "zh-TW": "這張單最多加簽 {0} 個關卡",
+    "en-US": "This record allows at most {0} added stages",
+    "th": "เอกสารนี้เพิ่มขั้นตอนการลงนามได้ไม่เกิน {0} ขั้นตอน",
+    "vi": "Chứng từ này chỉ được thêm tối đa {0} bước ký bổ sung"
+  },
+  "ApprovalAddSignModeInvalid": {
+    "zh-TW": "加簽方式只能是 all 或 any",
+    "en-US": "The add-sign mode can only be all or any",
+    "th": "รูปแบบการลงนามเพิ่มต้องเป็น all หรือ any เท่านั้น",
+    "vi": "Cách ký bổ sung chỉ có thể là all hoặc any"
+  },
+  "ApprovalAddSignStage": {
+    "zh-TW": "加簽",
+    "en-US": "Added approval",
+    "th": "การลงนามเพิ่ม",
+    "vi": "Ký bổ sung"
+  },
+  "ApprovalAddSignTooManyUsers": {
+    "zh-TW": "加簽對象最多 {0} 位",
+    "en-US": "You can add at most {0} people",
+    "th": "เพิ่มผู้ลงนามได้ไม่เกิน {0} คน",
+    "vi": "Chỉ có thể thêm tối đa {0} người"
+  },
+  "ApprovalAddSignUsersRequired": {
+    "zh-TW": "請至少選一位加簽對象",
+    "en-US": "Pick at least one person to add",
+    "th": "เลือกผู้ลงนามเพิ่มอย่างน้อยหนึ่งคน",
+    "vi": "Chọn ít nhất một người để ký bổ sung"
+  },
+  "ApprovalAlreadyPending": {
+    "zh-TW": "這張單已在簽核中",
+    "en-US": "This record is already in approval",
+    "th": "เอกสารนี้อยู่ระหว่างการอนุมัติแล้ว",
+    "vi": "Chứng từ này đã đang trong phê duyệt"
+  },
+  "ApprovalBoxInvalid": {
+    "zh-TW": "分頁只能是 todo、done、submitted、all",
+    "en-US": "The tab can only be todo, done, submitted, or all",
+    "th": "แท็บต้องเป็น todo, done, submitted หรือ all เท่านั้น",
+    "vi": "Tab chỉ có thể là todo, done, submitted hoặc all"
+  },
+  "ApprovalBranchCompleted": {
+    "zh-TW": "其他分支已完成，不需處理",
+    "en-US": "Another branch has already finished. No action is needed",
+    "th": "สาขาอื่นเสร็จสิ้นแล้ว ไม่ต้องดำเนินการ",
+    "vi": "Nhánh khác đã hoàn thành, không cần xử lý"
+  },
+  "ApprovalBusy": {
+    "zh-TW": "單據正忙，請稍後再試",
+    "en-US": "This approval is busy. Try again in a moment",
+    "th": "ใบอนุมัตินี้กำลังถูกใช้งาน โปรดลองอีกครั้งในภายหลัง",
+    "vi": "Phiếu phê duyệt đang bận, vui lòng thử lại sau"
+  },
+  "ApprovalCannotWithdraw": {
+    "zh-TW": "目前關卡已有人處理，不能撤回",
+    "en-US": "Someone has already acted on the current stage, so it cannot be withdrawn",
+    "th": "มีผู้ดำเนินการในขั้นปัจจุบันแล้ว จึงถอนคืนไม่ได้",
+    "vi": "Bước hiện tại đã có người xử lý nên không thể thu hồi"
+  },
+  "ApprovalCommentRequired": {
+    "zh-TW": "退回必須填寫意見",
+    "en-US": "A comment is required when rejecting",
+    "th": "ต้องกรอกความเห็นเมื่อส่งกลับ",
+    "vi": "Phải nhập ý kiến khi trả lại"
+  },
+  "ApprovalCommentTooLong": {
+    "zh-TW": "意見不能超過 {0} 字",
+    "en-US": "Comments cannot exceed {0} characters",
+    "th": "ความเห็นต้องไม่เกิน {0} ตัวอักษร",
+    "vi": "Ý kiến không được vượt quá {0} ký tự"
+  },
+  "ApprovalConditionNodeUndecidable": {
+    "zh-TW": "條件「{0}」無法判斷，已停止並通知系統管理員",
+    "en-US": "The condition \"{0}\" cannot be evaluated. The action was stopped and system administrators were notified",
+    "th": "ไม่สามารถประเมินเงื่อนไข \"{0}\" ได้ จึงหยุดดำเนินการและแจ้งผู้ดูแลระบบแล้ว",
+    "vi": "Không thể xác định điều kiện \"{0}\", đã dừng lại và thông báo cho quản trị viên hệ thống"
+  },
+  "ApprovalDelegateEnded": {
+    "zh-TW": "迄日不能早於今天",
+    "en-US": "The end date cannot be earlier than today",
+    "th": "วันที่สิ้นสุดต้องไม่ก่อนวันนี้",
+    "vi": "Ngày kết thúc không được trước hôm nay"
+  },
+  "ApprovalDelegateInactive": {
+    "zh-TW": "找不到這位代理人，或帳號已停用",
+    "en-US": "This delegate was not found or the account is disabled",
+    "th": "ไม่พบผู้รับมอบหมายนี้ หรือบัญชีถูกปิดใช้งาน",
+    "vi": "Không tìm thấy người được ủy quyền này hoặc tài khoản đã bị vô hiệu hóa"
+  },
+  "ApprovalDelegatePeriod": {
+    "zh-TW": "起日不能晚於迄日",
+    "en-US": "The start date cannot be later than the end date",
+    "th": "วันที่เริ่มต้องไม่ช้ากว่าวันที่สิ้นสุด",
+    "vi": "Ngày bắt đầu không được sau ngày kết thúc"
+  },
+  "ApprovalDelegateSelf": {
+    "zh-TW": "代理人不能是自己",
+    "en-US": "You cannot be your own delegate",
+    "th": "ผู้รับมอบหมายต้องไม่ใช่ตัวคุณเอง",
+    "vi": "Người được ủy quyền không thể là chính bạn"
+  },
+  "ApprovalEventBlocked": {
+    "zh-TW": "記錄 {0} 正在簽核中，這次請求改動了它，已取消",
+    "en-US": "Record {0} is in approval and this request changed it, so it was cancelled",
+    "th": "ระเบียน {0} อยู่ระหว่างการอนุมัติ คำขอนี้เปลี่ยนแปลงระเบียนนั้น จึงถูกยกเลิก",
+    "vi": "Bản ghi {0} đang trong phê duyệt mà yêu cầu này đã thay đổi nó, nên đã bị hủy"
+  },
+  "ApprovalFallbackStage": {
+    "zh-TW": "備援簽核",
+    "en-US": "Fallback approval",
+    "th": "การอนุมัติสำรอง",
+    "vi": "Phê duyệt dự phòng"
+  },
+  "ApprovalFieldHiddenForApprover": {
+    "zh-TW": "這個欄位對你隱藏，不能在簽核時修改",
+    "en-US": "This field is hidden from you and cannot be edited during approval",
+    "th": "ฟิลด์นี้ถูกซ่อนจากคุณ จึงแก้ไขระหว่างการอนุมัติไม่ได้",
+    "vi": "Trường này bị ẩn với bạn nên không thể sửa khi phê duyệt"
+  },
+  "ApprovalFieldLocked": {
+    "zh-TW": "這個欄位已經過簽核，要修改請先退回可編輯的狀態（{0}）",
+    "en-US": "This field has been approved. Return the record to an editable state before changing it ({0}).",
+    "th": "ฟิลด์นี้ผ่านการอนุมัติแล้ว หากต้องการแก้ไข โปรดส่งกลับไปยังสถานะที่แก้ไขได้ก่อน ({0})",
+    "vi": "Trường này đã được phê duyệt. Muốn sửa, vui lòng chuyển bản ghi về trạng thái có thể chỉnh sửa trước ({0})."
+  },
+  "ApprovalFieldReadOnlyForApprover": {
+    "zh-TW": "這個欄位對你是唯讀，不能在簽核時修改",
+    "en-US": "This field is read-only for you and cannot be edited during approval",
+    "th": "ฟิลด์นี้เป็นแบบอ่านอย่างเดียวสำหรับคุณ จึงแก้ไขระหว่างการอนุมัติไม่ได้",
+    "vi": "Trường này chỉ đọc với bạn nên không thể sửa khi phê duyệt"
+  },
+  "ApprovalFlowUndecidable": {
+    "zh-TW": "簽核流程「{0}」的條件無法判斷，請系統管理員檢查流程設定",
+    "en-US": "The conditions of approval flow \"{0}\" cannot be evaluated. Ask a system administrator to check the flow settings",
+    "th": "ไม่สามารถประเมินเงื่อนไขของโฟลว์การอนุมัติ \"{0}\" ได้ โปรดให้ผู้ดูแลระบบตรวจสอบการตั้งค่าโฟลว์",
+    "vi": "Không thể xác định điều kiện của quy trình phê duyệt \"{0}\", vui lòng nhờ quản trị viên hệ thống kiểm tra thiết lập quy trình"
+  },
+  "ApprovalFlowVersionMissing": {
+    "zh-TW": "找不到實例綁定的流程版本",
+    "en-US": "The flow version bound to this approval was not found",
+    "th": "ไม่พบเวอร์ชันของโฟลว์ที่ผูกกับการอนุมัตินี้",
+    "vi": "Không tìm thấy phiên bản quy trình gắn với phê duyệt này"
+  },
+  "ApprovalGraphPreviewInvalid": {
+    "zh-TW": "簽核流程「{0}」的流程圖定義不完整，請系統管理員檢查流程設定",
+    "en-US": "The flow graph definition of approval flow \"{0}\" is incomplete. Ask a system administrator to check the flow settings",
+    "th": "นิยามแผนผังโฟลว์ของโฟลว์การอนุมัติ \"{0}\" ไม่สมบูรณ์ โปรดให้ผู้ดูแลระบบตรวจสอบการตั้งค่าโฟลว์",
+    "vi": "Định nghĩa sơ đồ quy trình của quy trình phê duyệt \"{0}\" không đầy đủ, vui lòng nhờ quản trị viên hệ thống kiểm tra thiết lập quy trình"
+  },
+  "ApprovalGraphRuntimeInvalid": {
+    "zh-TW": "流程圖定義不完整，已停止並通知系統管理員",
+    "en-US": "The flow graph definition is incomplete. The action was stopped and system administrators were notified",
+    "th": "นิยามแผนผังโฟลว์ไม่สมบูรณ์ จึงหยุดดำเนินการและแจ้งผู้ดูแลระบบแล้ว",
+    "vi": "Định nghĩa sơ đồ quy trình không đầy đủ, đã dừng lại và thông báo cho quản trị viên hệ thống"
+  },
+  "ApprovalInstanceChanged": {
+    "zh-TW": "單據已有變動，請重新整理",
+    "en-US": "This approval has changed. Refresh and try again",
+    "th": "ใบอนุมัติมีการเปลี่ยนแปลง โปรดรีเฟรช",
+    "vi": "Phiếu phê duyệt đã thay đổi, vui lòng làm mới"
+  },
+  "ApprovalInstanceReturned": {
+    "zh-TW": "單據已退回",
+    "en-US": "This approval was already returned",
+    "th": "ใบอนุมัติถูกส่งกลับแล้ว",
+    "vi": "Phiếu phê duyệt đã bị trả lại"
+  },
+  "ApprovalManagerLabel": {
+    "zh-TW": "第 {0} 層主管",
+    "en-US": "Level {0} manager",
+    "th": "หัวหน้าระดับ {0}",
+    "vi": "Quản lý cấp {0}"
+  },
+  "ApprovalNeedsSubmit": {
+    "zh-TW": "這個狀態需要送出簽核",
+    "en-US": "This status requires submitting for approval",
+    "th": "สถานะนี้ต้องส่งขออนุมัติ",
+    "vi": "Trạng thái này cần gửi phê duyệt"
+  },
+  "ApprovalNoApprover": {
+    "zh-TW": "關卡「{0}」的來源「{1}」找不到簽核人，備援也沒有人",
+    "en-US": "No approver found for stage \"{0}\" from source \"{1}\", and there is no fallback either",
+    "th": "ไม่พบผู้อนุมัติของขั้น \"{0}\" จากแหล่ง \"{1}\" และไม่มีผู้อนุมัติสำรองด้วย",
+    "vi": "Không tìm thấy người phê duyệt cho bước \"{0}\" từ nguồn \"{1}\", và cũng không có người dự phòng"
+  },
+  "ApprovalNoMatchingFlow": {
+    "zh-TW": "沒有符合條件的簽核流程，請聯絡管理員",
+    "en-US": "No approval flow matches the conditions. Contact an administrator",
+    "th": "ไม่มีโฟลว์การอนุมัติที่ตรงตามเงื่อนไข โปรดติดต่อผู้ดูแลระบบ",
+    "vi": "Không có quy trình phê duyệt phù hợp với điều kiện, vui lòng liên hệ quản trị viên"
+  },
+  "ApprovalNoPreviousStage": {
+    "zh-TW": "前面沒有已同意的關卡，只能退回發起人",
+    "en-US": "There is no approved stage before this one. You can only return it to the submitter",
+    "th": "ไม่มีขั้นก่อนหน้าที่อนุมัติแล้ว จึงส่งกลับได้เฉพาะผู้ส่ง",
+    "vi": "Không có bước nào trước đó đã được đồng ý, chỉ có thể trả lại cho người gửi"
+  },
+  "ApprovalNoWorkflow": {
+    "zh-TW": "記錄所在模組沒有狀態機",
+    "en-US": "The module of this record has no workflow",
+    "th": "โมดูลของระเบียนนี้ไม่มีเวิร์กโฟลว์สถานะ",
+    "vi": "Mô-đun chứa bản ghi này không có luồng trạng thái"
+  },
+  "ApprovalNotApprovalTransition": {
+    "zh-TW": "這個轉移不需要送出簽核",
+    "en-US": "This status change does not need approval",
+    "th": "การเปลี่ยนสถานะนี้ไม่ต้องส่งขออนุมัติ",
+    "vi": "Việc chuyển trạng thái này không cần phê duyệt"
+  },
+  "ApprovalNotEditableField": {
+    "zh-TW": "這一關不能修改這個欄位",
+    "en-US": "This field cannot be edited at this stage",
+    "th": "ขั้นนี้แก้ไขฟิลด์นี้ไม่ได้",
+    "vi": "Bước này không được sửa trường này"
+  },
+  "ApprovalPending": {
+    "zh-TW": "簽核中，不可修改",
+    "en-US": "In approval and cannot be edited",
+    "th": "อยู่ระหว่างการอนุมัติ แก้ไขไม่ได้",
+    "vi": "Đang trong phê duyệt, không thể sửa"
+  },
+  "ApprovalPickCandidatesUnmatched": {
+    "zh-TW": "這一關的候選群組已失效，不能自選，送出後由備援簽核人處理",
+    "en-US": "The candidate groups of this stage are no longer valid, so approvers cannot be picked. After submitting, the fallback approvers will handle it",
+    "th": "กลุ่มผู้สมัครของขั้นนี้ใช้ไม่ได้แล้ว จึงเลือกผู้อนุมัติเองไม่ได้ หลังส่งแล้วผู้อนุมัติสำรองจะดำเนินการ",
+    "vi": "Nhóm ứng viên của bước này đã mất hiệu lực nên không thể tự chọn; sau khi gửi, người phê duyệt dự phòng sẽ xử lý"
+  },
+  "ApprovalPickCount": {
+    "zh-TW": "請選 {0} 到 {1} 位簽核人",
+    "en-US": "Pick {0} to {1} approvers",
+    "th": "โปรดเลือกผู้อนุมัติ {0} ถึง {1} คน",
+    "vi": "Vui lòng chọn từ {0} đến {1} người phê duyệt"
+  },
+  "ApprovalPickExact": {
+    "zh-TW": "請選 {0} 位簽核人",
+    "en-US": "Pick {0} approvers",
+    "th": "โปรดเลือกผู้อนุมัติ {0} คน",
+    "vi": "Vui lòng chọn {0} người phê duyệt"
+  },
+  "ApprovalPickInvalid": {
+    "zh-TW": "自選的簽核人必須是候選群組內、啟用中的其他使用者",
+    "en-US": "Picked approvers must be other active users within the candidate groups",
+    "th": "ผู้อนุมัติที่เลือกเองต้องเป็นผู้ใช้อื่นที่ใช้งานอยู่ในกลุ่มผู้สมัคร",
+    "vi": "Người phê duyệt tự chọn phải là người dùng khác đang hoạt động thuộc nhóm ứng viên"
+  },
+  "ApprovalPickLabel": {
+    "zh-TW": "發起人自選",
+    "en-US": "Picked by the submitter",
+    "th": "ผู้ส่งเลือกเอง",
+    "vi": "Người gửi tự chọn"
+  },
+  "ApprovalRecordGone": {
+    "zh-TW": "找不到簽核的記錄（可能已被刪除）",
+    "en-US": "The record under approval was not found (it may have been deleted)",
+    "th": "ไม่พบระเบียนที่อยู่ระหว่างการอนุมัติ (อาจถูกลบแล้ว)",
+    "vi": "Không tìm thấy bản ghi đang phê duyệt (có thể đã bị xóa)"
+  },
+  "ApprovalRejectTargetInvalid": {
+    "zh-TW": "退回對象只能是 initiator 或 previous",
+    "en-US": "The return target can only be initiator or previous",
+    "th": "ปลายทางการส่งกลับต้องเป็น initiator หรือ previous เท่านั้น",
+    "vi": "Đối tượng trả lại chỉ có thể là initiator hoặc previous"
+  },
+  "ApprovalRuntimeInvalid": {
+    "zh-TW": "簽核設定與狀態機不一致，已停止並通知系統管理員",
+    "en-US": "The approval settings do not match the workflow. The action was stopped and system administrators were notified",
+    "th": "การตั้งค่าการอนุมัติไม่สอดคล้องกับเวิร์กโฟลว์สถานะ จึงหยุดดำเนินการและแจ้งผู้ดูแลระบบแล้ว",
+    "vi": "Thiết lập phê duyệt không khớp với luồng trạng thái, đã dừng lại và thông báo cho quản trị viên hệ thống"
+  },
+  "ApprovalStageDefMissing": {
+    "zh-TW": "找不到要退回的關卡定義",
+    "en-US": "The definition of the stage to return to was not found",
+    "th": "ไม่พบนิยามของขั้นที่จะส่งกลับ",
+    "vi": "Không tìm thấy định nghĩa của bước cần trả lại"
+  },
+  "ApprovalStageHandled": {
+    "zh-TW": "這一關已由他人處理",
+    "en-US": "This stage was already handled by someone else",
+    "th": "ขั้นนี้มีผู้อื่นดำเนินการแล้ว",
+    "vi": "Bước này đã được người khác xử lý"
+  },
+  "ApprovalStateChanged": {
+    "zh-TW": "簽核狀態已更新，請重新整理後再試",
+    "en-US": "The approval status has been updated. Refresh and try again",
+    "th": "สถานะการอนุมัติถูกอัปเดตแล้ว โปรดรีเฟรชแล้วลองอีกครั้ง",
+    "vi": "Trạng thái phê duyệt đã được cập nhật, vui lòng làm mới rồi thử lại"
+  },
+  "ApprovalStatusInvalid": {
+    "zh-TW": "簽核狀態只能是 pending、approved、rejected、withdrawn、cancelled、rerouted",
+    "en-US": "The approval status can only be pending, approved, rejected, withdrawn, cancelled, or rerouted",
+    "th": "สถานะการอนุมัติต้องเป็น pending, approved, rejected, withdrawn, cancelled หรือ rerouted เท่านั้น",
+    "vi": "Trạng thái phê duyệt chỉ có thể là pending, approved, rejected, withdrawn, cancelled hoặc rerouted"
+  },
+  "ApprovalTargetInStage": {
+    "zh-TW": "這位使用者在這一關已經有簽核任務",
+    "en-US": "This user already has an approval task in this stage",
+    "th": "ผู้ใช้นี้มีงานอนุมัติในขั้นนี้อยู่แล้ว",
+    "vi": "Người dùng này đã có nhiệm vụ phê duyệt ở bước này"
+  },
+  "ApprovalTargetInactive": {
+    "zh-TW": "找不到這位使用者，或帳號已停用",
+    "en-US": "This user was not found or the account is disabled",
+    "th": "ไม่พบผู้ใช้นี้ หรือบัญชีถูกปิดใช้งาน",
+    "vi": "Không tìm thấy người dùng này hoặc tài khoản đã bị vô hiệu hóa"
+  },
+  "ApprovalTargetInitiator": {
+    "zh-TW": "不能交給發起人",
+    "en-US": "You cannot hand it over to the submitter",
+    "th": "ไม่สามารถส่งต่อให้ผู้ส่งได้",
+    "vi": "Không thể giao cho người gửi"
+  },
+  "ApprovalTargetSelf": {
+    "zh-TW": "不能交給自己",
+    "en-US": "You cannot hand it over to yourself",
+    "th": "ไม่สามารถส่งต่อให้ตัวเองได้",
+    "vi": "Không thể giao cho chính mình"
+  },
+  "ApprovalTaskNotFound": {
+    "zh-TW": "找不到待簽核",
+    "en-US": "Approval task not found",
+    "th": "ไม่พบงานรออนุมัติ",
+    "vi": "Không tìm thấy tác vụ chờ phê duyệt"
+  },
+  "ApprovalTooManyApprovers": {
+    "zh-TW": "關卡「{0}」的簽核人超過 {1} 人",
+    "en-US": "Stage \"{0}\" has more than {1} approvers",
+    "th": "ขั้น \"{0}\" มีผู้อนุมัติเกิน {1} คน",
+    "vi": "Bước \"{0}\" có hơn {1} người phê duyệt"
+  },
+  "ApprovalTransitionBlocked": {
+    "zh-TW": "記錄 {0} 的狀態轉移需要送出簽核，這次請求改動了它，已取消",
+    "en-US": "The status change of record {0} requires submitting for approval and this request changed it, so it was cancelled",
+    "th": "การเปลี่ยนสถานะของระเบียน {0} ต้องส่งขออนุมัติ แต่คำขอนี้เปลี่ยนแปลงระเบียนนั้น จึงถูกยกเลิก",
+    "vi": "Việc chuyển trạng thái của bản ghi {0} cần gửi phê duyệt mà yêu cầu này đã thay đổi nó, nên đã bị hủy"
+  },
+  "ApprovalUserFieldIsInitiator": {
+    "zh-TW": "簽核人不能是發起人自己",
+    "en-US": "The approver cannot be the submitter",
+    "th": "ผู้อนุมัติต้องไม่ใช่ผู้ส่งเอง",
+    "vi": "Người phê duyệt không thể là người gửi"
+  },
+  "ApprovalUserFieldNotCandidate": {
+    "zh-TW": "簽核人不在候選群組內",
+    "en-US": "The approver is not in the candidate groups",
+    "th": "ผู้อนุมัติไม่ได้อยู่ในกลุ่มผู้สมัคร",
+    "vi": "Người phê duyệt không thuộc nhóm ứng viên"
+  },
+  "ApprovalWithdrawFirst": {
+    "zh-TW": "簽核中，請先撤回",
+    "en-US": "In approval. Withdraw it first",
+    "th": "อยู่ระหว่างการอนุมัติ โปรดถอนคืนก่อน",
+    "vi": "Đang trong phê duyệt, vui lòng thu hồi trước"
+  },
+  "AttachmentFieldNotFound": {
+    "zh-TW": "找不到附件欄位",
+    "en-US": "Attachment field not found",
+    "th": "ไม่พบฟิลด์ไฟล์แนบ",
+    "vi": "Không tìm thấy trường tệp đính kèm"
+  },
+  "AttachmentForged": {
+    "zh-TW": "附件只能透過上傳加入",
+    "en-US": "Attachments can only be added by uploading",
+    "th": "เพิ่มไฟล์แนบได้โดยการอัปโหลดเท่านั้น",
+    "vi": "Chỉ có thể thêm tệp đính kèm bằng cách tải lên"
+  },
+  "AttachmentLocked": {
+    "zh-TW": "這筆記錄已經過簽核，附件不能再增減；要修改請先退回可編輯的狀態",
+    "en-US": "This record has been approved. Attachments can no longer be added or removed; return it to an editable state first.",
+    "th": "เรคอร์ดนี้ผ่านการอนุมัติแล้ว จึงเพิ่มหรือลบไฟล์แนบไม่ได้ หากต้องการแก้ไข โปรดส่งกลับไปยังสถานะที่แก้ไขได้ก่อน",
+    "vi": "Bản ghi này đã được phê duyệt nên không thể thêm hoặc xóa tệp đính kèm; muốn sửa, vui lòng chuyển về trạng thái có thể chỉnh sửa trước."
+  },
+  "AttachmentNotFound": {
+    "zh-TW": "找不到附件",
+    "en-US": "Attachment not found",
+    "th": "ไม่พบไฟล์แนบ",
+    "vi": "Không tìm thấy tệp đính kèm"
+  },
+  "AttachmentNotList": {
+    "zh-TW": "附件的值必須是檔案清單",
+    "en-US": "The attachment value must be a file list",
+    "th": "ค่าของไฟล์แนบต้องเป็นรายการไฟล์",
+    "vi": "Giá trị tệp đính kèm phải là danh sách tệp"
+  },
+  "AttachmentPosted": {
+    "zh-TW": "已記帳的單據不能再增減附件",
+    "en-US": "Attachments cannot be added or removed on a posted document",
+    "th": "เอกสารที่ลงบัญชีแล้วไม่สามารถเพิ่มหรือลบไฟล์แนบได้",
+    "vi": "Không thể thêm hoặc xóa tệp đính kèm trên chứng từ đã ghi sổ"
+  },
+  "AuditCursorInvalid": {
+    "zh-TW": "分頁位置不正確",
+    "en-US": "The page position is invalid",
+    "th": "ตำแหน่งหน้าไม่ถูกต้อง",
+    "vi": "Vị trí trang không hợp lệ"
+  },
+  "AuditDateTooEarly": {
+    "zh-TW": "日期不能早於 {0}",
+    "en-US": "Dates cannot be earlier than {0}",
+    "th": "วันที่ต้องไม่ก่อน {0}",
+    "vi": "Ngày không được sớm hơn {0}"
+  },
+  "AuditFilterInvalid": {
+    "zh-TW": "篩選條件不正確",
+    "en-US": "The filter is invalid",
+    "th": "เงื่อนไขการกรองไม่ถูกต้อง",
+    "vi": "Điều kiện lọc không hợp lệ"
+  },
+  "AuditLimitOutOfRange": {
+    "zh-TW": "每頁筆數要在 1 到 {0} 之間",
+    "en-US": "Page size must be between 1 and {0}",
+    "th": "จำนวนรายการต่อหน้าต้องอยู่ระหว่าง 1 ถึง {0}",
+    "vi": "Số bản ghi mỗi trang phải từ 1 đến {0}"
+  },
+  "AuditNotFound": {
+    "zh-TW": "找不到稽核紀錄",
+    "en-US": "Audit record not found",
+    "th": "ไม่พบบันทึกการตรวจสอบ",
+    "vi": "Không tìm thấy bản ghi kiểm toán"
+  },
+  "AuditRangeReversed": {
+    "zh-TW": "開始時間不能晚於結束時間",
+    "en-US": "The start time cannot be later than the end time",
+    "th": "เวลาเริ่มต้องไม่ช้ากว่าเวลาสิ้นสุด",
+    "vi": "Thời gian bắt đầu không được sau thời gian kết thúc"
+  },
+  "AuditRangeTooLong": {
+    "zh-TW": "查詢區間最長 {0} 天",
+    "en-US": "The range can be at most {0} days",
+    "th": "ช่วงที่ค้นหายาวได้ไม่เกิน {0} วัน",
+    "vi": "Khoảng truy vấn tối đa {0} ngày"
+  },
+  "BlockNotFound": {
+    "zh-TW": "找不到區塊",
+    "en-US": "Block not found",
+    "th": "ไม่พบบล็อก",
+    "vi": "Không tìm thấy khối"
+  },
+  "CheckNotFound": {
+    "zh-TW": "找不到檢查",
+    "en-US": "Check not found",
+    "th": "ไม่พบการตรวจสอบ",
+    "vi": "Không tìm thấy kiểm tra"
+  },
+  "ConversionNotFound": {
+    "zh-TW": "找不到轉換定義",
+    "en-US": "Conversion definition not found",
+    "th": "ไม่พบนิยามการแปลง",
+    "vi": "Không tìm thấy định nghĩa chuyển đổi"
+  },
+  "DatabaseBusy": {
+    "zh-TW": "系統忙碌中，請稍後再試",
+    "en-US": "The system is busy. Please try again later",
+    "th": "ระบบไม่ว่าง โปรดลองอีกครั้งในภายหลัง",
+    "vi": "Hệ thống đang bận, vui lòng thử lại sau"
+  },
+  "DatabaseUnavailable": {
+    "zh-TW": "資料庫目前無法連線，請聯絡系統管理員",
+    "en-US": "The database cannot be reached right now. Please contact your system administrator",
+    "th": "ขณะนี้ไม่สามารถเชื่อมต่อฐานข้อมูลได้ โปรดติดต่อผู้ดูแลระบบ",
+    "vi": "Hiện không thể kết nối cơ sở dữ liệu, vui lòng liên hệ quản trị viên hệ thống"
+  },
+  "DatabaseUnwritable": {
+    "zh-TW": "資料庫目前無法寫入，請聯絡系統管理員",
+    "en-US": "The database cannot be written to right now. Please contact your system administrator",
+    "th": "ขณะนี้ไม่สามารถเขียนฐานข้อมูลได้ โปรดติดต่อผู้ดูแลระบบ",
+    "vi": "Hiện không thể ghi vào cơ sở dữ liệu, vui lòng liên hệ quản trị viên hệ thống"
+  },
+  "DateFormat": {
+    "zh-TW": "日期格式必須是 yyyy-MM-dd",
+    "en-US": "The date format must be yyyy-MM-dd",
+    "th": "รูปแบบวันที่ต้องเป็น yyyy-MM-dd",
+    "vi": "Định dạng ngày phải là yyyy-MM-dd"
+  },
+  "DateTimeFormat": {
+    "zh-TW": "日期時間格式錯誤",
+    "en-US": "Invalid date-time format",
+    "th": "รูปแบบวันที่และเวลาไม่ถูกต้อง",
+    "vi": "Định dạng ngày giờ không hợp lệ"
+  },
+  "DeleteBookedReferenced": {
+    "zh-TW": "有已記帳的單據參照這筆記錄，不能刪除",
+    "en-US": "A posted document references this record, so it cannot be deleted",
+    "th": "มีเอกสารที่ลงบัญชีแล้วอ้างอิงระเบียนนี้ จึงลบไม่ได้",
+    "vi": "Có chứng từ đã ghi sổ tham chiếu bản ghi này nên không thể xóa"
+  },
+  "DeleteLockedReferenced": {
+    "zh-TW": "有處於唯讀狀態的單據參照這筆記錄，不能刪除",
+    "en-US": "A read-only document references this record, so it cannot be deleted",
+    "th": "มีเอกสารสถานะอ่านอย่างเดียวอ้างอิงระเบียนนี้ จึงลบไม่ได้",
+    "vi": "Có chứng từ ở trạng thái chỉ đọc tham chiếu bản ghi này nên không thể xóa"
+  },
+  "DeleteReferenced": {
+    "zh-TW": "還有其他資料參照這筆記錄，不能刪除",
+    "en-US": "Other records still reference this record, so it cannot be deleted",
+    "th": "ยังมีข้อมูลอื่นอ้างอิงระเบียนนี้ จึงลบไม่ได้",
+    "vi": "Vẫn còn dữ liệu khác tham chiếu bản ghi này nên không thể xóa"
+  },
+  "DeleteTooDeep": {
+    "zh-TW": "連帶刪除超過 5 層，請先手動刪除下層資料",
+    "en-US": "Cascading delete goes deeper than 5 levels. Delete the lower-level data manually first",
+    "th": "การลบต่อเนื่องเกิน 5 ชั้น โปรดลบข้อมูลชั้นล่างด้วยตนเองก่อน",
+    "vi": "Xóa liên đới vượt quá 5 cấp, vui lòng xóa thủ công dữ liệu cấp dưới trước"
+  },
+  "DetailRowNotFound": {
+    "zh-TW": "明細不存在",
+    "en-US": "Detail row not found",
+    "th": "ไม่พบรายการรายละเอียด",
+    "vi": "Không tìm thấy dòng chi tiết"
+  },
+  "DigitsExceeded": {
+    "zh-TW": "有效數字最多 {0} 位",
+    "en-US": "At most {0} significant digits",
+    "th": "ตัวเลขนัยสำคัญได้ไม่เกิน {0} หลัก",
+    "vi": "Tối đa {0} chữ số có nghĩa"
+  },
+  "DisplayNameRequired": {
+    "zh-TW": "請輸入姓名",
+    "en-US": "Enter a name",
+    "th": "โปรดป้อนชื่อ",
+    "vi": "Vui lòng nhập họ tên"
+  },
+  "DisplayNameTooLong": {
+    "zh-TW": "姓名最多 {0} 字",
+    "en-US": "The name can be at most {0} characters",
+    "th": "ชื่อยาวได้ไม่เกิน {0} ตัวอักษร",
+    "vi": "Họ tên tối đa {0} ký tự"
+  },
+  "EmailFormat": {
+    "zh-TW": "Email 格式錯誤",
+    "en-US": "Invalid email format",
+    "th": "รูปแบบอีเมลไม่ถูกต้อง",
+    "vi": "Định dạng email không hợp lệ"
+  },
+  "EventHiddenSourceNeedsPermissionAdmin": {
+    "zh-TW": "允許複製被隱藏的值需要「權限設定」權限，請洽系統管理員",
+    "en-US": "Allowing hidden values to be copied requires the \"Permission settings\" right. Please contact your system administrator",
+    "th": "การอนุญาตให้คัดลอกค่าที่ถูกซ่อนต้องมีสิทธิ์ \"การตั้งค่าสิทธิ์\" โปรดติดต่อผู้ดูแลระบบ",
+    "vi": "Cho phép sao chép giá trị bị ẩn cần quyền \"Cài đặt quyền\", vui lòng liên hệ quản trị viên hệ thống"
+  },
+  "EventNotFound": {
+    "zh-TW": "找不到事件",
+    "en-US": "Event not found",
+    "th": "ไม่พบเหตุการณ์",
+    "vi": "Không tìm thấy sự kiện"
+  },
+  "FieldNotFound": {
+    "zh-TW": "找不到欄位",
+    "en-US": "Field not found",
+    "th": "ไม่พบฟิลด์",
+    "vi": "Không tìm thấy trường"
+  },
+  "Forbidden": {
+    "zh-TW": "沒有權限執行此操作",
+    "en-US": "You do not have permission to perform this action",
+    "th": "คุณไม่มีสิทธิ์ดำเนินการนี้",
+    "vi": "Bạn không có quyền thực hiện thao tác này"
+  },
+  "FrozenField": {
+    "zh-TW": "欄位「{0}」屬於已關閉的應用程式「{1}」，不能修改",
+    "en-US": "The field \"{0}\" belongs to the closed app \"{1}\" and cannot be edited",
+    "th": "ฟิลด์ \"{0}\" อยู่ในแอปพลิเคชัน \"{1}\" ที่ปิดแล้ว จึงแก้ไขไม่ได้",
+    "vi": "Trường \"{0}\" thuộc ứng dụng đã đóng \"{1}\" nên không thể sửa"
+  },
+  "FrozenFieldHidden": {
+    "zh-TW": "這筆資料有無法修改的欄位",
+    "en-US": "This record has fields that cannot be edited",
+    "th": "ระเบียนนี้มีฟิลด์ที่แก้ไขไม่ได้",
+    "vi": "Bản ghi này có trường không thể sửa"
+  },
+  "HealthCheckBusy": {
+    "zh-TW": "這個檢查正在執行或剛執行過，請 {0} 秒後再試",
+    "en-US": "This check is running or has just run. Try again in {0} seconds",
+    "th": "การตรวจนี้กำลังทำงานหรือเพิ่งทำงาน โปรดลองใหม่ใน {0} วินาที",
+    "vi": "Kiểm tra này đang chạy hoặc vừa chạy, vui lòng thử lại sau {0} giây"
+  },
+  "HealthCheckCannotDisable": {
+    "zh-TW": "這個檢查不能關閉",
+    "en-US": "This check cannot be turned off",
+    "th": "ไม่สามารถปิดการตรวจนี้ได้",
+    "vi": "Không thể tắt kiểm tra này"
+  },
+  "HealthCheckNoThreshold": {
+    "zh-TW": "這個檢查沒有這個門檻",
+    "en-US": "This check has no such threshold",
+    "th": "การตรวจนี้ไม่มีเกณฑ์นี้",
+    "vi": "Kiểm tra này không có ngưỡng này"
+  },
+  "HealthCheckNotApplicable": {
+    "zh-TW": "這個檢查不適用於目前的資料庫",
+    "en-US": "This check does not apply to the current database",
+    "th": "การตรวจนี้ใช้ไม่ได้กับฐานข้อมูลปัจจุบัน",
+    "vi": "Kiểm tra này không áp dụng cho cơ sở dữ liệu hiện tại"
+  },
+  "HealthCheckNotFound": {
+    "zh-TW": "找不到健康檢查",
+    "en-US": "Health check not found",
+    "th": "ไม่พบการตรวจสุขภาพ",
+    "vi": "Không tìm thấy kiểm tra sức khỏe"
+  },
+  "HealthCheckOutOfRange": {
+    "zh-TW": "要在 {0} 到 {1} 之間",
+    "en-US": "Must be between {0} and {1}",
+    "th": "ต้องอยู่ระหว่าง {0} ถึง {1}",
+    "vi": "Phải từ {0} đến {1}"
+  },
+  "HealthCheckThresholdOrder": {
+    "zh-TW": "警告門檻與嚴重門檻的先後不合理",
+    "en-US": "The warning and critical thresholds are in the wrong order",
+    "th": "ลำดับเกณฑ์เตือนและเกณฑ์ร้ายแรงไม่สมเหตุสมผล",
+    "vi": "Thứ tự ngưỡng cảnh báo và ngưỡng nghiêm trọng không hợp lý"
+  },
+  "IdempotencyKeyReused": {
+    "zh-TW": "同一個操作識別碼（Idempotency-Key）已用在不同內容的請求",
+    "en-US": "This operation ID (Idempotency-Key) was already used for a request with different content",
+    "th": "รหัสการดำเนินการนี้ (Idempotency-Key) ถูกใช้กับคำขอที่มีเนื้อหาต่างกันไปแล้ว",
+    "vi": "Mã thao tác này (Idempotency-Key) đã được dùng cho một yêu cầu có nội dung khác"
+  },
+  "IncidentManagedBySource": {
+    "zh-TW": "這類事件由系統偵測到恢復後自動結案，不能手動結案",
+    "en-US": "This kind of incident is resolved automatically when the system detects recovery; it cannot be resolved manually",
+    "th": "เหตุการณ์ประเภทนี้จะปิดอัตโนมัติเมื่อระบบตรวจพบว่ากลับเป็นปกติ ไม่สามารถปิดเองได้",
+    "vi": "Loại sự cố này được tự động đóng khi hệ thống phát hiện đã phục hồi, không thể đóng thủ công"
+  },
+  "IncidentNotFound": {
+    "zh-TW": "找不到維運事件",
+    "en-US": "Ops incident not found",
+    "th": "ไม่พบเหตุการณ์ด้านระบบ",
+    "vi": "Không tìm thấy sự cố vận hành"
+  },
+  "IncidentStateChanged": {
+    "zh-TW": "事件的狀態已經被別人改了，請重新整理",
+    "en-US": "Someone else has already changed this incident. Please refresh",
+    "th": "สถานะของเหตุการณ์นี้ถูกผู้อื่นเปลี่ยนแล้ว โปรดรีเฟรช",
+    "vi": "Trạng thái sự cố đã được người khác thay đổi, vui lòng tải lại"
+  },
+  "LedgerBackstop": {
+    "zh-TW": "分錄不可修改，請新增沖銷分錄（模組「{0}」的既有分錄被這次請求改動）",
+    "en-US": "Ledger entries cannot be edited. Add a reversing entry instead (existing entries of module \"{0}\" were changed by this request)",
+    "th": "แก้ไขรายการบัญชีไม่ได้ โปรดเพิ่มรายการกลับรายการ (รายการบัญชีเดิมของโมดูล \"{0}\" ถูกคำขอนี้เปลี่ยนแปลง)",
+    "vi": "Không thể sửa bút toán, vui lòng thêm bút toán đảo (bút toán hiện có của mô-đun \"{0}\" bị yêu cầu này thay đổi)"
+  },
+  "LedgerFreezeConfirm": {
+    "zh-TW": "這個模組已有 {0} 筆記錄，設為分錄後它們會立刻變成不可修改、不可刪除，且設定後不能取消；確認請帶 confirmFreeze",
+    "en-US": "This module already has {0} record(s). Once it becomes a ledger they can no longer be edited or deleted, and this setting cannot be undone. Send confirmFreeze to confirm",
+    "th": "โมดูลนี้มีระเบียนอยู่แล้ว {0} รายการ เมื่อตั้งเป็นบัญชีแยกประเภท ระเบียนเหล่านี้จะแก้ไขหรือลบไม่ได้ทันที และยกเลิกการตั้งค่านี้ไม่ได้ ส่ง confirmFreeze เพื่อยืนยัน",
+    "vi": "Mô-đun này đã có {0} bản ghi. Khi đặt làm sổ cái, chúng sẽ lập tức không thể sửa hoặc xóa, và không thể hủy thiết lập này. Gửi confirmFreeze để xác nhận"
+  },
+  "LedgerImmutable": {
+    "zh-TW": "分錄不可修改，請新增沖銷分錄",
+    "en-US": "Ledger entries cannot be edited. Add a reversing entry instead",
+    "th": "แก้ไขรายการบัญชีไม่ได้ โปรดเพิ่มรายการกลับรายการ",
+    "vi": "Không thể sửa bút toán, vui lòng thêm bút toán đảo"
+  },
+  "LedgerSchemaImmutable": {
+    "zh-TW": "這是分錄模組，這項變更會改寫既有分錄的資料，不允許",
+    "en-US": "This is a ledger module. This change would rewrite existing ledger data and is not allowed",
+    "th": "นี่คือโมดูลบัญชีแยกประเภท การเปลี่ยนแปลงนี้จะเขียนทับข้อมูลรายการบัญชีเดิม จึงไม่อนุญาต",
+    "vi": "Đây là mô-đun sổ cái. Thay đổi này sẽ ghi đè dữ liệu bút toán hiện có nên không được phép"
+  },
+  "LoginFailed": {
+    "zh-TW": "帳號或密碼錯誤，或帳號暫時無法登入",
+    "en-US": "Incorrect user ID or password, or the account cannot sign in right now",
+    "th": "รหัสผู้ใช้หรือรหัสผ่านไม่ถูกต้อง หรือบัญชีเข้าสู่ระบบไม่ได้ชั่วคราว",
+    "vi": "Tài khoản hoặc mật khẩu không đúng, hoặc tài khoản tạm thời không thể đăng nhập"
+  },
+  "MailNotConfigured": {
+    "zh-TW": "寄信設定還沒設定好（主機或寄件地址沒填，或密碼需要重填）",
+    "en-US": "Email settings are not set up yet (host or sender address is missing, or the password needs to be re-entered)",
+    "th": "การตั้งค่าอีเมลยังไม่ครบ (ไม่ได้กรอกโฮสต์หรือที่อยู่ผู้ส่ง หรือต้องกรอกรหัสผ่านใหม่)",
+    "vi": "Cài đặt email chưa được thiết lập xong (thiếu máy chủ hoặc địa chỉ người gửi, hoặc cần nhập lại mật khẩu)"
+  },
+  "McpPermissionAdminDenied": {
+    "zh-TW": "AI 連線不能修改權限或帳號，請到系統畫面操作",
+    "en-US": "AI connections cannot change permissions or accounts. Please use the system screens instead",
+    "th": "การเชื่อมต่อ AI ไม่สามารถแก้ไขสิทธิ์หรือบัญชีได้ โปรดดำเนินการผ่านหน้าจอของระบบ",
+    "vi": "Kết nối AI không thể thay đổi quyền hoặc tài khoản, vui lòng thao tác trên màn hình hệ thống"
+  },
+  "ModuleNotAvailable": {
+    "zh-TW": "模組不存在或未啟用",
+    "en-US": "The module does not exist or is not enabled",
+    "th": "ไม่มีโมดูลหรือยังไม่เปิดใช้งาน",
+    "vi": "Mô-đun không tồn tại hoặc chưa được kích hoạt"
+  },
+  "ModuleNotFound": {
+    "zh-TW": "找不到模組",
+    "en-US": "Module not found",
+    "th": "ไม่พบโมดูล",
+    "vi": "Không tìm thấy mô-đun"
+  },
+  "MustBeBoolean": {
+    "zh-TW": "必須是是或否",
+    "en-US": "Must be yes or no",
+    "th": "ต้องเป็นใช่หรือไม่ใช่",
+    "vi": "Phải là có hoặc không"
+  },
+  "MustBeInteger": {
+    "zh-TW": "必須是整數",
+    "en-US": "Must be an integer",
+    "th": "ต้องเป็นจำนวนเต็ม",
+    "vi": "Phải là số nguyên"
+  },
+  "MustBeNumber": {
+    "zh-TW": "必須是數字",
+    "en-US": "Must be a number",
+    "th": "ต้องเป็นตัวเลข",
+    "vi": "Phải là số"
+  },
+  "MustBeText": {
+    "zh-TW": "必須是文字",
+    "en-US": "Must be text",
+    "th": "ต้องเป็นข้อความ",
+    "vi": "Phải là văn bản"
+  },
+  "NewPasswordSameAsOld": {
+    "zh-TW": "新密碼不可與舊密碼相同",
+    "en-US": "The new password must be different from the old one",
+    "th": "รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม",
+    "vi": "Mật khẩu mới không được trùng với mật khẩu cũ"
+  },
+  "NewPasswordTooShort": {
+    "zh-TW": "新密碼至少 {0} 碼",
+    "en-US": "The new password must be at least {0} characters",
+    "th": "รหัสผ่านใหม่ต้องมีอย่างน้อย {0} ตัวอักษร",
+    "vi": "Mật khẩu mới phải có ít nhất {0} ký tự"
+  },
+  "OldPasswordRequired": {
+    "zh-TW": "請輸入舊密碼",
+    "en-US": "Enter your current password",
+    "th": "โปรดป้อนรหัสผ่านเดิม",
+    "vi": "Vui lòng nhập mật khẩu cũ"
+  },
+  "OldPasswordWrong": {
+    "zh-TW": "舊密碼錯誤",
+    "en-US": "The current password is incorrect",
+    "th": "รหัสผ่านเดิมไม่ถูกต้อง",
+    "vi": "Mật khẩu cũ không đúng"
+  },
+  "OpsExpectedStatusInvalid": {
+    "zh-TW": "目前狀態只能是 {0}",
+    "en-US": "The expected status can only be {0}",
+    "th": "สถานะที่คาดไว้ต้องเป็น {0} เท่านั้น",
+    "vi": "Trạng thái dự kiến chỉ có thể là {0}"
+  },
+  "OpsNoteTooLong": {
+    "zh-TW": "備註最多 {0} 字",
+    "en-US": "The note can be at most {0} characters",
+    "th": "หมายเหตุยาวได้ไม่เกิน {0} ตัวอักษร",
+    "vi": "Ghi chú tối đa {0} ký tự"
+  },
+  "OptionInvalid": {
+    "zh-TW": "選項不存在或已停用",
+    "en-US": "The option does not exist or is disabled",
+    "th": "ไม่มีตัวเลือกนี้หรือถูกปิดใช้งาน",
+    "vi": "Tùy chọn không tồn tại hoặc đã bị vô hiệu hóa"
+  },
+  "OptionNotFound": {
+    "zh-TW": "找不到選項",
+    "en-US": "Option not found",
+    "th": "ไม่พบตัวเลือก",
+    "vi": "Không tìm thấy tùy chọn"
+  },
+  "OptionOutOfRange": {
+    "zh-TW": "選項不在可選範圍",
+    "en-US": "The option is not in the allowed range",
+    "th": "ตัวเลือกไม่อยู่ในช่วงที่เลือกได้",
+    "vi": "Tùy chọn không nằm trong phạm vi cho phép"
+  },
+  "PasswordChangeRequired": {
+    "zh-TW": "請先變更密碼",
+    "en-US": "Please change your password first",
+    "th": "โปรดเปลี่ยนรหัสผ่านก่อน",
+    "vi": "Vui lòng đổi mật khẩu trước"
+  },
+  "PasswordTooShort": {
+    "zh-TW": "密碼至少 {0} 碼",
+    "en-US": "The password must be at least {0} characters",
+    "th": "รหัสผ่านต้องมีอย่างน้อย {0} ตัวอักษร",
+    "vi": "Mật khẩu phải có ít nhất {0} ký tự"
+  },
+  "PermissionAdminRequired": {
+    "zh-TW": "修改權限需要「權限設定」權限，請洽系統管理員",
+    "en-US": "Changing permissions requires the \"Permission settings\" right. Please contact your system administrator",
+    "th": "การแก้ไขสิทธิ์ต้องมีสิทธิ์ \"การตั้งค่าสิทธิ์\" โปรดติดต่อผู้ดูแลระบบ",
+    "vi": "Thay đổi quyền cần quyền \"Cài đặt quyền\", vui lòng liên hệ quản trị viên hệ thống"
+  },
+  "PhoneFormat": {
+    "zh-TW": "電話格式錯誤",
+    "en-US": "Invalid phone number format",
+    "th": "รูปแบบหมายเลขโทรศัพท์ไม่ถูกต้อง",
+    "vi": "Định dạng số điện thoại không hợp lệ"
+  },
+  "RecordNotFound": {
+    "zh-TW": "記錄不存在",
+    "en-US": "Record not found",
+    "th": "ไม่พบระเบียน",
+    "vi": "Không tìm thấy bản ghi"
+  },
+  "RecordReadOnly": {
+    "zh-TW": "此記錄目前不可修改",
+    "en-US": "This record cannot be edited right now",
+    "th": "ระเบียนนี้แก้ไขไม่ได้ในขณะนี้",
+    "vi": "Hiện không thể sửa bản ghi này"
+  },
+  "RefNotFound": {
+    "zh-TW": "參照的資料不存在或無權選取",
+    "en-US": "The referenced record does not exist or you are not allowed to select it",
+    "th": "ไม่มีข้อมูลที่อ้างอิงหรือไม่มีสิทธิ์เลือก",
+    "vi": "Dữ liệu tham chiếu không tồn tại hoặc bạn không có quyền chọn"
+  },
+  "RefStateMismatch": {
+    "zh-TW": "目標記錄的狀態不符，不能選",
+    "en-US": "The target record's status does not match, so it cannot be selected",
+    "th": "สถานะของระเบียนเป้าหมายไม่ตรงกัน จึงเลือกไม่ได้",
+    "vi": "Trạng thái của bản ghi đích không phù hợp nên không thể chọn"
+  },
+  "Required": {
+    "zh-TW": "此欄位必填",
+    "en-US": "This field is required",
+    "th": "ต้องกรอกช่องนี้",
+    "vi": "Trường này là bắt buộc"
+  },
+  "ResourceNotFound": {
+    "zh-TW": "找不到資源",
+    "en-US": "Resource not found",
+    "th": "ไม่พบทรัพยากร",
+    "vi": "Không tìm thấy tài nguyên"
+  },
+  "ScaleExceeded": {
+    "zh-TW": "小數最多 {0} 位",
+    "en-US": "At most {0} decimal places",
+    "th": "ทศนิยมได้ไม่เกิน {0} ตำแหน่ง",
+    "vi": "Tối đa {0} chữ số thập phân"
+  },
+  "ServerError": {
+    "zh-TW": "系統發生錯誤，請稍後再試",
+    "en-US": "Something went wrong. Please try again later",
+    "th": "ระบบเกิดข้อผิดพลาด โปรดลองอีกครั้งในภายหลัง",
+    "vi": "Hệ thống đã xảy ra lỗi, vui lòng thử lại sau"
+  },
+  "SignInRequired": {
+    "zh-TW": "請先登入",
+    "en-US": "Please sign in first",
+    "th": "โปรดเข้าสู่ระบบก่อน",
+    "vi": "Vui lòng đăng nhập trước"
+  },
+  "SmtpNotConfigured": {
+    "zh-TW": "告警通道還沒設定好（主機、寄件地址或收件信箱沒填，或密碼需要重填）",
+    "en-US": "The alert channel is not set up yet (host, sender address or recipients are missing, or the password needs to be re-entered)",
+    "th": "ช่องทางแจ้งเตือนยังตั้งค่าไม่ครบ (ไม่ได้กรอกโฮสต์ ที่อยู่ผู้ส่ง หรือที่อยู่ผู้รับ หรือต้องกรอกรหัสผ่านใหม่)",
+    "vi": "Kênh cảnh báo chưa được thiết lập xong (thiếu máy chủ, địa chỉ người gửi hoặc người nhận, hoặc cần nhập lại mật khẩu)"
+  },
+  "SmtpPlaintextAuth": {
+    "zh-TW": "加密方式是「無」時不能填帳號或密碼（不准明文傳密碼）",
+    "en-US": "Sign-in name and password are not allowed when encryption is \"none\" (passwords must not be sent in plain text)",
+    "th": "เมื่อการเข้ารหัสเป็น \"ไม่มี\" จะกรอกชื่อผู้ใช้หรือรหัสผ่านไม่ได้ (ห้ามส่งรหัสผ่านแบบข้อความธรรมดา)",
+    "vi": "Khi mã hóa là \"không\" thì không được nhập tài khoản hoặc mật khẩu (không được gửi mật khẩu dạng văn bản thuần)"
+  },
+  "SmtpRecipientsCount": {
+    "zh-TW": "收件信箱要有 {0} 到 {1} 個",
+    "en-US": "There must be {0} to {1} recipient addresses",
+    "th": "ต้องมีที่อยู่ผู้รับ {0} ถึง {1} รายการ",
+    "vi": "Phải có từ {0} đến {1} địa chỉ người nhận"
+  },
+  "SmtpTestFailed": {
+    "zh-TW": "測試信寄不出去",
+    "en-US": "The test email could not be sent",
+    "th": "ส่งอีเมลทดสอบไม่ได้",
+    "vi": "Không gửi được email thử"
+  },
+  "SmtpTestTooSoon": {
+    "zh-TW": "測試信剛寄過，請 {0} 秒後再試",
+    "en-US": "A test email was just sent. Try again in {0} seconds",
+    "th": "เพิ่งส่งอีเมลทดสอบไป โปรดลองใหม่ใน {0} วินาที",
+    "vi": "Vừa gửi email thử, vui lòng thử lại sau {0} giây"
+  },
+  "Stale": {
+    "zh-TW": "資料已被其他人修改，請重新載入",
+    "en-US": "This data was changed by someone else. Please reload",
+    "th": "ข้อมูลนี้ถูกผู้อื่นแก้ไขแล้ว โปรดโหลดใหม่",
+    "vi": "Dữ liệu đã bị người khác sửa, vui lòng tải lại"
+  },
+  "TaskGanttConfigFormat": {
+    "zh-TW": "甘特圖設定有不認得的屬性或格式不正確（{0}）",
+    "en-US": "Gantt chart settings have an unknown property or invalid format ({0})",
+    "th": "การตั้งค่าแผนภูมิแกนต์มีคุณสมบัติที่ไม่รู้จักหรือรูปแบบไม่ถูกต้อง ({0})",
+    "vi": "Cài đặt biểu đồ Gantt có thuộc tính không xác định hoặc sai định dạng ({0})"
+  },
+  "TaskGanttConfigNotObject": {
+    "zh-TW": "甘特圖設定必須是物件",
+    "en-US": "Gantt chart settings must be an object",
+    "th": "การตั้งค่าแผนภูมิแกนต์ต้องเป็นออบเจ็กต์",
+    "vi": "Cài đặt biểu đồ Gantt phải là một đối tượng"
+  },
+  "TaskGanttConfigRequired": {
+    "zh-TW": "甘特圖設定必填",
+    "en-US": "Gantt chart settings are required",
+    "th": "ต้องระบุการตั้งค่าแผนภูมิแกนต์",
+    "vi": "Cài đặt biểu đồ Gantt là bắt buộc"
+  },
+  "TaskGanttConfigVersion": {
+    "zh-TW": "甘特圖設定版本必須是 {0}",
+    "en-US": "Gantt chart settings version must be {0}",
+    "th": "เวอร์ชันการตั้งค่าแผนภูมิแกนต์ต้องเป็น {0}",
+    "vi": "Phiên bản cài đặt biểu đồ Gantt phải là {0}"
+  },
+  "TaskGanttGroupByInvalid": {
+    "zh-TW": "甘特圖分組依據必須是 none、parent 或 assignee",
+    "en-US": "Gantt chart grouping must be none, parent, or assignee",
+    "th": "การจัดกลุ่มแผนภูมิแกนต์ต้องเป็น none, parent หรือ assignee",
+    "vi": "Cách nhóm biểu đồ Gantt phải là none, parent hoặc assignee"
+  },
+  "TaskGanttKeywordTooLong": {
+    "zh-TW": "甘特圖的關鍵字最多 {0} 字",
+    "en-US": "Gantt chart keyword can be at most {0} characters",
+    "th": "คำค้นของแผนภูมิแกนต์ยาวได้ไม่เกิน {0} ตัวอักษร",
+    "vi": "Từ khóa của biểu đồ Gantt tối đa {0} ký tự"
+  },
+  "TaskGanttNameRequired": {
+    "zh-TW": "甘特圖名稱必填",
+    "en-US": "Gantt chart name is required",
+    "th": "ต้องระบุชื่อแผนภูมิแกนต์",
+    "vi": "Tên biểu đồ Gantt là bắt buộc"
+  },
+  "TaskGanttNameTooLong": {
+    "zh-TW": "甘特圖名稱最多 {0} 字",
+    "en-US": "Gantt chart name can be at most {0} characters",
+    "th": "ชื่อแผนภูมิแกนต์ยาวได้ไม่เกิน {0} ตัวอักษร",
+    "vi": "Tên biểu đồ Gantt tối đa {0} ký tự"
+  },
+  "TaskGanttNoDueRange": {
+    "zh-TW": "甘特圖用時間範圍，不用到期日區間",
+    "en-US": "Gantt charts use a time window, not a due date range",
+    "th": "แผนภูมิแกนต์ใช้ช่วงเวลา ไม่ใช้ช่วงกำหนดส่ง",
+    "vi": "Biểu đồ Gantt dùng khoảng thời gian, không dùng khoảng hạn"
+  },
+  "TaskGanttNotFound": {
+    "zh-TW": "這個甘特圖已刪除或不再分享給你",
+    "en-US": "This Gantt chart was deleted or is no longer shared with you",
+    "th": "แผนภูมิแกนต์นี้ถูกลบแล้วหรือไม่ได้แชร์กับคุณอีกต่อไป",
+    "vi": "Biểu đồ Gantt này đã bị xóa hoặc không còn được chia sẻ với bạn"
+  },
+  "TaskGanttPeopleBlank": {
+    "zh-TW": "甘特圖的人員篩選不能有空白",
+    "en-US": "Gantt chart people filters cannot contain blanks",
+    "th": "ตัวกรองบุคคลของแผนภูมิแกนต์ต้องไม่มีค่าว่าง",
+    "vi": "Bộ lọc người của biểu đồ Gantt không được có giá trị trống"
+  },
+  "TaskGanttScaleInvalid": {
+    "zh-TW": "甘特圖刻度必須是 day、week 或 month",
+    "en-US": "Gantt chart scale must be day, week, or month",
+    "th": "มาตราส่วนแผนภูมิแกนต์ต้องเป็น day, week หรือ month",
+    "vi": "Thang thời gian biểu đồ Gantt phải là day, week hoặc month"
+  },
+  "TaskGanttScopeInvalid": {
+    "zh-TW": "甘特圖範圍必須是 assigned、involved、subordinates 或 visible",
+    "en-US": "Gantt chart scope must be assigned, involved, subordinates, or visible",
+    "th": "ขอบเขตแผนภูมิแกนต์ต้องเป็น assigned, involved, subordinates หรือ visible",
+    "vi": "Phạm vi biểu đồ Gantt phải là assigned, involved, subordinates hoặc visible"
+  },
+  "TaskGanttSourceBoth": {
+    "zh-TW": "只能帶甘特圖 Id 或甘特圖設定其中一個",
+    "en-US": "Send either a Gantt chart Id or Gantt chart settings, not both",
+    "th": "ส่งได้เพียง Id ของแผนภูมิแกนต์หรือการตั้งค่าแผนภูมิแกนต์อย่างใดอย่างหนึ่ง",
+    "vi": "Chỉ gửi Id biểu đồ Gantt hoặc cài đặt biểu đồ Gantt, không gửi cả hai"
+  },
+  "TaskGanttSourcesInvalid": {
+    "zh-TW": "甘特圖的來源篩選不正確",
+    "en-US": "Gantt chart source filter is invalid",
+    "th": "ตัวกรองแหล่งที่มาของแผนภูมิแกนต์ไม่ถูกต้อง",
+    "vi": "Bộ lọc nguồn của biểu đồ Gantt không hợp lệ"
+  },
+  "TaskGanttStatusesInvalid": {
+    "zh-TW": "甘特圖的狀態篩選不正確",
+    "en-US": "Gantt chart status filter is invalid",
+    "th": "ตัวกรองสถานะของแผนภูมิแกนต์ไม่ถูกต้อง",
+    "vi": "Bộ lọc trạng thái của biểu đồ Gantt không hợp lệ"
+  },
+  "TaskGanttTooManyShares": {
+    "zh-TW": "每個甘特圖最多分享給 {0} 個對象",
+    "en-US": "A Gantt chart can be shared with at most {0} recipients",
+    "th": "แชร์แผนภูมิแกนต์ได้ไม่เกิน {0} ผู้รับ",
+    "vi": "Mỗi biểu đồ Gantt chỉ chia sẻ được tối đa {0} đối tượng"
+  },
+  "TaskGanttWindowInvalid": {
+    "zh-TW": "時間範圍的開始不能晚於結束",
+    "en-US": "The start of the time window cannot be later than the end",
+    "th": "วันเริ่มของช่วงเวลาต้องไม่ช้ากว่าวันสิ้นสุด",
+    "vi": "Ngày bắt đầu của khoảng thời gian không được sau ngày kết thúc"
+  },
+  "TaskGanttWindowRequired": {
+    "zh-TW": "時間範圍的開始與結束都必填",
+    "en-US": "The time window needs both a start and an end",
+    "th": "ช่วงเวลาต้องระบุทั้งวันเริ่มและวันสิ้นสุด",
+    "vi": "Khoảng thời gian phải có cả ngày bắt đầu và ngày kết thúc"
+  },
+  "TaskGanttWindowTooLong": {
+    "zh-TW": "時間範圍最多 {0} 天",
+    "en-US": "The time window can be at most {0} days",
+    "th": "ช่วงเวลายาวได้ไม่เกิน {0} วัน",
+    "vi": "Khoảng thời gian tối đa {0} ngày"
+  },
+  "TaskRuleAlreadyRun": {
+    "zh-TW": "任務規則已套用，請重新整理後再試",
+    "en-US": "The task rule has already been applied. Please refresh and try again",
+    "th": "กฎงานถูกนำไปใช้แล้ว โปรดรีเฟรชแล้วลองอีกครั้ง",
+    "vi": "Quy tắc công việc đã được áp dụng, vui lòng làm mới rồi thử lại"
+  },
+  "TaskRuleApplied": {
+    "zh-TW": "已套用",
+    "en-US": "Already applied",
+    "th": "นำไปใช้แล้ว",
+    "vi": "Đã áp dụng"
+  },
+  "TaskRuleNotApplicable": {
+    "zh-TW": "這筆記錄不符合規則條件",
+    "en-US": "This record does not meet the rule's conditions",
+    "th": "ระเบียนนี้ไม่ตรงตามเงื่อนไขของกฎ",
+    "vi": "Bản ghi này không thỏa điều kiện của quy tắc"
+  },
+  "TaskRuleNotFound": {
+    "zh-TW": "找不到任務規則",
+    "en-US": "Task rule not found",
+    "th": "ไม่พบกฎงาน",
+    "vi": "Không tìm thấy quy tắc công việc"
+  },
+  "TaskRuleNotPaused": {
+    "zh-TW": "這條任務規則沒有被暫停",
+    "en-US": "This task rule is not paused",
+    "th": "กฎงานนี้ไม่ได้ถูกหยุดไว้",
+    "vi": "Quy tắc công việc này không bị tạm dừng"
+  },
+  "TaskRulePreviousOpen": {
+    "zh-TW": "上一輪任務尚未完成",
+    "en-US": "The previous round of tasks is not finished yet",
+    "th": "งานรอบก่อนหน้ายังไม่เสร็จ",
+    "vi": "Các công việc của vòng trước vẫn chưa hoàn thành"
+  },
+  "TaskStartAfterDue": {
+    "zh-TW": "開始日不能晚於到期日",
+    "en-US": "Start date cannot be later than the due date",
+    "th": "วันเริ่มต้องไม่ช้ากว่ากำหนดส่ง",
+    "vi": "Ngày bắt đầu không được sau hạn"
+  },
+  "TaskViewKindInvalid": {
+    "zh-TW": "檢視種類必須是 board 或 gantt",
+    "en-US": "View kind must be board or gantt",
+    "th": "ประเภทมุมมองต้องเป็น board หรือ gantt",
+    "vi": "Loại chế độ xem phải là board hoặc gantt"
+  },
+  "TasksDisabled": {
+    "zh-TW": "這個模組未啟用任務",
+    "en-US": "Tasks are turned off for this module",
+    "th": "โมดูลนี้ปิดการใช้งานงานอยู่",
+    "vi": "Mô-đun này đang tắt tính năng công việc"
+  },
+  "TimeFormat": {
+    "zh-TW": "時間格式必須是 HH:mm",
+    "en-US": "The time format must be HH:mm",
+    "th": "รูปแบบเวลาต้องเป็น HH:mm",
+    "vi": "Định dạng giờ phải là HH:mm"
+  },
+  "TooLong": {
+    "zh-TW": "超過 {0} 個字元",
+    "en-US": "Exceeds {0} characters",
+    "th": "เกิน {0} ตัวอักษร",
+    "vi": "Vượt quá {0} ký tự"
+  },
+  "TooManyDetailRows": {
+    "zh-TW": "明細最多 {0} 列",
+    "en-US": "At most {0} detail rows",
+    "th": "รายละเอียดได้ไม่เกิน {0} แถว",
+    "vi": "Tối đa {0} dòng chi tiết"
+  },
+  "UnknownDetail": {
+    "zh-TW": "明細模組不存在或未啟用",
+    "en-US": "The detail module does not exist or is not enabled",
+    "th": "ไม่มีโมดูลรายละเอียดหรือยังไม่เปิดใช้งาน",
+    "vi": "Mô-đun chi tiết không tồn tại hoặc chưa được kích hoạt"
+  },
+  "UrlFormat": {
+    "zh-TW": "網址必須以 http:// 或 https:// 開頭",
+    "en-US": "The URL must start with http:// or https://",
+    "th": "URL ต้องขึ้นต้นด้วย http:// หรือ https://",
+    "vi": "URL phải bắt đầu bằng http:// hoặc https://"
+  },
+  "UserIdFormat": {
+    "zh-TW": "帳號只能用英數字、點、底線、減號，長度 2 到 50",
+    "en-US": "User ID may only contain letters, digits, periods, underscores and hyphens, 2 to 50 characters",
+    "th": "รหัสผู้ใช้ใช้ได้เฉพาะตัวอักษรภาษาอังกฤษ ตัวเลข จุด ขีดล่าง และขีดกลาง ยาว 2 ถึง 50 ตัวอักษร",
+    "vi": "Tài khoản chỉ được dùng chữ cái, chữ số, dấu chấm, gạch dưới, gạch ngang, dài 2 đến 50 ký tự"
+  },
+  "UserNotFound": {
+    "zh-TW": "使用者不存在",
+    "en-US": "User not found",
+    "th": "ไม่พบผู้ใช้",
+    "vi": "Người dùng không tồn tại"
+  },
+  "WorkflowLockedDelete": {
+    "zh-TW": "此狀態的單據不可刪除",
+    "en-US": "Records in this status cannot be deleted",
+    "th": "เอกสารในสถานะนี้ลบไม่ได้",
+    "vi": "Chứng từ ở trạng thái này không thể xóa"
+  },
+  "WorkflowLockedDetails": {
+    "zh-TW": "此狀態的單據不可修改明細",
+    "en-US": "Details cannot be edited for documents in this status",
+    "th": "เอกสารในสถานะนี้แก้ไขรายละเอียดไม่ได้",
+    "vi": "Chứng từ ở trạng thái này không thể sửa chi tiết"
+  },
+  "WorkflowNotAllowed": {
+    "zh-TW": "不允許這個狀態轉移",
+    "en-US": "This status change is not allowed",
+    "th": "ไม่อนุญาตให้เปลี่ยนสถานะนี้",
+    "vi": "Không cho phép chuyển trạng thái này"
+  },
+  "WorkflowNotInitial": {
+    "zh-TW": "新增時只能使用起始狀態",
+    "en-US": "Only the initial status can be used when creating",
+    "th": "ตอนสร้างใช้ได้เฉพาะสถานะเริ่มต้น",
+    "vi": "Khi tạo mới chỉ được dùng trạng thái ban đầu"
+  },
+  "WorkflowNotPermitted": {
+    "zh-TW": "你沒有權限執行這個狀態轉移",
+    "en-US": "You do not have permission to make this status change",
+    "th": "คุณไม่มีสิทธิ์เปลี่ยนสถานะนี้",
+    "vi": "Bạn không có quyền chuyển trạng thái này"
+  },
+  "WorkflowTooManyTransitions": {
+    "zh-TW": "每個流程最多 {0} 條轉換",
+    "en-US": "Each workflow can have at most {0} transitions",
+    "th": "แต่ละโฟลว์มีการเปลี่ยนสถานะได้ไม่เกิน {0} รายการ",
+    "vi": "Mỗi quy trình có tối đa {0} chuyển đổi"
+  },
+  "report.Avg": {
+    "zh-TW": "{0} 平均",
+    "en-US": "{0} average",
+    "th": "ค่าเฉลี่ย {0}",
+    "vi": "Trung bình {0}"
+  },
+  "report.Blank": {
+    "zh-TW": "（空白）",
+    "en-US": "(Blank)",
+    "th": "(ว่าง)",
+    "vi": "(Trống)"
+  },
+  "report.Conditional": {
+    "zh-TW": "{0}（符合條件）",
+    "en-US": "{0} (matching)",
+    "th": "{0} (ตามเงื่อนไข)",
+    "vi": "{0} (khớp điều kiện)"
+  },
+  "report.ConditionalEq": {
+    "zh-TW": "{0}（{1}＝{2}）",
+    "en-US": "{0} ({1} = {2})",
+    "th": "{0} ({1} = {2})",
+    "vi": "{0} ({1} = {2})"
+  },
+  "report.Count": {
+    "zh-TW": "{0}筆數",
+    "en-US": "{0} count",
+    "th": "จำนวน {0}",
+    "vi": "Số {0}"
+  },
+  "report.CountIf": {
+    "zh-TW": "{0} 符合條件筆數",
+    "en-US": "{0} matching count",
+    "th": "จำนวนที่ตรงเงื่อนไข {0}",
+    "vi": "Số lượng khớp điều kiện {0}"
+  },
+  "report.CountIfEq": {
+    "zh-TW": "{0}＝{1} 筆數",
+    "en-US": "{0} = {1} count",
+    "th": "จำนวน {0} = {1}",
+    "vi": "Số lượng {0} = {1}"
+  },
+  "report.DedupedNote": {
+    "zh-TW": "總計每筆記錄只算一次；同一筆可能出現在多列或多個分組，所以各列相加不一定等於總計。",
+    "en-US": "The total counts each record once. One record can appear on several rows or in several groups, so adding up the rows may not equal the total.",
+    "th": "ยอดรวมนับแต่ละรายการเพียงครั้งเดียว รายการเดียวอาจปรากฏในหลายแถวหรือหลายกลุ่ม ผลรวมของแถวจึงอาจไม่เท่ากับยอดรวม",
+    "vi": "Tổng chỉ tính mỗi bản ghi một lần. Một bản ghi có thể xuất hiện ở nhiều dòng hoặc nhiều nhóm, nên cộng các dòng có thể không bằng tổng."
+  },
+  "report.Deleted": {
+    "zh-TW": "（已刪除）",
+    "en-US": "(Deleted)",
+    "th": "(ถูกลบแล้ว)",
+    "vi": "(Đã xóa)"
+  },
+  "report.DetailAsMain": {
+    "zh-TW": "明細模組不能當主模組",
+    "en-US": "A detail module cannot be the main module",
+    "th": "โมดูลรายละเอียดเป็นโมดูลหลักไม่ได้",
+    "vi": "Mô-đun chi tiết không thể làm mô-đun chính"
+  },
+  "report.ExportTotal": {
+    "zh-TW": "總計",
+    "en-US": "Total",
+    "th": "รวม",
+    "vi": "Tổng"
+  },
+  "report.FieldGone": {
+    "zh-TW": "欄位已不存在",
+    "en-US": "A field no longer exists",
+    "th": "ฟิลด์ไม่มีอยู่แล้ว",
+    "vi": "Trường không còn tồn tại"
+  },
+  "report.FieldGoneNamed": {
+    "zh-TW": "欄位已不存在：{0}",
+    "en-US": "Field no longer exists: {0}",
+    "th": "ฟิลด์ไม่มีอยู่แล้ว: {0}",
+    "vi": "Trường không còn tồn tại: {0}"
+  },
+  "report.FieldPath": {
+    "zh-TW": "{0}．{1}",
+    "en-US": "{0}.{1}",
+    "th": "{0}.{1}",
+    "vi": "{0}.{1}"
+  },
+  "report.HiddenField": {
+    "zh-TW": "隱藏欄位",
+    "en-US": "Hidden field",
+    "th": "ฟิลด์ที่ถูกซ่อน",
+    "vi": "Trường bị ẩn"
+  },
+  "report.Max": {
+    "zh-TW": "{0} 最大",
+    "en-US": "{0} max",
+    "th": "ค่าสูงสุด {0}",
+    "vi": "Lớn nhất {0}"
+  },
+  "report.Median": {
+    "zh-TW": "{0} 中位數",
+    "en-US": "{0} median",
+    "th": "ค่ามัธยฐาน {0}",
+    "vi": "Trung vị {0}"
+  },
+  "report.Min": {
+    "zh-TW": "{0} 最小",
+    "en-US": "{0} min",
+    "th": "ค่าต่ำสุด {0}",
+    "vi": "Nhỏ nhất {0}"
+  },
+  "report.ModuleDisabled": {
+    "zh-TW": "模組已停用",
+    "en-US": "The module is disabled",
+    "th": "โมดูลถูกปิดใช้งาน",
+    "vi": "Mô-đun đã bị vô hiệu hóa"
+  },
+  "report.No": {
+    "zh-TW": "否",
+    "en-US": "No",
+    "th": "ไม่ใช่",
+    "vi": "Không"
+  },
+  "report.NoChildRead": {
+    "zh-TW": "無權限檢視合併的子模組",
+    "en-US": "No permission to view the merged child module",
+    "th": "ไม่มีสิทธิ์ดูโมดูลย่อยที่รวมไว้",
+    "vi": "Không có quyền xem mô-đun con đã gộp"
+  },
+  "report.NoModuleRead": {
+    "zh-TW": "無權限檢視這個模組",
+    "en-US": "No permission to view this module",
+    "th": "ไม่มีสิทธิ์ดูโมดูลนี้",
+    "vi": "Không có quyền xem mô-đun này"
+  },
+  "report.NoPermission": {
+    "zh-TW": "（無權限）",
+    "en-US": "(No permission)",
+    "th": "(ไม่มีสิทธิ์)",
+    "vi": "(Không có quyền)"
+  },
+  "report.NoPermissionTo": {
+    "zh-TW": "無權限檢視：{0}",
+    "en-US": "No permission to view: {0}",
+    "th": "ไม่มีสิทธิ์ดู: {0}",
+    "vi": "Không có quyền xem: {0}"
+  },
+  "report.NotUsable": {
+    "zh-TW": "這個欄位不能用於報表：{0}",
+    "en-US": "This field cannot be used in reports: {0}",
+    "th": "ฟิลด์นี้ใช้ในรายงานไม่ได้: {0}",
+    "vi": "Trường này không dùng được trong báo cáo: {0}"
+  },
+  "report.Ratio": {
+    "zh-TW": "{0} 條件占比",
+    "en-US": "{0} condition share",
+    "th": "สัดส่วนตามเงื่อนไข {0}",
+    "vi": "Tỷ lệ theo điều kiện {0}"
+  },
+  "report.ReportGone": {
+    "zh-TW": "報表已不存在",
+    "en-US": "The report no longer exists",
+    "th": "ไม่มีรายงานนี้อีกต่อไป",
+    "vi": "Báo cáo không còn tồn tại"
+  },
+  "report.RowMeaning": {
+    "zh-TW": "一筆{0}",
+    "en-US": "One {0}",
+    "th": "{0} หนึ่งรายการ",
+    "vi": "Một {0}"
+  },
+  "report.SqlTimeout": {
+    "zh-TW": "報表執行逾時，請加上條件縮小範圍",
+    "en-US": "The report took too long to run. Add conditions to narrow it down",
+    "th": "รายงานใช้เวลานานเกินไป โปรดเพิ่มเงื่อนไขเพื่อจำกัดขอบเขต",
+    "vi": "Báo cáo chạy quá thời gian, vui lòng thêm điều kiện để thu hẹp phạm vi"
+  },
+  "report.Sum": {
+    "zh-TW": "{0} 加總",
+    "en-US": "{0} sum",
+    "th": "ผลรวม {0}",
+    "vi": "Tổng {0}"
+  },
+  "report.Title": {
+    "zh-TW": "標題",
+    "en-US": "Title",
+    "th": "ชื่อเรื่อง",
+    "vi": "Tiêu đề"
+  },
+  "report.TooMany": {
+    "zh-TW": "資料太多，請縮小條件",
+    "en-US": "Too much data, please narrow the conditions",
+    "th": "ข้อมูลมากเกินไป โปรดจำกัดเงื่อนไข",
+    "vi": "Dữ liệu quá nhiều, vui lòng thu hẹp điều kiện"
+  },
+  "report.TooManyTasks": {
+    "zh-TW": "資料太多，請縮小條件；部門篩選不會減少載入量，請縮小期間",
+    "en-US": "Too much data, please narrow the conditions. The department filter does not reduce what is loaded; narrow the period instead",
+    "th": "ข้อมูลมากเกินไป โปรดจำกัดเงื่อนไข ตัวกรองแผนกไม่ได้ลดปริมาณข้อมูลที่โหลด โปรดจำกัดช่วงเวลา",
+    "vi": "Dữ liệu quá nhiều, vui lòng thu hẹp điều kiện. Bộ lọc phòng ban không giảm lượng dữ liệu được tải, hãy thu hẹp kỳ"
+  },
+  "report.TooManyToLoad": {
+    "zh-TW": "來源資料超過系統的載入上限，而且這份報表的條件與欄位無法在資料庫端處理；請把用到的欄位設為可篩選，或聯絡管理員",
+    "en-US": "The source data exceeds the system's load limit, and this report's conditions and fields cannot be processed in the database. Mark the fields it uses as filterable, or contact an administrator",
+    "th": "ข้อมูลต้นทางเกินขีดจำกัดการโหลดของระบบ และเงื่อนไขกับฟิลด์ของรายงานนี้ประมวลผลในฐานข้อมูลไม่ได้ โปรดตั้งฟิลด์ที่ใช้เป็นกรองได้ หรือติดต่อผู้ดูแลระบบ",
+    "vi": "Dữ liệu nguồn vượt quá giới hạn tải của hệ thống và các điều kiện, trường của báo cáo này không thể xử lý trong cơ sở dữ liệu. Hãy đặt các trường đang dùng là có thể lọc, hoặc liên hệ quản trị viên"
+  },
+  "report.TypeChanged": {
+    "zh-TW": "欄位型別已變更：{0}",
+    "en-US": "Field type has changed: {0}",
+    "th": "ประเภทฟิลด์เปลี่ยนแล้ว: {0}",
+    "vi": "Kiểu trường đã thay đổi: {0}"
+  },
+  "report.Unshared": {
+    "zh-TW": "此報表已不再分享",
+    "en-US": "This report is no longer shared",
+    "th": "รายงานนี้ไม่ได้แชร์อีกต่อไป",
+    "vi": "Báo cáo này không còn được chia sẻ"
+  },
+  "report.Yes": {
+    "zh-TW": "是",
+    "en-US": "Yes",
+    "th": "ใช่",
+    "vi": "Có"
+  }
+}
