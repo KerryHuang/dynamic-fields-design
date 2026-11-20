@@ -1,3 +1,4 @@
+# 已改用映像部署（GitHub Actions 建映像推 GHCR，平台拉映像，見 docs/deploy.md「Demo 部署」），此 Blueprint 只留作 git 建置的備案。
 # Render Blueprint：Demo 站台（免費方案，閒置 15 分鐘休眠，重啟後資料回到映像建置時的 Demo 資料）
 services:
   - type: web

@@ -2,25 +2,31 @@
 
 Formwright 的 Demo 站與容器部署做法。本機開發與測試見 [CONTRIBUTING.md](../CONTRIBUTING.md)；操作畫面見[操作手冊](manual.md)。
 
-## Demo 部署（Render 免費方案）
+## Demo 部署（GHCR 映像＋託管平台拉映像）
 
-`Dockerfile` 把前端建置結果和後端打包成一個容器，API 與畫面在同一個網址；`render.yaml` 是 Render 的 Blueprint。
+`Dockerfile.demo` 把前端建置結果、後端與建置時產生的 Demo 資料打包成一個容器，API 與畫面在同一個網址。Render 免費方案每月的建置額度不夠用，所以改成由 GitHub Actions 建好映像推上 GHCR，託管平台只拉現成映像、不自己建置（使用者 2026-11-20 裁決）。先用 Render 拉映像，不行就換 Koyeb。
 
-1. 在 [Render](https://render.com) 用 GitHub 登入，New → Blueprint，選這個 repo，Render 會讀 `render.yaml` 建立 `dynamic-modules-demo`。
-2. 部署由每天的排程觸發（見下方「Demo 每日部署」），推上 `main` 不會自動部署。
+1. 映像：`ghcr.io/kerryhuang/formwright-demo`，標籤有 `latest` 和 commit sha。託管平台要能拉得到：把 GHCR package 設成公開，或在平台設定 registry 認證。
+2. 託管平台：建一個「從映像部署」的服務，映像填 `ghcr.io/kerryhuang/formwright-demo:latest`、健康檢查路徑 `/api/health/ready`，關掉 Auto-Deploy；把平台的 Deploy Hook 網址設成 GitHub secret `DEMO_DEPLOY_HOOK`。
+3. `render.yaml` 是舊的 git 建置 Blueprint，只留作備案。
 
 限制：免費方案閒置 15 分鐘會休眠，下次開啟要等約 1 分鐘；沒有永久磁碟，休眠重啟後資料回到映像建置時的 Demo 資料（`Dockerfile.demo` 在建置時就產生好，喚醒後不用等），日期停在建置那天，每天的排程部署會更新。Demo 站開了一鍵登入（`Demo__LoginEnabled`），任何人點一下就能以任何 Demo 帳號含 `admin` 登入，所以站上只放虛構的示範資料，請勿輸入真實資料。Render 上 cookie 帶 `secure; samesite=lax; httponly`（2026-11-05 實測）。
 
-啟動時自動產生 Demo 資料：設定環境變數 `Demo__SeedOnStartup=true`，站台會在背景產生訂單、故障報修、模具保養、品質異常四組模組與範例記錄；本機預設關閉，Render 改用 `Dockerfile.demo` 在建置時產生，不需要這個設定。也可以由系統管理員在「系統管理 → Demo 資料」手動產生。各情境怎麼示範見 [Demo 腳本](demo.md)。
+啟動時自動產生 Demo 資料：設定環境變數 `Demo__SeedOnStartup=true`，站台會在背景產生訂單、故障報修、模具保養、品質異常四組模組與範例記錄；本機預設關閉，Demo 映像改在建置時產生，不需要這個設定。也可以由系統管理員在「系統管理 → Demo 資料」手動產生。各情境怎麼示範見 [Demo 腳本](demo.md)。
 
 ### Demo 每日部署
 
-Render 的 Auto-Deploy 已關掉（2026-11-20）：本月建置額度用完，而且服務的 Build Filters 是空的，`render.yaml` 的 `buildFilter` 沒有套用，連只改文件的 commit 都會觸發部署，一天約 20 次。現在**推上 `main` 不會部署**。
+推上 `main` 不會部署。`.github/workflows/demo-refresh.yml` 每天台北時間 02:00（UTC 18:00）跑一次，不判斷當天有沒有改動，順便讓 Demo 資料的日期每天更新：
 
-改由 `.github/workflows/demo-refresh.yml` 每天台北時間 02:00（UTC 18:00）部署一次：呼叫 Render 的 Deploy Hook，接著最多等 15 分鐘輪詢 `/api/health/ready`，逾時就讓這次排程失敗。不判斷當天有沒有改動，每天都部署，順便讓 Demo 資料的日期每天更新。
+1. 用 `Dockerfile.demo` 建映像（build-arg `GIT_COMMIT` 是這次的 sha），推上 GHCR 的 `latest` 與 `<sha>`。
+2. 呼叫 `DEMO_DEPLOY_HOOK`，接著每 20 秒讀一次 `<DEMO_URL>/api/version`，`commit` 等於這次的 sha 才算成功，最多等 15 分鐘，逾時讓排程失敗。部署期間舊實例會繼續服務，只看健康檢查分不出新舊版，所以比對 commit。
 
-- 設定：Render 的 `dynamic-modules-demo` → Settings → Deploy Hook 複製網址，到 GitHub repo 的 Settings → Secrets and variables → Actions 新增 secret `RENDER_DEPLOY_HOOK`。沒設定時排程只印警告、照樣成功結束。
-- 急著上線：`gh workflow run demo-refresh.yml`（或 GitHub → Actions → demo-refresh → Run workflow），不必等到隔天 02:00。
+設定：
+
+- secret `DEMO_DEPLOY_HOOK`：託管平台的 Deploy Hook 網址（GitHub repo → Settings → Secrets and variables → Actions → Secrets）。沒設定時只建映像、印警告、照樣成功結束。舊的 `RENDER_DEPLOY_HOOK` 指向 git 建置的舊服務，workflow 已不再使用。
+- variable `DEMO_URL`：Demo 站網址（同一頁的 Variables），沒設定時用 `https://dynamic-modules-demo.onrender.com`。
+
+急著上線：`gh workflow run demo-refresh.yml`（或 GitHub → Actions → demo-refresh → Run workflow），不必等到隔天 02:00。
 
 ## 環境變數
 

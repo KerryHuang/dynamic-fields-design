@@ -1,6 +1,5 @@
-# Demo 每日部署：Render 的 Auto-Deploy 已關（2026-11-20，建置額度用完；服務的 Build Filters 沒套用 render.yaml，連文件都會觸發部署），
-# 改成每天台北 02:00 部署一次，順便讓建置時產生的 Demo 資料日期每天更新。
-# 用法與 secret 設定見 docs/deploy.md「Demo 每日部署」。
+# Demo 每日部署：GitHub Actions 建好 Demo 映像推上 GHCR，託管平台只拉現成映像（使用者 2026-11-20 裁決；
+# Render 免費方案的建置額度不夠用）。設定與手動部署方式見 docs/deploy.md「Demo 每日部署」。
 name: demo-refresh
 
 on:
@@ -8,40 +7,70 @@ on:
     - cron: "0 18 * * *" # UTC 18:00＝台北 02:00
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 concurrency:
   group: demo-refresh
   cancel-in-progress: false
 
 jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: 建置時間
+        id: meta
+        run: echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.demo
+          push: true
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ steps.meta.outputs.built }}
+          tags: |
+            ghcr.io/kerryhuang/formwright-demo:latest
+            ghcr.io/kerryhuang/formwright-demo:${{ github.sha }}
+
   deploy:
+    needs: image
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - name: 觸發 Render 部署並等健康檢查
+      - name: 觸發部署並等新版上線
         env:
-          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
-          READY_URL: https://dynamic-modules-demo.onrender.com/api/health/ready
+          DEMO_DEPLOY_HOOK: ${{ secrets.DEMO_DEPLOY_HOOK }}
+          DEMO_URL: ${{ vars.DEMO_URL || 'https://dynamic-modules-demo.onrender.com' }}
+          EXPECTED: ${{ github.sha }}
         run: |
-          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
-            echo "::warning::沒有設定 secret RENDER_DEPLOY_HOOK，略過部署（設定方式見 docs/deploy.md）"
-            echo "沒有設定 secret RENDER_DEPLOY_HOOK，略過部署。" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$DEMO_DEPLOY_HOOK" ]; then
+            echo "::warning::沒有設定 secret DEMO_DEPLOY_HOOK，映像已推上 GHCR，但沒有觸發部署（設定方式見 docs/deploy.md）"
+            echo "映像已推上 GHCR；沒有設定 DEMO_DEPLOY_HOOK，略過部署。" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          curl -fsS -X POST "$RENDER_DEPLOY_HOOK" > /dev/null
-          echo "已觸發 Render 部署，等健康檢查（最多 15 分鐘）。" >> "$GITHUB_STEP_SUMMARY"
-          # 先等舊實例下線，避免第一次就打到還沒換掉的舊版
-          sleep 60
-          deadline=$(( $(date +%s) + 14 * 60 ))
+          curl -fsS -X POST "$DEMO_DEPLOY_HOOK" > /dev/null
+          echo "已觸發部署，等 $DEMO_URL/api/version 的 commit 變成 $EXPECTED（最多 15 分鐘）。" >> "$GITHUB_STEP_SUMMARY"
+          # 部署期間舊實例會繼續服務，所以比對版本的 commit，不只看健康檢查（#59）
+          deadline=$(( $(date +%s) + 15 * 60 ))
           while [ "$(date +%s)" -lt "$deadline" ]; do
-            if curl -fsS --max-time 20 "$READY_URL" > /dev/null 2>&1; then
-              echo "健康檢查通過。" >> "$GITHUB_STEP_SUMMARY"
+            got=$(curl -fsS --max-time 20 "$DEMO_URL/api/version" 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin).get("commit",""))' 2>/dev/null || true)
+            if [ "$got" = "$EXPECTED" ]; then
+              echo "新版已上線（commit $got）。" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 20
           done
-          echo "::error::15 分鐘內健康檢查沒有通過：$READY_URL"
-          echo "15 分鐘內健康檢查沒有通過，到 Render 看部署 log。" >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::15 分鐘內 $DEMO_URL/api/version 的 commit 沒有變成 $EXPECTED（最後讀到：${got:-無回應}）"
+          echo "15 分鐘內新版沒有上線（最後讀到：${got:-無回應}），到託管平台看部署 log。" >> "$GITHUB_STEP_SUMMARY"
           exit 1

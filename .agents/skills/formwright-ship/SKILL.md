@@ -56,7 +56,7 @@ git fetch -q && git merge-base --is-ancestor origin/main HEAD && git push -q ori
 
 Render 的 Auto-Deploy 已關（2026-11-20），推上 `main` 不會部署；Demo 由 `.github/workflows/demo-refresh.yml` 每天台北 02:00 部署一次。所以推完 main 這個流程就結束，不等部署、不在 Demo 上冒煙，本機走查（1.5 節）就是合併前的驗證。
 
-- 急著讓 Demo 更新：`gh workflow run demo-refresh.yml`，它會等健康檢查最多 15 分鐘；要冒煙再用 `formwright-demo-verify` 開一次動到的頁面。
+- 急著讓 Demo 更新：`gh workflow run demo-refresh.yml`，它會建映像、部署，並等 `/api/version` 的 commit 變成新版，最多 15 分鐘；要冒煙再用 `formwright-demo-verify` 開一次動到的頁面。
 - 隔天排程失敗（健康檢查逾時）時，到 Render 看 log；查明是哪個合併造成的才 `git revert` 該 commit 再推，不 reset。
 
 ## 5. 收尾

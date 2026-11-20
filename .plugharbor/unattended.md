@@ -49,7 +49,7 @@ GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0
 收尾清理：分支改動確認已完整進 main（祖先關係，或 rebase 後比對 patch 相同）才算可刪；沒進 main 的保留（使用者 2026-11-18 裁決）。遠端分支不自己刪（auto mode 權限檢查會擋 `git push origin --delete`），在回來報告列一行 `git push origin --delete <分支…>` 給使用者自己跑（使用者 2026-11-19 裁決）。push 一律不會部署（見「部署」）。
 
 ## 部署
-推上 main 不會部署：Render 的 Auto-Deploy 已關（使用者 2026-11-20 裁決，建置額度不夠），Demo 由 `.github/workflows/demo-refresh.yml` 每天台北 02:00 部署一次。單元流程的「部署」與部署後的 Demo 冒煙都跳過，本機走查就是合併前的驗證；回來報告寫「Demo 隔天 02:00 更新」。真的要當天上，跑 `gh workflow run demo-refresh.yml`（等健康檢查最多 15 分鐘），再照實機驗證做冒煙。
+推上 main 不會部署：Render 的 Auto-Deploy 已關（使用者 2026-11-20 裁決，建置額度不夠），Demo 由 `.github/workflows/demo-refresh.yml` 每天台北 02:00 部署一次。單元流程的「部署」與部署後的 Demo 冒煙都跳過，本機走查就是合併前的驗證；回來報告寫「Demo 隔天 02:00 更新」。真的要當天上，跑 `gh workflow run demo-refresh.yml`（建映像、部署，等新版 commit 上線最多 15 分鐘），再照實機驗證做冒煙。
 
 ## 實機驗證
 - 時機：有畫面的改動在 gate 通過、推上 main 之前，先用 `bash scripts/unattended/local-demo.sh <worktree>` 在本機走查（使用者 2026-11-11 裁決）。Demo 改成每日排程部署，部署後的冒煙檢查不再是單元流程的一步。
