@@ -402,7 +402,7 @@ i3 把它們改成多語，讓：
 |---|---|---|---|---|
 | i3a | 報表、儀表板、卡片標題、任務檢視名稱多語，前後端一起：實體與 migration `NameI18n`、共用轉換器搬到 Domain、DTO、驗證、MCP、稽核、匯出、刪除影響清單、前端六個輸入處與全部顯示、Demo 示範報表與儀表板與看板四語（§11.3）、手冊 | 有（SQLite＋PostgreSQL 各一） | `Report.cs`、`Dashboard.cs`、`TaskView.cs`、`DashboardLayout.cs`、`I18nTextOrStringJsonConverter.cs`（Domain 新增）、`ReportsController.cs`、`DashboardsController.cs`、`TaskViewsController.cs`、前端 `report-types.ts`、`dashboard-types.ts`、`task-board-types.ts`、兩份 model snapshot、`DemoReports.cs`、`DemoDashboards.cs` | i4a（已上線） |
 | i3b | Demo 群組與部門四語、系統程式名稱四語與既有列補譯、選單分區的 API 收字串、拒收 `null`、缺繁中報錯（§9 第 2–4 點） | 無 | `DemoPeople.cs`、`SeedData.cs`、`ModulesController.cs`、`ModuleRules.cs`、`Module.cs` | i3a（共用轉換器） |
-| i3c（＝i4f） | 套件格式 9：`reports[].name` 多語、語系鍵改代碼格式、`section` 驗證（§9 第 1 點）、欄位 `excludeFromAi` 與範本格式 2（§8.1：讀寫、套用的權限檢查與只加不減、預覽計數、匯出）、舊版不放寬的拒收案例、內建三套件升格式與報表名稱四語、`app.schema.json`、手冊與套件設計、MCP 設計 §5.5 回填 | 無 | `AppPackageData.cs`、`AppPackageValidator*.cs`、`TemplatePackage.cs`、`TemplateValidator.cs`、`TemplateInstantiator.cs`、`TemplateExporter.cs`、`AppExporter.cs`、`app.schema.json`、`backend/apps/*.app.json` | i3a；不和 mg1 並行 |
+| i3c（＝i4f） | 套件格式 9：`reports[].name` 多語、語系鍵改代碼格式、`section` 驗證（§9 第 1 點）、欄位 `excludeFromAi` 與範本格式 2（§8.1：讀寫、套用的權限檢查與只加不減、預覽計數與欄位名稱、匯出）、舊版不放寬的拒收案例、內建三套件升格式與報表名稱四語、`app.schema.json`、手冊與套件設計、MCP 設計 §5.5 回填 | 無 | `AppPackageData.cs`、`AppPackageValidator*.cs`、`TemplatePackage.cs`、`TemplateValidator.cs`、`TemplateInstantiator.cs`、`TemplateExporter.cs`、`AppExporter.cs`、`app.schema.json`、`backend/apps/*.app.json` | i3a；不和 mg1 並行 |
 
 - i3a 是最大的一段（前後端都動），估約 40 個檔。真的太大時，可把任務檢視（後端 `TaskViewService`、前端 `BoardPicker.vue`）拆成 i3a2，但 migration 只能有一組，留在 i3a1；拆了以後 i3a1 的 migration 仍要改 `Dynamic_TaskView`，i3a2 只動程式。
 - i3b、i3c 都依賴 i3a；兩者之間不相依、沒有共用檔，可以平行，但 i3b 很小，建議 i3a → i3b → i3c 依序做。
@@ -491,7 +491,7 @@ i3 把它們改成多語，讓：
 - **驗證**：V1–V10；看板與甘特的訊息用字分種類；長度訊息帶上限。
 - **repository**：`NameExistsAsync`、`AssignedNameExistsAsync` 改記憶體比對（加 `Category=Postgres`）；刪除影響清單、刪群組影響清單讀名稱。
 - **解析處**：MCP `list_reports`、Excel 工作表名稱、稽核目標名稱用預設語系（S5–S7）。
-- **套件**：P1–P8；P10–P17（旗標：開啟、重新套用只加不減、範本無權限略過、舊格式拒收、往返、預覽計數；P13 的重新套用含共用主檔綁定與接回孤兒欄位兩條路徑；權限軸 PAX 系列的守衛測試照過）；`AppSchemaTests`（schema 的 `pattern`）；`AppCatalogChecks` 內建套件全部通過；`ModuleSectionPackageTests` 補驗證器案例；舊格式帶新語系鍵被拒（`.claude/rules/app-packages.md`）。
+- **套件**：P1–P8；P10–P17（旗標：開啟、重新套用只加不減、範本無權限略過、舊格式拒收、往返、預覽計數與欄位名稱；P13 的重新套用含共用主檔綁定與接回孤兒欄位兩條路徑；權限軸 PAX 系列的守衛測試照過）；`AppSchemaTests`（schema 的 `pattern`）；`AppCatalogChecks` 內建套件全部通過；`ModuleSectionPackageTests` 補驗證器案例；舊格式帶新語系鍵被拒（`.claude/rules/app-packages.md`）。
 - **種子**：改前 grep `DemoReportsTests`、`DemoDashboardsTests`、`DemoOrganizationTests`、`TaskBoardScenarioTests`、`TaskViewTests`、`TaskViewShareTests`、`SeedDataTests`、`CrmDesignCaseAppTests`、`TaskReportsApiTests` 對名稱的斷言（以繁中比對的照過，`r.Name` 改 `r.NameI18n.Resolve("zh-TW")`）；G1–G3。
 - **前端 vitest**：六個輸入處送出物件、修改時帶 `original`；卡片標題與報表名稱的退回（S3、S4）；`resolveI18n` 用在所有顯示處（清單、頁首、側欄、新增卡片清單）；型別改動後 `vue-tsc` 通過。
 - **畫面**：四種寬度不橫向捲動（§10.3）；Demo 冒煙：切 English 看首頁儀表板名稱與卡片標題。
