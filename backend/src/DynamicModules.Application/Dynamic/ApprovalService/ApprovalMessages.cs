@@ -9,6 +9,8 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 public static class ApprovalMessages
 {
     // ── 定義結構 ──
+    /// <summary>執行期檢查（ApprovalRuntimeCheck）的原因：模組沒有狀態機；同一句三處共用。</summary>
+    public const string NoWorkflowReason = "模組沒有狀態機";
     public const string ShapeInvalid = "流程形狀只能是 sequence 或 graph";
     public static string WhenInvalid(string reason) => $"條件不正確：{reason}";
     public const string RejectToInvalidState = "退回狀態必須是狀態機的狀態";

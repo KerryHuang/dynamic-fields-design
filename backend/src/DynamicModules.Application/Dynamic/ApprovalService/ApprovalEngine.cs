@@ -179,7 +179,7 @@ public sealed class ApprovalEngine(
         var notify = tasks.Where(t => t.Status == ApprovalTaskStatus.Approved).Select(t => t.AssigneeUserId)
             .Prepend(user.UserId).Prepend(old.InitiatorUserId).ToList();
         foreach (var t in tasks.Where(t => t.Status == ApprovalTaskStatus.Open)) t.Status = ApprovalTaskStatus.Closed;
-        if (DefinitionOf(old) is { } oldDef && ApprovalGraphMode.Applies(old, oldDef)) ApprovalActionSupport.CloseLive(runs, now);   // 連匯合等待中的列一起關（J14）
+        if (DefinitionOf(old) is { } oldDef && ApprovalGraphMode.Applies(old, oldDef)) ApprovalRunClosing.CloseLive(runs, now);   // 連匯合等待中的列一起關（J14）
         else
             foreach (var r in runs.Where(r => r.Status is ApprovalStageStatus.Active or ApprovalStageStatus.Queued))
             {
@@ -333,7 +333,7 @@ public sealed class ApprovalEngine(
         Log(inst, ApprovalActions.Complete, SystemActor);
         // 執行前再驗（設計 §8.3）：要走的轉移仍是狀態機上已定義的轉移
         var module = await modules.GetByIdAsync(inst.ModuleId, includeChildren: true, ct);
-        var reason = module?.Workflow is { } wf ? ApprovalRuntimeCheck.Verify(wf, inst.FromOptionId, inst.ToOptionId, isReject: false) : "模組沒有狀態機";
+        var reason = module?.Workflow is { } wf ? ApprovalRuntimeCheck.Verify(wf, inst.FromOptionId, inst.ToOptionId, isReject: false) : ApprovalMessages.NoWorkflowReason;
         if (reason is not null) return RuntimeInvalid(inst, reason);
         var result = await runner.RunAsync(inst, inst.ToOptionId, null, ct);
         if (!result.IsSuccess) return result;

@@ -265,7 +265,7 @@ public sealed class ApprovalGraphEngine(IApprovalInstanceRepository repo, Approv
         if (cancelled.Count > 0)
         {
             var ids = cancelled.Select(r => r.Id).ToHashSet();
-            ApprovalActionSupport.CloseOpen((await repo.ListTasksAsync(p.Inst.Id, p.Ct)).Where(t => ids.Contains(t.StageRunId)));
+            ApprovalRunClosing.CloseOpen((await repo.ListTasksAsync(p.Inst.Id, p.Ct)).Where(t => ids.Contains(t.StageRunId)));
         }
 
         // 「最後一個」依 Seq；段內已被取消的內層分支（到達列已 passed 後才算得出來）不在這次到達的路徑上，名稱不從那裡取

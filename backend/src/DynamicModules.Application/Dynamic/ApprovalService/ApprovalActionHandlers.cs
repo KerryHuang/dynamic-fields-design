@@ -145,36 +145,6 @@ public sealed class ApprovalActionSupport(
     /// </summary>
     public static bool AlreadyApprovedInStage(IEnumerable<ApprovalTask> tasks, ApprovalTask me, string userId) =>
         tasks.Any(t => t.StageRunId == me.StageRunId && t.Id != me.Id && t.Status == ApprovalTaskStatus.Approved && ApprovalActionRules.IsActor(t, userId));
-
-    /// <summary>排隊中的加簽關卡改 closed（退回、撤回；設計 §7.6）。</summary>
-    public static void CloseQueued(IEnumerable<ApprovalStageRun> runs, DateTime now)
-    {
-        foreach (var r in runs.Where(r => r.Status == ApprovalStageStatus.Queued))
-        {
-            r.Status = ApprovalStageStatus.Closed;
-            r.CompletedTime = now;
-        }
-    }
-
-    /// <summary>
-    /// graph 實例結束時（退回發起人、撤回、終止、重來）：還在走的執行線（active、waiting、queued）全部 closed，原因 instanceEnded（計畫 fg2 J14）。
-    /// sequence 不呼叫，仍照第一版只關 active、queued 且不寫原因。
-    /// </summary>
-    public static void CloseLive(IEnumerable<ApprovalStageRun> runs, DateTime now)
-    {
-        foreach (var r in ApprovalGraphPath.Live(runs))
-        {
-            r.Status = ApprovalStageStatus.Closed;
-            r.CloseReason = ApprovalCloseReasons.InstanceEnded;
-            r.CompletedTime = now;
-        }
-    }
-
-    /// <summary>open 任務改 closed（已由他人處理、撤回、退回）。</summary>
-    public static void CloseOpen(IEnumerable<ApprovalTask> tasks)
-    {
-        foreach (var t in tasks.Where(t => t.Status == ApprovalTaskStatus.Open)) t.Status = ApprovalTaskStatus.Closed;
-    }
 }
 
 /// <summary>加簽計畫：加簽對象（已去重）與方式（all 會簽、any 或簽）。</summary>
@@ -219,7 +189,7 @@ public sealed class ApprovalApprover(
             return ServiceResult.Invalid(blocked.ToDictionary(b => b.Key, b => new[] { b.Value }));
 
         // 可編輯欄位的豁免：送出時的狀態是簽核鎖定狀態就不放行（設計 §8.5）
-        if (values.Count > 0 && (module.Workflow is { } wf ? ApprovalRuntimeCheck.VerifyEditable(wf, inst.FromOptionId) : "模組沒有狀態機") is { } locked)
+        if (values.Count > 0 && (module.Workflow is { } wf ? ApprovalRuntimeCheck.VerifyEditable(wf, inst.FromOptionId) : ApprovalMessages.NoWorkflowReason) is { } locked)
             return engine.RuntimeInvalid(inst, locked);
         // 先寫可編輯欄位，再用當下的記錄值重新比對路線（設計 §5.5 第 1 點、§8.2 第 1、2 步）
         if (values.Count > 0 && await runner.RunAsync(inst, null, values, ct) is { IsSuccess: false } written) return written;
@@ -290,7 +260,7 @@ public sealed class ApprovalApprover(
         }
         else
         {
-            ApprovalActionSupport.CloseOpen(stageTasks);
+            ApprovalRunClosing.CloseOpen(stageTasks);
             complete = true;
         }
 
@@ -449,7 +419,7 @@ public class RejectTaskHandler(
         if (def.RejectTo is { } rt && rt != inst.FromOptionId)
         {
             // 執行前再驗（設計 §5.2、§8.3）：退回轉移已定義、不需簽核、不會讓單據不簽就進入鎖定狀態
-            var reason = module.Workflow is { } wf ? ApprovalRuntimeCheck.Verify(wf, inst.FromOptionId, rt, isReject: true) : "模組沒有狀態機";
+            var reason = module.Workflow is { } wf ? ApprovalRuntimeCheck.Verify(wf, inst.FromOptionId, rt, isReject: true) : ApprovalMessages.NoWorkflowReason;
             if (reason is not null) return engine.RuntimeInvalid(inst, reason);
             if (await runner.RunAsync(inst, rt, null, ct) is { IsSuccess: false } moved) return moved;
         }
@@ -466,10 +436,10 @@ public class RejectTaskHandler(
     {
         me.Status = ApprovalTaskStatus.Rejected;
         me.ActedTime = now;
-        ApprovalActionSupport.CloseOpen(tasks.Where(t => t.StageRunId == run.Id));
+        ApprovalRunClosing.CloseOpen(tasks.Where(t => t.StageRunId == run.Id));
         run.Status = ApprovalStageStatus.Returned;
         run.CompletedTime = now;
-        ApprovalActionSupport.CloseQueued(runs.Where(r => r.NodeId == run.NodeId && (r.BranchKey ?? "") == (run.BranchKey ?? "")), now);
+        ApprovalRunClosing.CloseQueued(runs.Where(r => r.NodeId == run.NodeId && (r.BranchKey ?? "") == (run.BranchKey ?? "")), now);
     }
 
     /// <summary>graph 退回發起人（§8.4）：整張單據結束，所有 open 任務與還在走的執行線（含被退回的這一列）都關閉，原因 instanceEnded。</summary>
@@ -477,18 +447,18 @@ public class RejectTaskHandler(
     {
         me.Status = ApprovalTaskStatus.Rejected;
         me.ActedTime = now;
-        ApprovalActionSupport.CloseOpen(tasks);
-        ApprovalActionSupport.CloseLive(runs, now);
+        ApprovalRunClosing.CloseOpen(tasks);
+        ApprovalRunClosing.CloseLive(runs, now);
     }
 
     private static void Reject(ApprovalTask me, ApprovalStageRun run, List<ApprovalTask> tasks, List<ApprovalStageRun> runs, DateTime now, string runStatus)
     {
         me.Status = ApprovalTaskStatus.Rejected;
         me.ActedTime = now;
-        ApprovalActionSupport.CloseOpen(tasks);
+        ApprovalRunClosing.CloseOpen(tasks);
         run.Status = runStatus;
         run.CompletedTime = now;
-        ApprovalActionSupport.CloseQueued(runs, now);
+        ApprovalRunClosing.CloseQueued(runs, now);
     }
 }
 
@@ -512,8 +482,8 @@ public class WithdrawApprovalHandler(
 
         var now = time.Now;
         var notify = tasks.Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).ToList();
-        ApprovalActionSupport.CloseOpen(tasks);
-        if (graph) ApprovalActionSupport.CloseLive(runs, now);
+        ApprovalRunClosing.CloseOpen(tasks);
+        if (graph) ApprovalRunClosing.CloseLive(runs, now);
         else
         {
             if (current is not null)
@@ -521,7 +491,7 @@ public class WithdrawApprovalHandler(
                 current.Status = ApprovalStageStatus.Closed;
                 current.CompletedTime = now;
             }
-            ApprovalActionSupport.CloseQueued(runs, now);
+            ApprovalRunClosing.CloseQueued(runs, now);
         }
         inst.Status = ApprovalInstanceStatus.Withdrawn;
         inst.CompletedTime = now;
@@ -581,8 +551,8 @@ public class CancelApprovalHandler(
         var now = time.Now;
         var currentRun = inst.CurrentStageRunId;
         var notify = tasks.Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Append(inst.InitiatorUserId).ToList();
-        ApprovalActionSupport.CloseOpen(tasks);
-        if (ApprovalGraphMode.Applies(inst, def)) ApprovalActionSupport.CloseLive(runs, now);   // 連匯合等待中的列一起關；終止不讀圖（U11）
+        ApprovalRunClosing.CloseOpen(tasks);
+        if (ApprovalGraphMode.Applies(inst, def)) ApprovalRunClosing.CloseLive(runs, now);   // 連匯合等待中的列一起關；終止不讀圖（U11）
         else
             foreach (var run in runs.Where(r => r.Status is ApprovalStageStatus.Active or ApprovalStageStatus.Queued))
             {
