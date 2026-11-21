@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Mcp;
 
 namespace DynamicModules.Application.Dynamic.McpService.Tools;
 
@@ -38,6 +39,43 @@ public static class McpResultFormatter
             }
         var root = new JsonObject { ["contentTrust"] = McpTexts.ContentTrust, ["meta"] = metaNode, ["data"] = ToNode(data) };
         return Build(false, root, null);
+    }
+
+    /// <summary>
+    /// 成功結果加大小判斷（判斷 14；寫死清單：<see cref="McpLimits.MaxResultChars"/> 是文字內容加結構化內容合計）。放不下時：
+    /// 分頁列表不截斷，回 <c>result_too_large</c> 與 <c>retry.pageSize</c>（這一頁能放下的最多筆數；1 筆仍放不下就不帶）；
+    /// 報表明細截到放得下；其餘（單筆、分組報表）回 <c>result_too_large</c>，有提示就附 <c>hint</c>。
+    /// </summary>
+    public static McpFormattedResult Fit(string tool, McpToolOutcome outcome, string tooLargeMessage, int max = McpLimits.MaxResultChars)
+    {
+        var full = Success(tool, outcome.Meta, outcome.Data);
+        if (full.Size <= max) return full;
+        if (outcome.Resize is { Count: > 1 } resize)
+        {
+            McpFormattedResult Take(int n)
+            {
+                var (meta, data) = resize.Take(n);
+                return Success(tool, meta, data);
+            }
+            // 項目越少結果越小：二分找放得下的最多筆數
+            int lo = 0, hi = resize.Count - 1;
+            McpFormattedResult? best = null;
+            while (lo < hi)
+            {
+                var mid = (lo + hi + 1) / 2;
+                var candidate = Take(mid);
+                if (candidate.Size <= max) { lo = mid; best = candidate; }
+                else hi = mid - 1;
+            }
+            if (lo >= 1)
+            {
+                best ??= Take(lo);
+                return resize.Mode == McpOversize.Truncate
+                    ? best
+                    : Error(McpErrorCodes.ResultTooLarge, tooLargeMessage, extra: new { retry = new { pageSize = lo } });
+            }
+        }
+        return Error(McpErrorCodes.ResultTooLarge, tooLargeMessage, extra: outcome.OversizeHint is { } hint ? new { hint } : null);
     }
 
     /// <summary>錯誤結果；訊息已依請求語系解析。</summary>

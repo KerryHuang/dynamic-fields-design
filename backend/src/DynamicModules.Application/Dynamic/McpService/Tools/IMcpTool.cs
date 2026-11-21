@@ -24,11 +24,13 @@ public sealed record McpToolCall(JsonElement Arguments, McpPolicySnapshot Limits
 /// <summary>
 /// 工具執行的結果，還沒格式化。成功時 <see cref="Meta"/>／<see cref="Data"/> 分區；handler 回的失敗放 <see cref="Failure"/>，
 /// 由 invoker 依 §6.5 對照成錯誤代碼（工具拿不到訊息目錄）。<see cref="TargetKind"/> 以下是稽核欄位。
+/// 結果放不下時（判斷 14）：沒有 <see cref="Resize"/> 的單筆結果回 <c>result_too_large</c>（可附 <see cref="OversizeHint"/>）；
+/// 分頁列表回建議的 <c>pageSize</c>；報表明細截斷。
 /// </summary>
 public sealed record McpToolOutcome(bool IsError, object? Meta, object? Data, string? ErrorCode = null, MessageRef? ErrorMessage = null,
     IReadOnlyDictionary<string, MessageRef>? Fields = null, int? RetryAfterSeconds = null,
     string? TargetKind = null, string? TargetId = null, int? ResultCount = null, IReadOnlyList<long>? RecordIds = null,
-    ServiceResult? Failure = null)
+    ServiceResult? Failure = null, McpResize? Resize = null, string? OversizeHint = null)
 {
     public static McpToolOutcome Ok(object? data, object? meta = null) => new(false, meta, data);
 
@@ -41,6 +43,15 @@ public sealed record McpToolOutcome(bool IsError, object? Meta, object? Data, st
     public static McpToolOutcome InvalidArguments(IReadOnlyDictionary<string, MessageRef> fields) =>
         Error(McpErrorCodes.InvalidArguments, fields.Values.First(), fields);
 }
+
+/// <summary>結果放不下時的處理：分頁列表回建議筆數（不截斷，避免下一頁跳過被拿掉的筆）；報表明細截到放得下。</summary>
+public enum McpOversize { SuggestPageSize, Truncate }
+
+/// <summary>
+/// 結果的可縮小形式：<see cref="Count"/> 是目前的項目數，<see cref="Take"/>(n) 回只含前 n 項的 meta 與 data
+/// （報表用 <c>ReportRules.TakeDetail</c>，並在 meta 標 <c>truncated</c>、<c>rowsReturned</c>、<c>rowsTotal</c>）。
+/// </summary>
+public sealed record McpResize(McpOversize Mode, int Count, Func<int, (object? Meta, object? Data)> Take);
 
 /// <summary>工具結果的錯誤代碼（設計 §6.5、計畫判斷 12）：協定上的機器碼，給模型判斷能不能修正。</summary>
 public static class McpErrorCodes

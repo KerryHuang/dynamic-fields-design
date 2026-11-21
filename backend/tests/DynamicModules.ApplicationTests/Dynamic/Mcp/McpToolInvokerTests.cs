@@ -1,4 +1,6 @@
 using System.Text.Json;
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.McpService;
 using DynamicModules.Application.Dynamic.McpService.Tools;
@@ -7,7 +9,9 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Mcp;
 using DynamicModules.Domain.Policies;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Mcp;
 
@@ -45,20 +49,36 @@ public abstract class McpInvokerTestBase : McpTokenTestBase
     protected readonly FakeTool List = new("fake_list");
     protected readonly FakeTool Design = new("fake_design", "mcp.describeModule", McpScopes.DesignRead);
 
+    protected readonly SwitchableAudit Audit = new();
+    protected readonly List<(LogLevel Level, string Message)> Logs = [];
+    protected readonly SettableLocale Locale = new();
+
     protected override void ConfigureServices(IServiceCollection services)
     {
         base.ConfigureServices(services);
         services.AddSingleton<IRequestChannel>(Channel);
         services.AddSingleton<IMcpTool>(List);
         services.AddSingleton<IMcpTool>(Design);
+        services.AddScoped<AuditLog>();
+        services.AddScoped<IAuditLog>(sp => new SwitchableAuditLog(sp.GetRequiredService<AuditLog>(), Audit));
+        services.AddSingleton<ILogger<McpToolInvoker>>(new CaptureLogger<McpToolInvoker>(Logs));
+        services.AddSingleton<ICurrentLocale>(Locale);
     }
 
-    protected async Task<McpFormattedResult> Invoke(string name = "fake_list", string args = "{}")
+    protected async Task<McpFormattedResult> Invoke(string name = "fake_list", string args = "{}", McpCallContext? context = null,
+        CancellationToken ct = default)
     {
+        // 閘門在 /mcp 換身分時開的稽核來源（通道 MCP、權杖 id）
+        using var origin = AuditOrigin.Begin(AuditChannel.Mcp, TokenId);
         using var scope = NewScope();
         return await scope.ServiceProvider.GetRequiredService<McpToolInvoker>()
-            .InvokeAsync(name, JsonDocument.Parse(args).RootElement.Clone(), new McpCallContext("test-client", "1.0"), CancellationToken.None);
+            .InvokeAsync(name, JsonDocument.Parse(args).RootElement.Clone(), context ?? new McpCallContext("test-client", "1.0"), ct);
     }
+
+    /// <summary>執行器寫的稽核列（權杖 7、MCP 通道；不含測試直接寫的已提交列）。</summary>
+    protected Task<List<AuditLogEntry>> McpRows() =>
+        Db.Context.Set<AuditLogEntry>().AsNoTracking().Where(a => a.TokenId == TokenId && a.Channel == AuditChannel.Mcp && a.TargetLabel != null)
+            .OrderBy(a => a.Id).ToListAsync();
 
     protected static string? CodeOf(McpFormattedResult r) =>
         r.Structured.TryGetProperty("error", out var e) ? e.GetProperty("code").GetString() : null;
@@ -77,6 +97,32 @@ public abstract class McpInvokerTestBase : McpTokenTestBase
 
     /// <summary>營運時區今天 00:00（UTC）：時鐘是 2026-11-04 09:00 +08:00。</summary>
     protected static readonly DateTime TodayStartUtc = new(2026, 11, 3, 16, 0, 0, DateTimeKind.Utc);
+}
+
+/// <summary>可切換成寫不進去的稽核（包住真的 AuditLog）。</summary>
+public sealed class SwitchableAudit { public bool Fail { get; set; } }
+
+public sealed class SwitchableAuditLog(AuditLog inner, SwitchableAudit state) : IAuditLog
+{
+    public AuditLogEntry Add(AuditEntry entry) => inner.Add(entry);
+
+    public Task WriteNowAsync(AuditEntry entry, CancellationToken ct) =>
+        state.Fail ? throw new AuditWriteException(new InvalidOperationException("db down")) : inner.WriteNowAsync(entry, ct);
+
+    public Task<bool> TryWriteNowAsync(AuditEntry entry, CancellationToken ct) =>
+        state.Fail ? Task.FromResult(false) : inner.TryWriteNowAsync(entry, ct);
+}
+
+public sealed class SettableLocale : ICurrentLocale { public string Locale { get; set; } = "zh-TW"; }
+
+public sealed class CaptureLogger<T>(List<(LogLevel Level, string Message)> sink) : ILogger<T>
+{
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public bool IsEnabled(LogLevel logLevel) => true;
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        lock (sink) sink.Add((logLevel, formatter(state, exception) + (exception is null ? "" : " | " + exception.Message)));
+    }
 }
 
 /// <summary>工具執行器：範圍、速率與每日名額保留（mcp1a 計畫判斷 13、19，Task 7）。</summary>
@@ -212,13 +258,180 @@ public class McpToolInvokerTests : McpInvokerTestBase
     public async Task Reservation_ReleasedOnException()
     {
         await SetSystem(PolicyCatalog.McpCallsPerDay, "100");
-        await AddCalls(99);
+        await AddCalls(98);   // 丟例外的那次也寫一列 Failed 稽核、計入今天；名額沒釋放的話下一次會被擋
         List.Behavior = (_, _) => throw new InvalidOperationException("boom");
-        await FluentActions.Awaiting(() => Invoke()).Should().ThrowAsync<InvalidOperationException>();
+        CodeOf(await Invoke()).Should().Be(McpErrorCodes.InternalError);
 
         List.Behavior = (_, _) => Task.FromResult(McpToolOutcome.Ok(new { }));
         (await Invoke()).IsError.Should().BeFalse("例外後名額已釋放");
     }
+}
+
+/// <summary>工具執行器的稽核結束路徑（判斷 17：每次呼叫恰好一列）與結果大小（判斷 14）。</summary>
+[Trait("Category", "Postgres")]
+public class McpToolInvokerAuditTests : McpInvokerTestBase
+{
+    private async Task<AuditLogEntry> SingleRow()
+    {
+        var rows = await McpRows();
+        rows.Should().ContainSingle();
+        return rows[0];
+    }
+
+    [Fact]
+    public async Task Success_WritesAudit()
+    {
+        const string args = """{"module":"orders","keyword":"王小明","filter":{"all":[{"field":"amount","op":"gt","value":12345}]},"confirmationCode":"fwc_x"}""";
+        List.Behavior = (_, _) => Task.FromResult(McpToolOutcome.Ok(new { rows = 3 }) with
+        {
+            TargetKind = "module", TargetId = "orders", ResultCount = 3, RecordIds = Enumerable.Range(1, 25).Select(i => (long)i).ToList(),
+        });
+
+        var r = await Invoke(args: args, context: new McpCallContext(new string('c', 150), "1.2", "nightly"));
+
+        r.IsError.Should().BeFalse();
+        var row = await SingleRow();
+        (row.Action, row.TargetLabel, row.Result, row.TargetKind, row.TargetId, row.ResultCount)
+            .Should().Be(("mcp.queryRecords", "fake_list", AuditResult.Success, "module", "orders", 3));
+        row.ArgumentsHash.Should().Be(McpArguments.Hash(JsonDocument.Parse(args).RootElement));
+        var summary = JsonDocument.Parse(row.SummaryJson!).RootElement;
+        summary.GetProperty("ids").GetArrayLength().Should().Be(20);
+        summary.GetProperty("client").GetProperty("name").GetString().Should().HaveLength(100);
+        summary.GetProperty("job").GetString().Should().Be("nightly");
+        summary.TryGetProperty("ms", out _).Should().BeTrue();
+        row.SummaryJson.Should().NotContain("12345").And.NotContain("王小明").And.NotContain("fwc_x");
+    }
+
+    [Fact]
+    public async Task UnknownTool_Audited()
+    {
+        CodeOf(await Invoke("no_such_tool")).Should().Be(McpErrorCodes.UnknownTool);
+        var row = await SingleRow();
+        (row.Action, row.Result, row.TargetLabel, row.ReasonCode).Should().Be(("mcp.unknownTool", AuditResult.Invalid, "no_such_tool", "unknown_tool"));
+    }
+
+    [Fact]
+    public async Task ToolThrows_AuditedFailed_InternalError()
+    {
+        List.Behavior = (_, _) => throw new InvalidOperationException("secret-detail");
+
+        var r = await Invoke();
+
+        CodeOf(r).Should().Be(McpErrorCodes.InternalError);
+        r.Text.Should().NotContain("secret-detail");
+        var row = await SingleRow();
+        (row.Result, row.ReasonCode).Should().Be((AuditResult.Failed, "exception"));
+        Logs.Count(l => l.Level == LogLevel.Error).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Cancelled_AuditedFailed()
+    {
+        using var cts = new CancellationTokenSource();
+        List.Behavior = async (_, ct) =>
+        {
+            cts.Cancel();
+            await Task.Delay(Timeout.Infinite, ct);
+            return McpToolOutcome.Ok(new { });
+        };
+
+        await FluentActions.Awaiting(() => Invoke(ct: cts.Token)).Should().ThrowAsync<OperationCanceledException>();
+
+        var row = await SingleRow();
+        (row.Result, row.ReasonCode).Should().Be((AuditResult.Failed, "cancelled"));
+    }
+
+    [Fact]
+    public async Task ResultTooLarge_AuditedFailed()
+    {
+        List.Behavior = (_, _) => Task.FromResult(McpToolOutcome.Ok(new { text = new string('x', McpLimits.MaxResultChars) }));
+
+        CodeOf(await Invoke()).Should().Be(McpErrorCodes.ResultTooLarge);
+        var row = await SingleRow();
+        (row.Result, row.ReasonCode).Should().Be((AuditResult.Failed, "result_too_large"));
+    }
+
+    [Fact]
+    public async Task AuditFails_NoData()
+    {
+        Audit.Fail = true;
+
+        var r = await Invoke();
+
+        r.IsError.Should().BeTrue();
+        CodeOf(r).Should().Be(McpErrorCodes.AuditUnavailable);
+        r.Structured.TryGetProperty("data", out _).Should().BeFalse();
+        Logs.Count(l => l.Level == LogLevel.Error).Should().Be(1);
+        List.Runs.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ScopeDenied_Audited()
+    {
+        await Invoke("fake_design");
+        var row = await SingleRow();
+        (row.Action, row.Result, row.ReasonCode).Should().Be(("mcp.describeModule", AuditResult.Denied, "scope_denied"));
+    }
+
+    [Fact]
+    public async Task InvalidArgs_Audited()
+    {
+        List.Behavior = (call, _) =>
+        {
+            var a = McpArgs.Of(call.Arguments);
+            a.PageSize(toolMax: 100, call.Limits.MaxRows);
+            return Task.FromResult(a.Invalid());
+        };
+
+        var r = await Invoke(args: """{"pageSize":0}""");
+
+        CodeOf(r).Should().Be(McpErrorCodes.InvalidArguments);
+        r.Structured.GetProperty("error").GetProperty("fields").TryGetProperty("pageSize", out _).Should().BeTrue();
+        var row = await SingleRow();
+        (row.Result, row.ReasonCode).Should().Be((AuditResult.Invalid, "invalid_arguments"));
+    }
+
+    [Fact]
+    public async Task Forbidden_NoExistenceLeak()
+    {
+        List.Behavior = (_, _) => Task.FromResult(McpToolOutcome.From(ServiceResult.Forbidden(MessageRef.Literal("模組 secret-orders 不開放"))));
+        var forbidden = await Invoke();
+        List.Behavior = (_, _) => Task.FromResult(McpToolOutcome.From(ServiceResult.NotFound(MessageRef.Literal("找不到 secret-orders"))));
+        var notFound = await Invoke();
+
+        (CodeOf(forbidden), Message(forbidden)).Should().Be((McpErrorCodes.Forbidden, "沒有權限執行此操作"));
+        (CodeOf(notFound), Message(notFound)).Should().Be((McpErrorCodes.NotFound, "找不到資源"));
+        forbidden.Text.Should().NotContain("secret-orders");
+        notFound.Text.Should().NotContain("secret-orders");
+        (await McpRows()).Select(r => (r.Result, r.ReasonCode)).Should()
+            .Equal((AuditResult.Denied, "forbidden"), (AuditResult.Invalid, "not_found"));
+    }
+
+    [Fact]
+    public async Task Conflict_Stale()
+    {
+        List.Behavior = (_, _) => Task.FromResult(McpToolOutcome.From(ServiceResult.Stale()));
+        CodeOf(await Invoke()).Should().Be(McpErrorCodes.Stale);
+        (await SingleRow()).Result.Should().Be(AuditResult.Invalid);
+    }
+
+    [Fact]
+    public async Task RateLimited_AuditedDenied()
+    {
+        await SetSystem(PolicyCatalog.McpCallsPerMinute, "1");
+        await Invoke();
+        await Invoke();
+        (await McpRows()).Select(r => (r.Result, r.ReasonCode)).Should().Equal((AuditResult.Success, null), (AuditResult.Denied, "rate_limited"));
+    }
+
+    [Fact]
+    public async Task ErrorMessage_FollowsRequestLocale()
+    {
+        Locale.Locale = "en-US";
+        Message(await Invoke("no_such_tool")).Should().Be("There is no such tool");
+    }
+
+    private static string? Message(McpFormattedResult r) => r.Structured.GetProperty("error").GetProperty("message").GetString();
 }
 
 /// <summary>McpRateGate 的同步契約（判斷 13 第三、四輪必修）：清理不拆分保留、讀取順序、釋放冪等。已提交數用可暫停的假實作。</summary>
