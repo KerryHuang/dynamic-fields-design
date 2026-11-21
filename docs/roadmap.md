@@ -59,10 +59,10 @@
 | i4 | 語系包與自訂語系（可新增語系、JSON 語系包匯入匯出、內建語系可覆寫、設計資料 Excel 翻譯），切 i4a–i4f（i4d 分 i4d1、i4d2）；段內順序 i4a → i4b／i4c → i3 → i4d1 → i4d2 → i4e；i4f 併進 i3（i3c） | 進行中：<br>i4a 已上線 3d0dd59b；<br>i4b 已上線 7843faa9；<br>i4c 已上線 bf6fef7b；<br>i4d1 已上線 0e42b98e；<br>i4d2 已上線（2026-11-21，028015c5） | [語系包與自訂語系](superpowers/specs/2026-11-17-language-packs-design.md) §20 |
 | mcp1a | MCP 後端地基：權杖、範圍、工具分級與確認碼、稽核寫入點、速率限制、12 個唯讀工具；權杖與確認碼的 repository 測試在 PostgreSQL 與 SQLite 各跑一次 | ✅ 已上線（2026-11-21，2c5f921b）：<br>四個子段一起上線（mcp1a-1 權杖與政策、mcp1a-2 帳號連動與 AI 遮罩、mcp1a-3 /mcp 端點與名額、mcp1a-4 確認碼與 12 個唯讀工具）；<br>migration `McpFoundation`（兩表＋欄位旗標），回退到 96081206 以前需先移除這組 migration；<br>Claude Code 實機連線已驗、Codex 實機未驗證 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | mcp1b | MCP 畫面：個人「AI 存取權杖」頁、管理員「AI 連線」頁、設計器欄位旗標、手冊 | ✅ 已上線（2026-11-21，99129622）：<br>個人「AI 存取權杖」頁、管理員「AI 連線」頁、設計器「不提供給 AI 工具」勾選框、手冊 §24；沒有 migration；<br>Claude Code 實機（curl 建權杖→連上→撤銷後 401）已驗，從畫面建權杖只有 vitest、Codex 實機未驗證 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
-| O3 | 廠商維運中心（Cloudflare Workers＋D1）、外部探測、匿名回報與新版本通知、告警推播 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | bk1 | 產品內備份：排程備份、存放位置（雲端版用隔離、只寫不刪的儲存空間）、O2「備份新鮮度」檢查接上真實時間；還原留在階段 5（使用者 11-19 裁決；開工前先寫設計） | 未開始（設計待寫） | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) |
 | pkg1 | 套件更新入口：把新版內建應用程式套到客戶已開啟的應用程式（先寫設計；第一個客戶上線前必須有結論；方向為升級預覽與逐項套用，使用者 11-17 裁決） | 未開始（設計待寫） | — |
 | au1 | 帳號安全：帳號信的寄信佇列（不節流、不摘要）、寄信重設密碼、雙因素登入 TOTP（使用者 11-17 裁決，雲端版對外開放前必須有；開工前先寫設計）。SMTP 連線已在 o2e 抽成核心「寄信設定」，與告警信共用連線、佇列分開（使用者 11-19 裁決） | 未開始（設計待寫） | [功能清單](feature.md)「寄信重設密碼與核心寄信能力」「雙因素登入」兩列、[維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §17.2.6 |
+| O3 | 廠商維運中心（Cloudflare Workers＋D1）、外部探測、匿名回報與新版本通知、告警推播 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | O4、mcpO1 | agent L1 唯讀診斷；產品端維運唯讀工具與維運服務帳號 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | O5 | agent L3 修正 PR、CI gate | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | O6、mcpO2 | 雲端版 L2 自動處置；產品端維運處置工具 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
@@ -119,7 +119,7 @@ HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工
 
 設計：[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md)、[維運、觀測與告警派工 agent](superpowers/specs/2026-11-11-ops-observability-design.md)、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md)。這幾段插在上面第 1 項「任務管理與簽核」的簽核主線中間。
 
-順序：**p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → fg1–fg6 → kb1–kb3、kr1–kr3 → st1、st2 → gt1、gt2 → o1b、o1c → un1 → pg0 → pg1 → O2 → 權限軸 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ O3 → bk1 → pkg1 → au1 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
+順序：**p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → fg1–fg6 → kb1–kb3、kr1–kr3 → st1、st2 → gt1、gt2 → o1b、o1c → un1 → pg0 → pg1 → O2 → 權限軸 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ bk1 → pkg1 → au1 → O3 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
 
 - 使用者裁決（2026-11-11）：p1 → O1 → pg0 → a2d–a6 → O2 → mcp1 → O3…；O1 在 p1 之後、a2d 之前；O2 以後視情況穿插；pg0 在 O1 之後，之後的功能兩種資料庫都驗，其餘 PostgreSQL 改寫排在簽核之後；MCP 地基 mcp1 在簽核與 O2 之後，業務寫入、設計器工具、OAuth 後續分段，維運 O4、O6 直接用 MCP 工具；列表的使用者欄位顯示姓名用小段穿插。
 - 使用者確認（2026-11-12）：p2、p3 排在 O2 之後、mcp1a 之前；O3 → O4 → O5 → O6 的先後；mcp1 之後是 mcp1a → mcp1b → mcp2a → mcp2b → mcp3 → mcp4，mcpO1 隨 O4、mcpO2 隨 O6，mcp4 可視雲端版第一個客戶的需求提前。
@@ -132,6 +132,7 @@ HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工
 - 使用者裁決（2026-11-13）：簽核改成拖拉式流程圖（fg1–fg6），順序 a5 → a3 → fg；任務看板、報表、子任務、甘特圖排在流程圖之後，先子任務再甘特圖。
 - 主控判斷（2026-11-13，待使用者確認）：tz1 緊接 ci1、排在 a5 前；理由：正式 Demo 跑在 UTC，報表日期區間可能差 8 小時，屬正確性問題。
 - 使用者裁決（2026-11-20）：未來各段的設計題（2026-11-19 分流，平台、ERP、應用程式三份）要問使用者的全部照推薦、顧問裁決全部確認；帳務與稅務的專家題不找會計師，照台灣中小企業常見做法先定、做成可設定，設計標「未經會計師確認」。各段寫設計時直接採用，不再重問。
+- 使用者裁決（2026-11-21）：O3 等使用者開帳號（Cloudflare 另開專用帳號、Telegram bot、郵件 API），期間先做 bk1 → pkg1 → au1（三段都不依賴 O3；比照 i3 交主控寫設計），O3 移到 au1 之後、O4 之前；pkg1 開啟應用程式時保存一份套件原文當升級基準（推翻套件設計決策 15）。
 - 主控判斷（位置）：un1 排在 O1 之後、pg0 之前；pkg1 緊接 O3，不等 O4。
 - 段號命名：MCP 各段一律用 mcp 開頭（mcp1a、mcp1b、mcp2a、mcp2b、mcp3、mcp4、mcpO1、mcpO2），與已上線的多語系 m1（模組選單分區）區隔。
 
