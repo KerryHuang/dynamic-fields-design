@@ -111,7 +111,7 @@ public class RollupFormulaMaskTests : ApprovalTestBase
         return (DynamicRecordResponse)res.Data!;
     }
 
-    private string[] RefKeys => [$"f_{_refSum}", $"f_{_refSumX}"];
+    private string[] RefKeys => [$"f_{_refSum}", $"f_{_refCount}", $"f_{_refSumX}"];
 
     // ───────── #74 第 1 點：一般參照來源的彙總 ─────────
 
@@ -165,7 +165,47 @@ public class RollupFormulaMaskTests : ApprovalTestBase
             return Encoding.UTF8.GetString(((ExportFile)res.Data!).Content);
         }
 
-        (await Csv("admin")).Should().Contain("機密合計").And.Contain("1234");
-        (await Csv("buyer1")).Should().NotContain("機密合計").And.NotContain("1234");
+        (await Csv("admin")).Should().Contain("機密合計").And.Contain("機密筆數").And.Contain("1234");
+        (await Csv("buyer1")).Should().NotContain("機密合計").And.NotContain("機密筆數").And.NotContain("1234");
+    }
+
+    // ───────── #75：條件引用看不到欄位的彙總 ─────────
+
+    [Fact]
+    public async Task Guard_ConditionOnHidden_HiddenForReader_VisibleForAdmin()
+    {
+        await Rig();
+        var buyer = await Perms("buyer1");
+        buyer.HiddenFieldIds.Should().Contain(_refCount, "一般參照來源、條件是看不到的機密")
+            .And.Contain(_priceCount, "明細來源、條件是看不到的單價")
+            .And.NotContain(_qtyCount, "條件只引用看得到的數量");
+        (await Perms("admin")).HiddenFieldIds.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Record_ConditionOnHidden_NotReturned()
+    {
+        await Rig();
+        var po = await PoWithExtra();
+
+        var admin = await Get("admin", po);
+        admin.Values[$"f_{_refCount}"]!.Value.GetDecimal().Should().Be(1);
+        admin.Values[$"f_{_priceCount}"]!.Value.GetDecimal().Should().Be(1);
+        var buyer = await Get("buyer1", po);
+        buyer.Values.Keys.Should().NotContain([$"f_{_refCount}", $"f_{_priceCount}"]).And.Contain($"f_{_qtyCount}");
+    }
+
+    /// <summary>條件解析失敗（運算子不存在）時 RollupCalculator 會略過條件算全部來源列，讀者端一律隱藏；管理員照常。</summary>
+    [Fact]
+    public async Task Guard_ConditionUnparsable_HiddenForReader()
+    {
+        await Rig();
+        var field = await Db.Context.Set<Field>().SingleAsync(f => f.Id == _qtyCount);
+        field.Config = field.Config with { Rollup = field.Config.Rollup! with { Condition = J($$"""{"field":{{_r.LineQty}},"op":"bogus","value":0}""") } };
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        (await Perms("buyer1")).HiddenFieldIds.Should().Contain(_qtyCount);
+        (await Perms("admin")).HiddenFieldIds.Should().BeEmpty();
     }
 }
