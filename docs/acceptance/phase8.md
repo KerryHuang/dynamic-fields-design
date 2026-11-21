@@ -48,16 +48,16 @@
 
 2026-11-05 在 Chrome（`http://127.0.0.1:9180`，後端 `http://127.0.0.1:5180`）走完下列 8 項。走查在最終審查修正之前；第 7 項依的是舊的權限建議（業務沒有金額權限），修正後的行為見「未實機驗證」。走查用的開發資料庫原本沒有 `order`、`order-line`，但為了示範改代碼，這次建成 `p8-order`、`p8-order-line`。
 
-| # | 項目 | 結果 | 截圖 |
-|---|---|---|---|
-| 1 | 從範本建立對話框：改代碼、名稱，取消勾選「取消原因」 | 通過 | 01 |
-| 2 | 建出的模組是草稿，規則少兩條 | 通過 | 02 |
-| 3 | 啟用表頭與明細 | 通過 | 03 |
-| 4 | 新增訂單時訂單日期帶今天；新增明細列帶表頭交期 | 通過 | 04 |
-| 5 | 存檔後的合計、稅額、含稅總額 | 通過 | 05 |
-| 6 | 結案後全單唯讀 | 通過 | 06 |
-| 7 | 切換成業務：看不到別人的訂單，表單沒有金額類欄位（舊權限建議） | 通過 | 07、08 |
-| 8 | 匯出範本下載檔；改代碼匯入後清單出現 | 通過 | 09、10 |
+| # | 項目 | 結果 |
+|---|---|---|
+| 1 | 從範本建立對話框：改代碼、名稱，取消勾選「取消原因」 | 通過 |
+| 2 | 建出的模組是草稿，規則少兩條 | 通過 |
+| 3 | 啟用表頭與明細 | 通過 |
+| 4 | 新增訂單時訂單日期帶今天；新增明細列帶表頭交期 | 通過 |
+| 5 | 存檔後的合計、稅額、含稅總額 | 通過 |
+| 6 | 結案後全單唯讀 | 通過 |
+| 7 | 切換成業務：看不到別人的訂單，表單沒有金額類欄位（舊權限建議） | 通過 |
+| 8 | 匯出範本下載檔；改代碼匯入後清單出現 | 通過 |
 
 逐項觀察：
 
@@ -86,21 +86,6 @@
    - 跳出「已匯入範本：訂單（複本）」；再按「從範本建立」，清單是「訂單（內建）」與「訂單（複本）（已匯入）」。
    - 整段走查 console 沒有錯誤或警告。
 
-截圖：
-
-| 截圖 | 內容 |
-|---|---|
-| [01-template-dialog-edit-code-uncheck-cancel-reason.png](phase8/01-template-dialog-edit-code-uncheck-cancel-reason.png) | 01：改代碼、取消勾選取消原因 |
-| [02-created-from-template-rules-two-fewer.png](phase8/02-created-from-template-rules-two-fewer.png) | 02：建出的草稿模組只有兩條規則 |
-| [03-modules-activated.png](phase8/03-modules-activated.png) | 03：兩個模組啟用中 |
-| [04-new-order-date-today-lines-due-from-header.png](phase8/04-new-order-date-today-lines-due-from-header.png) | 04：訂單日期帶今天、明細帶表頭交期 |
-| [05-order-saved-totals-and-tax.png](phase8/05-order-saved-totals-and-tax.png) | 05：存檔後的合計與稅額 |
-| [06-closed-order-readonly.png](phase8/06-closed-order-readonly.png) | 06：結案後整張唯讀 |
-| [07-sales01-list-no-others-orders.png](phase8/07-sales01-list-no-others-orders.png) | 07：業務一看不到別人的訂單 |
-| [08-sales01-form-no-pricing-fields.png](phase8/08-sales01-form-no-pricing-fields.png) | 08：業務一的表單沒有金額類欄位 |
-| [09-export-template-download.png](phase8/09-export-template-download.png) | 09：按下匯出範本 |
-| [10-imported-template-listed.png](phase8/10-imported-template-listed.png) | 10：匯入的範本出現在清單 |
-
 ## 未實機驗證
 
 下列項目在實機走查中沒有實際操作，只靠自動測試或程式碼判斷：
@@ -113,7 +98,7 @@
 
 最終審查修正（裁決 R10–R13）改了下列行為，修正後沒有重新走查，只靠自動測試：
 
-- **業務有金額權限、現場人員沒有**（R10）：業務在表單填的單價直接生效，現場人員看不到單價、金額與各項合計但讀得到業務的訂單。`Phase8_DemoScenario1` 第 2、3、10 步，`TemplateInstantiateTests.Instantiate_Order_CreatesDraftModules`。實機走查第 7 項的截圖 07、08 是修正前的業務畫面。
+- **業務有金額權限、現場人員沒有**（R10）：業務在表單填的單價直接生效，現場人員看不到單價、金額與各項合計但讀得到業務的訂單。`Phase8_DemoScenario1` 第 2、3、10 步，`TemplateInstantiateTests.Instantiate_Order_CreatesDraftModules`。實機走查第 7 項記錄的是修正前的業務畫面。
 - **檢視不再把看不到的欄位算成過期欄位**（R12）：沒有金額權限的人打開含金額欄的檢視，不再出現「此檢視有 1 個欄位已停用…」。`ViewServiceTests.GetViews_HiddenFieldStrippedSilently`。
 - **只有新增權限時不顯示「從範本建立」**（R13）：`ModuleListPage.vitest.spec.ts`。
 - **擴充模組匯出後可以再匯入、套用**：`TemplateExportTests.Export_ExtensionModule_RoundTrip`。

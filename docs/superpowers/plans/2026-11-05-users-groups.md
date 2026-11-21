@@ -58,7 +58,7 @@
   - `TestApp(bool seedDemoPeople = true, bool realAuth = false)`：`realAuth` 在 Task 2 才有作用，這裡先加 `seedDemoPeople`。
 
 - [ ] **Step 1: 寫失敗的測試**（`SeedDataTests`，先刪掉斷言示範使用者、`firstUpgrade` 授權的舊測試）
-  - `FreshDatabase_HasOnlyAdmin`：`AppUser` 只有 `admin`，`IsSystemAdmin == true`，`PermissionGroup`、`MockEquipment`、`MockCustomer` 都是 0 筆。
+  - `FreshDatabase_HasOnlyAdmin`：`AppUser` 只有 `admin`，`IsSystemAdmin == true`，`PermissionGroup`、設備模擬類別、`MockCustomer` 都是 0 筆。
   - `Reseed_DoesNotRestoreRemovedMembers`：`EnsureAsync` 後移除 `sales01` 的成員對應，再跑 `EnsureSeededAsync`，對應仍不存在。
   - `Reseed_DoesNotForceAdminFlag`：另建一位管理員、取消 `admin` 的 `IsSystemAdmin`，再跑 `EnsureSeededAsync`，`admin.IsSystemAdmin == false`。
   - `DemoPeopleTests.Generate_CreatesPeopleFlaggedAsDemo`：跑產生器後 `sales01.IsDemoAccount == true`、`PasswordHash == null`，`admin.IsDemoAccount == false`。

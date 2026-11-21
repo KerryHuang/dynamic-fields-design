@@ -765,7 +765,7 @@ poc/frontend/src/
 **Files:**
 - Create：
   - `poc/backend/tests/DynamicModules.WebAPITests/Phase3AcceptanceTests.cs`
-  - `docs/acceptance/phase3.md`、`docs/acceptance/phase3/*.png`
+  - `docs/acceptance/phase3.md`
 - Modify：
   - spec §15：風險 15、16 改寫成「第 3 階段已處理」並附做法，加一條「有效權限每請求即時計算，上線時要用 `ICache`」。
   - spec §6.2 的權限表：補 `UserProgramPrivilege`。
@@ -805,5 +805,5 @@ poc/frontend/src/
   - 切 `floor01`：「說明」唯讀。
   - 在網址列直接輸入 `/system/dynamic-modules`，顯示「沒有權限使用此功能」。
 
-  每個畫面截一張圖存到 `docs/acceptance/phase3/`，結果記在 `docs/acceptance/phase3.md`，逐項標「通過」或「失敗」。
+  每個畫面截一張圖，結果記在 `docs/acceptance/phase3.md`，逐項標「通過」或「失敗」。
 - [ ] **Step 5：Commit** `test: 第 3 階段驗收`

@@ -19,10 +19,10 @@ public sealed class OrderScenario : IDemoScenario
 
     private static readonly (string No, string Name, string Unit)[] Items =
     [
-        ("P-1001", "外殼上蓋", "pcs"), ("P-1002", "外殼下蓋", "pcs"), ("P-1003", "按鍵組", "set"),
-        ("P-1004", "電池蓋", "pcs"), ("P-1005", "固定支架", "pcs"), ("P-1006", "旋鈕", "pcs"),
-        ("P-1007", "前面板", "pcs"), ("P-1008", "底座", "pcs"), ("P-1009", "導光板", "pcs"),
-        ("P-1010", "塑膠粒", "kg")
+        ("P-1001", "驅動軸", "pcs"), ("P-1002", "軸承座", "pcs"), ("P-1003", "齒輪組", "set"),
+        ("P-1004", "馬達端蓋", "pcs"), ("P-1005", "固定支架", "pcs"), ("P-1006", "聯軸器", "pcs"),
+        ("P-1007", "控制面板", "pcs"), ("P-1008", "機座底板", "pcs"), ("P-1009", "電路板", "pcs"),
+        ("P-1010", "鋁錠", "kg")
     ];
 
     private static readonly string[] CancelReasons = ["客戶調整產品規格，整單重下", "客戶預算凍結，暫停採購"];

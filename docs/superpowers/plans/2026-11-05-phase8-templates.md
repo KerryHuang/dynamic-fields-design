@@ -444,7 +444,7 @@ TemplateFieldSummary(string Code, I18nText Label, string Type, bool Locked, List
 
 **Files:**
 - Create: `poc/backend/tests/DynamicModules.WebAPITests/Phase8AcceptanceTests.cs`
-- Create: `docs/acceptance/phase8.md`、`docs/acceptance/phase8/*.png`
+- Create: `docs/acceptance/phase8.md`
 - Modify: `README.md`（進度表第 8 列、計畫與裁決連結）、`docs/manual.md`（模組範本一節、兩種新預設值；已知限制）、spec §15（本階段的已知限制）
 
 - [ ] **Step 1: 寫 `Phase8_DemoScenario1`**（spec §13.2 Demo 情境一，一個 WebAPI 測試走完整條路）：
@@ -460,7 +460,7 @@ TemplateFieldSummary(string Code, I18nText Label, string Type, bool Locked, List
   9. sales02 的列表看不到 sales01 的訂單；sales01 的 schema 與記錄沒有單價、金額、未稅合計、稅額、含稅總額（沒有 Pricing）。
 - [ ] **Step 2: 寫 `Phase8_ExportImportScenario`**：匯出 `order` → 改 key 匯入 → 以 `order-b`／`order-b-line` 套用並啟用 → 在新模組建一張含 1 列明細的訂單，合計正確。
 - [ ] **Step 3: 跑全部測試**：`dotnet test poc/backend`、`cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit && bunx quasar build`。
-- [ ] **Step 4: 實機走查**（`poc/start.command`，Chrome）：從範本建立對話框（改代碼、取消勾選取消原因後看規則少兩條）、啟用、新增訂單時訂單日期帶今天、新增明細列帶表頭交期、合計與稅額、結案後唯讀、切換成業務看不到金額、匯出範本下載檔、匯入範本後清單出現。每項截圖存 `docs/acceptance/phase8/`。走不到的項目在 `phase8.md` 標「未實機驗證」。
+- [ ] **Step 4: 實機走查**（`poc/start.command`，Chrome）：從範本建立對話框（改代碼、取消勾選取消原因後看規則少兩條）、啟用、新增訂單時訂單日期帶今天、新增明細列帶表頭交期、合計與稅額、結案後唯讀、切換成業務看不到金額、匯出範本下載檔、匯入範本後清單出現。走不到的項目在 `phase8.md` 標「未實機驗證」。
 - [ ] **Step 5: 寫 `docs/acceptance/phase8.md`**（格式照 `phase7.md`），更新 README、手冊、spec §15。
 - [ ] **Step 6: Commit** `docs: 第 8 階段驗收、手冊與 spec 已知限制`
 
