@@ -13,20 +13,22 @@
 <meta property="og:title" content="Formwright 表匠｜公司的系統，自己拼">
 <meta property="og:description" content="像疊積木一樣拼出客戶管理、進銷存、生產管理。流程哪天變了，打開來改就好。不寫程式、不等外包，免註冊試玩 Demo。">
 <meta name="twitter:card" content="summary">
+<script>try{var t=localStorage.getItem("fw-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<meta name="color-scheme" content="light dark">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&amp;family=Noto+Sans+TC:wght@400;500;700;900&amp;display=swap">
 <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
-<div style="background: #FFFFFF; color: #1E2A44; font-family: 'Noto Sans TC', 'Space Grotesk', sans-serif; font-size: 17px; line-height: 1.7; overflow: hidden">
+<div style="background: var(--surface); color: var(--ink); font-family: 'Noto Sans TC', 'Space Grotesk', sans-serif; font-size: 17px; line-height: 1.7; overflow: hidden">
 
 <header style="max-width: 1200px; margin: 0 auto; padding: 18px 24px">
 <nav aria-label="主選單" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px">
 <a href="#top" style="display: flex; align-items: center; gap: 10px; text-decoration: none">
-<svg width="40" height="40" viewBox="0 0 64 64" role="img" aria-label="Formwright 標誌"><rect x="10" y="8" width="14" height="48" rx="3" fill="#1E2A44"></rect><rect x="28" y="8" width="28" height="14" rx="3" fill="#1E2A44"></rect><rect x="28" y="28" width="16" height="12" rx="3" fill="#1E2A44"></rect><rect x="48" y="28" width="8" height="12" rx="3" fill="#2F80ED"></rect></svg>
+<svg width="40" height="40" viewBox="0 0 64 64" role="img" aria-label="Formwright 標誌"><rect x="10" y="8" width="14" height="48" rx="3" style="fill: var(--ink)"></rect><rect x="28" y="8" width="28" height="14" rx="3" style="fill: var(--ink)"></rect><rect x="28" y="28" width="16" height="12" rx="3" style="fill: var(--ink)"></rect><rect x="48" y="28" width="8" height="12" rx="3" fill="#2F80ED"></rect></svg>
 <span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 22px; letter-spacing: -0.5px">Formwright</span>
-<span style="font-weight: 900; font-size: 14px; background: #FFD23F; padding: 2px 10px; border-radius: 999px">表匠</span>
+<span style="font-weight: 900; font-size: 14px; background: #FFD23F; padding: 2px 10px; border-radius: 999px; color: #1E2A44; --ink: #1E2A44; --muted: #3B4763; --line: #1E2A44; --link: #1F64C2">表匠</span>
 </a>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 22px; font-size: 16px; font-weight: 500">
 <a href="#how" style="text-decoration: none; padding: 10px 0">怎麼玩</a>
@@ -34,131 +36,136 @@
 <a href="#ai" style="text-decoration: none; padding: 10px 0">AI 協作</a>
 <a href="#plans" style="text-decoration: none; padding: 10px 0">方案</a>
 <a href="#faq" style="text-decoration: none; padding: 10px 0">你可能想問</a>
-<a href="demo.html" style="text-decoration: none; background: #1E2A44; color: #FFFFFF; padding: 10px 20px; border-radius: 999px; font-weight: 700">直接玩 Demo →</a>
+<a href="demo.html" style="text-decoration: none; background: var(--band); color: #FFFFFF; padding: 10px 20px; border-radius: 999px; font-weight: 700">直接玩 Demo →</a>
+<div class="fw-theme" role="group" aria-label="外觀主題">
+<button type="button" data-theme-set="light" aria-pressed="false" title="淺色"><span aria-hidden="true">☀︎</span><span class="t-label">淺色</span></button>
+<button type="button" data-theme-set="dark" aria-pressed="false" title="深色"><span aria-hidden="true">☾</span><span class="t-label">深色</span></button>
+<button type="button" data-theme-set="system" aria-pressed="false" title="依系統"><span aria-hidden="true">◐</span><span class="t-label">依系統</span></button>
+</div>
 </div>
 </nav>
 </header>
 
 <section id="top" style="max-width: 1200px; margin: 0 auto; padding: 56px 24px 96px; display: flex; flex-wrap: wrap; align-items: center; gap: 56px">
 <div style="flex: 1 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
-<div style="align-self: flex-start; font-size: 15px; font-weight: 700; border: 2px solid #1E2A44; border-radius: 999px; padding: 4px 14px">不寫程式　不等外包　不跟 Excel 吵架</div>
-<h1 style="margin: 0; font-size: clamp(44px, 7vw, 84px); line-height: 1.08; font-weight: 900; letter-spacing: -1px">公司的系統，<br><span style="background: linear-gradient(transparent 58%, #FFD23F 58%); padding: 0 4px">自己拼</span>。</h1>
-<p style="margin: 0; font-size: 20px; color: #3B4763; max-width: 540px">像疊積木一樣拼出客戶管理、進銷存、生產管理。流程哪天變了？打開來改就好，今天改、今天用。</p>
+<div style="align-self: flex-start; font-size: 15px; font-weight: 700; border: 2px solid var(--line); border-radius: 999px; padding: 4px 14px">不寫程式　不等外包　不跟 Excel 吵架</div>
+<h1 style="margin: 0; font-size: clamp(44px, 7vw, 84px); line-height: 1.08; font-weight: 900; letter-spacing: -1px">公司的系統，<br><span style="background: linear-gradient(transparent 58%, var(--mark) 58%); padding: 0 4px">自己拼</span>。</h1>
+<p style="margin: 0; font-size: 20px; color: var(--muted); max-width: 540px">像疊積木一樣拼出客戶管理、進銷存、生產管理。流程哪天變了？打開來改就好，今天改、今天用。</p>
 <div style="display: flex; flex-wrap: wrap; gap: 12px">
-<a href="demo.html" style="text-decoration: none; background: #2F80ED; color: #FFFFFF; padding: 16px 30px; border-radius: 999px; font-weight: 900; font-size: 18px; box-shadow: 4px 4px 0 #1E2A44">免註冊開玩 Demo</a>
-<a href="#how" style="text-decoration: none; background: #FFFFFF; border: 2px solid #1E2A44; padding: 14px 28px; border-radius: 999px; font-weight: 700; font-size: 18px">先看怎麼玩</a>
+<a href="demo.html" style="text-decoration: none; background: #2F80ED; color: #FFFFFF; padding: 16px 30px; border-radius: 999px; font-weight: 900; font-size: 18px; box-shadow: 4px 4px 0 var(--line)">免註冊開玩 Demo</a>
+<a href="#how" style="text-decoration: none; background: var(--surface); border: 2px solid var(--line); padding: 14px 28px; border-radius: 999px; font-weight: 700; font-size: 18px">先看怎麼玩</a>
 </div>
-<p style="margin: 0; font-size: 14px; color: #4A5570">登入頁點「Demo 帳號」就進去了。免費主機會打瞌睡，第一次叫醒要等大約 1 分鐘。</p>
+<p style="margin: 0; font-size: 14px; color: var(--muted)">登入頁點「Demo 帳號」就進去了。免費主機會打瞌睡，第一次叫醒要等大約 1 分鐘。</p>
 </div>
 
 <div style="flex: 1 1 460px; min-width: 0; position: relative; padding: 28px 8px">
-<div class="fw-wobble" style="position: absolute; z-index: 2; top: 0; right: 24px; background: #FFD23F; border: 2px solid #1E2A44; border-radius: 12px; padding: 6px 14px; font-weight: 900; font-size: 15px">＋ 拖一個欄位</div>
-<div class="fw-float" style="position: absolute; z-index: 2; bottom: 0; left: 0; background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 12px; padding: 6px 14px; font-weight: 900; font-size: 15px; box-shadow: 3px 3px 0 #1E2A44">✓ 存檔就上線</div>
-<div style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 20px; box-shadow: 10px 10px 0 #1E2A44; overflow: hidden">
-<div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 2px solid #1E2A44; background: #EEF4FD">
-<span style="width: 12px; height: 12px; border-radius: 6px; background: #1E2A44"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #2F80ED"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #FFD23F"></span>
+<div class="fw-wobble" style="position: absolute; z-index: 2; top: 0; right: 24px; background: #FFD23F; border: 2px solid var(--line); border-radius: 12px; padding: 6px 14px; font-weight: 900; font-size: 15px; color: #1E2A44; --ink: #1E2A44; --muted: #3B4763; --line: #1E2A44; --link: #1F64C2">＋ 拖一個欄位</div>
+<div class="fw-float" style="position: absolute; z-index: 2; bottom: 0; left: 0; background: var(--surface); border: 2px solid var(--line); border-radius: 12px; padding: 6px 14px; font-weight: 900; font-size: 15px; box-shadow: 3px 3px 0 var(--line)">✓ 存檔就上線</div>
+<div style="background: var(--surface); border: 2px solid var(--line); border-radius: 20px; box-shadow: 10px 10px 0 var(--line); overflow: hidden">
+<div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 2px solid var(--line); background: var(--soft-blue)">
+<span style="width: 12px; height: 12px; border-radius: 6px; background: var(--band)"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #2F80ED"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #FFD23F; color: #1E2A44; --ink: #1E2A44; --muted: #3B4763; --line: #1E2A44; --link: #1F64C2"></span>
 <span style="margin-left: 10px; font-size: 14px; font-weight: 700">設計器　／　器材借用申請</span>
 </div>
 <div style="display: flex; flex-wrap: wrap">
 <div style="flex: 1 1 190px; padding: 18px; border-right: 2px dashed #C9D1E0; display: flex; flex-direction: column; gap: 10px">
 
-<div class="fw-cycle" style="animation-delay: 0s; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; background: #F4F6FA; font-size: 15px; font-weight: 500">
-<span>申請單號</span><span style="font-size: 12px; font-weight: 700; color: #FFFFFF; background: #1E2A44; padding: 1px 8px; border-radius: 999px">編號</span>
+<div class="fw-cycle" style="animation-delay: 0s; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; background: var(--soft); font-size: 15px; font-weight: 500">
+<span>申請單號</span><span style="font-size: 12px; font-weight: 700; color: #FFFFFF; background: var(--band); padding: 1px 8px; border-radius: 999px">編號</span>
 </div>
 
 
-<div class="fw-cycle" style="animation-delay: 0.4s; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; background: #F4F6FA; font-size: 15px; font-weight: 500">
-<span>申請人</span><span style="font-size: 12px; font-weight: 700; color: #FFFFFF; background: #1E2A44; padding: 1px 8px; border-radius: 999px">人員</span>
+<div class="fw-cycle" style="animation-delay: 0.4s; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; background: var(--soft); font-size: 15px; font-weight: 500">
+<span>申請人</span><span style="font-size: 12px; font-weight: 700; color: #FFFFFF; background: var(--band); padding: 1px 8px; border-radius: 999px">人員</span>
 </div>
 
 
-<div class="fw-cycle" style="animation-delay: 0.8s; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; background: #F4F6FA; font-size: 15px; font-weight: 500">
-<span>器材</span><span style="font-size: 12px; font-weight: 700; color: #FFFFFF; background: #1E2A44; padding: 1px 8px; border-radius: 999px">參照</span>
+<div class="fw-cycle" style="animation-delay: 0.8s; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; background: var(--soft); font-size: 15px; font-weight: 500">
+<span>器材</span><span style="font-size: 12px; font-weight: 700; color: #FFFFFF; background: var(--band); padding: 1px 8px; border-radius: 999px">參照</span>
 </div>
 
 
-<div class="fw-cycle" style="animation-delay: 1.2s; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; background: #F4F6FA; font-size: 15px; font-weight: 500">
-<span>借幾天</span><span style="font-size: 12px; font-weight: 700; color: #FFFFFF; background: #1E2A44; padding: 1px 8px; border-radius: 999px">數字</span>
+<div class="fw-cycle" style="animation-delay: 1.2s; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; background: var(--soft); font-size: 15px; font-weight: 500">
+<span>借幾天</span><span style="font-size: 12px; font-weight: 700; color: #FFFFFF; background: var(--band); padding: 1px 8px; border-radius: 999px">數字</span>
 </div>
 
 
-<div class="fw-cycle" style="animation-delay: 1.6s; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; background: #F4F6FA; font-size: 15px; font-weight: 500">
-<span>用途</span><span style="font-size: 12px; font-weight: 700; color: #FFFFFF; background: #1E2A44; padding: 1px 8px; border-radius: 999px">文字</span>
+<div class="fw-cycle" style="animation-delay: 1.6s; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; background: var(--soft); font-size: 15px; font-weight: 500">
+<span>用途</span><span style="font-size: 12px; font-weight: 700; color: #FFFFFF; background: var(--band); padding: 1px 8px; border-radius: 999px">文字</span>
 </div>
 
 </div>
 <div style="flex: 1 1 210px; padding: 18px; display: flex; flex-direction: column; gap: 12px">
-<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 14px; color: #3B4763">器材</span><div style="height: 38px; border: 2px solid #1E2A44; border-radius: 10px; font-size: 15px; display: flex; align-items: center; padding: 0 10px">投影機 B</div></div>
-<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 14px; color: #3B4763">借幾天</span><div style="height: 38px; border: 2px solid #2F80ED; border-radius: 10px; font-size: 15px; display: flex; align-items: center; padding: 0 10px">5</div></div>
-<div class="fw-cycle" style="animation-delay: 2.6s; background: #FFD23F; border-radius: 12px; padding: 10px 12px; font-size: 14px; font-weight: 700">規則：借超過 3 天 → 自動送主管簽核</div>
-<div style="font-size: 13px; color: #4A5570">設計器裡一句條件，前後端照同一套判斷。</div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 14px; color: var(--muted)">器材</span><div style="height: 38px; border: 2px solid var(--line); border-radius: 10px; font-size: 15px; display: flex; align-items: center; padding: 0 10px">投影機 B</div></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 14px; color: var(--muted)">借幾天</span><div style="height: 38px; border: 2px solid #2F80ED; border-radius: 10px; font-size: 15px; display: flex; align-items: center; padding: 0 10px">5</div></div>
+<div class="fw-cycle" style="animation-delay: 2.6s; background: #FFD23F; border-radius: 12px; padding: 10px 12px; font-size: 14px; font-weight: 700; color: #1E2A44; --ink: #1E2A44; --muted: #3B4763; --line: #1E2A44; --link: #1F64C2">規則：借超過 3 天 → 自動送主管簽核</div>
+<div style="font-size: 13px; color: var(--muted)">設計器裡一句條件，前後端照同一套判斷。</div>
 </div>
 </div>
 </div>
 </div>
 </section>
 
-<section aria-labelledby="pain-h" style="background: #F4F6FA">
+<section aria-labelledby="pain-h" style="background: var(--soft)">
 <div style="max-width: 1200px; margin: 0 auto; padding: 96px 24px; display: flex; flex-direction: column; gap: 40px">
 <div style="display: flex; flex-direction: column; gap: 12px; max-width: 760px">
 <h2 id="pain-h" style="margin: 0; font-size: clamp(32px, 4.5vw, 52px); line-height: 1.2; font-weight: 900">你家是不是也這樣？</h2>
-<p style="margin: 0; font-size: 19px; color: #3B4763">資料各放各的，老闆一句「上個月到底賺多少」，全公司開始翻檔案。</p>
+<p style="margin: 0; font-size: 19px; color: var(--muted)">資料各放各的，老闆一句「上個月到底賺多少」，全公司開始翻檔案。</p>
 </div>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 28px">
 <div style="flex: 1 1 460px; min-width: 0; display: flex; flex-wrap: wrap; gap: 14px">
 
-<div class="fw-wobble" style="animation-delay: 0s; flex: 1 1 180px; background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+<div class="fw-wobble" style="animation-delay: 0s; flex: 1 1 180px; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
 <span style="font-weight: 900; font-size: 17px">業務的 Excel</span>
-<span style="font-size: 14px; color: #B4443A; font-weight: 700">版本 final_v7_真的final</span>
+<span style="font-size: 14px; color: var(--danger); font-weight: 700">版本 final_v7_真的final</span>
 </div>
 
 
-<div class="fw-wobble" style="animation-delay: 0.5s; flex: 1 1 180px; background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+<div class="fw-wobble" style="animation-delay: 0.5s; flex: 1 1 180px; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
 <span style="font-weight: 900; font-size: 17px">倉庫的 Excel</span>
-<span style="font-size: 14px; color: #B4443A; font-weight: 700">庫存數字對不起來</span>
+<span style="font-size: 14px; color: var(--danger); font-weight: 700">庫存數字對不起來</span>
 </div>
 
 
-<div class="fw-wobble" style="animation-delay: 1s; flex: 1 1 180px; background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+<div class="fw-wobble" style="animation-delay: 1s; flex: 1 1 180px; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
 <span style="font-weight: 900; font-size: 17px">生產群組訊息</span>
-<span style="font-size: 14px; color: #B4443A; font-weight: 700">工單進度往上滑 300 則</span>
+<span style="font-size: 14px; color: var(--danger); font-weight: 700">工單進度往上滑 300 則</span>
 </div>
 
 
-<div class="fw-wobble" style="animation-delay: 1.5s; flex: 1 1 180px; background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+<div class="fw-wobble" style="animation-delay: 1.5s; flex: 1 1 180px; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
 <span style="font-weight: 900; font-size: 17px">紙本簽核單</span>
-<span style="font-size: 14px; color: #B4443A; font-weight: 700">主管出差，單子卡一週</span>
+<span style="font-size: 14px; color: var(--danger); font-weight: 700">主管出差，單子卡一週</span>
 </div>
 
 
-<div class="fw-wobble" style="animation-delay: 2s; flex: 1 1 180px; background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+<div class="fw-wobble" style="animation-delay: 2s; flex: 1 1 180px; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
 <span style="font-weight: 900; font-size: 17px">老闆的便利貼</span>
-<span style="font-size: 14px; color: #B4443A; font-weight: 700">「這個客戶誰在跟？」</span>
+<span style="font-size: 14px; color: var(--danger); font-weight: 700">「這個客戶誰在跟？」</span>
 </div>
 
 
-<div class="fw-wobble" style="animation-delay: 2.5s; flex: 1 1 180px; background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+<div class="fw-wobble" style="animation-delay: 2.5s; flex: 1 1 180px; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
 <span style="font-weight: 900; font-size: 17px">會計月底</span>
-<span style="font-size: 14px; color: #B4443A; font-weight: 700">全部重打一次</span>
+<span style="font-size: 14px; color: var(--danger); font-weight: 700">全部重打一次</span>
 </div>
 
 </div>
-<div class="fw-shake" aria-hidden="true" style="flex: 0 0 auto; font-family: 'Space Grotesk', sans-serif; font-size: 48px; font-weight: 700; color: #2F80ED">→</div>
+<div class="fw-shake" aria-hidden="true" style="flex: 0 0 auto; font-family: 'Space Grotesk', sans-serif; font-size: 48px; font-weight: 700; color: var(--link)">→</div>
 <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
-<div class="fw-pulse" style="background: #1E2A44; color: #FFFFFF; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 10px">
+<div class="fw-pulse" style="background: var(--band); color: #FFFFFF; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 10px">
 <div style="display: flex; align-items: center; gap: 12px">
 <svg width="44" height="44" viewBox="0 0 64 64" aria-hidden="true"><rect x="10" y="8" width="14" height="48" rx="3" fill="#FFFFFF"></rect><rect x="28" y="8" width="28" height="14" rx="3" fill="#FFFFFF"></rect><rect x="28" y="28" width="16" height="12" rx="3" fill="#FFFFFF"></rect><rect x="48" y="28" width="8" height="12" rx="3" fill="#FFD23F"></rect></svg>
 <span style="font-size: 24px; font-weight: 900">同一套系統，同一份資料</span>
 </div>
 <span style="color: #D5DBE7">業務開單、倉庫出貨、生產報工、主管簽核都在同一個地方，報表即時算好。</span>
 </div>
-<div style="font-size: 15px; color: #3B4763">老闆打開儀表板就看得到，不用等誰下班前整理。</div>
+<div style="font-size: 15px; color: var(--muted)">老闆打開儀表板就看得到，不用等誰下班前整理。</div>
 </div>
 </div>
 </div>
 </section>
 
-<section aria-labelledby="vs-h" style="background: #1E2A44; color: #FFFFFF">
+<section aria-labelledby="vs-h" style="background: var(--band); color: #FFFFFF">
 <div style="max-width: 1200px; margin: 0 auto; padding: 88px 24px; display: flex; flex-direction: column; gap: 40px">
 <h2 id="vs-h" style="margin: 0; font-size: clamp(32px, 4.5vw, 52px); line-height: 1.2; font-weight: 900">想加一個欄位，要多久？</h2>
 <div style="display: flex; flex-wrap: wrap; gap: 24px">
@@ -181,7 +188,7 @@
 
 <div style="font-size: 15px; color: #AEB7C8">……然後流程又變了。</div>
 </div>
-<div style="flex: 1 1 360px; min-width: 0; background: #FFD23F; color: #1E2A44; border-radius: 20px; padding: 32px; display: flex; flex-direction: column; gap: 14px; box-shadow: 8px 8px 0 #2F80ED">
+<div style="flex: 1 1 360px; min-width: 0; background: #FFD23F; color: #1E2A44; border-radius: 20px; padding: 32px; display: flex; flex-direction: column; gap: 14px; box-shadow: 8px 8px 0 #2F80ED; --ink: #1E2A44; --muted: #3B4763; --line: #1E2A44; --link: #1F64C2">
 <div style="font-weight: 900; font-size: 20px">用表匠</div>
 <div style="display: flex; gap: 12px; align-items: baseline; font-size: 18px; font-weight: 500"><span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700">01</span><span>打開設計器</span></div>
 <div style="display: flex; gap: 12px; align-items: baseline; font-size: 18px; font-weight: 500"><span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700">02</span><span>加欄位、設規則</span></div>
@@ -195,70 +202,70 @@
 <section id="how" aria-labelledby="how-h" style="max-width: 1200px; margin: 0 auto; padding: 96px 24px; display: flex; flex-direction: column; gap: 44px">
 <div style="display: flex; flex-direction: column; gap: 12px; max-width: 760px">
 <h2 id="how-h" style="margin: 0; font-size: clamp(32px, 4.5vw, 52px); line-height: 1.2; font-weight: 900">三塊積木，拼出整套系統</h2>
-<p style="margin: 0; font-size: 19px; color: #3B4763">表匠只管平台；你的業務是什麼樣子，由你決定。內建的應用程式也是同一種積木拼的，拆開來改完全合法。</p>
+<p style="margin: 0; font-size: 19px; color: var(--muted)">表匠只管平台；你的業務是什麼樣子，由你決定。內建的應用程式也是同一種積木拼的，拆開來改完全合法。</p>
 </div>
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px">
-<div style="background: #EEF4FD; border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 12px">
-<div style="width: 56px; height: 56px; border-radius: 16px; background: #1E2A44"></div>
+<div style="background: var(--soft-blue); border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 12px">
+<div style="width: 56px; height: 56px; border-radius: 16px; background: var(--band)"></div>
 <h3 style="margin: 0; font-size: 24px; font-weight: 900">拼模組</h3>
-<p style="margin: 0; color: #3B4763">21 種欄位隨你放：選項、日期、金額、附件、參照、公式、自動編號……</p>
+<p style="margin: 0; color: var(--muted)">21 種欄位隨你放：選項、日期、金額、附件、參照、公式、自動編號……</p>
 </div>
-<div style="background: #FFF6D6; border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 12px">
-<div style="display: flex; gap: 6px"><div style="width: 56px; height: 56px; border-radius: 16px; background: #1E2A44"></div><div style="width: 26px; height: 56px; border-radius: 10px; background: #FFD23F; border: 2px solid #1E2A44; box-sizing: border-box"></div></div>
+<div style="background: var(--soft-yellow); border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; gap: 6px"><div style="width: 56px; height: 56px; border-radius: 16px; background: var(--band)"></div><div style="width: 26px; height: 56px; border-radius: 10px; background: #FFD23F; border: 2px solid var(--line); box-sizing: border-box; color: #1E2A44; --ink: #1E2A44; --muted: #3B4763; --line: #1E2A44; --link: #1F64C2"></div></div>
 <h3 style="margin: 0; font-size: 24px; font-weight: 900">畫面自己長</h3>
-<p style="margin: 0; color: #3B4763">列表、表單、明細、查詢、匯出、權限檢查，存檔就有，手機也能用。</p>
+<p style="margin: 0; color: var(--muted)">列表、表單、明細、查詢、匯出、權限檢查，存檔就有，手機也能用。</p>
 </div>
-<div style="background: #EEF4FD; border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 12px">
-<div style="display: flex; gap: 6px"><div style="width: 56px; height: 56px; border-radius: 16px; background: #1E2A44"></div><div style="width: 26px; height: 26px; border-radius: 8px; background: #2F80ED; align-self: flex-end"></div></div>
+<div style="background: var(--soft-blue); border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; gap: 6px"><div style="width: 56px; height: 56px; border-radius: 16px; background: var(--band)"></div><div style="width: 26px; height: 26px; border-radius: 8px; background: #2F80ED; align-self: flex-end"></div></div>
 <h3 style="margin: 0; font-size: 24px; font-weight: 900">想改就改</h3>
-<p style="margin: 0; color: #3B4763">老闆說簽核要多一關？拖一下流程圖，下午就生效。</p>
+<p style="margin: 0; color: var(--muted)">老闆說簽核要多一關？拖一下流程圖，下午就生效。</p>
 </div>
 </div>
 </section>
 
-<section aria-labelledby="flow-h" style="background: #1E2A44; color: #FFFFFF">
+<section aria-labelledby="flow-h" style="background: var(--band); color: #FFFFFF">
 <div style="max-width: 1200px; margin: 0 auto; padding: 96px 24px; display: flex; flex-direction: column; gap: 36px">
 <div style="display: flex; flex-direction: column; gap: 12px; max-width: 760px">
 <h2 id="flow-h" style="margin: 0; font-size: clamp(32px, 4.5vw, 52px); line-height: 1.2; font-weight: 900">一張單，自己跑完全程</h2>
 <p style="margin: 0; font-size: 19px; color: #C9D1E0">簽核關卡、金額門檻、通知誰，都在流程圖上拖拉設定。單子跑到哪，大家都看得到。</p>
 </div>
 <div aria-hidden="true" style="position: relative; height: 28px; border-radius: 999px; background: #26344F">
-<div class="fw-travel" style="position: absolute; top: 0; width: 28px; height: 28px; border-radius: 14px; background: #FFD23F"></div>
+<div class="fw-travel" style="position: absolute; top: 0; width: 28px; height: 28px; border-radius: 14px; background: #FFD23F; color: #1E2A44; --ink: #1E2A44; --muted: #3B4763; --line: #1E2A44; --link: #1F64C2"></div>
 </div>
 <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 14px">
 
-<li class="fw-step" style="animation-delay: 0s; flex: 1 1 170px; min-width: 0; background: #FFFFFF; color: #1E2A44; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 6px">
-<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: #1F64C2">01</span>
+<li class="fw-step" style="animation-delay: 0s; flex: 1 1 170px; min-width: 0; background: var(--surface); color: var(--ink); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: var(--link)">01</span>
 <span style="font-weight: 900; font-size: 18px">業務開報價</span>
-<span style="font-size: 14px; color: #3B4763">客戶、品項帶入，含稅自己算</span>
+<span style="font-size: 14px; color: var(--muted)">客戶、品項帶入，含稅自己算</span>
 </li>
 
 
-<li class="fw-step" style="animation-delay: 1.2s; flex: 1 1 170px; min-width: 0; background: #FFFFFF; color: #1E2A44; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 6px">
-<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: #1F64C2">02</span>
+<li class="fw-step" style="animation-delay: 1.2s; flex: 1 1 170px; min-width: 0; background: var(--surface); color: var(--ink); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: var(--link)">02</span>
 <span style="font-weight: 900; font-size: 18px">主管簽核</span>
-<span style="font-size: 14px; color: #3B4763">手機上點一下就核准</span>
+<span style="font-size: 14px; color: var(--muted)">手機上點一下就核准</span>
 </li>
 
 
-<li class="fw-step" style="animation-delay: 2.4s; flex: 1 1 170px; min-width: 0; background: #FFFFFF; color: #1E2A44; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 6px">
-<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: #1F64C2">03</span>
+<li class="fw-step" style="animation-delay: 2.4s; flex: 1 1 170px; min-width: 0; background: var(--surface); color: var(--ink); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: var(--link)">03</span>
 <span style="font-weight: 900; font-size: 18px">超過門檻？</span>
-<span style="font-size: 14px; color: #3B4763">金額大，自動多一關給老闆</span>
+<span style="font-size: 14px; color: var(--muted)">金額大，自動多一關給老闆</span>
 </li>
 
 
-<li class="fw-step" style="animation-delay: 3.6s; flex: 1 1 170px; min-width: 0; background: #FFFFFF; color: #1E2A44; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 6px">
-<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: #1F64C2">04</span>
+<li class="fw-step" style="animation-delay: 3.6s; flex: 1 1 170px; min-width: 0; background: var(--surface); color: var(--ink); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: var(--link)">04</span>
 <span style="font-weight: 900; font-size: 18px">轉成訂單</span>
-<span style="font-size: 14px; color: #3B4763">一鍵轉單，保留來源</span>
+<span style="font-size: 14px; color: var(--muted)">一鍵轉單，保留來源</span>
 </li>
 
 
-<li class="fw-step" style="animation-delay: 4.8s; flex: 1 1 170px; min-width: 0; background: #FFFFFF; color: #1E2A44; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 6px">
-<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: #1F64C2">05</span>
+<li class="fw-step" style="animation-delay: 4.8s; flex: 1 1 170px; min-width: 0; background: var(--surface); color: var(--ink); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: var(--link)">05</span>
 <span style="font-weight: 900; font-size: 18px">通知倉庫出貨</span>
-<span style="font-size: 14px; color: #3B4763">任務自動派給負責的人</span>
+<span style="font-size: 14px; color: var(--muted)">任務自動派給負責的人</span>
 </li>
 
 </ol>
@@ -266,38 +273,38 @@
 </div>
 </section>
 
-<section id="packs" aria-labelledby="packs-h" style="background: #F4F6FA">
+<section id="packs" aria-labelledby="packs-h" style="background: var(--soft)">
 <div style="max-width: 1200px; margin: 0 auto; padding: 96px 24px; display: flex; flex-direction: column; gap: 40px">
 <div style="display: flex; flex-direction: column; gap: 12px; max-width: 760px">
 <h2 id="packs-h" style="margin: 0; font-size: clamp(32px, 4.5vw, 52px); line-height: 1.2; font-weight: 900">懶得從零開始？有現成積木包</h2>
-<p style="margin: 0; font-size: 19px; color: #3B4763">想開哪包開哪包，一包都不開也行。客戶、供應商、聯絡人全系統共用一份，不用輸入三次。</p>
+<p style="margin: 0; font-size: 19px; color: var(--muted)">想開哪包開哪包，一包都不開也行。客戶、供應商、聯絡人全系統共用一份，不用輸入三次。</p>
 </div>
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px">
 
-<div style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 24px; padding: 30px; display: flex; flex-direction: column; gap: 12px; box-shadow: 6px 6px 0 #1E2A44">
+<div style="background: var(--surface); border: 2px solid var(--line); border-radius: 24px; padding: 30px; display: flex; flex-direction: column; gap: 12px; box-shadow: 6px 6px 0 var(--line)">
 <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px"><h3 style="margin: 0; font-size: 24px; font-weight: 900">客戶與銷售</h3><span style="font-size: 13px; font-weight: 700; background: #2F80ED; color: #FFFFFF; padding: 2px 12px; border-radius: 999px">可以用了</span></div>
-<p style="margin: 0; color: #3B4763">潛在客戶、商機、互動紀錄、行銷活動，報價一鍵轉訂單，含稅金額自己算。</p>
+<p style="margin: 0; color: var(--muted)">潛在客戶、商機、互動紀錄、行銷活動，報價一鍵轉訂單，含稅金額自己算。</p>
 </div>
 
 
-<div style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 24px; padding: 30px; display: flex; flex-direction: column; gap: 12px; box-shadow: 6px 6px 0 #1E2A44">
+<div style="background: var(--surface); border: 2px solid var(--line); border-radius: 24px; padding: 30px; display: flex; flex-direction: column; gap: 12px; box-shadow: 6px 6px 0 var(--line)">
 <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px"><h3 style="margin: 0; font-size: 24px; font-weight: 900">進銷存</h3><span style="font-size: 13px; font-weight: 700; background: #2F80ED; color: #FFFFFF; padding: 2px 12px; border-radius: 999px">可以用了</span></div>
-<p style="margin: 0; color: #3B4763">品項、倉庫、採購、進貨、出貨、盤點，庫存跟著單據走，不用手動對帳。</p>
+<p style="margin: 0; color: var(--muted)">品項、倉庫、採購、進貨、出貨、盤點，庫存跟著單據走，不用手動對帳。</p>
 </div>
 
 
-<div style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 24px; padding: 30px; display: flex; flex-direction: column; gap: 12px; box-shadow: 6px 6px 0 #1E2A44">
+<div style="background: var(--surface); border: 2px solid var(--line); border-radius: 24px; padding: 30px; display: flex; flex-direction: column; gap: 12px; box-shadow: 6px 6px 0 var(--line)">
 <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px"><h3 style="margin: 0; font-size: 24px; font-weight: 900">生產管理 MES</h3><span style="font-size: 13px; font-weight: 700; background: #2F80ED; color: #FFFFFF; padding: 2px 12px; border-radius: 999px">可以用了</span></div>
-<p style="margin: 0; color: #3B4763">工單、製程、報工、出貨、品質異常，還有設備保養與報修。</p>
+<p style="margin: 0; color: var(--muted)">工單、製程、報工、出貨、品質異常，還有設備保養與報修。</p>
 </div>
 
 </div>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 16px">
 <span style="font-weight: 700">還在烤：</span>
-<span style="border: 2px dashed #8E9AB3; padding: 3px 14px; border-radius: 999px; color: #3B4763">會計</span>
-<span style="border: 2px dashed #8E9AB3; padding: 3px 14px; border-radius: 999px; color: #3B4763">人資</span>
-<span style="border: 2px dashed #8E9AB3; padding: 3px 14px; border-radius: 999px; color: #3B4763">專案工時</span>
-<span style="border: 2px dashed #8E9AB3; padding: 3px 14px; border-radius: 999px; color: #3B4763">客服工單</span>
+<span style="border: 2px dashed #8E9AB3; padding: 3px 14px; border-radius: 999px; color: var(--muted)">會計</span>
+<span style="border: 2px dashed #8E9AB3; padding: 3px 14px; border-radius: 999px; color: var(--muted)">人資</span>
+<span style="border: 2px dashed #8E9AB3; padding: 3px 14px; border-radius: 999px; color: var(--muted)">專案工時</span>
+<span style="border: 2px dashed #8E9AB3; padding: 3px 14px; border-radius: 999px; color: var(--muted)">客服工單</span>
 </div>
 </div>
 </section>
@@ -306,51 +313,51 @@
 <h2 id="feat-h" style="margin: 0; font-size: clamp(32px, 4.5vw, 52px); line-height: 1.2; font-weight: 900">該有的都有，而且不囉嗦</h2>
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px">
 
-<div style="border-top: 4px solid #1E2A44; padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
+<div style="border-top: 4px solid var(--line); padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
 <h3 style="margin: 0; font-size: 19px; font-weight: 900">規則與公式</h3>
-<p style="margin: 0; color: #3B4763; font-size: 16px">什麼時候顯示、必填、唯讀，一句條件搞定。</p>
+<p style="margin: 0; color: var(--muted); font-size: 16px">什麼時候顯示、必填、唯讀，一句條件搞定。</p>
 </div>
 
 
-<div style="border-top: 4px solid #1E2A44; padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
+<div style="border-top: 4px solid var(--line); padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
 <h3 style="margin: 0; font-size: 19px; font-weight: 900">權限分得很細</h3>
-<p style="margin: 0; color: #3B4763; font-size: 16px">誰能看、誰能改、只看自己的單，連欄位都能管。</p>
+<p style="margin: 0; color: var(--muted); font-size: 16px">誰能看、誰能改、只看自己的單，連欄位都能管。</p>
 </div>
 
 
-<div style="border-top: 4px solid #1E2A44; padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
+<div style="border-top: 4px solid var(--line); padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
 <h3 style="margin: 0; font-size: 19px; font-weight: 900">拖拉式簽核</h3>
-<p style="margin: 0; color: #3B4763; font-size: 16px">在流程圖上拉關卡、設分支，退回撤回都有紀錄。</p>
+<p style="margin: 0; color: var(--muted); font-size: 16px">在流程圖上拉關卡、設分支，退回撤回都有紀錄。</p>
 </div>
 
 
-<div style="border-top: 4px solid #1E2A44; padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
+<div style="border-top: 4px solid var(--line); padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
 <h3 style="margin: 0; font-size: 19px; font-weight: 900">單據會轉身</h3>
-<p style="margin: 0; color: #3B4763; font-size: 16px">報價轉訂單、狀態一步步推進，誰能推也管得到。</p>
+<p style="margin: 0; color: var(--muted); font-size: 16px">報價轉訂單、狀態一步步推進，誰能推也管得到。</p>
 </div>
 
 
-<div style="border-top: 4px solid #1E2A44; padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
+<div style="border-top: 4px solid var(--line); padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
 <h3 style="margin: 0; font-size: 19px; font-weight: 900">報表與儀表板</h3>
-<p style="margin: 0; color: #3B4763; font-size: 16px">每個角色登入看到自己的數字。</p>
+<p style="margin: 0; color: var(--muted); font-size: 16px">每個角色登入看到自己的數字。</p>
 </div>
 
 
-<div style="border-top: 4px solid #1E2A44; padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
+<div style="border-top: 4px solid var(--line); padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
 <h3 style="margin: 0; font-size: 19px; font-weight: 900">任務看板</h3>
-<p style="margin: 0; color: #3B4763; font-size: 16px">指派、子任務、看板，開單時還能自動派工。</p>
+<p style="margin: 0; color: var(--muted); font-size: 16px">指派、子任務、看板，開單時還能自動派工。</p>
 </div>
 
 
-<div style="border-top: 4px solid #1E2A44; padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
+<div style="border-top: 4px solid var(--line); padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
 <h3 style="margin: 0; font-size: 19px; font-weight: 900">站內通知</h3>
-<p style="margin: 0; color: #3B4763; font-size: 16px">輪到你簽、任務到期，系統會叫你。</p>
+<p style="margin: 0; color: var(--muted); font-size: 16px">輪到你簽、任務到期，系統會叫你。</p>
 </div>
 
 
-<div style="border-top: 4px solid #1E2A44; padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
+<div style="border-top: 4px solid var(--line); padding: 16px 4px 0; display: flex; flex-direction: column; gap: 6px">
 <h3 style="margin: 0; font-size: 19px; font-weight: 900">多國語言</h3>
-<p style="margin: 0; color: #3B4763; font-size: 16px">內建四種介面語言，還能自己加語系、匯入翻譯。</p>
+<p style="margin: 0; color: var(--muted); font-size: 16px">內建四種介面語言，還能自己加語系、匯入翻譯。</p>
 </div>
 
 </div>
@@ -359,126 +366,126 @@
 <section id="ai" aria-labelledby="ai-h" style="max-width: 1200px; margin: 0 auto; padding: 0 24px 96px; display: flex; flex-direction: column; gap: 28px">
 <div style="background: #2F80ED; color: #FFFFFF; border-radius: 32px; padding: 56px 40px; display: flex; flex-wrap: wrap; align-items: center; gap: 40px">
 <div style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
-<div style="align-self: flex-start; background: #FFFFFF; color: #1E2A44; font-size: 14px; font-weight: 900; padding: 3px 12px; border-radius: 999px">AI × 你 × 系統</div>
+<div style="align-self: flex-start; background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 900; padding: 3px 12px; border-radius: 999px">AI × 你 × 系統</div>
 <h2 id="ai-h" style="margin: 0; font-size: clamp(30px, 4vw, 50px); line-height: 1.2; font-weight: 900">人做判斷，AI 跑腿，系統守規矩</h2>
 <p style="margin: 0; font-size: 19px">把 Claude、Codex 這類 AI 工具接上表匠，用聊天的方式查記錄、看報表、追簽核。AI 只能用你的身分、看你看得到的東西；最後拍板的永遠是人，流程照系統設好的規則走。</p>
 </div>
-<div style="flex: 1 1 360px; min-width: 0; background: #FFFFFF; color: #1E2A44; border-radius: 24px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
-<div style="font-size: 13px; font-weight: 700; color: #4A5570">示意對話</div>
-<div class="fw-cycle" style="animation-delay: 0s; align-self: flex-end; background: #1E2A44; color: #FFFFFF; border-radius: 18px 18px 4px 18px; padding: 10px 14px; font-size: 15px">這週有哪些簽核卡超過 3 天？</div>
-<div class="fw-cycle" style="animation-delay: .9s; align-self: flex-start; background: #EEF4FD; border-radius: 18px 18px 18px 4px; padding: 10px 14px; font-size: 15px">我查了簽核清單，列出卡住的單、目前在誰手上、卡了幾天。</div>
-<div class="fw-cycle" style="animation-delay: 1.8s; align-self: flex-end; background: #1E2A44; color: #FFFFFF; border-radius: 18px 18px 4px 18px; padding: 10px 14px; font-size: 15px">再幫我看這些單的客戶，上季下了多少訂單。</div>
-<div class="fw-cycle" style="animation-delay: 2.7s; align-self: flex-start; background: #EEF4FD; border-radius: 18px 18px 18px 4px; padding: 10px 14px; font-size: 15px">已從訂單報表整理好。薪資這類標了「不提供給 AI」的欄位我看不到。</div>
+<div style="flex: 1 1 360px; min-width: 0; background: var(--surface); color: var(--ink); border-radius: 24px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 700; color: var(--muted)">示意對話</div>
+<div class="fw-cycle" style="animation-delay: 0s; align-self: flex-end; background: var(--band); color: #FFFFFF; border-radius: 18px 18px 4px 18px; padding: 10px 14px; font-size: 15px">這週有哪些簽核卡超過 3 天？</div>
+<div class="fw-cycle" style="animation-delay: .9s; align-self: flex-start; background: var(--soft-blue); border-radius: 18px 18px 18px 4px; padding: 10px 14px; font-size: 15px">我查了簽核清單，列出卡住的單、目前在誰手上、卡了幾天。</div>
+<div class="fw-cycle" style="animation-delay: 1.8s; align-self: flex-end; background: var(--band); color: #FFFFFF; border-radius: 18px 18px 4px 18px; padding: 10px 14px; font-size: 15px">再幫我看這些單的客戶，上季下了多少訂單。</div>
+<div class="fw-cycle" style="animation-delay: 2.7s; align-self: flex-start; background: var(--soft-blue); border-radius: 18px 18px 18px 4px; padding: 10px 14px; font-size: 15px">已從訂單報表整理好。薪資這類標了「不提供給 AI」的欄位我看不到。</div>
 </div>
 </div>
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px">
-<div style="background: #FFF6D6; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 10px">
+<div style="background: var(--soft-yellow); border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 10px">
 <div style="font-size: 32px; font-weight: 900; font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif">人</div>
 <h3 style="margin: 0; font-size: 20px; font-weight: 900">提問、判斷、拍板</h3>
-<p style="margin: 0; color: #3B4763">決定要做什麼、看過 AI 的整理、按下核准。責任在人，AI 不會替你簽名。</p>
+<p style="margin: 0; color: var(--muted)">決定要做什麼、看過 AI 的整理、按下核准。責任在人，AI 不會替你簽名。</p>
 </div>
-<div style="background: #EEF4FD; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 10px">
+<div style="background: var(--soft-blue); border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 10px">
 <div style="font-size: 32px; font-weight: 900; font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif">AI</div>
 <h3 style="margin: 0; font-size: 20px; font-weight: 900">查、找、整理</h3>
-<p style="margin: 0; color: #3B4763">翻記錄、跑報表、盤點任務與簽核，把散在各模組的資訊整理成一段話。</p>
+<p style="margin: 0; color: var(--muted)">翻記錄、跑報表、盤點任務與簽核，把散在各模組的資訊整理成一段話。</p>
 </div>
-<div style="background: #F4F6FA; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 10px">
+<div style="background: var(--soft); border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 10px">
 <div style="font-size: 32px; font-weight: 900; font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif">表匠</div>
 <h3 style="margin: 0; font-size: 20px; font-weight: 900">守權限、跑流程、留紀錄</h3>
-<p style="margin: 0; color: #3B4763">每次呼叫都先檢查權限、遮掉敏感欄位、寫進稽核；簽核、派工、通知照規則自動跑。</p>
+<p style="margin: 0; color: var(--muted)">每次呼叫都先檢查權限、遮掉敏感欄位、寫進稽核；簽核、派工、通知照規則自動跑。</p>
 </div>
 </div>
 
-<div style="border: 2px solid #1E2A44; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+<div style="border: 2px solid var(--line); border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 18px">
 <h3 style="margin: 0; font-size: 22px; font-weight: 900">一個 AI 參與的工作流</h3>
 <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px">
 
-<li class="fw-step" style="animation-delay: 0s; flex: 1 1 180px; min-width: 0; border: 2px solid #1E2A44; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
-<span style="align-self: flex-start; font-size: 12px; font-weight: 900; color: #FFFFFF; background: #1E2A44; padding: 1px 10px; border-radius: 999px">人</span>
+<li class="fw-step" style="animation-delay: 0s; flex: 1 1 180px; min-width: 0; border: 2px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
+<span style="align-self: flex-start; font-size: 12px; font-weight: 900; color: #FFFFFF; background: var(--band); padding: 1px 10px; border-radius: 999px">人</span>
 <span style="font-weight: 900; font-size: 17px">用聊天提需求</span>
-<span style="font-size: 14px; color: #3B4763">「整理這週卡住的簽核」</span>
-<span style="font-size: 12px; font-weight: 700; color: #1E2A44"></span>
+<span style="font-size: 14px; color: var(--muted)">「整理這週卡住的簽核」</span>
+<span style="font-size: 12px; font-weight: 700; color: var(--ink)"></span>
 </li>
 
 
-<li class="fw-step" style="animation-delay: 1.2s; flex: 1 1 180px; min-width: 0; border: 2px solid #1E2A44; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
-<span style="align-self: flex-start; font-size: 12px; font-weight: 900; color: #FFFFFF; background: #1E2A44; padding: 1px 10px; border-radius: 999px">AI</span>
+<li class="fw-step" style="animation-delay: 1.2s; flex: 1 1 180px; min-width: 0; border: 2px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
+<span style="align-self: flex-start; font-size: 12px; font-weight: 900; color: #FFFFFF; background: var(--band); padding: 1px 10px; border-radius: 999px">AI</span>
 <span style="font-weight: 900; font-size: 17px">查資料</span>
-<span style="font-size: 14px; color: #3B4763">記錄、報表、任務、簽核，只查你看得到的</span>
-<span style="font-size: 12px; font-weight: 700; color: #1F64C2">已上線</span>
+<span style="font-size: 14px; color: var(--muted)">記錄、報表、任務、簽核，只查你看得到的</span>
+<span style="font-size: 12px; font-weight: 700; color: var(--link)">已上線</span>
 </li>
 
 
-<li class="fw-step" style="animation-delay: 2.4s; flex: 1 1 180px; min-width: 0; border: 2px solid #1E2A44; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
-<span style="align-self: flex-start; font-size: 12px; font-weight: 900; color: #FFFFFF; background: #1E2A44; padding: 1px 10px; border-radius: 999px">表匠</span>
+<li class="fw-step" style="animation-delay: 2.4s; flex: 1 1 180px; min-width: 0; border: 2px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
+<span style="align-self: flex-start; font-size: 12px; font-weight: 900; color: #FFFFFF; background: var(--band); padding: 1px 10px; border-radius: 999px">表匠</span>
 <span style="font-weight: 900; font-size: 17px">檢查與留痕</span>
-<span style="font-size: 14px; color: #3B4763">權限檢查、遮敏感欄位、寫稽核</span>
-<span style="font-size: 12px; font-weight: 700; color: #1F64C2">已上線</span>
+<span style="font-size: 14px; color: var(--muted)">權限檢查、遮敏感欄位、寫稽核</span>
+<span style="font-size: 12px; font-weight: 700; color: var(--link)">已上線</span>
 </li>
 
 
-<li class="fw-step" style="animation-delay: 3.6s; flex: 1 1 180px; min-width: 0; border: 2px solid #1E2A44; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
-<span style="align-self: flex-start; font-size: 12px; font-weight: 900; color: #FFFFFF; background: #1E2A44; padding: 1px 10px; border-radius: 999px">AI</span>
+<li class="fw-step" style="animation-delay: 3.6s; flex: 1 1 180px; min-width: 0; border: 2px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
+<span style="align-self: flex-start; font-size: 12px; font-weight: 900; color: #FFFFFF; background: var(--band); padding: 1px 10px; border-radius: 999px">AI</span>
 <span style="font-weight: 900; font-size: 17px">草擬單據與任務</span>
-<span style="font-size: 14px; color: #3B4763">幫你填好草稿、寫留言</span>
-<span style="font-size: 12px; font-weight: 700; color: #9A5B00">即將推出</span>
+<span style="font-size: 14px; color: var(--muted)">幫你填好草稿、寫留言</span>
+<span style="font-size: 12px; font-weight: 700; color: var(--warn)">即將推出</span>
 </li>
 
 
-<li class="fw-step" style="animation-delay: 4.8s; flex: 1 1 180px; min-width: 0; border: 2px solid #1E2A44; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
-<span style="align-self: flex-start; font-size: 12px; font-weight: 900; color: #FFFFFF; background: #1E2A44; padding: 1px 10px; border-radius: 999px">人</span>
+<li class="fw-step" style="animation-delay: 4.8s; flex: 1 1 180px; min-width: 0; border: 2px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
+<span style="align-self: flex-start; font-size: 12px; font-weight: 900; color: #FFFFFF; background: var(--band); padding: 1px 10px; border-radius: 999px">人</span>
 <span style="font-weight: 900; font-size: 17px">確認、送出</span>
-<span style="font-size: 14px; color: #3B4763">看過才送，簽核照流程跑</span>
-<span style="font-size: 12px; font-weight: 700; color: #1E2A44"></span>
+<span style="font-size: 14px; color: var(--muted)">看過才送，簽核照流程跑</span>
+<span style="font-size: 12px; font-weight: 700; color: var(--ink)"></span>
 </li>
 
 </ol>
 </div>
 
 <div style="display: flex; flex-wrap: wrap; gap: 10px">
-<span style="background: #1E2A44; color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">權限不超過本人</span>
-<span style="background: #1E2A44; color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">敏感欄位不給 AI</span>
-<span style="background: #1E2A44; color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">每分鐘、每天有上限</span>
-<span style="background: #1E2A44; color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">權杖隨時可撤銷</span>
-<span style="background: #1E2A44; color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">每次呼叫都留稽核</span>
-<span style="background: #1E2A44; color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">管理員決定誰能用</span>
+<span style="background: var(--band); color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">權限不超過本人</span>
+<span style="background: var(--band); color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">敏感欄位不給 AI</span>
+<span style="background: var(--band); color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">每分鐘、每天有上限</span>
+<span style="background: var(--band); color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">權杖隨時可撤銷</span>
+<span style="background: var(--band); color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">每次呼叫都留稽核</span>
+<span style="background: var(--band); color: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px">管理員決定誰能用</span>
 </div>
 </section>
 
-<section aria-labelledby="home-h" style="background: #FFF6D6">
+<section aria-labelledby="home-h" style="background: var(--soft-yellow)">
 <div style="max-width: 1200px; margin: 0 auto; padding: 88px 24px; display: flex; flex-wrap: wrap; gap: 40px; align-items: center">
 <div style="flex: 1 1 400px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
 <h2 id="home-h" style="margin: 0; font-size: clamp(30px, 4vw, 46px); line-height: 1.2; font-weight: 900">你的資料，住你家</h2>
-<p style="margin: 0; font-size: 19px; color: #3B4763">每家公司一套獨立系統，不跟別人擠同一個資料庫。小團隊一台主機配 SQLite 就跑得動，長大了換 PostgreSQL。</p>
+<p style="margin: 0; font-size: 19px; color: var(--muted)">每家公司一套獨立系統，不跟別人擠同一個資料庫。小團隊一台主機配 SQLite 就跑得動，長大了換 PostgreSQL。</p>
 </div>
 <div style="flex: 1 1 400px; min-width: 0; display: flex; flex-wrap: wrap; gap: 10px">
-<span style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 999px; padding: 8px 16px; font-weight: 700">雲端、自己機房都行</span>
-<span style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 999px; padding: 8px 16px; font-weight: 700">SQLite／PostgreSQL</span>
-<span style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 999px; padding: 8px 16px; font-weight: 700">一包都不開也能用</span>
-<span style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 999px; padding: 8px 16px; font-weight: 700">誰改了什麼都查得到</span>
-<span style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 999px; padding: 8px 16px; font-weight: 700">介面四種語言</span>
+<span style="background: var(--surface); border: 2px solid var(--line); border-radius: 999px; padding: 8px 16px; font-weight: 700">雲端、自己機房都行</span>
+<span style="background: var(--surface); border: 2px solid var(--line); border-radius: 999px; padding: 8px 16px; font-weight: 700">SQLite／PostgreSQL</span>
+<span style="background: var(--surface); border: 2px solid var(--line); border-radius: 999px; padding: 8px 16px; font-weight: 700">一包都不開也能用</span>
+<span style="background: var(--surface); border: 2px solid var(--line); border-radius: 999px; padding: 8px 16px; font-weight: 700">誰改了什麼都查得到</span>
+<span style="background: var(--surface); border: 2px solid var(--line); border-radius: 999px; padding: 8px 16px; font-weight: 700">介面四種語言</span>
 </div>
 </div>
 </section>
 
 <section aria-labelledby="who-h" style="max-width: 1200px; margin: 0 auto; padding: 96px 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px">
 <h2 id="who-h" style="margin: 0; font-size: clamp(30px, 4vw, 46px); line-height: 1.2; font-weight: 900">誰在用最對味？</h2>
-<div style="display: flex; flex-direction: column; gap: 8px"><h3 style="margin: 0; font-size: 22px; font-weight: 900">50 人以下的團隊</h3><p style="margin: 0; color: #3B4763">要一套夠用的 ERP，不要一套要先上三天課的 ERP。</p></div>
-<div style="display: flex; flex-direction: column; gap: 8px"><h3 style="margin: 0; font-size: 22px; font-weight: 900">幫客戶導系統的顧問</h3><p style="margin: 0; color: #3B4763">同一套平台拼給不同客戶，交接後客戶自己也會改，你不用被半夜電話叫醒。</p></div>
+<div style="display: flex; flex-direction: column; gap: 8px"><h3 style="margin: 0; font-size: 22px; font-weight: 900">50 人以下的團隊</h3><p style="margin: 0; color: var(--muted)">要一套夠用的 ERP，不要一套要先上三天課的 ERP。</p></div>
+<div style="display: flex; flex-direction: column; gap: 8px"><h3 style="margin: 0; font-size: 22px; font-weight: 900">幫客戶導系統的顧問</h3><p style="margin: 0; color: var(--muted)">同一套平台拼給不同客戶，交接後客戶自己也會改，你不用被半夜電話叫醒。</p></div>
 </section>
 
 <section id="plans" aria-labelledby="price-h" style="max-width: 1200px; margin: 0 auto; padding: 0 24px 96px; display: flex; flex-direction: column; gap: 28px">
 <div style="display: flex; flex-direction: column; gap: 8px">
 <h2 id="price-h" style="margin: 0; font-size: clamp(30px, 4vw, 46px); line-height: 1.2; font-weight: 900">三種玩法，挑一種開始</h2>
-<p style="margin: 0; font-size: 18px; color: #3B4763">每家公司人數、流程不一樣，價格依需求報價，寫信跟我們聊聊。</p>
+<p style="margin: 0; font-size: 18px; color: var(--muted)">每家公司人數、流程不一樣，價格依需求報價，寫信跟我們聊聊。</p>
 </div>
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px">
 
-<div style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 22px; box-shadow: 6px 6px 0 #1E2A44; padding: 28px; display: flex; flex-direction: column; gap: 14px; min-width: 0">
-<span style="align-self: flex-start; background: #1E2A44; color: #FFFFFF; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700">資料住你家</span>
+<div style="background: var(--surface); border: 2px solid var(--line); border-radius: 22px; box-shadow: 6px 6px 0 var(--line); padding: 28px; display: flex; flex-direction: column; gap: 14px; min-width: 0">
+<span style="align-self: flex-start; background: var(--band); color: #FFFFFF; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700">資料住你家</span>
 <h3 style="margin: 0; font-size: 26px; font-weight: 900">自架版</h3>
-<p style="margin: 0; color: #3B4763">裝在公司自己的主機或 NAS，資料不出門。</p>
+<p style="margin: 0; color: var(--muted)">裝在公司自己的主機或 NAS，資料不出門。</p>
 <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px">
 <li>用 Docker 安裝，一台主機就能跑</li>
 <li>SQLite 或 PostgreSQL 任選</li>
@@ -486,147 +493,147 @@
 <li>AI 助理唯讀查詢</li>
 <li>新版本出來自己決定何時升級</li>
 </ul>
-<div style="margin-top: auto; padding-top: 12px; border-top: 2px dashed #1E2A44; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+<div style="margin-top: auto; padding-top: 12px; border-top: 2px dashed var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
 <span style="font-size: 22px; font-weight: 900">聯絡我們報價</span>
-<a href="mailto:kerry.huang.2024@gmail.com?subject=Formwright%20%E8%A1%A8%E5%8C%A0%20%E8%A9%A2%E5%83%B9" style="text-decoration: none; background: #1E2A44; color: #FFFFFF; padding: 10px 20px; border-radius: 999px; font-weight: 700">問問看</a>
+<a href="mailto:kerry.huang.2024@gmail.com?subject=Formwright%20%E8%A1%A8%E5%8C%A0%20%E8%A9%A2%E5%83%B9" style="text-decoration: none; background: var(--band); color: #FFFFFF; padding: 10px 20px; border-radius: 999px; font-weight: 700">問問看</a>
 </div>
 </div>
 
 
-<div style="background: #EEF4FD; border: 2px solid #1E2A44; border-radius: 22px; box-shadow: 6px 6px 0 #1E2A44; padding: 28px; display: flex; flex-direction: column; gap: 14px; min-width: 0">
-<span style="align-self: flex-start; background: #1E2A44; color: #FFFFFF; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700">不用顧主機</span>
+<div style="background: var(--soft-blue); border: 2px solid var(--line); border-radius: 22px; box-shadow: 6px 6px 0 var(--line); padding: 28px; display: flex; flex-direction: column; gap: 14px; min-width: 0">
+<span style="align-self: flex-start; background: var(--band); color: #FFFFFF; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700">不用顧主機</span>
 <h3 style="margin: 0; font-size: 26px; font-weight: 900">雲端代管版</h3>
-<p style="margin: 0; color: #3B4763">我們幫你開一套專屬系統，主機、更新都不用管。</p>
+<p style="margin: 0; color: var(--muted)">我們幫你開一套專屬系統，主機、更新都不用管。</p>
 <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px">
 <li>每家公司一套，不和別人共用資料</li>
 <li>升級由我們排程，先通知再更新</li>
 <li>功能和自架版完全相同</li>
 <li>規劃中：雙因素登入上線後開放</li>
 </ul>
-<div style="margin-top: auto; padding-top: 12px; border-top: 2px dashed #1E2A44; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+<div style="margin-top: auto; padding-top: 12px; border-top: 2px dashed var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
 <span style="font-size: 22px; font-weight: 900">聯絡我們報價</span>
-<a href="mailto:kerry.huang.2024@gmail.com?subject=Formwright%20%E8%A1%A8%E5%8C%A0%20%E8%A9%A2%E5%83%B9" style="text-decoration: none; background: #1E2A44; color: #FFFFFF; padding: 10px 20px; border-radius: 999px; font-weight: 700">問問看</a>
+<a href="mailto:kerry.huang.2024@gmail.com?subject=Formwright%20%E8%A1%A8%E5%8C%A0%20%E8%A9%A2%E5%83%B9" style="text-decoration: none; background: var(--band); color: #FFFFFF; padding: 10px 20px; border-radius: 999px; font-weight: 700">問問看</a>
 </div>
 </div>
 
 
-<div style="background: #FFF6D6; border: 2px solid #1E2A44; border-radius: 22px; box-shadow: 6px 6px 0 #1E2A44; padding: 28px; display: flex; flex-direction: column; gap: 14px; min-width: 0">
-<span style="align-self: flex-start; background: #1E2A44; color: #FFFFFF; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700">最省心</span>
+<div style="background: var(--soft-yellow); border: 2px solid var(--line); border-radius: 22px; box-shadow: 6px 6px 0 var(--line); padding: 28px; display: flex; flex-direction: column; gap: 14px; min-width: 0">
+<span style="align-self: flex-start; background: var(--band); color: #FFFFFF; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700">最省心</span>
 <h3 style="margin: 0; font-size: 26px; font-weight: 900">導入陪跑版</h3>
-<p style="margin: 0; color: #3B4763">自架或雲端二選一，加上整套導入服務，帶你從 Excel 走到上線。</p>
+<p style="margin: 0; color: var(--muted)">自架或雲端二選一，加上整套導入服務，帶你從 Excel 走到上線。</p>
 <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px">
 <li>下方六步全部包含</li>
 <li>指定一位窗口，問題直接找人</li>
 <li>上線後陪跑 30 天</li>
 <li>適合第一次導入系統的團隊</li>
 </ul>
-<div style="margin-top: auto; padding-top: 12px; border-top: 2px dashed #1E2A44; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+<div style="margin-top: auto; padding-top: 12px; border-top: 2px dashed var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
 <span style="font-size: 22px; font-weight: 900">聯絡我們報價</span>
-<a href="mailto:kerry.huang.2024@gmail.com?subject=Formwright%20%E8%A1%A8%E5%8C%A0%20%E8%A9%A2%E5%83%B9" style="text-decoration: none; background: #1E2A44; color: #FFFFFF; padding: 10px 20px; border-radius: 999px; font-weight: 700">問問看</a>
+<a href="mailto:kerry.huang.2024@gmail.com?subject=Formwright%20%E8%A1%A8%E5%8C%A0%20%E8%A9%A2%E5%83%B9" style="text-decoration: none; background: var(--band); color: #FFFFFF; padding: 10px 20px; border-radius: 999px; font-weight: 700">問問看</a>
 </div>
 </div>
 
 </div>
-<div style="background: #F4F6FA; border-radius: 22px; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+<div style="background: var(--soft); border-radius: 22px; padding: 28px; display: flex; flex-direction: column; gap: 18px">
 <div style="display: flex; flex-direction: column; gap: 6px">
 <h3 style="margin: 0; font-size: 24px; font-weight: 900">導入服務：六步陪你上線</h3>
-<p style="margin: 0; color: #3B4763">選「導入陪跑」就包含這六步；自架版、雲端版也能單點加購其中幾步。</p>
+<p style="margin: 0; color: var(--muted)">選「導入陪跑」就包含這六步；自架版、雲端版也能單點加購其中幾步。</p>
 </div>
 <ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px">
 
-<li style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
-<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: #2F80ED">STEP 1</span>
+<li style="background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
+<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: var(--link)">STEP 1</span>
 <b style="font-size: 18px">盤點現況</b>
-<span style="color: #3B4763; font-size: 15px">訪談 1–2 次，列出你現在用的 Excel、紙本單據和簽核流程。</span>
+<span style="color: var(--muted); font-size: 15px">訪談 1–2 次，列出你現在用的 Excel、紙本單據和簽核流程。</span>
 </li>
 
 
-<li style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
-<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: #2F80ED">STEP 2</span>
+<li style="background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
+<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: var(--link)">STEP 2</span>
 <b style="font-size: 18px">挑積木包</b>
-<span style="color: #3B4763; font-size: 15px">從客戶與銷售、進銷存、MES 挑起點，對照你的流程列出要改的地方。</span>
+<span style="color: var(--muted); font-size: 15px">從客戶與銷售、進銷存、MES 挑起點，對照你的流程列出要改的地方。</span>
 </li>
 
 
-<li style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
-<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: #2F80ED">STEP 3</span>
+<li style="background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
+<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: var(--link)">STEP 3</span>
 <b style="font-size: 18px">拼成你的樣子</b>
-<span style="color: #3B4763; font-size: 15px">調整模組、欄位、規則與報表，每週給你看一次進度。</span>
+<span style="color: var(--muted); font-size: 15px">調整模組、欄位、規則與報表，每週給你看一次進度。</span>
 </li>
 
 
-<li style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
-<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: #2F80ED">STEP 4</span>
+<li style="background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
+<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: var(--link)">STEP 4</span>
 <b style="font-size: 18px">設好簽核與權限</b>
-<span style="color: #3B4763; font-size: 15px">依組織圖設群組、簽核關卡、誰看得到什麼。</span>
+<span style="color: var(--muted); font-size: 15px">依組織圖設群組、簽核關卡、誰看得到什麼。</span>
 </li>
 
 
-<li style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
-<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: #2F80ED">STEP 5</span>
+<li style="background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
+<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: var(--link)">STEP 5</span>
 <b style="font-size: 18px">搬舊資料</b>
-<span style="color: #3B4763; font-size: 15px">把客戶、品項、庫存等 Excel 匯進系統，逐筆對過數字。</span>
+<span style="color: var(--muted); font-size: 15px">把客戶、品項、庫存等 Excel 匯進系統，逐筆對過數字。</span>
 </li>
 
 
-<li style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
-<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: #2F80ED">STEP 6</span>
+<li style="background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0">
+<span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 700; color: var(--link)">STEP 6</span>
 <b style="font-size: 18px">教育訓練與上線</b>
-<span style="color: #3B4763; font-size: 15px">管理員學會自己改設計，同事學會日常操作，上線後陪跑 30 天。</span>
+<span style="color: var(--muted); font-size: 15px">管理員學會自己改設計，同事學會日常操作，上線後陪跑 30 天。</span>
 </li>
 
 </ol>
 </div>
 </section>
 
-<section id="faq" aria-labelledby="faq-h" style="background: #F4F6FA">
+<section id="faq" aria-labelledby="faq-h" style="background: var(--soft)">
 <div style="max-width: 860px; margin: 0 auto; padding: 96px 24px; display: flex; flex-direction: column; gap: 16px">
 <h2 id="faq-h" style="margin: 0 0 12px; font-size: clamp(30px, 4vw, 46px); line-height: 1.2; font-weight: 900">你可能想問</h2>
 
-<details style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 4px 20px">
+<details style="background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 4px 20px">
 <summary style="cursor: pointer; font-size: 18px; font-weight: 900; padding: 14px 0">我完全不會寫程式，可以嗎？</summary>
-<p style="margin: 0 0 16px; color: #3B4763">可以。模組、欄位、規則、流程、權限都在畫面上點選設定。</p>
+<p style="margin: 0 0 16px; color: var(--muted)">可以。模組、欄位、規則、流程、權限都在畫面上點選設定。</p>
 </details>
 
 
-<details style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 4px 20px">
+<details style="background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 4px 20px">
 <summary style="cursor: pointer; font-size: 18px; font-weight: 900; padding: 14px 0">內建的積木包可以亂改嗎？</summary>
-<p style="margin: 0 0 16px; color: #3B4763">可以。它們本來就是一包設定，開了之後照你公司的做法改。</p>
+<p style="margin: 0 0 16px; color: var(--muted)">可以。它們本來就是一包設定，開了之後照你公司的做法改。</p>
 </details>
 
 
-<details style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 4px 20px">
+<details style="background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 4px 20px">
 <summary style="cursor: pointer; font-size: 18px; font-weight: 900; padding: 14px 0">資料放在哪？</summary>
-<p style="margin: 0 0 16px; color: #3B4763">每家公司一套獨立系統，放雲端或公司自己的主機都行。</p>
+<p style="margin: 0 0 16px; color: var(--muted)">每家公司一套獨立系統，放雲端或公司自己的主機都行。</p>
 </details>
 
 
-<details style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 4px 20px">
+<details style="background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 4px 20px">
 <summary style="cursor: pointer; font-size: 18px; font-weight: 900; padding: 14px 0">Demo 可以放真的資料嗎？</summary>
-<p style="margin: 0 0 16px; color: #3B4763">請不要。Demo 會定期還原，只給你試玩。</p>
+<p style="margin: 0 0 16px; color: var(--muted)">請不要。Demo 會定期還原，只給你試玩。</p>
 </details>
 
 
-<details style="background: #FFFFFF; border: 2px solid #1E2A44; border-radius: 16px; padding: 4px 20px">
+<details style="background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 4px 20px">
 <summary style="cursor: pointer; font-size: 18px; font-weight: 900; padding: 14px 0">一定要先開某個積木包嗎？</summary>
-<p style="margin: 0 0 16px; color: #3B4763">不用。空白系統一樣能用，從零開始拼也沒問題。</p>
+<p style="margin: 0 0 16px; color: var(--muted)">不用。空白系統一樣能用，從零開始拼也沒問題。</p>
 </details>
 
 </div>
 </section>
 
 <section id="contact" aria-labelledby="cta-h" style="max-width: 1200px; margin: 0 auto; padding: 96px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 22px">
-<svg width="96" height="96" viewBox="0 0 64 64" aria-hidden="true"><rect x="10" y="8" width="14" height="48" rx="3" fill="#1E2A44"></rect><rect x="28" y="8" width="28" height="14" rx="3" fill="#1E2A44"></rect><rect x="28" y="28" width="16" height="12" rx="3" fill="#1E2A44"></rect><rect x="48" y="28" width="8" height="12" rx="3" fill="#2F80ED"></rect></svg>
+<svg width="96" height="96" viewBox="0 0 64 64" aria-hidden="true"><rect x="10" y="8" width="14" height="48" rx="3" style="fill: var(--ink)"></rect><rect x="28" y="8" width="28" height="14" rx="3" style="fill: var(--ink)"></rect><rect x="28" y="28" width="16" height="12" rx="3" style="fill: var(--ink)"></rect><rect x="48" y="28" width="8" height="12" rx="3" fill="#2F80ED"></rect></svg>
 <h2 id="cta-h" style="margin: 0; font-size: clamp(36px, 5.5vw, 64px); line-height: 1.15; font-weight: 900">少一塊？自己補上。</h2>
-<p style="margin: 0; font-size: 19px; color: #3B4763; max-width: 560px">Demo 裡有客戶管理、進銷存、生產管理的示範資料，改模組、跑簽核，隨便玩，玩壞會自動還原。</p>
+<p style="margin: 0; font-size: 19px; color: var(--muted); max-width: 560px">Demo 裡有客戶管理、進銷存、生產管理的示範資料，改模組、跑簽核，隨便玩，玩壞會自動還原。</p>
 <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 12px">
-<a href="demo.html" style="text-decoration: none; background: #2F80ED; color: #FFFFFF; padding: 16px 30px; border-radius: 999px; font-weight: 900; font-size: 18px; box-shadow: 4px 4px 0 #1E2A44">免註冊開玩 Demo</a>
-<a href="mailto:kerry.huang.2024@gmail.com?subject=Formwright%20%E8%A1%A8%E5%8C%A0%20%E8%A9%A2%E5%83%B9" style="text-decoration: none; border: 2px solid #1E2A44; padding: 14px 28px; border-radius: 999px; font-weight: 700; font-size: 18px">跟我們聊聊</a>
+<a href="demo.html" style="text-decoration: none; background: #2F80ED; color: #FFFFFF; padding: 16px 30px; border-radius: 999px; font-weight: 900; font-size: 18px; box-shadow: 4px 4px 0 var(--line)">免註冊開玩 Demo</a>
+<a href="mailto:kerry.huang.2024@gmail.com?subject=Formwright%20%E8%A1%A8%E5%8C%A0%20%E8%A9%A2%E5%83%B9" style="text-decoration: none; border: 2px solid var(--line); padding: 14px 28px; border-radius: 999px; font-weight: 700; font-size: 18px">跟我們聊聊</a>
 <button type="button" class="fw-share-btn" data-share><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>分享給朋友</button>
 </div>
 </section>
 
-<footer style="background: #1E2A44; color: #C9D1E0; font-size: 15px">
+<footer style="background: var(--band); color: #C9D1E0; font-size: 15px">
 <div style="max-width: 1200px; margin: 0 auto; padding: 32px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
 <span style="font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-weight: 700; color: #FFFFFF">Formwright 表匠</span>
 <div style="display: flex; flex-wrap: wrap; gap: 20px">
@@ -651,6 +658,7 @@
 <button type="button" id="share-close">關閉</button>
 </dialog>
 <script src="assets/share.js" defer></script>
+<script src="assets/theme.js" defer></script>
 
 </div>
 </body>
