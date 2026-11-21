@@ -14,21 +14,24 @@ public class RacingFlowRepository : DispatchProxy
 {
     public IApprovalFlowRepository Inner { get; set; } = null!;
     public Func<Task>? BeforeReplace { get; set; }
+    /// <summary>要在哪個方法之前跑 <see cref="BeforeReplace"/>；預設 TryReplaceDraftAsync。</summary>
+    public string Method { get; set; } = nameof(IApprovalFlowRepository.TryReplaceDraftAsync);
 
     /// <summary>以 <paramref name="race"/> 取得這次要跑的動作（每次請求取一次，跑完就清掉）。</summary>
-    public static void Register(IServiceCollection services, Func<Func<Task>?> race) =>
+    public static void Register(IServiceCollection services, Func<Func<Task>?> race, Func<string?>? method = null) =>
         services.AddScoped(sp =>
         {
             var proxy = Create<IApprovalFlowRepository, RacingFlowRepository>();
             var racing = (RacingFlowRepository)(object)proxy;
             racing.Inner = new ApprovalFlowRepository(sp.GetRequiredService<DynamicDbContext>());
             racing.BeforeReplace = race();
+            if (method?.Invoke() is { } name) racing.Method = name;
             return proxy;
         });
 
     protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
     {
-        if (targetMethod!.Name == nameof(IApprovalFlowRepository.TryReplaceDraftAsync) && BeforeReplace is { } hook)
+        if (targetMethod!.Name == Method && BeforeReplace is { } hook)
         {
             BeforeReplace = null;
             // Task.Run：PostgreSQL 是真的非同步 I/O，同步等待不能占著 xUnit 的同步內容，否則平行跑時整個測試行程卡死
