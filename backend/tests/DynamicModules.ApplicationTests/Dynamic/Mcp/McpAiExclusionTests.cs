@@ -453,6 +453,45 @@ public class McpAiExclusionTests : ApprovalTestBase
         ((DynamicRecordResponse)(await Mcp("admin", new GetRecordRequest(po.Id))).Data!).Values.Keys.Should().NotContain($"f_{formula}");
     }
 
+    /// <summary>
+    /// 多層停用公式鏈、欄位順序反向：A＝基數 × 1、B＝A × 1、C＝B × 1，三者存值後都停用；建立順序是 C、B、A（id 與 Sequence 都反過來），
+    /// 單趟依序掃只會遮到 A、B。A 標「不提供給 AI」後 B、C 都要被遮，鎖住閉包的反覆掃描。
+    /// </summary>
+    [Fact]
+    public async Task DisabledFormulaChain_ReversedOrder_AllHidden()
+    {
+        await Rig();
+        var basis = (await MustAdd(_r.Module, FieldType.Decimal, new FieldConfig { Scale = 0 }, "基數")).Id;
+        static FieldConfig Formula(string expr) => new() { Formula = expr, ResultType = "number", Scale = 0 };
+        var c = await MustAdd(_r.Module, FieldType.Formula, Formula("0"), "公式C");
+        var b = await MustAdd(_r.Module, FieldType.Formula, Formula("0"), "公式B");
+        var a = await MustAdd(_r.Module, FieldType.Formula, Formula("0"), "公式A");
+        (await Update(a, Formula($"{{{basis}}} * 1"))).IsSuccess.Should().BeTrue();
+        (await Update(b, Formula($"{{{a.Id}}} * 1"))).IsSuccess.Should().BeTrue();
+        (await Update(c, Formula($"{{{b.Id}}} * 1"))).IsSuccess.Should().BeTrue();
+        As("buyer1");
+        var po = await NewPo(_r, extra: V((basis, 500)));
+        var ids = new[] { a.Id, b.Id, c.Id };
+        var fields = await Db.Context.Set<Field>().Where(f => ids.Contains(f.Id)).ToListAsync();
+        foreach (var f in fields)
+        {
+            f.Status = FieldStatus.Inactive;
+            f.Sequence = f.Id == c.Id ? -3 : f.Id == b.Id ? -2 : -1;
+        }
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+        var keys = ids.Select(id => $"f_{id}").ToArray();
+
+        ((DynamicRecordResponse)(await Mcp("buyer1", new GetRecordRequest(po.Id))).Data!).Values.Keys
+            .Should().Contain(keys, "對照：還沒標旗標時，停用的公式在 MCP 照樣讀得到");
+        await Exclude(a.Id);
+
+        var ui = (DynamicRecordResponse)(await Ui("buyer1", new GetRecordRequest(po.Id))).Data!;
+        ui.Values[$"f_{c.Id}"]!.Value.GetDecimal().Should().Be(500, "對照：畫面通道照樣讀得到存過的值");
+        ((DynamicRecordResponse)(await Mcp("buyer1", new GetRecordRequest(po.Id))).Data!).Values.Keys.Should().NotContain(keys);
+        ((DynamicRecordResponse)(await Mcp("admin", new GetRecordRequest(po.Id))).Data!).Values.Keys.Should().NotContain(keys);
+    }
+
     /// <summary>公式本來不記歷程（RecordHistoryWriter 略過計算欄位）；這裡直接寫一列，鎖住歷程查詢套用同一個遮罩（舊資料或日後改寫入規則時不外洩）。</summary>
     [Fact]
     public async Task DisabledFormula_History_Hidden()
