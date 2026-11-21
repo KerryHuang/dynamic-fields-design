@@ -13,8 +13,8 @@ namespace DynamicModules.Application.Common.Security;
 public sealed record RollupSourceMask(IReadOnlySet<long> HiddenSourceFieldIds, IReadOnlyDictionary<long, IReadOnlySet<long>?> ConditionRefs);
 
 /// <summary>
-/// 依彙總實際的來源模組算遮罩（mcp1a 第五輪審查必修 7、9）。明細來源照舊：動作軸取表頭、欄位例外取明細。
-/// MCP 通道另外涵蓋一般參照來源（用來源模組自己的權限）與彙總條件；畫面通道只看明細來源，行為不變（計畫 Q3「畫面通道不改」）。
+/// 依彙總實際的來源模組算遮罩（mcp1a 第五輪審查必修 7、9）。明細來源：動作軸取表頭、欄位例外取明細；一般參照來源用來源模組自己的權限，
+/// 畫面通道與 MCP 通道相同（#74，使用者 2026-11-21 裁決，取代 mcp1a 計畫 Q3「畫面通道不改」）。彙總條件目前只有 MCP 通道看。
 /// </summary>
 public sealed class RollupSourceMasks(IPermissionRepository permissions, IModuleRepository modules, FieldTypeRegistry registry)
 {
@@ -43,7 +43,6 @@ public sealed class RollupSourceMasks(IPermissionRepository permissions, IModule
                 continue;
             }
             var detail = sourceField.Config.Relation == ReferenceRelation.Detail;
-            if (!detail && !inputs.AiMasked) continue;
 
             if (resolved.Add((source.Id, detail)))
             {
