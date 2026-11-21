@@ -10,6 +10,8 @@ using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 
+using DynamicModules.Domain.Mcp;
+
 namespace DynamicModules.Application.Dynamic.OpsService;
 
 /// <summary>
@@ -57,6 +59,13 @@ public sealed class OpsUpkeepJob(OpsUpkeepOptions options) : IScheduledJob
         await PurgeAsync(context, sender, OpsPurgeTarget.Incident, now.AddDays(-await policy.IntAsync(PolicyCatalog.OpsIncidentRetentionDays, ct)), ct);
         // 規則失敗列只在滑動窗口內有用；用窗口的上限算，設定調大時不會先被清掉（維運設計 §17.2.7、§17.4）
         await PurgeAsync(context, sender, OpsPurgeTarget.RuleFailure, now.AddMinutes(-PolicyCatalog.OpsRulePauseWindowMinutes.Max), ct);
+        // MCP（mcp1a 判斷 22）：確認碼在結束後 1 天清；撤銷或到期的權杖隨稽核保留天數清（保留列供稽核關聯）
+        var confirmationCutoff = now.AddDays(-McpLimits.ConfirmationPurgeDays);
+        while ((int)Lease(await sender.Send(new McpService.Upkeep.PurgeMcpConfirmationsBatchRequest(
+                   context.Fence(), confirmationCutoff, options.PurgeBatchSize), ct)).Data! >= options.PurgeBatchSize) { }
+        var tokenCutoff = now.AddDays(-await policy.IntAsync(PolicyCatalog.OpsAuditRetentionDays, ct));
+        while ((int)Lease(await sender.Send(new McpService.Upkeep.PurgeMcpTokensBatchRequest(
+                   context.Fence(), tokenCutoff, options.PurgeBatchSize), ct)).Data! >= options.PurgeBatchSize) { }
         return new JobOutcome(ScheduledJobStatus.Succeeded);
     }
 
