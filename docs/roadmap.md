@@ -57,7 +57,7 @@
 | p2、p3 | 設計與處理上限；地區與組織政策 | ✅ 已完成：<br>p2（6d647080，2026-11-20）；<br>p3a（ae542b83，2026-11-20：營運時區、部門層數）；<br>p3b（bc8d7203，2026-11-20：預設、啟用、必填語系，沒指定語系用預設語系；剩 11 行靜態路徑見 #66） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9、§3.7 |
 | i3 | 多語系：名稱欄位多語（儀表板、報表名稱），套件格式隨升版；與 i4f 的套件升版併成一次 | 未開始 | — |
 | i4 | 語系包與自訂語系（可新增語系、JSON 語系包匯入匯出、內建語系可覆寫、設計資料 Excel 翻譯），切 i4a–i4f（i4d 分 i4d1、i4d2）；段內順序 i4a → i4b／i4c → i3 → i4d1 → i4d2 → i4e、i4f | 進行中：<br>i4a 已上線 3d0dd59b；<br>i4b 已上線 7843faa9；<br>i4c 已上線 bf6fef7b；<br>i4d1 已上線 0e42b98e；<br>i4d2 已上線（2026-11-21，028015c5） | [語系包與自訂語系](superpowers/specs/2026-11-17-language-packs-design.md) §20 |
-| mcp1a | MCP 後端地基：權杖、範圍、工具分級與確認碼、稽核寫入點、速率限制、12 個唯讀工具；權杖與確認碼的 repository 測試在 PostgreSQL 與 SQLite 各跑一次 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
+| mcp1a | MCP 後端地基：權杖、範圍、工具分級與確認碼、稽核寫入點、速率限制、12 個唯讀工具；權杖與確認碼的 repository 測試在 PostgreSQL 與 SQLite 各跑一次 | ✅ 已上線（2026-11-21，2c5f921b）：<br>四個子段一起上線（mcp1a-1 權杖與政策、mcp1a-2 帳號連動與 AI 遮罩、mcp1a-3 /mcp 端點與名額、mcp1a-4 確認碼與 12 個唯讀工具）；<br>migration `McpFoundation`（兩表＋欄位旗標），回退到 96081206 以前需先移除這組 migration；<br>Claude Code 實機連線已驗、Codex 實機未驗證 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | mcp1b | MCP 畫面：個人「AI 存取權杖」頁、管理員「AI 連線」頁、設計器欄位旗標、手冊 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | O3 | 廠商維運中心（Cloudflare Workers＋D1）、外部探測、匿名回報與新版本通知、告警推播 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | bk1 | 產品內備份：排程備份、存放位置（雲端版用隔離、只寫不刪的儲存空間）、O2「備份新鮮度」檢查接上真實時間；還原留在階段 5（使用者 11-19 裁決；開工前先寫設計） | 未開始（設計待寫） | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) |
