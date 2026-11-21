@@ -54,6 +54,7 @@ public class McpWriteLoopTests : McpWriteTestBase
 {
     private const string UpdateRecord = "update_record";
     private readonly LoopIncidentFault _incidentFault = new();
+    private readonly WriteScopeSpy _writes = new();
     private string _titleKey = "";
     private McpToken _token = null!;
 
@@ -61,6 +62,7 @@ public class McpWriteLoopTests : McpWriteTestBase
     {
         base.ConfigureServices(services);
         services.AddSingleton(_incidentFault);
+        services.AddScoped<IMcpWriteScope>(sp => new SpyingWriteScope(sp.GetRequiredService<McpWriteScope>(), _writes));
         services.AddSingleton<IAlertMailSender, NoAlertMail>();
         services.AddSingleton<IAlertSecretProtector, NoAlertMail>();
         services.AddSingleton(AlertMailOptions.None);
@@ -145,8 +147,11 @@ public class McpWriteLoopTests : McpWriteTestBase
     {
         await Succeed(5);
         var before = (await Rows()).Count;
+        _writes.Reset();
 
         await Update(Target, "sixth");
+
+        _writes.CommittedAnswers.Should().NotBeEmpty().And.OnlyContain(c => !c, "被擋的呼叫沒有提交（IsCommitted 為 false）");
 
         var added = (await Rows()).Skip(before).ToList();
         var row = added.Should().ContainSingle().Subject;
@@ -160,11 +165,13 @@ public class McpWriteLoopTests : McpWriteTestBase
         await Succeed(5);
         Write.ToolCalled = false;
         var args = WriteArgs("x");
+        _writes.Reset();
 
         var r = await CallWrite(args);
 
         CodeOf(r).Should().Be(McpErrorCodes.WriteLoop, "測試寫入工具也以 recordId 為迴圈目標，與 update_record 合併計數");
         Write.ToolCalled.Should().BeFalse();
+        _writes.Arms.Should().Be(0, "迴圈檢查在上膛之前");
     }
 
     [Fact]
@@ -299,12 +306,13 @@ public class McpWriteLoopTests : McpWriteTestBase
         Logs.Where(l => l.Level >= LogLevel.Warning).Should().BeEmpty();
         var incident = Incidents().Should().ContainSingle().Subject;
         (incident.Source, incident.Category, incident.Severity, incident.TitleKey, incident.OccurrenceCount)
-            .Should().Be((IncidentSource.Config, IncidentCategory.Config, IncidentSeverity.Warning, IncidentTitles.McpWriteLoop, 1L));
+            .Should().Be((IncidentSource.Config, IncidentCategory.Security, IncidentSeverity.Warning, IncidentTitles.McpWriteLoop, 1L),
+                "安全類（處理者是管理員），來源維持客戶設定：只在新開與回歸時通知（第 4 批審查 S1）");
         var p = IncidentTitles.FromJson(incident.TitleParamsJson)!;
         p.Keys.Should().BeEquivalentTo("tokenId", "recordId", "count", "minutes");
         (p["tokenId"], p["recordId"], p["count"], p["minutes"]).Should().Be(((object)_token.Id, (object)Target, (object)5L, (object)10L));
         var notified = IncidentNotifications() - notificationsBefore;
-        notified.Should().BeGreaterThan(0, "出廠的 ops.configIssueRecipients 含系統管理員");
+        notified.Should().BeGreaterThan(0, "出廠的 ops.alertRecipients 是系統管理員");
         Db.Context.Set<Notification>().AsNoTracking().Where(n => n.Kind == NotificationKinds.OpsIncident).Select(n => n.UserId).ToList()
             .Should().Contain("admin");
 
@@ -312,6 +320,26 @@ public class McpWriteLoopTests : McpWriteTestBase
 
         Incidents().Should().ContainSingle().Which.OccurrenceCount.Should().Be(2);
         (IncidentNotifications() - notificationsBefore).Should().Be(notified, "同指紋再發生只累加次數、不再通知");
+    }
+
+    /// <summary>安全類：收件人走 ops.alertRecipients（不是 ops.configIssueRecipients）；出廠的告警信類別含 security，所以新開時排一封告警信，再發生不再排。</summary>
+    [Fact]
+    public async Task Incident_Security_AlertRecipients_MailOnOpenOnly()
+    {
+        await SetSystem(PolicyCatalog.OpsAlertRecipients, "user:wenhui");
+        await Succeed(5);
+
+        await Update(Target, "blocked1");
+
+        var incident = Incidents().Should().ContainSingle().Subject;
+        Db.Context.Set<Notification>().AsNoTracking().Where(n => n.Kind == NotificationKinds.OpsIncident).Select(n => n.UserId).Distinct().ToList()
+            .Should().Equal("wenhui");
+        int Mails() => Db.Context.Set<AlertOutbox>().AsNoTracking().Count(m => m.IncidentId == incident.Id);
+        Mails().Should().Be(1);
+
+        await Update(Target, "blocked2");
+
+        Mails().Should().Be(1, "同指紋再發生（Updated）不通知、不寄信");
     }
 
     [Fact]
@@ -368,5 +396,26 @@ public class McpWriteLoopTests : McpWriteTestBase
 
         using var scope = NewScope();
         (await scope.ServiceProvider.GetRequiredService<McpUsage>().CountTodayAsync(_token.Id, default)).Should().Be(6);
+    }
+}
+
+/// <summary>記錄執行器對寫入範圍的上膛次數與「已提交嗎」的回答（第 4 批審查 S8）。</summary>
+public sealed class WriteScopeSpy
+{
+    public int Arms { get; set; }
+    public List<bool> CommittedAnswers { get; } = [];
+    public void Reset() { Arms = 0; CommittedAnswers.Clear(); }
+}
+
+internal sealed class SpyingWriteScope(McpWriteScope inner, WriteScopeSpy spy) : IMcpWriteScope
+{
+    public void Arm(long call, McpWriteAudit audit) { spy.Arms++; inner.Arm(call, audit); }
+    public void Disarm() => inner.Disarm();
+    public bool IsArmed => inner.IsArmed;
+    public bool IsCommitted(long call)
+    {
+        var committed = inner.IsCommitted(call);
+        spy.CommittedAnswers.Add(committed);
+        return committed;
     }
 }

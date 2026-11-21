@@ -25,8 +25,9 @@ public sealed record RecordMcpWriteLoopIncidentRequest(long TokenId, long Record
     : IRequest<ServiceResult>, ITransactionalRequest;
 
 /// <summary>
-/// 客戶設定類、嚴重度警告（新開、回歸才通知，同指紋再發生只累加次數）；收件人照 <c>ops.configIssueRecipients</c>，
-/// 沒有規則修改者，解析為空時改送系統管理員。標題只放代碼與數字（O2-T22）：權杖名稱與擁有者是使用者輸入的字串，不進事件。
+/// 安全類、嚴重度警告：處理者是系統管理員（撤銷權杖），收件人照 <c>ops.alertRecipients</c>，出廠的告警信類別含安全類所以會寄信。
+/// 來源維持 <see cref="IncidentSource.Config"/>：通知只在新開、回歸時發，同指紋再發生只累加次數；來源若改成安全類，鋸齒期間每擋一次就通知一次
+/// （第 4 批審查 S1，主控裁決，待使用者確認）。標題只放代碼與數字（O2-T22）：權杖名稱與擁有者是使用者輸入的字串，不進事件。
 /// </summary>
 public sealed class RecordMcpWriteLoopIncidentHandler(IncidentRecorder recorder, IOpsEnvironment env)
     : IRequestHandler<RecordMcpWriteLoopIncidentRequest, ServiceResult>
@@ -36,7 +37,7 @@ public sealed class RecordMcpWriteLoopIncidentHandler(IncidentRecorder recorder,
         await recorder.RecordAsync(new IncidentSignal
         {
             Fingerprint = McpWriteLoopIncident.Fingerprint(r.TokenId, r.RecordId), Source = IncidentSource.Config,
-            Category = IncidentCategory.Config, Severity = IncidentSeverity.Warning, Code = McpWriteLoopIncident.Code,
+            Category = IncidentCategory.Security, Severity = IncidentSeverity.Warning, Code = McpWriteLoopIncident.Code,
             TitleKey = IncidentTitles.McpWriteLoop, TitleParams = IncidentTitles.WriteLoop(r.TokenId, r.RecordId, r.Count, r.WindowMinutes),
             OccurredUtc = r.OccurredUtc, Version = env.Version,
         }, ct);
