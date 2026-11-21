@@ -18,9 +18,13 @@ public sealed record RollupSourceMask(IReadOnlySet<long> HiddenSourceFieldIds, I
 /// </summary>
 public sealed class RollupSourceMasks(IPermissionRepository permissions, IModuleRepository modules, FieldTypeRegistry registry)
 {
-    /// <summary>沒有需要看來源的彙總回 (true, null)；任一來源模組讀不到權限輸入回 (false, null)，呼叫端不放行。</summary>
+    /// <summary>
+    /// 沒有需要看來源的彙總回 (true, null)；任一來源模組讀不到權限輸入回 (false, null)，呼叫端不放行。
+    /// 畫面通道的系統管理員直接回 (true, null)：<see cref="PermissionResolver.Resolve"/> 對他提早回傳，算了也用不到。
+    /// </summary>
     public async Task<(bool Ok, RollupSourceMask? Mask)> LoadAsync(Module module, PermissionInputs inputs, string userId, CancellationToken ct)
     {
+        if (inputs.User.IsSystemAdmin && !inputs.AiMasked) return (true, null);
         var rollups = module.Blocks.SelectMany(b => b.Fields)
             .Where(f => f is { Type: FieldType.Rollup, Config.Rollup: { } r } && (r.AggregateFieldId is not null || r.Condition is not null))
             .ToList();
