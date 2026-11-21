@@ -200,7 +200,7 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
      - 放行條件寫成 request 自己宣告（`IIdempotentRequest` 加預設屬性 `bool IdempotencyApplies => true`，`AddTaskCommentRequest` 覆寫成 `Files.Count == 0`），behavior 不認得具體型別。
      - `IdempotencyApiTests` 補「帶標頭的 multipart 留言照常成功、兩次都寫」。
    - 畫面不受影響：前端只對記錄、簽核、匯入、轉換、沖銷帶 `Idempotency-Key`（`frontend/src/services/api/dynamic-api.ts` 的 `idem(...)`），任務端點不帶；帶了才冪等。
-   - **雜湊加上通道**（複審建議 7）：MCP 通道的請求雜湊在既有輸入後面加 `"\nmcp"`，畫面通道的雜湊算法不變（既有紀錄照常回放）。理由：同一個人在畫面送出的 key 若被 AI 以相同內容重送，回放出來的是畫面通道的結果，含「不提供給 AI」的欄位；加了通道之後改回 `idempotency_key_reused`。`IdempotencyBehavior` 多注入 `IRequestChannel`，一行改動。
+   - **雜湊加上通道**（複審建議 7）：MCP 通道的請求雜湊在既有輸入後面加 `"\nmcp"`，畫面通道的雜湊算法不變（既有紀錄照常回放）。理由：同一個人在畫面送出的 key 若被 AI 以相同內容重送，回放出來的是畫面通道的結果，含「不提供給 AI」的欄位；加了通道之後改回 `idempotency_key_reused`。`IdempotencyBehavior` 多注入 `IRequestChannel`、`Hash` 從 static 改成實例方法、判斷從 `IRecordWriteRequest` 改成 `IIdempotentRequest` 並加 `IdempotencyApplies`，小改動（複審建議 4）。實作時另加「只處理最外層請求」（交易層數 1），巢狀的寫入請求不另存紀錄。
    - 儲存沿用 `Dynamic_Operation`（主鍵 `UserId, Key`），保留天數沿用政策 `maintenance.idempotencyRetentionDays`（A26，出廠 7 天），不另設。key 以使用者隔離、不以權杖隔離：同一人的兩把權杖用同一個 key 送同樣內容會回放，送不同內容回 `idempotency_key_reused`。
    - 並行重送：沿用交易開頭的全庫寫入鎖（SQLite `WriteGate`＋`BEGIN IMMEDIATE`；PostgreSQL `WriteGate.ForKey`＋advisory lock），後到者等前者提交後查到紀錄回放。PostgreSQL 與 SQLite 都要測（Task 3）。
    - 回放時 `ServiceResult.Data` 是 `JsonElement`，不是型別物件：**寫入工具不得把 `r.Data` 轉型後才用**，一律把 `Data` 當不透明物件放進 `data`；需要 id 時用 `JsonSerializer.SerializeToElement(r.Data)` 讀。唯一的例外是 `update_task` 要拿掉 `undoToken`，兩種形狀都要辨識（判斷 11）。對照測試驗「第一次的 data 與回放的 data 序列化後相同」（`IdempotencyBehavior.Json` 與 `McpResultFormatter.Json` 若有差異，以回放的 JSON 為準，把工具的輸出也先經同一份選項正規化）。
