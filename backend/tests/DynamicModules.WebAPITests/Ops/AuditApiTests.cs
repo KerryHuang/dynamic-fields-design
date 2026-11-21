@@ -61,6 +61,8 @@ public class AuditApiTests
         public Task<int> PurgeBatchAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
         public Task<int> CountSinceAsync(string action, DateTime sinceUtc, CancellationToken ct) => throw new NotSupportedException();
         public Task<int> CountForTokenSinceAsync(long tokenId, DateTime sinceUtc, IReadOnlyCollection<string> actions, CancellationToken ct) => throw new NotSupportedException();
+        public Task<Dictionary<long, int>> CountForTokensSinceAsync(
+            IReadOnlyCollection<long> tokenIds, DateTime sinceUtc, IReadOnlyCollection<string> actions, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private static object Priv(bool read = false, bool edit = false) =>
@@ -530,6 +532,9 @@ public class AuditApiTests
         public Task<int> CountSinceAsync(string action, DateTime sinceUtc, CancellationToken ct) => holder.Inner.CountSinceAsync(action, sinceUtc, ct);
         public Task<int> CountForTokenSinceAsync(long tokenId, DateTime sinceUtc, IReadOnlyCollection<string> actions, CancellationToken ct) =>
             holder.Inner.CountForTokenSinceAsync(tokenId, sinceUtc, actions, ct);
+        public Task<Dictionary<long, int>> CountForTokensSinceAsync(
+            IReadOnlyCollection<long> tokenIds, DateTime sinceUtc, IReadOnlyCollection<string> actions, CancellationToken ct) =>
+            holder.Inner.CountForTokensSinceAsync(tokenIds, sinceUtc, actions, ct);
         public async Task<int> PurgeBatchAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
         {
             if (holder.Batches.Count + 1 == failOnCall) throw new InvalidOperationException("第二批失敗（測試注入）");

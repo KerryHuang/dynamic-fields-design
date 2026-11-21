@@ -44,4 +44,16 @@ public class AuditLogRepository(DynamicDbContext db) : IAuditLogRepository
         if (actions.Count == 0) return 0;
         return await db.Set<AuditLogEntry>().CountAsync(a => a.TokenId == tokenId && a.OccurredUtc >= sinceUtc && actions.Contains(a.Action), ct);
     }
+
+    public async Task<Dictionary<long, int>> CountForTokensSinceAsync(
+        IReadOnlyCollection<long> tokenIds, DateTime sinceUtc, IReadOnlyCollection<string> actions, CancellationToken ct)
+    {
+        if (tokenIds.Count == 0 || actions.Count == 0) return [];
+        var ids = tokenIds.Select(id => (long?)id).ToList();
+        return await db.Set<AuditLogEntry>()
+            .Where(a => ids.Contains(a.TokenId) && a.OccurredUtc >= sinceUtc && actions.Contains(a.Action))
+            .GroupBy(a => a.TokenId!.Value)
+            .Select(g => new { TokenId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.TokenId, x => x.Count, ct);
+    }
 }

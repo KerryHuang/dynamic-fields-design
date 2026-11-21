@@ -132,6 +132,26 @@ public class McpTokenRepositoryTests
     }
 
     [Fact]
+    public async Task AuditLogRepository_CountForTokensSince_GroupedByToken()
+    {
+        await using var db = await TestDb.CreateAsync();
+        var repo = new AuditLogRepository(db.Context);
+        repo.Add(Audit(7, "mcp.queryRecords", T0));                 // 7 算
+        repo.Add(Audit(7, "mcp.getRecord", T0.AddMinutes(5)));      // 7 算
+        repo.Add(Audit(7, "mcp.queryRecords", T0.AddSeconds(-1)));  // since 之前
+        repo.Add(Audit(7, "mcp.token.create", T0.AddMinutes(1)));   // 不在清單
+        repo.Add(Audit(8, "mcp.queryRecords", T0.AddMinutes(1)));   // 8 算
+        repo.Add(Audit(9, "mcp.queryRecords", T0.AddMinutes(1)));   // 沒查 9
+        repo.Add(Audit(null, "mcp.queryRecords", T0.AddMinutes(1)));
+        await db.Context.SaveChangesAsync(Ct);
+        string[] actions = ["mcp.queryRecords", "mcp.getRecord"];
+
+        (await repo.CountForTokensSinceAsync([7, 8, 10], T0, actions, Ct)).Should().BeEquivalentTo(new Dictionary<long, int> { [7] = 2, [8] = 1 });
+        (await repo.CountForTokensSinceAsync([7], T0, [], Ct)).Should().BeEmpty();
+        (await repo.CountForTokensSinceAsync([], T0, actions, Ct)).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task AuditLogRepository_Page_FilterByTokenId()
     {
         await using var db = await TestDb.CreateAsync();

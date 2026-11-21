@@ -22,6 +22,9 @@ public interface IAuditLogRepository
     Task<int> CountSinceAsync(string action, DateTime sinceUtc, CancellationToken ct);
     /// <summary>某把 MCP 權杖在 sinceUtc（含）之後、動作在 <paramref name="actions"/> 裡的列數（每日呼叫上限，MCP 設計 §8.2）；清單是空的回 0。</summary>
     Task<int> CountForTokenSinceAsync(long tokenId, DateTime sinceUtc, IReadOnlyCollection<string> actions, CancellationToken ct);
+    /// <summary>同 <see cref="CountForTokenSinceAsync"/>，一次分組統計多把權杖（權杖清單的「今日呼叫」）；沒有列的權杖不在結果裡，兩個清單任一是空的回空字典。</summary>
+    Task<Dictionary<long, int>> CountForTokensSinceAsync(
+        IReadOnlyCollection<long> tokenIds, DateTime sinceUtc, IReadOnlyCollection<string> actions, CancellationToken ct);
 }
 
 /// <summary>稽核查詢條件；時間範圍兩端都含（預設迄時是「現在」，剛寫的列要查得到）。動作分組由呼叫端展開成 <see cref="Actions"/>（不用 LIKE 前綴，O2-T18）。</summary>

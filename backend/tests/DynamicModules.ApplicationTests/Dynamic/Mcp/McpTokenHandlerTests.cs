@@ -443,6 +443,21 @@ public class McpTokenHandlerTests : McpTokenTestBase
     }
 
     [Fact]
+    public async Task AdminList_TodayCalls_PerToken()
+    {
+        var a = AddToken("admin", "a", NowUtc.AddDays(10));
+        var b = AddToken("wenhui", "b", NowUtc.AddDays(10));
+        AddToken("jiahao", "c", NowUtc.AddDays(10));
+        var today = new DateTime(2026, 11, 4, 0, 30, 0, DateTimeKind.Utc);
+        foreach (var (tokenId, action) in new[] { (a.Id, "mcp.whoami"), (a.Id, "mcp.listModules"), (b.Id, "mcp.unknownTool"), (b.Id, "mcp.access") })
+            Db.Context.Add(new AuditLogEntry { OccurredUtc = today, Channel = AuditChannel.Mcp, TokenId = tokenId, Action = action, Result = AuditResult.Success });
+        await Db.Context.SaveChangesAsync();
+
+        ((IReadOnlyList<McpTokenItem>)(await Send(new AdminListMcpTokensRequest(null, null))).Data!).ToDictionary(i => i.Name, i => i.TodayCalls)
+            .Should().BeEquivalentTo(new Dictionary<string, int> { ["a"] = 2, ["b"] = 1, ["c"] = 0 });
+    }
+
+    [Fact]
     public async Task Audit_Create_NoSecret()
     {
         await Enable();

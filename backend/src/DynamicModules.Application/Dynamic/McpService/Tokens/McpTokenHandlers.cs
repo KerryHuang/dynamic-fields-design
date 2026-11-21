@@ -41,20 +41,22 @@ public sealed class McpTokenViews(
     /// <summary>帳號能不能用 AI 連線：存在、啟用、不是示範帳號、不必改密碼。</summary>
     public static bool AccountUsable(AppUser? user) => user is { IsActive: true, IsDemoAccount: false, MustChangePassword: false };
 
-    public async Task<McpTokenItem> ItemAsync(McpToken t, CancellationToken ct)
+    public async Task<McpTokenItem> ItemAsync(McpToken t, CancellationToken ct) => (await ItemsAsync([t], ct)).Single();
+
+    /// <summary>清單列；「今日呼叫」一次分組統計，不逐把查。</summary>
+    public async Task<List<McpTokenItem>> ItemsAsync(IEnumerable<McpToken> list, CancellationToken ct)
     {
+        var tokens = list.ToList();
         var now = NowUtc;
-        var today = await audits.CountForTokenSinceAsync(t.Id, StartOfBusinessDayUtc(Today), CallActions, ct);
+        var today = await audits.CountForTokensSinceAsync([.. tokens.Select(t => t.Id)], StartOfBusinessDayUtc(Today), CallActions, ct);
+        return tokens.Select(t => Item(t, now, today.GetValueOrDefault(t.Id))).ToList();
+    }
+
+    private McpTokenItem Item(McpToken t, DateTime now, int today)
+    {
         McpScopes.TryParse(t.Scopes, out var scopes);
         return new McpTokenItem(t.Id, t.UserId, t.Name, t.Last4, scopes, t.CreatedUtc, t.ExpiresUtc, ExpiresOnOf(t.ExpiresUtc), t.LastUsedUtc,
             t.LastUsedIp, StatusOf(t, now), t.RevokedUtc, t.RevokedBy, t.RevokeReason is { } r ? Camel(r.ToString()) : null, today);
-    }
-
-    public async Task<List<McpTokenItem>> ItemsAsync(IEnumerable<McpToken> list, CancellationToken ct)
-    {
-        var items = new List<McpTokenItem>();
-        foreach (var t in list) items.Add(await ItemAsync(t, ct));
-        return items;
     }
 
     /// <summary>撤銷；已撤銷的不改原因與時間（冪等）。回傳這次有沒有改。</summary>
