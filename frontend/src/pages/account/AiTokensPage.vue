@@ -56,7 +56,9 @@ const callText = (c: { action: string; tool?: string | null }) => c.tool || labe
         <q-card flat bordered :data-testid="`ai-token-${k.id}`">
           <q-card-section>
             <div class="row items-center no-wrap">
-              <div class="text-weight-medium col" style="overflow-wrap: anywhere">{{ k.name }}</div>
+              <div class="text-weight-medium col" style="overflow-wrap: anywhere">
+                <span class="text-muted q-mr-xs" data-testid="ai-token-id">#{{ k.id }}</span>{{ k.name }}
+              </div>
               <q-badge color="primary" :outline="k.status !== 'active'" class="q-ml-sm" data-testid="ai-status">{{ tokenStatusText(t, te, k) }}</q-badge>
             </div>
             <div class="text-caption text-muted">{{ t('aiTokens.last4', { last4: k.last4 }) }}</div>

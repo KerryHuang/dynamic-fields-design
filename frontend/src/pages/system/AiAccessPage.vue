@@ -101,6 +101,7 @@ function confirmAll() {
                 <q-card-section>
                   <div class="row items-center no-wrap">
                     <div class="col" style="overflow-wrap: anywhere">
+                      <span class="text-muted q-mr-xs" data-testid="ai-token-id">#{{ k.id }}</span>
                       <span class="text-weight-medium">{{ k.name }}</span>
                       <span class="text-muted"> · {{ userName(k.userId) }}（{{ k.userId }}）</span>
                     </div>

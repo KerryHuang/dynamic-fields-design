@@ -61,6 +61,12 @@ describe('AiTokensPage', () => {
   });
   afterEach(() => { mounted?.unmount(); document.body.innerHTML = ''; });
 
+  it('shows the token id on the card so it matches the id in ops incident titles', async () => {
+    api.getMyMcpTokens.mockResolvedValue([TOKEN({ id: 12 })]);
+    await mountPage();
+    expect(q('ai-token-12')!.querySelector('[data-testid="ai-token-id"]')!.textContent).toBe('#12');
+  });
+
   it('lists tokens with status, expiry and today calls', async () => {
     await mountPage();
     const card = q('ai-token-1')!;

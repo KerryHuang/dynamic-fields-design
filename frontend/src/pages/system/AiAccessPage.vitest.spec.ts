@@ -63,6 +63,12 @@ describe('AiAccessPage', () => {
     expect(api.getAdminMcpTokens).not.toHaveBeenCalled();
   });
 
+  it('shows each token id on its card so the id in ops incident titles can be found', async () => {
+    await mountPage();
+    expect(q('ai-admin-token-1')!.querySelector('[data-testid="ai-token-id"]')!.textContent).toBe('#1');
+    expect(q('ai-admin-token-2')!.querySelector('[data-testid="ai-token-id"]')!.textContent).toBe('#2');
+  });
+
   it('lists everyone\'s tokens with the owner name; only active tokens can be revoked', async () => {
     await mountPage();
     expect(api.getAdminMcpTokens).toHaveBeenCalledWith({});

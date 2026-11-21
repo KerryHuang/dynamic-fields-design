@@ -48,7 +48,7 @@ public static partial class IncidentTitles
         Params(("ruleKind", Code(ruleKind)), ("ruleKey", Code(ruleKey)), ("moduleKey", Code(moduleKey)), ("errorCode", Code(lastErrorCode)),
             ("threshold", (long)threshold), ("failures", (long)failures));
 
-    /// <summary>AI 寫入迴圈（MCP 設計 §20 C3）：只放權杖 id、記錄 id、次數、時間窗分鐘數，權杖名稱是使用者輸入的字串不進標題。</summary>
+    /// <summary>AI 寫入迴圈（MCP 設計 §20 C3）：只放權杖 id、記錄 id、次數、時間窗分鐘數，權杖名稱是使用者輸入的字串不進標題；權杖 id 對得到「AI 連線」頁權杖卡片上的 #id。</summary>
     public static IReadOnlyDictionary<string, object> WriteLoop(long tokenId, long recordId, int count, int minutes) =>
         Params(("tokenId", tokenId), ("recordId", recordId), ("count", (long)count), ("minutes", (long)minutes));
 
