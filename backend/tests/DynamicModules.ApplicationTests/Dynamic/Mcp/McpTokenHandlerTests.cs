@@ -258,6 +258,17 @@ public class McpTokenHandlerTests : McpTokenTestBase
     }
 
     [Fact]
+    public async Task Create_IntegerPolicyInvalid_403()
+    {
+        await Enable();
+        await SetSystem(PolicyCatalog.McpTokenMaxPerUser, "999");
+        var r = await Create();
+        r.IsForbidden.Should().BeTrue();
+        r.Code.Should().Be(McpMessages.CodePolicyInvalid);
+        Db.Context.Set<McpToken>().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Create_DemoAccount_403()
     {
         await Enable();

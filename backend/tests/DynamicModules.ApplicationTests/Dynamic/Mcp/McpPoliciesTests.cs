@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Mcp;
 
-/// <summary>MCP 政策快照（mcp1a 計畫判斷 6）：存取類壞值 fail closed、允許對象展開、預設效期夾到最長效期、不快取。</summary>
+/// <summary>MCP 政策快照（mcp1a 計畫判斷 6）：9 項壞值皆 fail closed、允許對象展開、預設效期夾到最長效期、不快取。</summary>
 public class McpPoliciesTests : DesignerTestBase
 {
     private async Task SetSystem(PolicyDefinition def, string? value)
@@ -68,15 +68,23 @@ public class McpPoliciesTests : DesignerTestBase
         denial.Should().Be(McpMessages.CodePolicyInvalid);
     }
 
-    [Fact]
-    public async Task IntegerGarbage_FallsBackToFactory_AccessStillValid()
+    /// <summary>9 項皆 fail closed（第五輪審查，主控裁決）：整數項的壞值也拒絕，不退回出廠值放行。</summary>
+    [Theory]
+    [InlineData("mcp.tokenMaxLifetimeDays", "0")]
+    [InlineData("mcp.tokenMaxLifetimeDays", "abc")]
+    [InlineData("mcp.tokenDefaultLifetimeDays", "366")]
+    [InlineData("mcp.tokenMaxPerUser", "51")]
+    [InlineData("mcp.callsPerMinute", "0")]
+    [InlineData("mcp.callsPerDay", "99")]
+    [InlineData("mcp.maxRows", "999")]
+    [InlineData("mcp.confirmTtlSeconds", "59")]
+    public async Task IntegerGarbage_AccessInvalid(string code, string value)
     {
         await SetSystem(PolicyCatalog.McpEnabled, "true");
-        await SetSystem(PolicyCatalog.McpMaxRows, "999");
+        await SetSystem(PolicyCatalog.All.Single(d => d.Code == code), value);
         var (snap, denial) = await ReadAsync();
-        snap.MaxRows.Should().Be(50);
-        snap.AccessInvalid.Should().BeFalse();
-        denial.Should().BeNull();
+        snap.AccessInvalid.Should().BeTrue();
+        denial.Should().Be(McpMessages.CodePolicyInvalid);
     }
 
     [Fact]

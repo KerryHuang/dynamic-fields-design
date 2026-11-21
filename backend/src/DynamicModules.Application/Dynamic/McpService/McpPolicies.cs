@@ -1,3 +1,4 @@
+using System.Globalization;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Policies;
 using Microsoft.Extensions.Logging;
@@ -5,8 +6,8 @@ using Microsoft.Extensions.Logging;
 namespace DynamicModules.Application.Dynamic.McpService;
 
 /// <summary>
-/// MCP 政策的一次讀值（mcp1a 判斷 6）。<see cref="AccessInvalid"/>：存取類政策（<c>mcp.enabled</c>、<c>mcp.allowedGroups</c>）
-/// 有存值但無法使用，或讀取丟例外；這時建立權杖與 <c>/mcp</c> 一律拒絕，不靠退回的出廠值（允許對象的出廠值是空＝全部使用者）。
+/// MCP 政策的一次讀值（mcp1a 判斷 6）。<see cref="AccessInvalid"/>：9 項政策任一有存值但無法使用，或讀取丟例外；
+/// 這時建立權杖與 <c>/mcp</c> 一律拒絕，不靠退回的出廠值（允許對象的出廠值是空＝全部使用者；整數項退回出廠值會放寬上限）。
 /// <see cref="TokenDefaultLifetimeDays"/> 已夾到最長效期（T15）。
 /// </summary>
 public sealed record McpPolicySnapshot(
@@ -19,31 +20,35 @@ public sealed class McpPolicies(IPolicyReader policies, RecipientResolver recipi
 {
     public async Task<McpPolicySnapshot> ReadAsync(CancellationToken ct)
     {
-        PolicyResolution enabled, allowed;
+        var rows = new Dictionary<PolicyDefinition, PolicyResolution>();
         try
         {
-            enabled = await policies.ResolveAsync(PolicyCatalog.McpEnabled, null, ct);
-            allowed = await policies.ResolveAsync(PolicyCatalog.McpAllowedGroups, null, ct);
+            foreach (var def in Defs) rows[def] = await policies.ResolveAsync(def, null, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // 讀不到就拒絕；之後不再發查詢（交易內的資料庫錯誤會讓 PostgreSQL 整個交易失效），整數項用程式出廠值
-            logger.LogError(ex, "讀取 MCP 存取政策失敗，AI 連線一律拒絕");
+            logger.LogError(ex, "讀取 MCP 政策失敗，AI 連線一律拒絕");
             return Rejected();
         }
 
-        var invalid = enabled.SystemUnusable || allowed.SystemUnusable;
-        if (invalid) logger.LogWarning("MCP 存取政策有無法使用的值，AI 連線一律拒絕");
-        var max = await policies.IntAsync(PolicyCatalog.McpTokenMaxLifetimeDays, null, ct);
+        // 9 項任一有存值但無法使用就拒絕（第五輪審查：整數項壞值也不退回出廠值放行）
+        var invalid = rows.Values.Any(r => r.SystemUnusable);
+        if (invalid) logger.LogWarning("MCP 政策有無法使用的值，AI 連線一律拒絕");
+        int IntOf(PolicyDefinition def) => int.Parse(rows[def].Effective, NumberStyles.None, CultureInfo.InvariantCulture);
+        var max = IntOf(PolicyCatalog.McpTokenMaxLifetimeDays);
         return new McpPolicySnapshot(
-            enabled.Effective == "true", PolicyDefinition.RecipientItems(allowed.Effective), invalid,
-            max, Math.Min(await policies.IntAsync(PolicyCatalog.McpTokenDefaultLifetimeDays, null, ct), max),
-            await policies.IntAsync(PolicyCatalog.McpTokenMaxPerUser, null, ct),
-            await policies.IntAsync(PolicyCatalog.McpCallsPerMinute, null, ct),
-            await policies.IntAsync(PolicyCatalog.McpCallsPerDay, null, ct),
-            await policies.IntAsync(PolicyCatalog.McpMaxRows, null, ct),
-            await policies.IntAsync(PolicyCatalog.McpConfirmTtlSeconds, null, ct));
+            rows[PolicyCatalog.McpEnabled].Effective == "true", PolicyDefinition.RecipientItems(rows[PolicyCatalog.McpAllowedGroups].Effective),
+            invalid, max, Math.Min(IntOf(PolicyCatalog.McpTokenDefaultLifetimeDays), max), IntOf(PolicyCatalog.McpTokenMaxPerUser),
+            IntOf(PolicyCatalog.McpCallsPerMinute), IntOf(PolicyCatalog.McpCallsPerDay), IntOf(PolicyCatalog.McpMaxRows), IntOf(PolicyCatalog.McpConfirmTtlSeconds));
     }
+
+    private static readonly PolicyDefinition[] Defs =
+    [
+        PolicyCatalog.McpEnabled, PolicyCatalog.McpAllowedGroups, PolicyCatalog.McpTokenMaxLifetimeDays, PolicyCatalog.McpTokenDefaultLifetimeDays,
+        PolicyCatalog.McpTokenMaxPerUser, PolicyCatalog.McpCallsPerMinute, PolicyCatalog.McpCallsPerDay, PolicyCatalog.McpMaxRows,
+        PolicyCatalog.McpConfirmTtlSeconds,
+    ];
 
     /// <summary>
     /// 這位使用者能不能用 AI 連線：不能時回 403 機器碼（依序：政策壞值、未啟用、不在允許對象），能用回 null。
@@ -58,7 +63,7 @@ public sealed class McpPolicies(IPolicyReader policies, RecipientResolver recipi
         return users.Contains(userId, StringComparer.Ordinal) ? null : McpMessages.CodeNotAllowed;
     }
 
-    private static int Int(PolicyDefinition def) => int.Parse(def.Factory, System.Globalization.CultureInfo.InvariantCulture);
+    private static int Int(PolicyDefinition def) => int.Parse(def.Factory, CultureInfo.InvariantCulture);
 
     /// <summary>讀取失敗時的快照：拒絕存取，整數項用程式出廠值。</summary>
     private static McpPolicySnapshot Rejected()

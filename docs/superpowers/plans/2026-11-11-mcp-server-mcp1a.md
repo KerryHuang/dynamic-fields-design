@@ -245,9 +245,9 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
    - Application 讀值一律經 `IPolicyReader`（每請求讀資料庫，改值下一個請求就生效；`moduleId: null`），包成 `McpPolicies.ReadAsync(ct) → McpPolicySnapshot`。
    - **存取類政策壞值 fail closed**：`IPolicyReader` 遇到存的值無法解析時會退回出廠值（`PolicyReader.Usable` 記 Warning 後回 null），`mcp.allowedGroups` 的出廠值是空＝全部使用者，等於 fail open。所以：
      - `PolicyResolution` 加 `bool SystemUnusable`（有存值、但 `Usable` 回 null 時為 true；其他呼叫端不受影響）。
-     - `mcp.enabled`、`mcp.allowedGroups` 任一 `SystemUnusable` → 快照標 `AccessInvalid`，建立權杖與 `/mcp` 一律 403 `mcpPolicyInvalid`；讀取丟例外也一樣拒絕。
+     - 9 項任一 `SystemUnusable` → 快照標 `AccessInvalid`，建立權杖與 `/mcp` 一律 403 `mcpPolicyInvalid`；讀取丟例外也一樣拒絕。
      - 合法的空值才是「全部使用者」；有項目但展開後零名成員（例如群組被刪光）＝沒有人可用，不是全部。
-     - 其餘 7 項整數壞值退回出廠值照舊（不涉存取控制）。
+     - 第五輪審查改為 9 項皆 fail closed（主控裁決）：原本「其餘 7 項整數壞值退回出廠值照舊」會讓每人上限、最長效期等壞值照出廠值放行，改成整數項壞值也拒絕。
    - `DefaultLifetimeDays` 取用時夾到 `min(預設, 最長)`（T15）。
    - **前端必改**：`PolicyCatalogFixtureTests` 與 `policy-i18n.vitest.spec.ts` 要求 `PolicyCatalog.All` 與 `shared/policy-catalog.json` 一致、每個代碼四語都有 `name`／`help`、每個分類有文案。所以 mcp1a 就要加：
      - `shared/policy-catalog.json` 的 `codes` 與 `categories`（`mcp`）。
