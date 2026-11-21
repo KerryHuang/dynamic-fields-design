@@ -208,4 +208,43 @@ public class RollupFormulaMaskTests : ApprovalTestBase
         (await Perms("buyer1")).HiddenFieldIds.Should().Contain(_qtyCount);
         (await Perms("admin")).HiddenFieldIds.Should().BeEmpty();
     }
+
+    // ───────── #74 第 2 點：引用隱藏欄位的停用公式 ─────────
+
+    private async Task DisableBonusFormula()
+    {
+        var field = await Db.Context.Set<Field>().SingleAsync(f => f.Id == _bonusX);
+        field.Status = FieldStatus.Inactive;
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+    }
+
+    [Fact]
+    public async Task DisabledFormula_RefsHidden_NotReturned()
+    {
+        await Rig();
+        var po = await PoWithExtra();
+        await DisableBonusFormula();
+
+        (await Get("admin", po)).Values[$"f_{_bonusX}"]!.Value.GetDecimal().Should().Be(7, "對照：停用的公式存過的值仍讀得到");
+        (await Perms("buyer1")).HiddenFieldIds.Should().Contain(_bonusX);
+        (await Get("buyer1", po)).Values.Keys.Should().NotContain($"f_{_bonusX}");
+    }
+
+    // ───────── 簽核臨時讀取權 ─────────
+
+    [Fact]
+    public async Task ApprovalGrant_RegularRefSourceAndDisabledFormula_Hidden()
+    {
+        await Rig();
+        var po = await PoWithExtra();
+        await DisableBonusFormula();
+        As("admin");
+        await MustSubmit(po, _r.Confirmed);
+
+        var fin = await Get("fin1", po);
+        fin.ApprovalGrant.Should().BeTrue("fin1 只靠簽核的臨時讀取權讀這筆");
+        fin.Values.Keys.Should().NotContain([.. RefKeys, $"f_{_bonusX}"]);
+        (await Get("admin", po)).Values.Keys.Should().Contain([.. RefKeys, $"f_{_bonusX}"]);
+    }
 }
