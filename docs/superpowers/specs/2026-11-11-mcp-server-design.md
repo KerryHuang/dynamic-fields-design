@@ -250,7 +250,9 @@ mcp1 唯讀工具對應的既有 request（builder 審查時逐一查證，12 �
 - 已知限制：
   - 簽核標題快照：MCP 通道中，模組有任何「不提供給 AI」欄位時一律給空字串（mcp1a 計畫 Q7，使用者 2026-11-21 裁決維持）。
   - 畫面通道的彙總條件、一般參照來源彙總、停用公式連帶遮罩：#74、#75 已補。
-  - `AiMasked` 也會流進寫入端的權限解析；mcp1a 沒有寫入工具，寫入端在 AI 遮罩下的語意留給 mcp2a 審。
+  - 寫入端（mcp2a 已審，使用者裁決 2026-11-21）：「不提供給 AI」的欄位 AI 不能寫，當成看不到（D1）。`AiMasked` 流進寫入端的權限解析，被遮欄位與隱藏欄位同語意：修改時保留舊值、新增時只套預設值、送來的值被忽略；`meta.ignoredFields` 把它和「不存在的欄位」「唯讀欄位」混在一起列，不分原因，AI 無法藉此確認欄位存在。
+  - 被遮的必填欄位、又沒有預設值時，AI 建立記錄不擋（D2，顧問拍板，待使用者確認）：記錄存成功、該欄位空著，之後畫面上任何人存檔都會被「此欄位必填」擋下，要先補填。
+  - 被遮欄位出現在標題樣板時，MCP 送簽照常成功；`get_record_approval` 的標題快照是空字串，畫面仍看得到完整快照。
 - 套件格式（mcp1a 計畫 Q4）：mcp1a、mcp1b 旗標不進套件與範本，更新套件不清除既有的 true。使用者 2026-11-21 裁決：併進 i3／i4f 那次套件 formatVersion 升版一起帶，套用時寫入 true 需要權限設定的權限（權限軸 §7.3）；在那之前匯出再匯入另一套系統會失去旗標。
 
 ### 5.6 維運服務帳號（對齊維運設計 T7）
@@ -307,7 +309,7 @@ mcp1 唯讀工具對應的既有 request（builder 審查時逐一查證，12 �
 照規範設定 annotations，讓 client 決定要不要先問使用者：
 
 - 唯讀工具：`readOnlyHint: true`、`openWorldHint: false`。
-- 一般寫入：`readOnlyHint: false`、`destructiveHint: false`。可安全重送的標 `idempotentHint: true`（帶冪等鍵時，§12 mcp2a）。
+- 一般寫入：`readOnlyHint: false`、`destructiveHint: false`。一般寫入工具的 `idempotencyKey` 一律必填，所以一律標 `idempotentHint: true`（mcp2a 實作：annotations 是每個工具固定的，不能依「有沒有帶 key」變動，故改成 key 必填）。
 - 高風險：`destructiveHint: true`。
 - 所有工具都標 `openWorldHint: false`：只碰本系統，不連外網。
 
@@ -356,6 +358,9 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 | Forbidden | `isError`，「沒有權限」；不透露模組或記錄是否存在 |
 | NotFound | `isError`，「找不到」 |
 | Conflict（stale） | `isError`，代碼 `stale`，提示重新讀取再改 |
+| Conflict（其他：檢查失敗、`subtasksOpen`、已有簽核中的實例、無法撤回、實例狀態或關卡已變、凍結、模組關閉） | `isError`，代碼 `conflict`，訊息照 handler（依語系），`fields` 帶 handler 的 `code` 與 `params`，模型可據此調整後重試（mcp2a） |
+| 冪等鍵重用（同 key、內容不同） | `isError`，代碼 `idempotency_key_reused`（REST 仍是 422，mcp2a） |
+| 寫入迴圈 | `isError`，代碼 `write_loop`，請模型停下來請使用者確認（C3、mcp2a） |
 | 速率超限 | `isError`，代碼 `rate_limited`，附幾秒後可重試 |
 
 訊息語系沿用 `HeaderCurrentLocale`；client 沒帶語系標頭時用系統預設語系。預設語系是政策 A18，屬於 p3；排程上 p3 在 mcp1a 之前（使用者 2026-11-12 確認），mcp1a 開工時直接接 A18；若 p3 尚未合併，沿用目前的預設語系（主控判斷 B17）。
@@ -389,13 +394,15 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 
 ### 7.2 後續工具大綱
 
-**mcp2a 一般寫入**（`business.write`）
+**mcp2a 一般寫入**（`business.write`，已實作；細部決定與計畫見[mcp2a 計畫](../plans/2026-11-11-mcp-server-mcp2a.md)，回填見 §7.3）
 
-- create_record、update_record：以 describe_module 的 schema 驗證，`UpdateRecordRequest` 需要 rowVersion，衝突回 `stale`。
-- create_task、update_task（狀態、負責人、到期日）、add_task_comment（文字，不含附件上傳）。
-- submit_approval（先走預覽再送，預覽是送簽的一部分，不是高風險確認）、withdraw_approval（撤回）。
-- mark_notifications_read。
-- 每個寫入工具接受 `idempotencyKey`，對應既有的 `IOperationContext.ClientKey`，`IdempotencyBehavior` 自動接手。
+- create_record、update_record：以 describe_module 的 schema 驗證，`UpdateRecordRequest` 需要 rowVersion，衝突回 `stale`。`update_record` 不收明細列的 `_delete`（D3），要刪行請使用者在畫面操作。
+- create_task、update_task（狀態、負責人、到期日；不開放標題與描述）、add_task_comment（文字，不含附件上傳）。`create_task` 一個工具涵蓋三種建法：個人任務、記錄任務（帶 `recordId`）、子任務（帶 `parentTaskId`），兩者同時帶回 `invalid_arguments`。
+- submit_approval：預覽是 `previewOnly: true` 的那一次呼叫（只回預覽，不寫入；不需要 rowVersion），不是每次送簽都先預覽；沒帶 `previewOnly` 就直接送簽。預覽不是高風險確認。
+- withdraw_approval（撤回）。
+- `mark_notifications_read` 不做（D6，票 #82）：mcp1 沒有列出通知的唯讀工具，AI 只能「全部標已讀」，使用者回到畫面就看不到哪些沒處理；等有唯讀工具時一起做。
+- 每個寫入工具的 `idempotencyKey` 必填，接到 `IOperationContext.ClientKey`，由 `IdempotencyBehavior` 接手。原本只有記錄寫入，mcp2a 把任務與留言也納入（新 marker `IIdempotentRequest`）；附件留言（畫面專用，MCP 不收附件）放行，不做請求層冪等。MCP 通道的請求雜湊加通道後綴，畫面送出的 key 被 AI 以相同內容重送時回 `idempotency_key_reused`，不會回放畫面通道的結果。
+- 寫入迴圈偵測：同一權杖在時間窗內反覆修改同一筆記錄，見 §7.3 與 §20 C3。
 
 **mcp2b 高風險**（`business.write`）
 
@@ -431,6 +438,61 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 - 誰來呼叫：依維運設計 C4 使用者裁決（2026-11-12），由維運中心的 runbook 呼叫，不是 agent。
 - 產品端另有寫死的每日硬上限，數字由 O6 定。
 
+### 7.3 mcp2a 實作回填
+
+**決策狀態**
+
+- D1（被遮欄位 AI 不能寫，當成看不到）、D7（記錄歷程這段先不標「經 AI」，票 #81）：使用者裁決（2026-11-21）。
+- D8（被擋、失敗、取消都計入每日名額）：使用者裁決（2026-11-21）。
+- D2（被遮的必填欄位 AI 建立時不擋）、D3（`update_record` 不收 `_delete`）、D4（迴圈處理方式）、D5（迴圈時間窗用新政策）、D6（不做 `mark_notifications_read`，票 #82）、D9（四個子段一起上線）：顧問拍板，待使用者確認。
+
+**與原設計不同之處**
+
+- §7.2 冪等「自動接手」只對記錄寫入成立，改以 `IIdempotentRequest` 涵蓋任務與留言。
+- §8.1 寫入稽核不走 `IWriteStage`（它只由 `RecordEffectsBehavior` 對記錄寫入請求執行，任務與留言不跑），改用 `McpWriteAuditBehavior`。
+- §6.5 補 `conflict`、`idempotency_key_reused`、`write_loop`。
+- §8.1 的 operation id 只串得到事件事實；`RecordHistory` 沒有通道欄也沒有 OperationId，要標「經 AI」得加 migration，隨票 #81。
+- §7.2 `submit_approval` 不先預覽再送：先預覽會讓第一次成功之後的同 key 重送被預覽擋下，冪等無法回放。
+
+**寫入工具的行為**
+
+- 工具只從白名單參數逐欄組既有的 request，`SystemKeys` 一律不寫，不把參數反序列化成 request；結果（記錄值、歷程、事件事實、檢查、任務規則、通知）與畫面建立相同。
+- 長度上限沿用既有 request 的常數（任務標題、留言內文）。空留言 `""` 與超過標題上限由工具的參數檢查回 `invalid_arguments`；只有空白字元的留言交給 handler，回 `invalid`，訊息同畫面。
+- 跨記錄檢查失敗：REST 回 400，錯誤鍵 `_record`（不是 409）；MCP 回 `invalid`，`fields._record` 與訊息同 REST。
+- 有事件事實的記錄只能變更狀態（EventFactLock）：AI 改單要避開已記帳的記錄，否則被擋。
+- 撤回：非發起人回 `forbidden`（handler 403）；實例版本過期回 `conflict`（`StateChanged`、`StageHandled`），不是 `stale`，工具描述提醒先用 `get_record_approval` 重讀。
+- `update_task` 把任務派給呼叫者自己看不到的人、寫入後任務對他不可見時，回 `{ taskId, hiddenAfterWrite: true }`，不給 `undoToken`（含冪等回放）；復原只給畫面。
+- `submit_approval` 預覽的稽核列：動作 `mcp.submitApproval`、結果成功、原因 `preview`；迴圈計數排除這一列。非預覽缺 `rowVersion` 回 `invalid_arguments`；自選關卡缺人時 handler 回 `invalid`，鍵 `picks.<關卡代號>`，模型先用 `previewOnly` 看候選人再重送。
+- 長結果放不下時沿用 mcp1a 的「已執行、結果省略」。
+
+**迴圈偵測（C3、D4、D5）**
+
+- 對象是記錄，只對 `update_record`、`submit_approval` 的 `recordId` 偵測；任務與撤回的反覆寫入只靠每分鐘速率。
+- 計數：稽核表中同一權杖、同一筆記錄、寫入工具動作、結果成功且沒有原因碼（排除冪等回放 `replayed` 與預覽 `preview`）、落在時間窗內的列數。`create_record` 成功也算那筆新記錄的一次，但建立本身不檢查。
+- 達到 `ops.ruleLoopTriggersPerRecord`（出廠 30，5–1000）次就擋；時間窗是 `ops.ruleLoopWindowMinutes`（出廠 10，1–1440 分鐘）。
+- 這個 key 已有冪等紀錄（重送）時不擋，照常回放，否則重送「第 30 次成功的那筆」會拿到 `write_loop`，模型會以為那次沒寫進去。
+- 擋下時：回 `write_loop`，訊息說明「同一筆記錄在 N 分鐘內已被這把權杖修改 M 次，已暫停這把權杖對它的寫入，請停下來請使用者確認」；稽核恰一列「被拒」、原因 `write_loop`、目標是那筆記錄；計入每日名額，不計入迴圈次數。
+- 維運事件：代碼 `mcp.writeLoop`、類別客戶設定、嚴重度警告；指紋＝代碼＋權杖 id＋記錄 id，同指紋再發生只累加次數、不再通知；收件人照 `ops.configIssueRecipients`（出廠含全部系統管理員）。標題只放代碼與數字：「AI 權杖 #權杖 id 在 N 分鐘內修改記錄 #記錄 id 達 M 次，已暫停它對這筆的寫入」，權杖名稱與擁有者不進標題，管理員用權杖 id 到「AI 連線」頁查。事件寫不進去只記 Error log，回給 AI 的仍是 `write_loop`。
+- 恢復：時間窗滑過、次數降到門檻以下就自動恢復，不做「恢復」按鈕。
+- `update_record`、`submit_approval` 的工具描述多一句「遇到 `write_loop` 停下來問使用者」；`update_record` 的描述寫明明細請在同一次呼叫一起送，逐列修改容易碰到門檻。
+
+**已知限制（mcp2a）**
+
+- `ignoredFields` 只涵蓋表頭、只看 schema：明細欄位、規則唯讀與狀態機唯讀造成的忽略不會列出，要比對回傳的記錄。
+- `forbidden` 一律同一句，主管只能改負責人這類細訊息不給 AI。
+- `update_task` 沒有版本比對，兩邊同時改時後者蓋前者（與畫面相同）；標題與描述不開放；寫入後看不到的復原只給畫面。
+- 迴圈偵測只看記錄、只看權杖；整合等其他來源上線時再擴充。
+- 迴圈只計成功的寫入：失敗的反覆嘗試（例如一直被檢查擋下）不觸發，靠每分鐘速率與每日名額擋。
+- 迴圈的鋸齒效應：時間窗一滑動就放行一次，迴圈會以「門檻／時間窗」的速度繼續寫，事件只累加次數、不再通知，直到每日名額用完（D4 自動恢復的取捨）。
+- 迴圈事件歸「客戶設定」類（計畫判斷 8），維運監控頁的處理者因此顯示「需要設計者處理」，但實際該處理的是系統管理員（到「AI 連線」頁看權杖）；本機走查發現，處理者標示是否改成系統管理員待使用者確認。
+- 迴圈計數在交易外判斷，並行的兩次寫入可能讓次數多一次才擋。
+- 冪等紀錄保留 `maintenance.idempotencyRetentionDays`（出廠 7 天），過了之後同 key 重送會再執行一次；key 以使用者隔離、不以權杖隔離。
+- 檢查規則若引用被遮欄位，AI 可以藉「改別的欄位後有沒有被擋」試探被遮欄位的值；檢查訊息裡的 `{value}`、`{limit}` 會換成彙總值，若彙總的正好是被遮欄位，AI 在 `conflict` 訊息裡直接拿到數字。畫面上看不到隱藏欄位的使用者也是同樣語意，本段不擋，另開票處理「MCP 通道上彙總欄位被遮時 `{value}` 顯示為『…』」（票號待確認）。
+- 被遮的必填欄位在 AI 建立時不檢查（D2）。
+- 記錄歷程不標「經 AI」（D7，票 #81），要到稽核頁用來源管道「MCP」查。
+- 留言不收附件；不做 `mark_notifications_read`（D6，票 #82）。
+- mcp2b 的伏筆：`McpWriteAuditBehavior` 遇到 `IMcpConfirmedRequest` 會丟例外。C7 允許管理員把刪除移出高風險清單、改成一般寫入，到時要決定是讓確認請求在「不要求確認」時改走寫入稽核，還是另做一個不帶確認的請求。
+
 ## 8. 稽核與用量
 
 ### 8.1 稽核寫入點（對齊維運設計 §5.6）
@@ -450,14 +512,14 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 | 動作代碼 | `mcp.<工具名稱>`，例如 `mcp.query_records` |
 | 風險級別 | 唯讀／一般寫入／高風險 |
 | 目標 | 模組代碼、記錄 id；查詢類記回傳筆數與前 20 個記錄 id |
-| 摘要與差異 | 參數摘要：保留結構與代碼、拿掉欄位值，最多 2000 字；另存參數雜湊。寫入類的新舊值已在記錄歷程，不重複存 |
+| 摘要與差異 | 參數摘要：保留結構與代碼、拿掉欄位值，最多 2000 字；另存參數雜湊。寫入類的新舊值已在記錄歷程，不重複存。寫入、高風險、不存在工具的摘要逐參數去值：`values` 只留鍵、`details` 只留明細模組與列的鍵、標題／描述／內文／留言只記長度、`picks` 只記關卡與人數、日期只記有或清除；未列的鍵只記型別與長度（mcp2a） |
 | 預演關聯 | 確認 id 與結果（預演、已確認、逾時未確認、不符） |
 | 結果 | 成功、被拒（權限、範圍、速率、確認碼）、驗證錯誤、失敗，含原因代碼 |
-| 關聯 | request id、operation id（可串到事件事實與記錄歷程）、來源 IP、client 自報的名稱與版本（不可信）、耗時 |
+| 關聯 | request id、operation id（可串到事件事實；記錄歷程沒有 OperationId，隨票 #81）、來源 IP、client 自報的名稱與版本（不可信）、耗時 |
 
 - **寫不進稽核就不回資料**（fail closed，寫死）：
   - 唯讀工具：先用 `IAuditLog.WriteNowAsync` 寫稽核再回結果；它在寫不進去時丟 `AuditWriteException`，工具就回錯誤、不回資料。不用 `TryWriteNowAsync`（那是登入用的、失敗只記 log）。
-  - 寫入工具：成功時稽核與業務寫入在同一個交易，透過既有的 `IWriteStage` 機制以 `IAuditLog.Add` 寫入；業務失敗時交易已回滾，另以 `WriteNowAsync` 寫一筆失敗稽核（寫不進去只能記 Error log，業務本來就沒寫成）。
+  - 寫入工具：成功時稽核與業務寫入在同一個交易，由 `McpWriteAuditBehavior`（放在 `McpConfirmationBehavior` 之後、`AuditBehavior` 之前，只接手 MCP 通道最外層的 `IIdempotentRequest`）以 `IAuditLog.Add` 寫入，不走 `IWriteStage`（任務與留言不跑它，見 §7.3）；業務失敗時交易已回滾，另以 `WriteNowAsync` 寫一筆失敗稽核（寫不進去只能記 Error log，業務本來就沒寫成）。一次呼叫只能送一個寫入請求，第二個、或沒上膛的寫入請求一律丟例外（fail closed）；稽核寫不進去，業務寫入一併回滾。
   - `WriteNowAsync` 只能在交易外呼叫（維運設計 §17.2.1）：工具 handler 若是交易型請求，唯讀工具的稽核要在 handler 回傳之後、回應送出之前由 `/mcp` 的管線寫。
 - 權杖明文、確認碼明文、密碼一律不進稽核與 log（寫死）。
 - 保留天數沿用 `ops.auditRetentionDays`（O2，出廠 365 天），由 O1 的排程器清理。MCP 不另設保留政策。
@@ -606,7 +668,7 @@ mcp2 以後與 O3–O6 怎麼穿插，由主控依當時進度排定。mcp4 可�
 |---|---|---|---|
 | mcp1a | 後端地基：權杖資料表與 API、權杖認證、範圍、工具登記與分級、確認碼機制（以測試專用工具驗證）、稽核寫入點、速率限制、「不提供給 AI」欄位旗標的後端、12 個唯讀工具、MCP 類政策（§13.6） | p1（政策登記）、O1（排程器清理）、O2（稽核表）、pg0（兩種資料庫驗證）、a2c–a6（簽核查詢穩定）；排程上在 p2、p3 之後（使用者 2026-11-12 確認），技術上不依賴它們 | §13.8 的自動測試全過；用 Claude Code 與 Codex 實際連本機查到資料 |
 | mcp1b | 前端：個人「AI 存取權杖」頁、管理員「AI 連線」頁、設計器欄位旗標、政策頁分類（mcp1a 已做）、手冊章節（手冊 §24）；實作差異見 §13.5 末「mcp1b 實作回填」 | mcp1a | 四種寬度走查；從畫面建權杖→Claude Code 連上→撤銷後被拒 |
-| mcp2a | 一般寫入工具、冪等鍵；寫入迴圈偵測（依 C3 使用者裁決（2026-11-12）：同一權杖或來源反覆寫同一筆，政策 `ops.ruleLoopTriggersPerRecord`） | mcp1 | 對照測試：MCP 建立／修改的記錄與畫面建立的完全相同（含事件、檢查、歷程）；重送同一冪等鍵不重複寫 |
+| mcp2a | 一般寫入工具、冪等鍵（[mcp2a 計畫](../plans/2026-11-11-mcp-server-mcp2a.md)）；寫入迴圈偵測（依 C3 使用者裁決（2026-11-12）：同一權杖或來源反覆寫同一筆，政策 `ops.ruleLoopTriggersPerRecord`） | mcp1 | 對照測試：MCP 建立／修改的記錄與畫面建立的完全相同（含事件、檢查、歷程）；重送同一冪等鍵不重複寫 |
 | mcp2b | 高風險業務工具、`mcp.highRiskTools` 與「多選代碼」政策型別 | mcp2a | 刪除與簽核同意都要兩段式；目標版本改變後確認碼失效；管理員把刪除移出清單後改成一般寫入；地板項目移不出去（依 C7 使用者裁決（2026-11-12）） |
 | mcp3 | 設計器工具（另寫設計） | mcp2b | 用 AI 從零建一個兩模組的小應用程式，設計器畫面看到結果一致；套用套件走兩段式 |
 | mcp4 | OAuth 2.1：受保護資源中繼資料、內建授權伺服器、CIMD 與 DCR、同意頁、授權列在個人頁 | mcp1 | Claude.ai 自訂連接器與 ChatGPT developer mode 連上雲端測試站並查到資料；撤銷授權後被拒 |
@@ -893,6 +955,7 @@ mcp1a 的版本以 [mcp1a 計畫](../plans/2026-11-11-mcp-server-mcp1a.md)「實
 沿用其他文件的政策，不另設：
 
 - 稽核保留天數 `ops.auditRetentionDays`（維運 O2）。
+- 寫入迴圈偵測 `ops.ruleLoopTriggersPerRecord`（AI 寫入迴圈的次數，出廠 30，5–1000）與 `ops.ruleLoopWindowMinutes`（AI 寫入迴圈的時間窗，出廠 10 分鐘，1–1440；mcp2a D5 新增）（維運設計政策區，政策頁「維運」分類；C3）。
 - 廠商遠端維運（唯讀）開關 `ops.remoteDiagnosticsEnabled`（維運 O4／mcpO1；依 C1 使用者裁決（2026-11-12））。
 - 維運處置總開關 `ops.remoteActionsEnabled`（維運 O6／mcpO2）。
 - 營運時區 A17、預設語系 A18（政策設定 p3；p3 之前沿用 `IBusinessTime` 與目前的預設語系，B17）。
@@ -977,6 +1040,27 @@ mcp1a 的版本以 [mcp1a 計畫](../plans/2026-11-11-mcp-server-mcp1a.md)「實
 | 唯讀工具的 schema 列舉（任務分頁與篩選、報表期間種類、簽核匣）與 handler 的合法值同步；工具先驗、handler 仍會驗 | `ReadTools` | 技術限制（API 詞彙） |
 | 分頁工具的每頁上限沿用既有 request 的常數：記錄與歷程 200（`PagedRequest.MaxPagesSize`）、任務與簽核匣 100（`GetMyTasksRequest`／`GetApprovalTasksRequest.MaxPagesSize`） | `ReadTools` | 技術限制（單一來源） |
 | 錯誤結果放不下時去掉欄位明細、訊息截到 1,000 字 | `McpToolInvoker.ErrorMessageMax` | 技術限制 |
+
+**mcp2a 新增與落點（2026-11-22，[mcp2a 計畫](../plans/2026-11-11-mcp-server-mcp2a.md)「寫死清單」，逐條標性質；業務政策只有迴圈次數與時間窗兩項，出廠值與上下限只在 `PolicyCatalog`）**
+
+| 項目 | 常數位置 | 性質 |
+|---|---|---|
+| 7 個寫入工具、範圍 `business.write`、級別一般寫入 | `McpToolCatalog` | 平台功能清單 |
+| 可建立範圍加 `business.write`；預設勾選只有唯讀範圍 | `McpScopes.Issuable`、`McpScopes.DefaultChecked` | 平台功能清單（預設勾選依使用者 2026-11-21 裁決） |
+| 一次工具呼叫只能送一個最外層 `IIdempotentRequest`；寫入稽核與業務同交易；MCP 通道沒上膛的 `IIdempotentRequest` 丟例外；其他交易型請求放行 | `McpWriteAuditBehavior` | 安全、資料完整性 |
+| 稽核摘要不存寫入的值；寫入、高風險、不存在工具的摘要，未列的鍵只記型別與長度 | `McpAuditSummary` | 安全 |
+| 工具只從白名單參數逐欄組請求，`SystemKeys` 一律 null | `Tools/Write/*` | 安全 |
+| 寫入工具的 `idempotencyKey` 必填，格式沿用 `OperationContext.KeyPattern` | `McpArgs` | 資料完整性（技術限制） |
+| MCP 通道的冪等雜湊加通道後綴 | `IdempotencyBehavior` | 安全 |
+| 附件留言（`Files` 非空）不做請求層冪等 | `AddTaskCommentRequest.IdempotencyApplies` | 技術限制（`Stream` 不能可靠雜湊） |
+| 被遮欄位寫入時與隱藏欄位同語意（D1） | 既有 `RecordValueProcessor` | 安全 |
+| `ignoredFields` 不分原因、只涵蓋表頭 | `WriteTool` | 安全 |
+| `update_record` 不收明細列 `_delete`（D3） | `UpdateRecordTool` | 安全（mcp2b 重審） |
+| `update_task` 結果不給 `undoToken`（含回放） | `TaskWriteTools` | 安全 |
+| 迴圈只計成功且非回放的寫入；有冪等紀錄時不擋；寫事件失敗不影響回應 | `McpToolInvoker`、`McpUsage` | 技術限制 |
+| 迴圈事件標題只放代碼與數字 | `IncidentTitles.WriteLoop` | 安全（O2-T22） |
+| 工具參數的長度上限沿用既有 request 常數（任務標題、留言內文） | `McpTexts`（插值） | 技術限制（單一來源） |
+| 寫入工具 annotations：`destructiveHint` false、`idempotentHint` true | `McpSdkAdapter` | 技術限制 |
 
 ## 16. 主控判斷（待使用者確認；U11 已於 2026-11-12 確認）
 
@@ -1289,6 +1373,7 @@ builder 審查找出 7 題只有使用者能答、答案會改變要做什麼的
 - **選項**：1.（建議）迴圈偵測延到 mcp2a，對象改成「同一權杖或來源在時間窗內反覆寫同一筆記錄」。2. 照裁決字面在 O2 做。3. 連事件與檢查也暫停。
 - **選錯代價**：選 2 會寫出量不到東西的偵測器；選 3 有靜默壞帳的風險。選 1 的代價是 mcp2a 多一項工作。
 - **本文件依賴處**：§12 mcp2a 列。
+- **mcp2a 已實作**：處理方式見[計畫 D4](../plans/2026-11-11-mcp-server-mcp2a.md)（擋該權杖對該筆、開維運事件、時間窗滑過自動恢復；時間窗另設政策 `ops.ruleLoopWindowMinutes`，D5）；行為摘要見 §7.3。
 
 ### C4 L2 由維運中心 runbook 執行、不由 agent 執行（主體見維運設計 C4）
 

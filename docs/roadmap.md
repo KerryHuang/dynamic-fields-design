@@ -67,7 +67,7 @@
 | O4、mcpO1 | agent L1 唯讀診斷；產品端維運唯讀工具與維運服務帳號；相依：bk2 雲端隔離儲存 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | O5 | agent L3 修正 PR、CI gate | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | O6、mcpO2 | 雲端版 L2 自動處置；產品端維運處置工具 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
-| mcp2a | MCP 一般寫入工具、冪等鍵 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
+| mcp2a | MCP 一般寫入工具（7 個）、冪等鍵、寫入迴圈偵測（使用者 11-21 裁決：寫入範圍預設不勾、被遮欄位 AI 不能寫、歷程先不標經 AI） | 進行中：<br>mcp2a-1 至 mcp2a-4 已實作（範圍、寫入稽核與冪等、記錄與遮罩、任務與簽核、迴圈偵測）、文件回填與本機走查、實機驗收已完成，gate 與合併待做；沒有 migration | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12、[mcp2a 計畫](superpowers/plans/2026-11-11-mcp-server-mcp2a.md) |
 | mcp2b | MCP 高風險業務工具 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | mcp3 | MCP 設計器工具（開工前另寫設計） | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | mcp4 | MCP OAuth 2.1（Claude.ai、ChatGPT 連接器；可視雲端版第一個客戶的需求提前） | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |

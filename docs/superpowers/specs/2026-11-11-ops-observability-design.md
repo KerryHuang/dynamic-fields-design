@@ -248,7 +248,7 @@ Formwright 要賣成兩種版本：客戶自己裝的**地端安裝版**，和�
 
 - **連續失敗**：同一條規則在 `ops.rulePauseWindowMinutes` 內連續失敗達 `ops.rulePauseConsecutiveFailures` 次，中間沒有任何一次成功。建議出廠「60 分鐘內連續 5 次」（初稿「10 分鐘內 20 次」對 50 人以下的公司幾乎不會觸發，使用者會一直卡著）。
 - **失敗計數寫在業務交易之外**：存檔交易失敗會回滾，交易內寫的計數也會跟著消失；PostgreSQL 的交易失敗後整個交易都不能再用。所以計數在業務交易回滾之後，另開一個獨立的 DI scope 與交易寫入；這筆寫入失敗只記 Error log，不影響回給使用者的錯誤。
-- **迴圈偵測目前沒有對象**：任務規則產生的任務不會再觸發規則（任務不是動態記錄，任務設計 §5.4）；事件的循環在設計期擋下（`EventValidator.cs:67`），執行期有串聯深度上限（`EventStage.cs:23`）。唯一可能的來源是外部反覆寫同一筆記錄，例如 MCP mcp2a 上線後的 AI 寫入迴圈、整合。建議迴圈偵測延到 mcp2a 再做，對象改成「同一權杖或同一來源在時間窗內反覆寫同一筆記錄」；O2 不做，`ops.ruleLoopTriggersPerRecord` 也延到 mcp2a 登記。
+- **迴圈偵測目前沒有對象**：任務規則產生的任務不會再觸發規則（任務不是動態記錄，任務設計 §5.4）；事件的循環在設計期擋下（`EventValidator.cs:67`），執行期有串聯深度上限（`EventStage.cs:23`）。唯一可能的來源是外部反覆寫同一筆記錄，例如 MCP mcp2a 上線後的 AI 寫入迴圈、整合。建議迴圈偵測延到 mcp2a 再做，對象改成「同一權杖或同一來源在時間窗內反覆寫同一筆記錄」；O2 不做，`ops.ruleLoopTriggersPerRecord` 也延到 mcp2a 登記（mcp2a 已實作，另加時間窗政策 `ops.ruleLoopWindowMinutes`，見 [MCP 設計](2026-11-11-mcp-server-design.md) §7.3）。
 
 處理：
 
@@ -692,7 +692,8 @@ O1 的三項見 §10.6。以下是 O2–O6 的建議登記（代碼與出廠值�
 | `ops.incidentAutoResolveHours` | 缺陷類事件多久沒再出現就自動結案 | 72 | S | 1–720 | O2 |
 | `ops.rulePauseConsecutiveFailures` | 規則連續失敗幾次自動暫停（C3） | 5 | S | 3–1000 | O2 |
 | `ops.rulePauseWindowMinutes` | 連續失敗的計算時間窗（C3） | 60 | S | 1–1440 | O2 |
-| `ops.ruleLoopTriggersPerRecord` | 同一權杖或來源在時間窗內反覆寫同一筆記錄幾次視為迴圈（C3） | 30 | S | 5–1000 | mcp2a |
+| `ops.ruleLoopTriggersPerRecord` | 同一權杖或來源在時間窗內反覆寫同一筆記錄幾次視為迴圈（C3）；畫面名稱「AI 寫入迴圈的次數」 | 30 | S | 5–1000 | mcp2a（已實作） |
+| `ops.ruleLoopWindowMinutes` | 迴圈偵測的時間窗（分鐘；mcp2a D5 新增，不沿用 `ops.rulePauseWindowMinutes`，兩個各自調整）；畫面名稱「AI 寫入迴圈的時間窗」 | 10 | S | 1–1440 | mcp2a（已實作） |
 | `ops.configIssueRecipients` | 客戶設定類事件與規則自動暫停的收件人（B14） | 該規則的最後修改者＋全部系統管理員 | S | — | O2 |
 | `ops.alertRecipients` | 基礎設施、產品缺陷、安全事件的站內收件人（Email 收件信箱改在告警通道設定，§17.10.1 O2-U1） | 全部系統管理員 | S | — | O2 |
 | `ops.telemetryEnabled` | 地端版匿名錯誤回報（安裝時詢問，預設勾選） | 是 | S | — | O3 |
@@ -1062,7 +1063,7 @@ O2 做六件事：
 | 不做 | 留給 |
 |---|---|
 | 事件推送到維運中心、外部探測、匿名回報、新版本通知；雲端版由維運中心代寄 Email（U1） | O3 |
-| 規則的迴圈偵測、`ops.ruleLoopTriggersPerRecord`（C3） | mcp2a |
+| 規則的迴圈偵測、`ops.ruleLoopTriggersPerRecord`（C3） | mcp2a（已實作，另加 `ops.ruleLoopWindowMinutes`；事件代碼 `mcp.writeLoop`，客戶設定類、警告，見 [MCP 設計](2026-11-11-mcp-server-design.md) §7.3） |
 | PostgreSQL 的連線與鎖（`pg_stat_activity`、`pg_locks`）、慢查詢（`pg_stat_statements`）、`amcheck`；SQLite 的每週 `integrity_check`、EF 慢查詢攔截器（§8 表內其餘項目） | O4（mcpO1 的唯讀工具要讀這些統計時一起做；O2-U13） |
 | 維運唯讀與處置的 MCP 工具、維運服務帳號（只預留稽核的行為者種類） | O4（mcpO1）、O6（mcpO2） |
 | MCP 呼叫的稽核寫入點（O2 只建表與介面） | mcp1a |
@@ -1915,6 +1916,8 @@ failureStreak?: { consecutiveFailures: number; lastFailureUtc: string } | null; 
 | `ops.incidentAutoResolveHours` | 缺陷、客戶設定錯誤碼、安全事件多久沒再出現就自動結案 | 整數（時） | 72 | 1–720 |
 | `ops.rulePauseConsecutiveFailures` | 規則連續失敗幾次自動暫停（C3） | 整數（次） | 5 | 3–1000 |
 | `ops.rulePauseWindowMinutes` | 連續失敗的計算時間窗（C3） | 整數（分） | 60 | 1–1440 |
+| `ops.ruleLoopTriggersPerRecord` | AI 寫入迴圈的次數（mcp2a）：同一權杖在時間窗內修改同一筆記錄幾次就暫停它對這筆的寫入 | 整數（次） | 30 | 5–1000 |
+| `ops.ruleLoopWindowMinutes` | AI 寫入迴圈的時間窗（mcp2a） | 整數（分） | 10 | 1–1440 |
 | `ops.configIssueRecipients` | 客戶設定類事件與規則自動暫停的站內收件人（B14） | 收件人（另允許 `ruleEditor`） | `ruleEditor,admins` | 1–20 項 |
 | `ops.alertRecipients` | 基礎設施、產品缺陷、安全事件的站內收件人 | 收件人 | `admins` | 1–20 項 |
 | `ops.alertEmailCategories` | 哪些類別的事件寄告警信 | 多選（`infra`、`security`、`defect`、`config`） | `infra,security,defect` | — |
