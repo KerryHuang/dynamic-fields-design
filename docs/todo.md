@@ -6,5 +6,4 @@
 
 自動駕駛等 CI、部署、審查時的空檔候選：依賴已滿足、範圍小、可隨時暫停。每項寫目標與驗收｜依賴｜基準 SHA｜預計路徑｜資源｜可暫停點｜狀態｜owner；做完刪掉，從 GitHub 的 backlog 票（`stage:backlog`）挑新的補上，升上來的項目行尾寫票號（例 `#12`）。
 
-- 修正略過標記檢查註解引用的設計章節（a5d 複審 N5）：註解 §6.3 改 §6.1，build 過即可｜依賴：無｜基準 3c024feb｜backend/src（略過標記檢查處）｜CPU 輕｜任一 commit 後｜可開工｜未指派
 - 持續追蹤 vitest 在 jsdom 拆除後 Quasar 計時器觸發「window is not defined」：本機無法重現，根因未證實；已做局部修正（ApproverSourceEditor spec 每個測試後卸載元件，QSelect 卸載時清 filter／input 計時器），曾試全域包裝 setTimeout 但可能吞掉真實錯誤已撤。CI 再出現時看是哪個 spec、哪個計時器；其他用 QSelect use-input 的 spec 尚未處理
