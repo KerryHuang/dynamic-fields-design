@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>叫醒 Demo 中｜Formwright 表匠</title>
+<meta name="description" content="Formwright 表匠免註冊試玩 Demo，正在暖機，好了會自動帶你過去。">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&amp;family=Noto+Sans+TC:wght@400;500;700;900&amp;display=swap">
+<link rel="preconnect" href="https://formwright-demo.onrender.com">
+<link rel="stylesheet" href="assets/demo.css">
+</head>
+<body>
+<main class="wake" aria-labelledby="wake-h">
+  <a class="brand" href="./">
+    <img src="assets/mark.svg" width="32" height="32" alt=""><span>Formwright</span><b>表匠</b>
+  </a>
+
+  <div class="card">
+    <div class="blocks" aria-hidden="true">
+      <i class="b b1"></i><i class="b b2"></i><i class="b b3"></i><i class="b b4"></i>
+    </div>
+
+    <h1 id="wake-h" data-state="checking">正在連線 Demo…</h1>
+    <p class="lead" id="lead">看看它醒了沒。</p>
+
+    <div class="bar" aria-hidden="true"><span></span></div>
+    <p class="meta" role="status" aria-live="polite"><span id="elapsed">0</span> 秒<span id="hint"></span></p>
+
+    <p class="tip" id="tip">等的時候：Demo 每天凌晨自動還原，隨便改、隨便玩壞都沒關係。</p>
+
+    <a class="skip" id="skip" href="https://formwright-demo.onrender.com">不等了，直接打開 Demo</a>
+  </div>
+
+  <a class="back" href="./">← 回官網</a>
+</main>
+
+<noscript><p class="noscript">請直接打開 <a href="https://formwright-demo.onrender.com">Formwright Demo</a>。</p></noscript>
+
+<script>
+(function () {
+  var DEMO = 'https://formwright-demo.onrender.com';
+  var PROBE = DEMO + '/favicon.svg'; // 由 Demo 程式本身提供，載入得到就代表已開機
+  var FAST_MS = 1500;                // 這麼快回來就是本來就醒著，直接過去
+  var RETRY_MS = 3000;
+  var SLOW_S = 90;                   // 超過就提示可能有狀況
+  var tips = [
+    '等的時候：Demo 每天凌晨自動還原，隨便改、隨便玩壞都沒關係。',
+    '進去後按上方的示範帳號就能登入，不用註冊。',
+    '試試看：到設計器幫任何模組加一個欄位，存檔就上線。',
+    '為什麼要等？免費主機閒置一陣子會睡著，第一個訪客要負責叫醒它。'
+  ];
+  var h = document.getElementById('wake-h');
+  var lead = document.getElementById('lead');
+  var elapsedEl = document.getElementById('elapsed');
+  var hint = document.getElementById('hint');
+  var tipEl = document.getElementById('tip');
+  var started = Date.now();
+  var done = false;
+
+  function go() {
+    if (done) return;
+    done = true;
+    h.dataset.state = 'ready';
+    h.textContent = 'Demo 醒了！';
+    lead.textContent = '正在帶你過去…';
+    hint.textContent = '';
+    location.replace(DEMO);
+  }
+
+  function warming() {
+    h.dataset.state = 'warming';
+    h.textContent = 'Demo 正在暖機中';
+    lead.textContent = '免費主機閒置會睡著，叫醒它大約 30–60 秒。好了會自動帶你過去，這頁開著就好。';
+  }
+
+  function probe() {
+    if (done) return;
+    var t0 = Date.now();
+    var img = new Image();
+    img.onload = go;
+    img.onerror = function () { setTimeout(probe, Math.max(0, RETRY_MS - (Date.now() - t0))); };
+    img.src = PROBE + '?wake=' + t0;
+  }
+
+  setTimeout(function () { if (!done) warming(); }, FAST_MS);
+
+  var tipIdx = 0;
+  setInterval(function () {
+    if (done) return;
+    var s = Math.floor((Date.now() - started) / 1000);
+    elapsedEl.textContent = s;
+    if (s >= SLOW_S) hint.textContent = '　比平常久，可能正在更新版本；可以再等一下，或按下方直接打開。';
+    if (s > 0 && s % 8 === 0) { tipIdx = (tipIdx + 1) % tips.length; tipEl.textContent = tips[tipIdx]; }
+  }, 1000);
+
+  probe();
+})();
+</script>
+</body>
+</html>
