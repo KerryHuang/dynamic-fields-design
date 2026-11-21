@@ -1,0 +1,24 @@
+body{margin:0}
+@keyframes hlS1{0%,30%{opacity:1}34%,97%{opacity:0}100%{opacity:1}}
+@keyframes hlS2{0%,31%{opacity:0}35%,63%{opacity:1}67%,100%{opacity:0}}
+@keyframes hlS3{0%,64%{opacity:0}68%,96%{opacity:1}100%{opacity:0}}
+@keyframes hlShake{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg) translateY(-8px)}}
+@keyframes hlA{0%,33%{opacity:0;transform:translateX(-360px)}41%,100%{opacity:1;transform:none}}
+@keyframes hlB{0%,35%{opacity:0;transform:translateY(-320px)}43%,100%{opacity:1;transform:none}}
+@keyframes hlC{0%,37%{opacity:0;transform:translateX(360px)}45%,100%{opacity:1;transform:none}}
+@keyframes hlD{0%,42%{opacity:0;transform:translate(260px,220px) rotate(90deg)}50%,100%{opacity:1;transform:none}}
+@keyframes hlRow{0%,66%{opacity:0;transform:translateY(-24px)}72%,100%{opacity:1;transform:none}}
+@keyframes hlToast{0%,80%{opacity:0;transform:scale(.6)}84%{opacity:1;transform:scale(1.08)}86%,100%{opacity:1;transform:scale(1)}}
+.hl-s1{animation:hlS1 12s linear infinite}
+.hl-s2{animation:hlS2 12s linear infinite}
+.hl-s3{animation:hlS3 12s linear infinite}
+.hl-shake{animation:hlShake 1.4s ease-in-out infinite}
+.hl-a{animation:hlA 12s cubic-bezier(.2,.9,.3,1.2) infinite}
+.hl-b{animation:hlB 12s cubic-bezier(.2,.9,.3,1.2) infinite}
+.hl-c{animation:hlC 12s cubic-bezier(.2,.9,.3,1.2) infinite}
+.hl-d{animation:hlD 12s cubic-bezier(.2,.9,.3,1.2) infinite}
+.hl-row{animation:hlRow 12s ease-out infinite}
+.hl-toast{animation:hlToast 12s ease-out infinite}
+@media (prefers-reduced-motion: reduce){.hl-s1,.hl-s3,.hl-shake,.hl-s2,.hl-a,.hl-b,.hl-c,.hl-d,.hl-row,.hl-toast{animation:none!important}.hl-s1,.hl-s3{opacity:0}.hl-s2{animation:none!important;opacity:1}}
+body{margin:0;background:#1E2A44;overflow:hidden}
+.stage-fit{margin:0 auto;overflow:hidden}

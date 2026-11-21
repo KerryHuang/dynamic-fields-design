@@ -1,0 +1,8 @@
+body{margin:0}
+@keyframes pfShake{0%,100%{transform:translateX(0)}15%{transform:translateX(-5px)}30%{transform:translateX(5px)}45%{transform:translateX(-3px)}60%{transform:translateX(0)}}
+@keyframes pfPulse{0%,100%{box-shadow:0 0 0 0 rgba(47,128,237,.55)}50%{box-shadow:0 0 0 16px rgba(47,128,237,0)}}
+.pf-shake{animation:pfShake 2.4s ease-in-out infinite}
+.pf-pulse{animation:pfPulse 2.2s ease-out infinite}
+@media (prefers-reduced-motion: reduce){.pf-shake,.pf-pulse{animation:none!important}}
+body{margin:0;background:#1E2A44;overflow:hidden}
+.stage-fit{margin:0 auto;overflow:hidden}

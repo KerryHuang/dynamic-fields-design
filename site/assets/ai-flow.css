@@ -1,0 +1,6 @@
+body{margin:0}
+@keyframes afGlow{0%,100%{box-shadow:0 0 0 0 rgba(47,128,237,0)}10%,22%{box-shadow:0 0 0 8px rgba(47,128,237,.45)}}
+.af-glow{animation:afGlow 8s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.af-glow{animation:none!important}}
+body{margin:0;background:#1E2A44;overflow:hidden}
+.stage-fit{margin:0 auto;overflow:hidden}

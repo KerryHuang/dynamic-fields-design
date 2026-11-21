@@ -1,0 +1,17 @@
+body{margin:0;background:#FFFFFF}
+a{color:#1E2A44}a:hover{color:#1F64C2}
+@keyframes fwCycle{0%{opacity:0;transform:translateX(-18px)}8%{opacity:1;transform:none}86%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+@keyframes fwWobble{0%,100%{transform:rotate(-4deg) translateY(0)}50%{transform:rotate(4deg) translateY(-8px)}}
+@keyframes fwFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+@keyframes fwPulse{0%,100%{box-shadow:0 0 0 0 rgba(47,128,237,.55)}50%{box-shadow:0 0 0 18px rgba(47,128,237,0)}}
+@keyframes fwTravel{0%{left:0%}100%{left:calc(100% - 28px)}}
+@keyframes fwStep{0%,100%{background:#FFFFFF;transform:none}8%,22%{background:#FFD23F;transform:translateY(-6px)}}
+@keyframes fwShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-2px)}}
+.fw-cycle{animation:fwCycle 9s ease-out infinite both}
+.fw-wobble{animation:fwWobble 3.2s ease-in-out infinite}
+.fw-float{animation:fwFloat 3.6s ease-in-out infinite}
+.fw-pulse{animation:fwPulse 2.2s ease-out infinite}
+.fw-travel{animation:fwTravel 6s linear infinite}
+.fw-step{animation:fwStep 6s ease-in-out infinite}
+.fw-shake{animation:fwShake 1.6s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.fw-cycle,.fw-wobble,.fw-float,.fw-pulse,.fw-travel,.fw-step,.fw-shake{animation:none!important;opacity:1!important}}
