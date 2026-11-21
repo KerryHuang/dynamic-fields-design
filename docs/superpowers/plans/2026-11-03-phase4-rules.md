@@ -856,7 +856,6 @@ poc/frontend/src/
 - Create：
   - `poc/backend/tests/DynamicModules.WebAPITests/Phase4AcceptanceTests.cs`
   - `docs/acceptance/phase4.md`
-  - `docs/acceptance/phase4/*.png`
   - `docs/superpowers/plans/2026-11-03-phase4-rulings.md`
 - Modify：
   - `README.md`：加驗收連結。
@@ -908,5 +907,5 @@ poc/frontend/src/
   - **已結案的記錄**：打開編輯，整張表單唯讀。
   - **`floor01`**：表單照樣套用規則，看不到預估費用。
 
-  每個畫面截一張圖，存到 `docs/acceptance/phase4/`。結果記在 `phase4.md`，逐項標「通過」或「失敗」。
+  每個畫面截一張圖。結果記在 `phase4.md`，逐項標「通過」或「失敗」。
 - [ ] **Step 5：Commit**：`test: 第 4 階段驗收`

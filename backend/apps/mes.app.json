@@ -2169,12 +2169,12 @@
          "color": null
         },
         {
-         "code": "first-article",
+         "code": "final-inspect",
          "label": {
-          "zh-TW": "首件檢驗",
-          "en-US": "First article inspection",
-          "th": "ตรวจสอบชิ้นงานแรก",
-          "vi": "Kiểm tra sản phẩm đầu tiên"
+          "zh-TW": "成品檢驗",
+          "en-US": "Final inspection",
+          "th": "ตรวจสอบสินค้าสำเร็จรูป",
+          "vi": "Kiểm tra thành phẩm"
          },
          "color": null
         },
@@ -2445,12 +2445,12 @@
          "color": null
         },
         {
-         "code": "first-article",
+         "code": "final-inspect",
          "label": {
-          "zh-TW": "首件檢驗",
-          "en-US": "First article inspection",
-          "th": "ตรวจสอบชิ้นงานแรก",
-          "vi": "Kiểm tra sản phẩm đầu tiên"
+          "zh-TW": "成品檢驗",
+          "en-US": "Final inspection",
+          "th": "ตรวจสอบสินค้าสำเร็จรูป",
+          "vi": "Kiểm tra thành phẩm"
          },
          "color": null
         },

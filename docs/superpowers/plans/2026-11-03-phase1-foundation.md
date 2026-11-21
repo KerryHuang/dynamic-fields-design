@@ -691,5 +691,5 @@ public sealed class FieldTypeRegistry {
   8. 刪除記錄，確認它不在 paged 列表裡。
 - [ ] **Step 2：執行** `dotnet test poc/backend --filter Phase1_Scenario`，預期 PASS。如果失敗，修正對應任務的程式碼。
 - [ ] **Step 3：執行全部自動測試**：`dotnet test poc/backend` 和 `cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit`，預期全部通過。
-- [ ] **Step 4：實機走一遍**：執行 `poc/start.command`，在瀏覽器手動走完 Step 1 的同一個情境，包括設計器建模組、選單出現新模組、新增、編輯、明細、刪除。每個畫面截一張圖存到 `docs/acceptance/phase1/`，結果記在 `docs/acceptance/phase1.md`；手動步驟逐項標「通過」或「失敗」。
+- [ ] **Step 4：實機走一遍**：執行 `poc/start.command`，在瀏覽器手動走完 Step 1 的同一個情境，包括設計器建模組、選單出現新模組、新增、編輯、明細、刪除。每個畫面截一張圖，結果記在 `docs/acceptance/phase1.md`；手動步驟逐項標「通過」或「失敗」。
 - [ ] **Step 5：Commit** `test: 第 1 階段驗收`

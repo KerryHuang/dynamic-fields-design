@@ -726,7 +726,6 @@ poc/frontend/src/
 - Create：
   - `poc/backend/tests/DynamicModules.WebAPITests/Phase6AcceptanceTests.cs`
   - `docs/acceptance/phase6.md`
-  - `docs/acceptance/phase6/*.png`
   - `docs/superpowers/plans/2026-11-04-phase6-rulings.md`
 - Modify：
   - `README.md`：進度表第 6 列、文件表加入計畫與裁決。
@@ -783,7 +782,7 @@ poc/frontend/src/
   - `dotnet test poc/backend --filter Phase6_Scenario` → 通過。
   - `dotnet test poc/backend` → 全部通過，記下各專案數字。
   - `cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit && bunx quasar build` → 全部通過。
-- [ ] **Step 3：實機走查**（`poc/start.command`，Chrome），逐項截圖到 `docs/acceptance/phase6/`：
+- [ ] **Step 3：實機走查**（`poc/start.command`，Chrome），逐項截圖：
   1. 設計器：參照欄位勾「明細」、自動編號勾「在表頭內編號」、彙總欄位設定（來源、函數、欄位、條件）；模組清單標示明細模組。
   2. 訂單新增頁：明細表格加 3 列、存檔後明細頁顯示項次、金額與表頭的合計、稅額、總額。
   3. 編輯：改一列數量、刪一列、加一列，存檔後彙總更新、新列項次接續。

@@ -29,16 +29,16 @@
 
 2026-11-03 以 `./start.command` 啟動，在 Chrome 走模組 `p4walk`（P4 設備維修申請）。基本欄位（申請人、申請日、需求日、故障類別與細項、外包廠商、預估費用、狀態）和 `floor` 群組權限用 API 預先建好；公式、自動編號、標題欄位與 7 條規則都在設計器畫面上操作。
 
-| # | 項目 | 結果 | 截圖 |
-|---|---|---|---|
-| 1 | 設計器：建公式與自動編號欄位；錯誤的公式顯示錯誤訊息 | 通過 | 01、02 |
-| 2 | 設計器規則分頁：新增 Visibility、Required、ReadOnly、Validation、OptionFilter 五種規則，儲存後重新整理仍在 | 通過 | 03、04 |
-| 3 | 表單：選「外包」才出現外包廠商，且必填 | 通過 | 05、08 |
-| 4 | 表單：故障細項跟著故障類別變 | 通過 | 05、08 |
-| 5 | 表單：需求日早於申請日時，送出前就擋下 | 通過 | 06 |
-| 6 | 表單：存檔後顯示申請單號與天數 | 通過 | 07 |
-| 7 | 已結案的記錄：打開編輯，整張表單唯讀 | 通過 | 09 |
-| 8 | 切 `floor01`：表單照樣套用規則，看不到預估費用 | 通過 | 10 |
+| # | 項目 | 結果 |
+|---|---|---|
+| 1 | 設計器：建公式與自動編號欄位；錯誤的公式顯示錯誤訊息 | 通過 |
+| 2 | 設計器規則分頁：新增 Visibility、Required、ReadOnly、Validation、OptionFilter 五種規則，儲存後重新整理仍在 | 通過 |
+| 3 | 表單：選「外包」才出現外包廠商，且必填 | 通過 |
+| 4 | 表單：故障細項跟著故障類別變 | 通過 |
+| 5 | 表單：需求日早於申請日時，送出前就擋下 | 通過 |
+| 6 | 表單：存檔後顯示申請單號與天數 | 通過 |
+| 7 | 已結案的記錄：打開編輯，整張表單唯讀 | 通過 |
+| 8 | 切 `floor01`：表單照樣套用規則，看不到預估費用 | 通過 |
 
 逐項觀察：
 
@@ -57,21 +57,6 @@
 6. 需求日改成 2026-11-20 後儲存，明細頁標題與申請單號都是 `REP-202611-0001`，距需求日天數 10。第二筆是 `REP-202611-0002`。
 7. 編輯表單把狀態改成已結案時沒有立刻鎖住，儲存成功。重新打開編輯，頂端顯示 `此記錄目前不可修改`，沒有儲存鈕，所有輸入框都是唯讀。
 8. 切到現場人員（`floor01`）新增：沒有預估費用欄。選外包後外包廠商出現且必填，細項只剩委外修復。schema 裡引用預估費用的必填規則沒有送下來（API 確認：規則種類只有顯示、驗證、3 條選項限制、唯讀）。
-
-### 截圖
-
-| 檔案 | 內容 |
-|---|---|
-| [01-formula-error.png](phase4/01-formula-error.png) | 錯誤公式的訊息 |
-| [02-autonumber-editor.png](phase4/02-autonumber-editor.png) | 自動編號格式與即時範例 |
-| [03-rule-validation-fieldref.png](phase4/03-rule-validation-fieldref.png) | 驗證規則：任一符合＋比較另一個欄位 |
-| [04-rules-tab.png](phase4/04-rules-tab.png) | 重新整理後的規則清單 |
-| [05-form-outsource-visible.png](phase4/05-form-outsource-visible.png) | 選外包後出現外包廠商 |
-| [06-form-date-validation.png](phase4/06-form-date-validation.png) | 需求日早於申請日被擋 |
-| [07-detail-number-days.png](phase4/07-detail-number-days.png) | 明細頁的申請單號與天數 |
-| [08-form-option-out-of-range.png](phase4/08-form-option-out-of-range.png) | 上層改變後下層舊值不在範圍 |
-| [09-closed-record-readonly.png](phase4/09-closed-record-readonly.png) | 已結案記錄整張唯讀 |
-| [10-floor01-form.png](phase4/10-floor01-form.png) | 現場人員的表單 |
 
 ## 已知限制
 

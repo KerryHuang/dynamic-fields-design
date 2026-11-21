@@ -503,7 +503,7 @@ it('groups menu items by section, unsectioned under 自訂功能 first, sections
 
 **Files:**
 - Create: `poc/backend/tests/DynamicModules.WebAPITests/Phase7AcceptanceTests.cs`
-- Create: `docs/acceptance/phase7.md`、`docs/acceptance/phase7/*.png`
+- Create: `docs/acceptance/phase7.md`
 - Modify: `README.md`（進度表第 7 列、計畫與裁決連結）、`docs/manual.md`（歷程、匯出、匯入、預覽、選單分區各一節；已知限制）、spec §15（第 30 條標為第 7 階段已處理；新增本階段的已知限制）
 
 - [ ] **Step 1: 寫 `Phase7_Scenario`**（一個 WebAPI 測試走完整條路，沿用 `Phase6AcceptanceTests` 的寫法）：
@@ -515,7 +515,7 @@ it('groups menu items by section, unsectioned under 自訂功能 first, sections
   6. 把匯出檔改兩列後匯入預覽：一列選項打錯 → 錯誤在正確的行號；修正後確認匯入 → 建立 N 筆，每筆有自己的訂單編號與 `Create` 歷程。
   7. 刪掉被 SetNull 參照的記錄：來源記錄多一列 `Update` 歷程。
 - [ ] **Step 2: 跑全部測試**：`dotnet test poc/backend`、`cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit && bunx quasar build`。
-- [ ] **Step 3: 實機走查**（`poc/start.command`，Chrome）：選單分區、預覽分頁、明細頁歷程、匯出 CSV 用文字編輯器確認 BOM 與內容、匯出 xlsx、匯入預覽錯誤與確認。每項截圖存 `docs/acceptance/phase7/`。
+- [ ] **Step 3: 實機走查**（`poc/start.command`，Chrome）：選單分區、預覽分頁、明細頁歷程、匯出 CSV 用文字編輯器確認 BOM 與內容、匯出 xlsx、匯入預覽錯誤與確認。
 - [ ] **Step 4: 寫 `docs/acceptance/phase7.md`**（格式照 `phase6.md`：自動測試表、情境、走查表、截圖表、已知限制、裁決連結），更新 README、手冊、spec §15。
 - [ ] **Step 5: Commit** `docs: 第 7 階段驗收、手冊與 spec 已知限制`
 

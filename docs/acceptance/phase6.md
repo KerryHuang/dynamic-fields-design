@@ -64,17 +64,17 @@
 
 `sales` 群組對 `p6-order` 有讀取、新增、修改，範圍本人，沒有金額權限。
 
-| # | 項目 | 結果 | 截圖 |
-|---|---|---|---|
-| 1 | 設計器：參照欄位選「明細」、自動編號「在表頭內編號」、彙總欄位設定；模組清單標示明細模組 | 通過 | 01、03、04、05 |
-| 2 | 訂單新增頁加 3 列明細，存檔後明細頁顯示項次、金額與表頭的合計、稅額、總額 | 通過 | 06、07 |
-| 3 | 編輯：改一列數量、刪一列、加一列，存檔後彙總更新、新列項次接續 | 通過 | 08 |
-| 4 | 明細列驗證錯誤顯示在那一格 | 通過 | 09 |
-| 5 | 已結案的訂單：表單與明細表格都唯讀 | 通過 | 10 |
-| 6 | 切成 `sales01`：看不到單價、金額、合計欄位 | 通過 | 13 |
-| 7 | 維修申請的「總工時」在新增維修紀錄後更新 | 通過 | 14 |
-| 8 | 下拉選單打字篩選：設計器欄位型別、身分切換、公式「插入欄位」、權限「新增使用者」 | 通過 | 02、11、12 |
-| 9 | 明細模組的權限分頁只剩欄位例外與選項範圍 | 通過 | 15 |
+| # | 項目 | 結果 |
+|---|---|---|
+| 1 | 設計器：參照欄位選「明細」、自動編號「在表頭內編號」、彙總欄位設定；模組清單標示明細模組 | 通過 |
+| 2 | 訂單新增頁加 3 列明細，存檔後明細頁顯示項次、金額與表頭的合計、稅額、總額 | 通過 |
+| 3 | 編輯：改一列數量、刪一列、加一列，存檔後彙總更新、新列項次接續 | 通過 |
+| 4 | 明細列驗證錯誤顯示在那一格 | 通過 |
+| 5 | 已結案的訂單：表單與明細表格都唯讀 | 通過 |
+| 6 | 切成 `sales01`：看不到單價、金額、合計欄位 | 通過 |
+| 7 | 維修申請的「總工時」在新增維修紀錄後更新 | 通過 |
+| 8 | 下拉選單打字篩選：設計器欄位型別、身分切換、公式「插入欄位」、權限「新增使用者」 | 通過 |
+| 9 | 明細模組的權限分頁只剩欄位例外與選項範圍 | 通過 |
 
 逐項觀察：
 
@@ -112,26 +112,6 @@
      - 輸入框清空，再打開時是完整清單。Task 9b 審查指出的「選完殘留文字」在瀏覽器裡沒有出現。
    - 權限分頁的「新增使用者」打「業務二」、選取後，輸入框同樣清空。
 9. **明細模組的權限分頁**：頂端說明「明細模組的權限沿用表頭模組，這裡只能設定欄位例外與選項範圍」，沒有群組與個人的權限矩陣。
-
-截圖：
-
-| 截圖 | 內容 |
-|---|---|
-| [01-module-list-detail-marker.png](phase6/01-module-list-detail-marker.png) | 01：模組清單標示明細模組 |
-| [02-select-filter-field-type.png](phase6/02-select-filter-field-type.png) | 02：欄位型別選單打字篩選 |
-| [03-designer-detail-relation.png](phase6/03-designer-detail-relation.png) | 03：參照欄位選「明細」 |
-| [04-designer-autonumber-scope-parent.png](phase6/04-designer-autonumber-scope-parent.png) | 04：自動編號「在表頭內編號」 |
-| [05-designer-rollup-settings.png](phase6/05-designer-rollup-settings.png) | 05：彙總欄位設定 |
-| [06-new-order-detail-grid.png](phase6/06-new-order-detail-grid.png) | 06：新增訂單時逐列填明細 |
-| [07-order-detail-page-totals.png](phase6/07-order-detail-page-totals.png) | 07：明細頁的項次、金額與合計 |
-| [08-edit-rows-rollup-updated.png](phase6/08-edit-rows-rollup-updated.png) | 08：改、刪、加列後彙總更新 |
-| [09-detail-cell-error.png](phase6/09-detail-cell-error.png) | 09：明細格的驗證錯誤 |
-| [10-closed-order-readonly.png](phase6/10-closed-order-readonly.png) | 10：已結案訂單整張唯讀 |
-| [11-identity-select-no-match.png](phase6/11-identity-select-no-match.png) | 11：沒有符合的選項 |
-| [12-identity-select-filter.png](phase6/12-identity-select-filter.png) | 12：身分選單打字篩選 |
-| [13-sales01-no-pricing-columns.png](phase6/13-sales01-no-pricing-columns.png) | 13：sales01 看不到金額相關欄位 |
-| [14-lookup-rollup-total-hours.png](phase6/14-lookup-rollup-total-hours.png) | 14：維修申請的總工時 |
-| [15-detail-permissions-inherited.png](phase6/15-detail-permissions-inherited.png) | 15：明細模組的權限分頁 |
 
 ## 已知限制
 

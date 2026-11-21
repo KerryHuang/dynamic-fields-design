@@ -17,11 +17,11 @@
 | 供應商 | 1：進銷存 `inv-supplier`（但同一家公司可能既是客戶又是供應商，沒有辦法表達） |
 | 聯絡人 | CRM `crm-contact`（掛在 CRM 客戶下），加上進銷存客戶與供應商用文字欄位 `contact` 存聯絡人 |
 | 品項 | CRM `crm-product`（欄位 `sku`、`price`）、進銷存 `inv-item`（`category`、`price`、`safetyStock`）、MES 報價明細／訂單明細／工令用文字欄位 `itemNo`、`itemName` |
-| 設備 | 核心模擬 `design.equipment`，MES 以擴充模組 `mes-equipment-info` 加欄位 |
+| 設備 | 核心模擬設備模擬實體，MES 以擴充模組 `mes-equipment-info` 加欄位 |
 
 幾個值得注意的點：
 
-- 核心裡寫死的 `sales.customer`、`design.equipment`（`MockCustomerProvider`、`MockEquipmentProvider`、兩張 `Mock_*` 表、`DemoPeople` 種子）是 POC 遺留，違反鐵則 1「ERP 邏輯不寫死」。
+- 核心裡寫死的 `sales.customer`、設備模擬實體（`MockCustomerProvider`、設備模擬提供者、兩張 `Mock_*` 表、`DemoPeople` 種子）是 POC 遺留，違反鐵則 1「ERP 邏輯不寫死」。
 - 「品項價格」在進銷存是同一個欄位 `price`，採購明細和出貨明細都從它帶值（`item.price`）：採購時它是進價，出貨時它是售價，語意混在一起。這是拆主檔時要順手釐清的（§5.3、§12.4）。
 - MES 與進銷存各有一張出貨單、MES 與 CRM 各有一套報價和訂單。這是 s2e 的範圍，這份設計只負責讓它們**共用同一份客戶與品項**，使 s2e 能直接動手（§14）。
 
@@ -32,7 +32,7 @@
 1. 往來對象（客戶、供應商、聯絡人）合成一份，品項合成一份；各應用程式只在這一份上加自己的欄位。
 2. 每個應用程式仍能單獨開關；空系統仍是合法起點，**主檔不是平台必裝**，只在有應用程式需要它時才出現。
 3. 核心不寫死任何主檔：主檔本身也是用套件格式描述的定義，核心只補通用能力。
-4. 移除 `sales.customer`、`design.equipment` 模擬實體；設備改為 MES 自己的模組。
+4. 移除 `sales.customer` 與設備兩個模擬實體；設備改為 MES 自己的模組。
 
 **不做：**
 
@@ -387,9 +387,9 @@ CRM 的「潛在客戶轉客戶」現在建立 `crm-customer`。改成建立 `pa
 
 **相依檢查要排除自己的貢獻欄位：** 現行 `AppDependencyChecker.DependentsOfAsync` 逐一查「誰有參照欄位指向 A 的成員模組」，並把那個欄位所在模組的應用程式算成 A 的依賴者（`AppDependencyChecker.cs` 約 65 行）。CRM 貢獻的 `fromLead` 放在主檔 `partner` 上、指向 CRM 的 `lead`，照現行邏輯主檔會被算成 CRM 的依賴者，關閉 CRM 時要求 cascade，連帶關閉主檔，主檔關閉又讓進銷存失去主檔。改法：比照現行排除整合欄位的做法，把**A 自己貢獻的欄位**（A 名下含 `/` 的對照列）從入向參照中排除；關閉與刪除都排除，因為關閉時它們跟著凍結，刪除時依上面第 4 點一起清除。主檔不得因 A 的貢獻被要求 cascade 關閉。`requires.masters` 不算進「誰依賴 A」：主檔的狀態由不變式驅動、不走使用者的相依檢查流程，關閉 A 時不需要使用者決定主檔，所以不產生新的 `cascade` 提示。
 
-## 8. 資料模型（migration：s2d-0 的 `RemoveMockEquipment`、s2d-1 的 `SharedMasters`）
+## 8. 資料模型（migration：s2d-0 移除設備模擬表、s2d-1 的 `SharedMasters`）
 
-只走 EF migration，沒有執行期 DDL。s2d-0 自帶一個只移除 `Mock_Equipment` 的 migration `RemoveMockEquipment`；其餘異動都在 s2d-1 的 `SharedMasters`（第二輪準備度 1，主控裁決，待使用者確認）。
+只走 EF migration，沒有執行期 DDL。s2d-0 自帶一個只移除設備模擬表的 migration；其餘異動都在 s2d-1 的 `SharedMasters`（第二輪準備度 1，主控裁決，待使用者確認）。
 
 | 異動 | 內容 |
 |---|---|
@@ -401,7 +401,7 @@ CRM 的「潛在客戶轉客戶」現在建立 `crm-customer`。改成建立 `pa
 | 新表 `Dynamic_FieldGrant` | 貢獻欄位的可見群組（§6），代理主鍵 |
 | 新表 `Dynamic_AppOrphan` | 已刪除貢獻者留下的欄位、選項、區塊（§7 刪除第 5、6 點），唯一鍵（`FormerAppKey`, `Kind`, `Name`） |
 | 欄位新增 `VisibilityRestricted` | 布林，預設否 |
-| 移除 | s2d-0：`Mock_Equipment`；s2d-1：`Mock_Customer`（§11.4） |
+| 移除 | s2d-0：設備模擬表；s2d-1：`Mock_Customer`（§11.4） |
 
 **貢獻的所有權：** 貢獻者的 `AppId` 加上名稱 `<主檔 id>/<模組代號>.<欄位代號>`（選項是 `<主檔 id>/<模組代號>.<選項代號>`），含 `/` 的就是貢獻列，外鍵 cascade 照舊。第一輪的「因關閉停用」旗標隨備案取消（§7），不加。設計器在主檔上新增的欄位、選項、區塊也在建立時寫對照列，名稱用持久代號（§5.4）。
 
@@ -527,12 +527,12 @@ Demo 每次部署重建，正式客戶尚未上線，所以**不寫舊資料庫�
 
 | 現有 | 新做法 |
 |---|---|
-| `requires.entities`：`sales.customer`、`design.equipment` | s2d-0 移除 `design.equipment`；s2d-1 移除 `sales.customer` 後清空，改 `requires.masters`：`partner`、`item` |
+| `requires.entities`：`sales.customer`、設備模擬實體 | s2d-0 移除設備模擬實體；s2d-1 移除 `sales.customer` 後清空，改 `requires.masters`：`partner`、`item` |
 | 擴充模組 `mes-customer-info`（`sales.customer`） | 移除；`creditLevel`、`website` 變貢獻欄位（區塊「MES」）；`paymentTerms`（併入 `salesPaymentTerms`）、`accountRep`（併入 `owner`）、`phone`、`email` 併入基本欄位 |
 | `mes-quote.customer`、`mes-order.customer`、`mes-shipment.customer`（實體參照） | 改指 `partner`（守衛：客戶） |
 | 報價明細、訂單明細、工令的 `itemNo`／`itemName` 文字 | 新增 `item` 參照（工令與訂單明細必填，報價明細選填，見 §17 問題 1）；`itemNo`、`itemName` 保留為帶值（`fill` 預設，可改），列印與報表不用動 |
-| 擴充模組 `mes-equipment-info`（`design.equipment`） | 移除；改為 MES 自己的模組 `mes-equipment`「設備資料」（只有 MES 用，不共用）：`no` 設備編號（文字，必填）、`name` 名稱（標題、必填），加上原擴充欄位 `lastCareDate`、`cycleDays`、`runHours`（放「維護」區塊） |
-| `mes-repair.equipment`、`mes-equipment-care.equipment`（實體參照 `design.equipment`） | 改為模組參照 `equipment` |
+| 擴充模組 `mes-equipment-info`（設備模擬實體） | 移除；改為 MES 自己的模組 `mes-equipment`「設備資料」（只有 MES 用，不共用）：`no` 設備編號（文字，必填）、`name` 名稱（標題、必填），加上原擴充欄位 `lastCareDate`、`cycleDays`、`runHours`（放「維護」區塊） |
+| `mes-repair.equipment`、`mes-equipment-care.equipment`（實體參照設備模擬實體） | 改為模組參照 `equipment` |
 | 整合 `stockOut` | JSON：`stockItem` 的 `refTarget` 改為 `{ "key": "item", "app": "item" }`，`with[].modules` 移除 `item`。核心：驗證、目錄對帳、`IntegrationWorld`、`ConfigOf` 改成可解析主檔目標（§10） |
 
 ### 11.3 進銷存（`inventory`）
@@ -548,10 +548,10 @@ Demo 每次部署重建，正式客戶尚未上線，所以**不寫舊資料庫�
 ### 11.4 核心與測試
 
 - **移除，分兩段**（第二輪準備度 1，主控裁決，待使用者確認）：
-  - s2d-0：`MockEquipmentProvider`、`MockEquipment`、`MockConfigurations` 裡設備的設定、`DependencyInjection` 的設備註冊、`DemoPeople` 的設備種子與衝突檢查；migration `RemoveMockEquipment` 只刪 `Mock_Equipment`。
+  - s2d-0：設備模擬提供者、設備模擬類別、`MockConfigurations` 裡設備的設定、`DependencyInjection` 的設備註冊、`DemoPeople` 的設備種子與衝突檢查；移除設備模擬表的 migration 只刪這張表。
   - s2d-1：`MockCustomerProvider`、`MockCustomer`、`MockConfigurations` 剩下的部分（檔案隨之移除）、`DependencyInjection` 的客戶註冊、`DemoPeople` 的客戶種子與衝突檢查；`Mock_Customer` 在 `SharedMasters` 刪除。
 - **保留機制：** `IReferenceProvider`、`/entities`、擴充模組（`Kind = Extension`）是給「外部系統既有實體」的核心能力，不隨模擬實體移除。
-- **測試：** 目前有約 30 個測試檔使用 `sales.customer`／`design.equipment` 當夾具（`ExtensionModuleTests`、`ReferenceReadTests`、`EntitiesApiTests`、`Phase5`～`Phase7AcceptanceTests`、`TemplateValidatorTests` 等）。改為**只在測試專案註冊**的測試用實體提供者（命名為與業務無關的 `test.entity`、`test.host`），產品程式碼不留任何模擬實體。s2d-0 建立測試用提供者，並只改用到 `design.equipment` 的夾具；用到 `sales.customer` 的夾具在 s2d-1 改。這是實作時最大的機械性工作量，每段各自單獨一個 commit。
+- **測試：** 目前有約 30 個測試檔使用 `sales.customer`／設備模擬實體當夾具（`ExtensionModuleTests`、`ReferenceReadTests`、`EntitiesApiTests`、`Phase5`～`Phase7AcceptanceTests`、`TemplateValidatorTests` 等）。改為**只在測試專案註冊**的測試用實體提供者（命名為與業務無關的 `test.entity`、`test.host`），產品程式碼不留任何模擬實體。s2d-0 建立測試用提供者，並只改用到設備模擬實體的夾具；用到 `sales.customer` 的夾具在 s2d-1 改。這是實作時最大的機械性工作量，每段各自單獨一個 commit。
 - **舊範本夾具**（`tests/Fixtures/templates/*.json`，引用 `sales.customer`）：同樣改指測試用實體。
 - **`NoBusinessWordsTests`：** 新增的核心程式不得出現業務名詞，用 master、contribution、binding 這類詞。
 
@@ -685,7 +685,7 @@ s2d 完成時，報價單、訂單、出貨單仍是兩套並存（s2e 才合併
 
 | 段 | 內容 | 驗收 |
 |---|---|---|
-| s2d-0 設備歸位 | MES 自有模組 `mes-equipment`、移除 `design.equipment`、`MockEquipmentProvider`；migration `RemoveMockEquipment`；設備相關夾具改測試專用實體提供者 | MES 單開仍可開啟；設備保養、報修、Demo 正常；既有測試全綠 |
+| s2d-0 設備歸位 | MES 自有模組 `mes-equipment`、移除設備模擬實體、設備模擬提供者；移除設備模擬表的 migration；設備相關夾具改測試專用實體提供者 | MES 單開仍可開啟；設備保養、報修、Demo 正常；既有測試全綠 |
 | s2d-1 核心能力＋往來對象與聯絡人 | 開頭先做可行性驗證（§15.1）；格式 6、主檔套件、`requires.masters`、`contributions`、生命週期、資料表；`partner`、`contact` 主檔；CRM、進銷存、MES 改用；移除 `sales.customer`、`MockCustomerProvider` 與客戶夾具；Demo | §15 的測試清單中與往來對象有關的全部；四種版型實機 |
 | s2d-2 品項 | `item` 主檔；CRM、進銷存、MES 改用品項；`stockOut` 整合調整（含整合解析主檔目標的核心改動，§10）；Demo | 同上，加上價格／進價拆分的行為測試 |
 
@@ -777,7 +777,7 @@ s2c 的 `stockOut` 整合讓 MES 出貨扣進銷存庫存。s2d 不改兩張出�
 - 往來對象與聯絡人行為：`refGuard` 限制客戶／供應商；角色為兩者的可被銷售與採購單據挑選；聯絡人必填所屬公司，出現在公司的反向關聯分頁；只開進銷存或只開 CRM 時聯絡人主檔自動出現，只開 MES 時不出現。
 - 品項行為：採購明細從 `cost` 帶值、出貨明細從 `price` 帶值；MES 工令選品項後 `itemNo`／`itemName` 帶值且可改；`supplyType` 必填（沒選不能存）；Demo 種子每個品項都有 `supplyType`。
 - 整合解析主檔目標（s2d-2）：MES 套件的 `stockOut` 指向 `item/item`、`with` 不列品項 → 驗證與目錄對帳通過；MES＋進銷存開啟後 `stockItem` 狀態不是 `unbound`、不產生 `Waiting`，MES 出貨扣得到進銷存庫存。
-- 設備：MES 單開可開啟；保養、報修的設備參照；`design.equipment` 不再出現在 `/entities`。
+- 設備：MES 單開可開啟；保養、報修的設備參照；設備模擬實體不再出現在 `/entities`。
 - 既有測試：`MesAppEquivalenceTests` 白名單、`DemoStructure`、`DemoGeneration`、`SeedDataTests`、`NoBusinessWordsTests`、`EntitiesApiTests` 等同步更新；**最後完整全跑一次**。
 - 公開 repo 掃描：程式、文件、commit message 不得出現公司名稱、個人絕對路徑、內網 IP。
 
@@ -785,7 +785,7 @@ s2c 的 `stockOut` 整合讓 MES 出貨扣進銷存庫存。s2d 不改兩張出�
 
 ### 15.3 實作順序
 
-1. s2d-0：設備歸位、migration `RemoveMockEquipment`、設備相關測試夾具（獨立 commit 群，不等可行性驗證）。
+1. s2d-0：設備歸位、移除設備模擬表的 migration、設備相關測試夾具（獨立 commit 群，不等可行性驗證）。
 2. s2d-1 開頭：可行性驗證（§15.1 的 1～7、9、11、12、14～17；#10 已在 s2d-0 用到）。#4、#7、#14、#16 走備案前先回報。
 3. 資料表與 migration `SharedMasters`（`Dynamic_AppOrphan` 的 `Kind` 與唯一索引已在 §8 定案，產生前照它建）；格式 6 與驗證。
 4. 主檔套件讀取；`AppOpener` 自動開啟與綁定、主檔狀態重算；貢獻實例化與區塊排序；權限來源記錄、逐動作範圍與重算、貢獻欄位限定可見與手動授予。
@@ -925,7 +925,7 @@ s2c 的 `stockOut` 整合讓 MES 出貨扣進銷存庫存。s2d 不改兩張出�
 | 建議 5 | 區塊順序依開啟順序 | 基本區塊在前，貢獻區塊依應用程式 id | §4.3、§11.5、§15.2、§16 #29 |
 | 建議 6 | 刪除再重開不接回舊資料 | 依應用程式 id＋代號接回孤兒 | §6、§7 刪除第 5、6 點、§8、§12.6、§15.2、§16 #4、§18 #11、§19 |
 | 建議 7 | 循環檢查沒納入主檔的邊 | `requires.masters` 納入匯入與目錄載入的相依圖 | §4.2、§9、§15.2 |
-| 準備度 1 | s2d-0 邊界與 migration 衝突 | s2d-0 只做設備，自帶 `RemoveMockEquipment`；客戶移到 s2d-1；驗證放 s2d-1 開頭 | §8、§11.2、§11.4、§13、§15.3 |
+| 準備度 1 | s2d-0 邊界與 migration 衝突 | s2d-0 只做設備，自帶移除設備模擬表的 migration；客戶移到 s2d-1；驗證放 s2d-1 開頭 | §8、§11.2、§11.4、§13、§15.3 |
 | 準備度 2 | 兩張新表的鍵在 EF Core 不可行 | 代理主鍵、`SourceKind`、篩選式唯一索引 | §8、§16 #28 |
 | 準備度 3 | 手動授予可見沒有入口 | 掛在既有模組權限 API 與欄位存取區 | §6、§15.2、§16 #27 |
 | 準備度 4 | `supplyType` 沒落到遷移與 Demo | 必填、Demo 逐筆指定、只有 `make` 建工令 | §5.3、§11.1、§11.5、§14.1、§15.2、§16 #26 |
