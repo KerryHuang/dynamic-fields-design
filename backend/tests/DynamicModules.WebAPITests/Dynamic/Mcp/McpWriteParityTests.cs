@@ -18,6 +18,7 @@ namespace DynamicModules.WebAPITests.Dynamic.Mcp;
 /// 造模：單據模組有自動編號、公式、負責人、跨記錄檢查（同品項金額加總 ≥ 0）、建立時與修改時各一個有條件的事件效果（在異動模組新增一筆）、
 /// 建立時的任務規則，以及一個明細模組。權限照 <c>McpParityTests.SetSales</c> 的寫法。
 /// 任務與留言（Task 6）：三種建法、改狀態負責人到期日、留言提及，比對任務欄位、參與者、系統事件與通知（收件人與種類）。
+/// 送簽與撤回（Task 7）：比對實例、關卡、簽核任務、簽核歷程、通知，以及送簽後記錄換了新的 RowVersion。
 /// </summary>
 [Trait("Category", "Postgres")]
 public class McpWriteParityTests : IAsyncLifetime
@@ -411,5 +412,52 @@ public class McpWriteParityTests : IAsyncLifetime
         var shape = TaskShape(a);
         shape.Should().Contain("sales02/Mentioned");
         TaskShape(b).Should().Be(shape);
+    }
+
+    // ───────── 送簽與撤回（Task 7）─────────
+
+    private string RowVersionOf(long id) => Query(_app, db => db.Set<Record>().Single(r => r.Id == id).RowVersion);
+
+    [Fact]
+    public async Task Submit_SameAsRest()
+    {
+        var rig = await McpApprovalKit.ArrangeAsync(_app, _admin);
+        var (a, rvA) = await McpApprovalKit.NewRecord(_rest, rig, "送簽單");
+        var (b, rvB) = await McpApprovalKit.NewRecord(_rest, rig, "送簽單");
+
+        var rest = await McpApprovalKit.RestSubmit(_rest, rig, a, rvA);
+        rest.StatusCode.Should().Be(HttpStatusCode.Created, await rest.Content.ReadAsStringAsync());
+        var mcp = Data(await Mcp("submit_approval", new { recordId = b, to = rig.Done, rowVersion = rvB, idempotencyKey = NewIdem() }));
+
+        var shape = McpApprovalKit.Shape(_app, a);
+        shape.Should().Contain($"|{User}|").And.Contain("submit/" + User);
+        McpApprovalKit.Shape(_app, b).Should().Be(shape);
+        mcp.GetProperty("outcome").GetString().Should().Be((await JsonOf(rest)).GetProperty("outcome").GetString());
+        RowVersionOf(b).Should().NotBe(rvB, "送簽換了記錄的 RowVersion").And.Be(mcp.GetProperty("recordRowVersion").GetString());
+        RowVersionOf(a).Should().NotBe(rvA);
+    }
+
+    [Fact]
+    public async Task Withdraw_SameAsRest()
+    {
+        var rig = await McpApprovalKit.ArrangeAsync(_app, _admin);
+        var (a, rvA) = await McpApprovalKit.NewRecord(_rest, rig, "撤回單");
+        var (b, rvB) = await McpApprovalKit.NewRecord(_rest, rig, "撤回單");
+        (await McpApprovalKit.RestSubmit(_rest, rig, a, rvA)).StatusCode.Should().Be(HttpStatusCode.Created);
+        (await McpApprovalKit.RestSubmit(_rest, rig, b, rvB)).StatusCode.Should().Be(HttpStatusCode.Created);
+        var ca = await McpApprovalKit.Current(_rest, a);
+        var cb = await McpApprovalKit.Current(_rest, b);
+
+        var rest = await _rest.PostAsJsonAsync($"{Base}/approval-instances/{ca.GetProperty("id").GetInt64()}/withdraw",
+            new { rowVersion = ca.GetProperty("rowVersion").GetString(), comment = "改日再送" });
+        rest.StatusCode.Should().Be(HttpStatusCode.OK, await rest.Content.ReadAsStringAsync());
+        Data(await Mcp("withdraw_approval", new
+        {
+            instanceId = cb.GetProperty("id").GetInt64(), rowVersion = cb.GetProperty("rowVersion").GetString(), comment = "改日再送", idempotencyKey = NewIdem(),
+        }));
+
+        var shape = McpApprovalKit.Shape(_app, a);
+        shape.Should().Contain("instance withdrawn").And.Contain($"withdraw/{User}/改日再送").And.Contain("/approvalWithdrawn");
+        McpApprovalKit.Shape(_app, b).Should().Be(shape);
     }
 }

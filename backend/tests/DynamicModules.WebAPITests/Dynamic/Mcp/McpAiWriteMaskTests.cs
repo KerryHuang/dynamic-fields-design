@@ -321,6 +321,32 @@ public class McpAiWriteMaskTests : IAsyncLifetime
         Text(Stored(id), _secret).Should().Be("畫面新值");
     }
 
-    [Fact(Skip = "送簽工具在 Task 7（mcp2a-3）；完成後補：標題樣板含被遮欄位時 MCP 送簽成功、get_record_approval 的標題快照照 mcp1a Q7 是空字串")]
-    public Task Approval_Submit_MaskedTitleTemplate() => Task.CompletedTask;
+    /// <summary>
+    /// 標題樣板含被遮欄位：MCP 送簽照常成功（簽核引擎讀資料庫的值，不受通道遮罩影響），送簽結果不帶被遮的值；
+    /// get_record_approval 的標題快照照 mcp1a Q7 是空字串，同一位使用者在畫面上看得到完整快照。
+    /// </summary>
+    [Fact]
+    public async Task Approval_Submit_MaskedTitleTemplate()
+    {
+        const string secret = "機密-8K2P";
+        var rig = await McpApprovalKit.ArrangeAsync(_app, _admin, module: _doc);
+        var titleId = long.Parse(_title[2..]);
+        Db(_app, db => db.Set<Module>().Single(m => m.Key == _doc).TitleTemplate = $"{{{titleId}}}-{{{_secretId}}}");
+        var values = Full("樣板單");
+        values[_secret] = secret;
+        var created = await RestCreate(values);
+        var id = created.GetProperty("id").GetInt64();
+        Query(_app, db => db.Set<Record>().Single(r => r.Id == id).Title).Should().Contain(secret, "標題樣板含被遮欄位");
+
+        var submitted = Ok(await Mcp("submit_approval", new
+        {
+            recordId = id, to = rig.Done, rowVersion = created.GetProperty("rowVersion").GetString(), idempotencyKey = NewIdem(),
+        }));
+
+        submitted.GetRawText().Should().NotContain(secret);
+        Query(_app, db => db.Set<ApprovalInstance>().Single(i => i.RecordId == id).TitleSnapshot).Should().Contain(secret);
+        var approval = Ok(await Mcp("get_record_approval", new { recordId = id }));
+        approval.GetProperty("data").GetProperty("current").GetProperty("titleSnapshot").GetString().Should().BeEmpty();
+        (await McpApprovalKit.Current(_rest, id)).GetProperty("titleSnapshot").GetString().Should().Contain(secret, "畫面通道不受影響");
+    }
 }

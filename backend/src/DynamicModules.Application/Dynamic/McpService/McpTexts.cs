@@ -140,6 +140,35 @@ public static class McpTexts
         + $"\"body\":{{\"type\":\"string\",\"minLength\":1,\"maxLength\":{TaskService.TaskCommentRules.BodyMax}}},"
         + IdempotencyKeyProperty + "},\"required\":[\"taskId\",\"body\",\"idempotencyKey\"],\"additionalProperties\":false}";
 
+    public const string SubmitApprovalDescription =
+        "Submits a record for approval, moving it to status option `to` (one of submitTargets from get_record_approval). "
+        + "rowVersion is the record's current rowVersion; on error code stale, read the record again and retry. "
+        + "With previewOnly true nothing is written and rowVersion is not needed: data.preview lists the stages and, in picks, the stages "
+        + "where you must choose approvers with their candidates; send them as picks {stageCode: [userId]}. "
+        + "Without previewOnly, data is {outcome, instanceId, recordRowVersion}; outcome is submitted, approved (all stages skipped) "
+        + "or direct (no flow matched and the move was applied directly). Requires idempotencyKey: reuse the same key only when resending the same call.";
+    public const string WithdrawApprovalDescription =
+        "Withdraws a pending approval you submitted, before any approver has acted. instanceId and rowVersion are current.id and "
+        + "current.rowVersion from get_record_approval; on error code conflict, call get_record_approval again before retrying. "
+        + "Requires idempotencyKey: reuse the same key only when resending the same call.";
+
+    private const string CommentProperty = "\"comment\":{\"type\":\"string\",\"description\":\"Optional comment kept in the approval history\"}";
+
+    public const string SubmitApprovalSchema =
+        "{\"type\":\"object\",\"properties\":{\"recordId\":{\"type\":\"integer\",\"minimum\":1},"
+        + "\"to\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"Target status option id from submitTargets\"},"
+        + "\"rowVersion\":{\"type\":\"string\",\"description\":\"Record's current rowVersion; required unless previewOnly\"},"
+        + "\"picks\":{\"type\":\"object\",\"description\":\"Chosen approvers by stage code\",\"additionalProperties\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},"
+        + CommentProperty + ","
+        + "\"previewOnly\":{\"type\":\"boolean\",\"default\":false},"
+        + IdempotencyKeyProperty + "},\"required\":[\"recordId\",\"to\",\"idempotencyKey\"],\"additionalProperties\":false}";
+
+    public const string WithdrawApprovalSchema =
+        "{\"type\":\"object\",\"properties\":{\"instanceId\":{\"type\":\"integer\",\"minimum\":1},"
+        + "\"rowVersion\":{\"type\":\"string\",\"description\":\"current.rowVersion from get_record_approval\"},"
+        + CommentProperty + ","
+        + IdempotencyKeyProperty + "},\"required\":[\"instanceId\",\"rowVersion\",\"idempotencyKey\"],\"additionalProperties\":false}";
+
     /// <summary>沒有參數的工具的 JSON Schema。</summary>
     public const string NoArgumentsSchema = """{"type":"object","properties":{},"additionalProperties":false}""";
 }

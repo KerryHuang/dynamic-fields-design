@@ -241,6 +241,8 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Write.CreateTaskTool>();
         services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Write.UpdateTaskTool>();
         services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Write.AddTaskCommentTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Write.SubmitApprovalTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Write.WithdrawApprovalTool>();
         services.AddScoped<Dynamic.McpService.Tools.McpToolInvoker>();
         services.AddScoped<Dynamic.McpService.Confirmations.McpConfirmationScope>();
         services.AddScoped<Dynamic.McpService.Writes.McpWriteScope>();

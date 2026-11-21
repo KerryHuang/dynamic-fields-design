@@ -72,6 +72,25 @@ public class McpTransportTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// business.read＋business.write 的權杖列出全部 19 個正式工具（12 唯讀＋7 一般寫入，mcp2a 判斷 1、14）；寫入工具的 annotations
+    /// 是 readOnlyHint false、destructiveHint false、idempotentHint true（判斷 10）。
+    /// </summary>
+    [Fact]
+    public async Task ListTools_BusinessWrite_AllProductionTools()
+    {
+        await using var client = await ConnectAsync(_app, IssueToken(_app, scopes: McpScopes.Join([McpScopes.BusinessRead, McpScopes.BusinessWrite])).Raw);
+        var tools = await client.ListToolsAsync();
+
+        tools.Select(t => t.Name).Order(StringComparer.Ordinal).Should().Equal(McpToolCatalog.Production.Select(t => t.Name).Order(StringComparer.Ordinal));
+        tools.Should().HaveCount(19);
+        foreach (var tool in tools.Where(t => McpToolCatalog.Find(t.Name)!.Risk == McpRisk.Write))
+        {
+            var a = tool.ProtocolTool.Annotations!;
+            (a.ReadOnlyHint, a.DestructiveHint, a.IdempotentHint, a.OpenWorldHint).Should().Be((false, false, true, false), tool.Name);
+        }
+    }
+
     /// <summary>權杖只有一個還沒有工具的範圍（模擬未來範圍）：只列不需範圍的 whoami。</summary>
     [Fact]
     public async Task ListTools_FutureScopeOnly_OnlyWhoami()

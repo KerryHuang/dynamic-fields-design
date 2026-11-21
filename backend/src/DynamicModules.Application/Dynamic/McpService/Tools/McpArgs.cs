@@ -119,6 +119,26 @@ public sealed class McpArgs
     }
 
     /// <summary>
+    /// 鍵 → 字串陣列的物件（送簽的 <c>picks</c>：關卡代號 → userId，mcp2a 判斷 2）。沒帶回 null；不是物件、值不是字串陣列記錯誤，
+    /// 錯誤鍵是 <c>&lt;參數&gt;.&lt;鍵&gt;</c>。
+    /// </summary>
+    public Dictionary<string, List<string>>? StringLists(string name)
+    {
+        if (Object(name) is not { } o) return null;
+        var result = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var p in o.EnumerateObject())
+        {
+            if (p.Value.ValueKind != JsonValueKind.Array || p.Value.EnumerateArray().Any(e => e.ValueKind != JsonValueKind.String))
+            {
+                Fail($"{name}.{p.Name}");
+                continue;
+            }
+            result[p.Name] = p.Value.EnumerateArray().Select(e => e.GetString()!).ToList();
+        }
+        return result;
+    }
+
+    /// <summary>
     /// 欄位值物件（mcp2a 判斷 16）：鍵是欄位 key、值原樣（JSON null 是清除），交給既有寫入請求解析。沒帶回空物件；不是物件記錯誤。
     /// </summary>
     public Dictionary<string, JsonElement?> Values(string name) =>
