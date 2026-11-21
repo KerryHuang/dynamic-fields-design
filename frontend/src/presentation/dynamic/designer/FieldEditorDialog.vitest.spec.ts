@@ -88,6 +88,75 @@ describe('FieldEditorDialog', () => {
     w.unmount();
   });
 
+  describe('不提供給 AI 工具（excludeFromAi）', () => {
+    const save = () => [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('儲存'))!.click();
+    const box = () => toggle('exclude-ai-checkbox');
+
+    it('shows the checkbox with its explanation', async () => {
+      const w = mountDialog({ field: field('text') });
+      await flushPromises();
+      expect(box().getAttribute('aria-checked')).toBe('false');
+      expect(document.body.textContent).toContain('不提供給 AI 工具');
+      expect(document.body.textContent).toContain('勾選後，AI 工具看不到這個欄位，也不能用它篩選或排序');
+      w.unmount();
+    });
+
+    it('edit: checking it sends excludeFromAi=true', async () => {
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
+      const w = mountDialog({ field: field('text') });
+      await flushPromises();
+      box().click();
+      await flushPromises();
+      save();
+      await flushPromises();
+      expect(spy.mock.calls[0]![1]).toMatchObject({ excludeFromAi: true });
+      spy.mockRestore();
+      w.unmount();
+    });
+
+    it('edit: a field already hidden shows checked, and unchecking sends false', async () => {
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
+      const w = mountDialog({ field: { ...field('text'), excludeFromAi: true } });
+      await flushPromises();
+      expect(box().getAttribute('aria-checked')).toBe('true');
+      box().click();
+      await flushPromises();
+      save();
+      await flushPromises();
+      expect(spy.mock.calls[0]![1]).toMatchObject({ excludeFromAi: false });
+      spy.mockRestore();
+      w.unmount();
+    });
+
+    it('edit: leaving it unchanged does not send the flag (it needs the permission-settings permission)', async () => {
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
+      const w = mountDialog({ field: field('text') });
+      await flushPromises();
+      save();
+      await flushPromises();
+      expect(spy.mock.calls[0]![1]).not.toHaveProperty('excludeFromAi');
+      spy.mockRestore();
+      w.unmount();
+    });
+
+    const addWith = async (check: boolean) => {
+      const spy = vi.spyOn(dynamicApi, 'addField').mockResolvedValue({ id: 9 } as never);
+      const w = mountDialog({});
+      await flushPromises();
+      await w.findComponent({ name: 'I18nTextInput' }).vm.$emit('update:modelValue', { 'zh-TW': '欄位' });
+      await flushPromises();
+      if (check) { box().click(); await flushPromises(); }
+      save();
+      await flushPromises();
+      const body = spy.mock.calls[0]![1];
+      spy.mockRestore();
+      w.unmount();
+      return body;
+    };
+    it('add: checked sends true', async () => { expect(await addWith(true)).toMatchObject({ excludeFromAi: true }); });
+    it('add: unchecked omits the flag', async () => { expect(await addWith(false)).not.toHaveProperty('excludeFromAi'); });
+  });
+
   it('new textarea defaults to full width; other types do not', async () => {
     const spy = vi.spyOn(dynamicApi, 'addField').mockResolvedValue({ id: 9 } as never);
     const w = mountDialog({});

@@ -45,6 +45,7 @@ const form = reactive({
   fullWidth: false,
   isFilterable: false,
   isSortable: false,
+  excludeFromAi: false,
   maxLength: null as number | string | null,
   scale: null as number | string | null,
   formula: '',
@@ -99,6 +100,7 @@ watch(() => [props.modelValue, props.field?.id] as const, ([open]) => {
     fullWidth: f ? isFullWidth(f) : false,
     isFilterable: f?.config.isFilterable ?? false,
     isSortable: f?.config.isSortable ?? false,
+    excludeFromAi: f?.excludeFromAi ?? false,
     maxLength: f?.config.maxLength ?? null,
     scale: f?.config.scale ?? null,
     formula: f?.config.formula ?? '',
@@ -300,13 +302,17 @@ const onError = (e: unknown) => {
 
 // menu: a new detail field turns this module into a detail, which the sidebar no longer lists
 const create = useDesignerMutation(
-  () => dynamicApi.addField(props.moduleKey, { blockId: props.blockId, type: form.type, label: form.label, config: buildConfig() }),
+  () => dynamicApi.addField(props.moduleKey, {
+    blockId: props.blockId, type: form.type, label: form.label, config: buildConfig(), ...(form.excludeFromAi ? { excludeFromAi: true } : {}),
+  }),
   () => props.moduleKey,
   ['menu'],
 );
 const update = useDesignerMutation(
   () => dynamicApi.updateField(props.field!.id, {
     type: props.field!.type, label: form.label, config: buildConfig(), blockId: props.field!.blockId,
+    // 只在使用者真的改了才送：變更需要權限設定的權限，不在每次存檔時一起送（前端畫面通則）
+    ...(form.excludeFromAi !== (props.field!.excludeFromAi ?? false) ? { excludeFromAi: form.excludeFromAi } : {}),
   }),
   () => props.moduleKey,
 );
@@ -367,6 +373,11 @@ const saving = computed(() => create.isPending.value || update.isPending.value);
             <q-toggle v-if="!isReference" v-model="form.isSortable" data-testid="sortable-toggle" :disable="!canSort" :label="t('designer.sortable')" />
             <div v-if="!canSort && !isReference" class="text-caption text-muted">{{ t('designer.sortUnsupported') }}</div>
           </div>
+        </div>
+
+        <div data-testid="exclude-ai">
+          <q-checkbox v-model="form.excludeFromAi" data-testid="exclude-ai-checkbox" :label="t('designer.excludeFromAi')" />
+          <div class="text-caption text-muted">{{ t('designer.excludeFromAiHint') }}</div>
         </div>
 
         <div v-if="isFormula" class="q-gutter-sm">

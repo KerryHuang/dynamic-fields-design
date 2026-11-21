@@ -421,6 +421,8 @@ export interface DesignerField {
   options: DesignerOption[];
   /** Set by the server only when a formula/rollup save recalculated a whole module: how many frozen records kept their value. */
   preservedRecordCount?: number | null;
+  /** 「不提供給 AI 工具」：AI 工具看不到這個欄位，也不能用它篩選或排序（MCP 設計 §13.5）；伺服器省略 false。 */
+  excludeFromAi?: boolean;
 }
 
 export interface DesignerBlock {
