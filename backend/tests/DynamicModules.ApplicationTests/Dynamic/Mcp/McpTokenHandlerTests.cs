@@ -377,7 +377,7 @@ public class McpTokenHandlerTests : McpTokenTestBase
         (on.DefaultExpiresOn, on.MaxExpiresOn).Should().Be((Today.AddDays(30), Today.AddDays(90)));
         on.ServerUrl.Should().Be("http://127.0.0.1:5180/mcp");
         on.Examples.ClaudeCode.Should().Be(
-            "claude mcp add --transport http formwright http://127.0.0.1:5180/mcp --header \"Authorization: Bearer ${FORMWRIGHT_TOKEN}\"");
+            "claude mcp add --transport http formwright http://127.0.0.1:5180/mcp --header 'Authorization: Bearer ${FORMWRIGHT_TOKEN}'");
         on.Examples.Codex.Should().Be(
             "[mcp_servers.formwright]\nurl = \"http://127.0.0.1:5180/mcp\"\nbearer_token_env_var = \"FORMWRIGHT_TOKEN\"");
 

@@ -1831,8 +1831,12 @@ AI 連線出廠是關閉的。系統管理員開啟前，先到「系統管理 �
 
 ```bash
 export FORMWRIGHT_TOKEN='fwp_…'
-claude mcp add --transport http formwright https://你的伺服器網址/mcp --header "Authorization: Bearer ${FORMWRIGHT_TOKEN}"
+claude mcp add --transport http formwright https://你的伺服器網址/mcp --header 'Authorization: Bearer ${FORMWRIGHT_TOKEN}'
 ```
+
+- `--header` 的值要用**單引號**包起來，讓 `${FORMWRIGHT_TOKEN}` 保留字面值、由 Claude Code 連線時再展開。用雙引號的話 shell 會在執行 `claude mcp add` 當下就把權杖展開，明文會被寫進設定檔；如果當時還沒 export，則會存成空的 `Bearer `，之後連不上也沒有提示。
+- 環境變數的名稱用 `FORMWRIGHT_TOKEN` 這類自己取的名稱，不要用 `ANTHROPIC_API_KEY` 等 `ANTHROPIC_` 開頭的保留名稱：實測 Claude Code 把 `.mcp.json` 的 `headers` 裡的 `${ANTHROPIC_API_KEY}` 送成空值（用假伺服器收標頭驗證），連線會因為沒有權杖而被拒。
+- `export FORMWRIGHT_TOKEN=…` 這一行會留在 shell 的歷史紀錄裡。建議把它寫進 shell 設定檔（例如 `~/.zshrc`）或由密碼管理員注入，不要長期留在歷史紀錄；Codex 的 `bearer_token_env_var` 同樣要求「啟動 Codex 的那個 shell」已經有這個環境變數。
 
 想把設定放進專案共用，可以改寫 `.mcp.json`，權杖用環境變數展開，不要把明文寫進檔案：
 
@@ -1875,7 +1879,7 @@ bearer_token_env_var = "FORMWRIGHT_TOKEN"
 有些欄位（薪資、身分證號、銀行帳號）不該讓 AI 看到。到「系統管理 → 動態模組設計」，開啟欄位設定，勾選「不提供給 AI 工具」：勾選後，AI 工具看不到這個欄位，也不能用它篩選或排序。
 
 - 新增欄位時可以直接勾；既有欄位改勾選要在編輯時處理。只有改了這個勾選才會送出變更。
-- 勾選與取消需要有權限設定的權限；沒有權限的設計者存檔會被擋並顯示原因。
+- 勾選與取消需要有權限設定的權限；沒有這個權限的設計者，勾選框是停用的，旁邊寫「需要有權限設定的權限才能變更這個勾選」。
 - 這個設定只影響 AI 工具，使用者自己在畫面上看到的欄位不變。
 
 ### 24.6 不要把高風險工具設成自動允許
