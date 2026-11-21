@@ -1,7 +1,7 @@
 # 帳號安全 設計文件（段 au1）
 
 > 2026-11-21｜平台共用能力（非應用程式）｜前置：[使用者與群組](2026-11-05-users-groups-design.md)（§4 登入）、[維運與觀測](2026-11-11-ops-observability-design.md)（§14 U1、§17.2.6 寄信設定與告警佇列、§17.9 安全）、[政策設定](2026-11-11-policy-settings-design.md)、[MCP 伺服器](2026-11-11-mcp-server-design.md)（§5.1、§13 個人存取權杖）、[權限軸](2026-11-19-permission-axes-design.md)、bk1 備份設計（同日，§5.7 備份不帶金鑰）
-> 狀態：主控撰寫（2026-11-21），這次只寫設計、不改程式。第二版（同日）：收同家審查必修 1–12 與建議 15 條、套用使用者 2026-11-20 已確認的平台分流答案（A 區照推薦、B 區全部確認）與 2026-11-21 新裁決。第三、四版（同日）：收兩次安全複審（N1–N7、建議 13 條與 A–F）與領域顧問分流（Q17–Q22）、使用者 2026-11-21 裁決 Q23。
+> 狀態：主控撰寫（2026-11-21），這次只寫設計、不改程式。第二版（同日）：收同家審查必修 1–12 與建議 15 條、套用使用者 2026-11-20 已確認的平台分流答案（A 區照推薦、B 區全部確認）與 2026-11-21 新裁決。第三至五版（同日）：收三次安全複審（N1–N9、建議 13 條與 A–I、L）與領域顧問分流（Q17–Q22）、使用者 2026-11-21 裁決 Q23。
 > 標記：「（使用者裁決）」「（使用者確認）」是使用者已拍板的；「（Q#，顧問拍板）」是行為類，領域顧問先定、待使用者確認；兩者彙整在 §20.1；「（主控裁決）」是安全守衛類的主控定案，列 §22；「（T#）」是技術類，主控已定、可推翻，彙整在 §20.2。分流答案以題號引用（例：au1-6），出處是 2026-11-19 的平台分流文件。
 
 ## 1. 目的
@@ -344,8 +344,13 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 3. `POST auth/two-factor { code | recoveryCode, rememberDevice }`：
    - 先檢查：憑證解得開、未過期、隨機編號沒用過、stamp 沒變、帳號仍啟用（停用會換 stamp，這裡另外明寫一次，避免日後改停用流程時漏掉）、帳號層沒有暫停。
    - 驗 `recoveryCode` 只比對雜湊，不解 TOTP 金鑰；送的是 `code` 時，**在佔帳號層名額之前**先解金鑰，解不開就直接回「驗證碼錯誤或已過期」，不佔帳號層名額（稽核原因 `twoFactorUnreadable`，避免本人因金鑰遺失被暫停，之後仍能用復原碼登入；複審 N6）。
-   - 處理順序：憑證檢查 → `TryBegin` → （`code` 時）解金鑰 → 佔帳號層名額並提交（第 4 點）→ 比對碼 → 結算。
-   - 碼正確 → 發 session cookie、清憑證 cookie、把隨機編號在記憶體標成已用（同一張憑證不能換第二個 session）、`TwoFactorFailedCount` 與 `TwoFactorLockedUntilUtc` 一起清掉（複審 N6）；勾了記住就發裝置 cookie（§8.5）；稽核 `login.succeeded`，`method` 為 `password+totp` 或 `password+recovery`；用復原碼時寄 `recoveryCodeUsed` 通知（Q5）。
+   - `code` 與 `recoveryCode` 兩個都送、或都沒送：直接回 400，排在 `TryBegin` 之前（複審建議 L），免得依 `code` 判斷「金鑰解不開不佔名額」之後又往下比對復原碼。
+   - 處理順序：憑證檢查 → `TryBegin` → （`code` 時）解金鑰 → 佔帳號層名額並提交（第 4 點）→ 比對碼 → 結算。金鑰解不開的那幾次照樣算進同一張憑證的 5 次（記憶體，不影響帳號層）。
+   - 碼比對正確 → 外層送內層的 `ITransactionalRequest`（例：完成第二步登入；複審建議 G），內層在同一交易裡：
+     1. 第一句就是重放的條件式更新：`TotpLastStep`（`WHERE TotpLastStep IS NULL OR TotpLastStep < ?`）或復原碼（`WHERE UsedUtc IS NULL`）。影響 0 列就回失敗、整個回滾，外層照碼錯結算：`Complete(false)`、稽核 `login.failed` 原因 `twoFactorWrong`。
+     2. 用 `ExecuteUpdate` 把 `TwoFactorFailedCount` 與 `TwoFactorLockedUntilUtc` 一起清掉（複審 N6）。不經追蹤實體：追蹤器裡是佔名額之前讀到的舊值，EF 會判定沒變而不寫，留下計數 0、有暫停時間或計數殘留 1。
+     3. 勾了記住就寫裝置列（§8.5）；稽核 `login.succeeded`，`method` 為 `password+totp` 或 `password+recovery`；用復原碼時寄 `recoveryCodeUsed` 通知（Q5）。交易內的稽核用 `audit.Add`、通知與寄送佇列登記在 `AfterCommitActions`，所以必須經 `TransactionBehavior`，不手開交易。
+   - 內層提交成功後，外層才 `Complete(true)`、發 session cookie 與裝置 cookie、清憑證 cookie、把隨機編號在記憶體標成已用（同一張憑證不能換第二個 session）。
 4. 錯誤處理，三層：
    - **同一張憑證**最多 5 次（記憶體），用完要重新輸入密碼。
    - **帳號＋IP**：每次錯誤計入 `LoginThrottle`，和猜密碼同一個額度。
@@ -366,9 +371,11 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 
        以上是語意示意，實作用 `ExecuteUpdate` 或經 `ISqlDialect` 的 raw SQL（識別字加引號）。`SET` 裡讀的都是更新前的值（PostgreSQL 與 SQLite 相同）。影響 0 列就當暫停中拒絕。欄位只會處在「計數小於 10、沒有暫停時間」或「計數 10、有暫停時間」兩種狀態，不會卡在「計數 10、沒有暫停時間」；除了這一條、成功時的清除（同一列的 `SET TwoFactorFailedCount = 0, TwoFactorLockedUntilUtc = NULL`）與 §8.8、§8.11 的整組清除，沒有其他地方單獨寫這兩欄。多個 IP 同時送出也不會超過 10 次（PostgreSQL 在 READ COMMITTED 下取得列鎖後重新評估 `WHERE`，SQLite 寫入本來就序列化）。
      - 佔到名額就算一次嘗試：之後碼錯、程式例外或重啟都不退還，15 分鐘內最多就是 10 次，暫停到期自動恢復。
-     - **在請求交易之外提交**（複審 N5）：`TransactionBehavior` 在結果失敗時整個交易回滾（`Application/Common/Behaviors/TransactionBehavior.cs:20–21`），失敗路徑的寫入若在交易內就全部消失。所以 `auth/two-factor` 比照 `LoginHandler`，**不**實作 `ITransactionalRequest`：佔名額的更新立即提交；失敗路徑的稽核、安全事件、通知也各自提交；成功路徑的寫入（清計數、`TotpLastStep`、標復原碼已用、記住的裝置、`login.succeeded`）由 handler 自己開一個短交易一起提交，這時名額已提交，不受影響。**不**在交易內另開 scope 寫計數：SQLite 的外層交易已 `BEGIN IMMEDIATE` 並持有 `WriteGate`（`Persistence/EfTransactionManager.cs:13`），另開的連線會等鎖到逾時。
-     - 要不要開安全事件、寄通知：佔名額的更新提交後重讀該列，暫停時間等於這一次的 `@until`（也就是這一次觸發了暫停）才處理。
-     - 通知去重（使用者 2026-11-21 裁決，Q23）：同一帳號 24 小時內只通知一次，信（`twoFactorFailures`）與站內通知都一樣；安全事件同指紋聚合、只累加次數。24 小時寫死，列 §22。
+     - **在請求交易之外提交**（複審 N5）：`TransactionBehavior` 在結果失敗時整個交易回滾（`Application/Common/Behaviors/TransactionBehavior.cs:20–21`），失敗路徑的寫入若在交易內就全部消失。所以 `auth/two-factor` 的外層比照 `LoginHandler`，**不**實作 `ITransactionalRequest`：佔名額的更新立即提交；一般碼錯的稽核照 `LoginHandler` 用 `TryWriteNowAsync`；成功路徑送內層交易請求（第 3 點），這時名額已提交，不受內層回滾影響。
+     - **觸發暫停時的事件與通知走一個小的交易型請求**（複審建議 H）：`IncidentRecorder` 只能在呼叫端的交易裡用，事件、站內通知、寄送佇列要同一交易（`AlertOutboxWriter` 的直送交接也登記在提交後動作）。所以判定「這一次觸發了暫停」之後，外層送一個 `ITransactionalRequest`（例：記錄第二步暫停），在同一交易裡寫 `login.failed`（重新驗證端點是 `account.reauthFailed`）稽核、安全事件、通知與 24 小時去重判斷。**不**在交易內另開 scope 寫計數：SQLite 的外層交易已 `BEGIN IMMEDIATE` 並持有 `WriteGate`（`Persistence/EfTransactionManager.cs:13`），另開的連線會等鎖到逾時。
+     - 要不要開安全事件、寄通知：佔名額的更新提交後重讀該列，暫停時間等於這一次的 `@until`（也就是這一次觸發了暫停）才處理。**`@until` 在下 UPDATE 之前先 `StorageTime.ToMicroseconds(now + 15 分鐘)`**（複審 N8）：PostgreSQL 的 timestamp 只到微秒，.NET 的 DateTime 是 100 奈秒，不截的話讀回的值比記憶體少尾數、相等永遠不成立，PostgreSQL 上猜碼告警會靜默失效；理由與做法同 `Application/Common/StorageTime.cs`（`IncidentRecorder.cs:27` 等處）。
+     - 判定時點在比對之前，所以第 10 次剛好是本人的正確碼時，仍會開事件、寄信；前面確實錯了 9 次，這是刻意的（複審建議 L），測試照這個預期寫。
+     - 通知去重（使用者 2026-11-21 裁決，Q23）：同一帳號 24 小時內只通知一次，信（`twoFactorFailures`）與站內通知都一樣；安全事件同指紋聚合、只累加次數。24 小時寫死，列 §22。去重來源是 `Dynamic_MailOutbox`：同 `UserId`、`Kind = twoFactorFailures`、`CreatedUtc` 在 24 小時內有列就不再寄，站內通知用同一個判斷，不另加欄（§5 只有 au1a 能改表）。帳號沒有已驗證 Email 時照樣寫一列 `skipped`（原因 `noVerifiedEmail`）當去重紀錄，不寄出（複審建議 H）。
      - **Demo 站不套帳號層**（領域顧問必修）：任何訪客都知道 `mfa01` 怎麼進第二步，套了就能反覆把 `mfa01` 鎖住；Demo 站只留同一憑證 5 次與 `LoginThrottle` 兩層（F35）。已知限制（複審建議 F）：`LoginThrottle` 的帳號層是全站共用的 `mfa01` 鍵，有人從多個 IP 每小時錯 50 次以上時，所有訪客的 `mfa01` 第二步會被拖慢到每 10 秒放行一次；影響只在 Demo，記進 `docs/demo.md`，不另寫 Demo 專屬分支。
    - 數字寫死（安全檢查，§22）。估算：每 15 分鐘最多 10 次，一天最多約 960 次，TOTP 一次猜中約 3/10⁶，一天猜中機率約 0.3%，而且第一個 15 分鐘就會寄信、開安全事件讓本人與管理員知道。
 5. 稽核 `login.failed`，原因 `twoFactorWrong`、`recoveryCodeWrong`、`twoFactorExpired`、`twoFactorLocked`；既有的 `security.loginFailures` 健康檢查因此也算到猜碼。
@@ -434,7 +441,8 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 - **金鑰落地的判斷與正式環境守衛**（T27，主控裁決，複審 N2、N3）：
   - 判斷以 `Program.cs` 實際算出的 `keysDirectory` 為準，只算一次：`KeysPersisted = keysDirectory is not null`，以單一服務 `KeyPersistenceStatus` 注入，§8.2、本節、§14、監控頁都引用它，不各自讀設定鍵。SQLite 檔案資料庫（絕對路徑的 `Data Source=`）沒設 `DataProtection:KeysDirectory` 時金鑰在 `<資料庫目錄>/keys`，**算落地**（客戶用的 `Dockerfile` 與 `Dockerfile.demo` 都是 `Data Source=/app/data/poc.db`，屬於這種），綁定與強制照常。
   - **非 Development 環境拒絕啟動**（複審 N3、N7）：環境不是 Development、`keysDirectory` 為 null 時，**不分資料庫種類**，啟動直接丟例外結束，訊息「非開發環境必須設定 DataProtection:KeysDirectory（否則重啟後登入、寄信密碼與雙因素全部失效）」。涵蓋 PostgreSQL、SQLite 記憶體資料庫、`file:` URI 寫法的 SQLite；例外在 `builder.Build()` 之前丟出，還沒連資料庫。取代 `Program.cs:145–147` 現在的 PostgreSQL 啟動警告。非 Development 環境因此不存在「金鑰不落地」的狀態，強制政策不會被暫停（不 fail-open，守住 au1-漏1 的「系統管理員一律強制」）。列 §22。
-  - **金鑰目錄有設、但不持久**（複審建議 B）：拒絕啟動只檢查有沒有設，偵測不到「設在容器裡沒掛 volume 的路徑」。補一道偵測：啟動時在 Data Protection 第一次使用前看金鑰目錄裡有沒有 `key-*.xml`；沒有（等於這次會產生新金鑰）而資料庫裡已有 `TotpSecretProtected` 不是空的帳號，開基礎設施事件 `infra.keysMayBeLost`「金鑰可能遺失：已綁定的雙因素與寄信密碼可能解不開」。Demo 站建置時刪掉金鑰，但建置的種子不寫 `mfa01` 的密文（§13.3），而且偵測排在重新加密 `mfa01` 之前，所以不會誤報。
+  - **金鑰目錄有設、但不持久**（複審建議 B）：拒絕啟動只檢查有沒有設，偵測不到「設在容器裡沒掛 volume 的路徑」。補一道偵測：啟動時在 Data Protection 第一次使用前看金鑰目錄裡有沒有 `key-*.xml`；沒有（等於這次會產生新金鑰）而資料庫裡已有 `TotpSecretProtected` 不是空的帳號，開基礎設施事件 `infra.keysMayBeLost`「金鑰可能遺失：已綁定的雙因素與寄信密碼可能解不開」。寄信設定的 SMTP 密碼密文也一起看：沒有人綁雙因素的站，金鑰遺失時仍偵測得到（複審建議 I）。
+    - **不做偵測的情況**（複審建議 I）：開 `Demo:LoginEnabled` 時不做（Demo 映像建置後刪金鑰、每次冷啟動都重生，這個事件對它沒有意義，也不必依賴重新加密 `mfa01` 的實作順序）；`keysDirectory` 為 null（Development＋記憶體資料庫等）時不做（沒有目錄可看）。
   - **Development 環境**金鑰不落地時：新綁定照樣 409；強制對所有人暫停（否則開發機與測試主機的管理員會卡在綁不了的綁定頁），啟動記 Warning、開基礎設施事件 `infra.keysNotPersisted`，帳號安全頁顯示「伺服器沒有保存加密金鑰，雙因素無法啟用」。這個暫停只在 Development 環境出現，其他環境走不到。
 - **Demo 站**（審查必修 4，守衛以站為準、不以帳號為準）：開 `Demo:LoginEnabled` 時強制政策對**所有帳號**（含 `admin`）都不生效；`auth` 分類的政策在 Demo 站唯讀（PUT 回 403 `demoSite`），訪客改不了。出廠的「系統管理員強制」因此不會讓 Demo 的 `admin` 卡在綁定頁（Demo 的 `admin` 密碼是啟動時隨機產生的，沒人能完成綁定）。
 
@@ -453,10 +461,13 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 - `PUT account/email`、`account/two-factor/setup`、`disable`、`recovery-codes`、建 AI 權杖、改密碼：密碼檢查一律走 `LoginThrottle`（帳號＋IP），失敗寫稽核 `account.reauthFailed`。
 - 驗證碼與復原碼檢查共用 §8.3 的帳號層計數與暫停，處理順序與「金鑰解不開不佔名額」同 §8.3。
 - **結算與第二步一致**（複審建議 D）：只要密碼的端點，密碼對 `Complete(true)`、錯 `Complete(false)`；同時要密碼與驗證碼的，密碼對時 `Release`，由驗證碼的結果結算 `Complete`。現在 `CreateMcpTokenHandler` 的 `VerifyPassword`（`McpTokenHandlers.cs:164–181`）密碼對就 `Complete(true)`，會清掉帳號＋IP 層，跟著改。
-- **拆成兩段**（複審 N5）：這些端點都會寫業務資料，照後端規則是 `ITransactionalRequest`，失敗時交易回滾會吃掉帳號層名額與 `reauthFailed`。所以每個端點拆成外層與內層：
-  - 外層請求**不**開交易：驗密碼、驗碼，佔名額與失敗路徑的稽核、事件、通知各自立即提交；驗不過就回失敗。
-  - 驗過才送內層的 `ITransactionalRequest` 做業務寫入（改 Email、綁定、關閉、重新產生、建權杖、改密碼）。
-  - 重新驗證的共用邏輯收在一個服務（例：`IReauthVerifier`），六個端點共用。
+- **拆成兩段**（複審 N5、N9）：這些端點都會寫業務資料，照後端規則是 `ITransactionalRequest`，失敗時交易回滾會吃掉帳號層名額與 `reauthFailed`。所以每個端點拆成外層與內層，結算照以下規則：
+  1. **可預期的檢查排在驗證之前**：外層先跑完所有不需要祕密的檢查——輸入格式、每人上限（例：AI 權杖的 `TokenMaxPerUser`）、強制對象內不能關閉（409 `twoFactorRequired`）、`demoSite`、`keysNotPersisted`、帳號可用。沒過就直接回失敗，不呼叫 `TryBegin`、不佔名額、不燒碼。這延伸 `CreateMcpTokenHandler` 現有的「帳號 → 站台 → 政策 → 密碼」順序。
+  2. **驗證在外層、效果當下提交**：驗密碼、驗碼，佔名額與失敗路徑照 §8.3（觸發暫停時的事件同樣走小的交易型請求）。驗證成功的效果也在外層立即提交，和第二步同一套：`TotpLastStep` 與復原碼用條件式更新，影響 0 列就當驗證失敗；兩欄用 `ExecuteUpdate` 清掉；`Complete(true)`。
+  3. **之後內層失敗**（並行、資料庫錯誤、驗證前查不到的業務檢查）：碼視為已用，使用者改用下一個碼重試；名額不退。這是刻意的取捨：可預期的失敗已在第 1 點擋掉，剩下的是少見情況，不值得為它把驗證結果做成可退還。
+  4. **`IReauthVerifier` 不能在交易內呼叫**：開頭比照 `AuditLog.GuardOutsideTransaction`（`AuditLog.cs:73–76`），`transactions.IsActive` 時丟例外，日後有人從交易型請求裡呼叫它會直接失敗，計數不會又被回滾。
+  5. **內層只收驗證服務發出的結果**：`ReauthResult` 建構子不公開，只有 `IReauthVerifier` 能產生，帶使用者 Id 與驗證當時的 `SecurityStamp`；內層交易一開始重新比對 stamp，不符就回失敗。避免日後有 controller 直接送內層、跳過重新驗證。
+  - 內層做業務寫入（改 Email、綁定、關閉、重新產生、建權杖、改密碼）。重新驗證的共用邏輯收在 `IReauthVerifier`，六個端點共用。
 - 既有的 `ChangePasswordHandler` 沒有限流，au1b 一起補上同一套（含拆兩段）。
 
 ### 8.10 安全事件
@@ -593,7 +604,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 `Dockerfile.demo` 建置時產生資料後刪掉金鑰，執行期重新產生，建置時加密的 `TotpSecretProtected` 會解不開。所以：
 
 - 建置時的種子**不寫** `mfa01` 的 `TotpSecretProtected`，只寫帳號、`TotpEnabledUtc` 與復原碼雜湊。
-- Demo 站每次啟動（`Demo:LoginEnabled`）用目前的金鑰把固定金鑰加密寫進 `mfa01`，可重複執行。
+- Demo 站每次一般啟動（`Demo:LoginEnabled`）用目前的金鑰把固定金鑰加密寫進 `mfa01`，可重複執行。只在一般啟動執行，排在 `--generate-demo-data` 分支之後，不放進 `InitializeDatabaseAsync`：建置那次若寫了密文，金鑰刪掉後就成了解不開的殘留（複審建議 I）。
 - 測試模擬「產生資料 → 刪金鑰 → 啟動 → `mfa01` 用提示碼登入成功」。
 
 ### 13.4 Demo 驗證碼提示（Q13）
@@ -665,7 +676,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 12. **`LoginHandler` 與 `LoginThrottle`**：「密碼正確即成功」的語意在有雙因素時改成「第二步通過才成功」（§8.3），註解跟著改。
 13. **bk1 設計 §5.7 不帶金鑰還原的代價清單**：要補「所有 TOTP 金鑰失效」與處理方式（§14），手冊的還原步驟同步；由主控轉給 bk1。
 14. **功能清單與路線**：`docs/feature.md` 第 56、57、379 列與 roadmap au1 列由主控更新；roadmap au1 的連結改指本設計（分流 E 第 4 點）。
-15. **部署文件 `docs/deploy.md:107`**：`DataProtection__KeysDirectory` 那一列現在寫「記憶體資料庫與 PostgreSQL 則不落地（重啟後要重新登入，PostgreSQL 會記 Warning）」，au1c 改寫成「非 Development 環境沒有金鑰目錄（PostgreSQL、記憶體資料庫、`file:` URI 寫法的 SQLite）就拒絕啟動；啟用雙因素前必設，建議和資料目錄分開放」。由實作段回填（§23）。
+15. **部署文件 `docs/deploy.md:107`**：`DataProtection__KeysDirectory` 那一列現在寫「記憶體資料庫與 PostgreSQL 則不落地（重啟後要重新登入，PostgreSQL 會記 Warning）」，au1c 改寫成「非 Development 環境沒有金鑰目錄（PostgreSQL、記憶體資料庫、`file:` URI 寫法的 SQLite）就拒絕啟動；啟用雙因素前必設，建議和資料目錄分開放；正式機不得設 `ASPNETCORE_ENVIRONMENT=Development`（Development 下金鑰不落地只會暫停強制、開 `infra.keysNotPersisted`，不拒絕啟動）」。由實作段回填（§23）。
 16. **附件目錄刻意不一起強制**：PostgreSQL 沒設 `Attachments:Root` 時附件暫存在暫存目錄，現在只記啟動警告（`Program.cs:111–112`）。au1 只對金鑰目錄拒絕啟動，附件目錄維持警告：金鑰遺失會讓**所有人**的登入、寄信密碼與雙因素一起失效，而且牽涉不 fail-open 的強制政策；附件遺失是資料問題，由備份（bk1）與維運的磁碟監控處理，不在帳號安全範圍。
 
 ## 17. 切段
@@ -742,7 +753,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | F4 | F3 | 送正確碼 | 發 session；`password+totp`；同一張憑證再送一次正確碼被拒 |
 | F5 | 用過的碼 | 30 秒內再登入送同一碼 | 拒絕；並行兩個請求只有一個成功 |
 | F6 | 同一張憑證 | 連錯 5 次 | 第 6 次正確也拒絕，要重輸密碼 |
-| F7 | 換 IP、反覆重新輸入密碼（走完整 MediatR 管線的 WebAPI 測試） | 第二步累計錯 10 次 | 之後 15 分鐘內正確碼也拒絕；`security.twoFactorFailures` 一件；`twoFactorFailures` 通知一封；15 分鐘後恢復；`Demo:LoginEnabled` 關閉的對照組明寫帳號層生效 |
+| F7 | 換 IP、反覆重新輸入密碼（走完整 MediatR 管線的 WebAPI 測試；PostgreSQL 與 SQLite 都跑，測試時鐘先 `Advance(TimeSpan.FromTicks(1))` 確保撞到微秒截斷） | 第二步累計錯 10 次 | 之後 15 分鐘內正確碼也拒絕；`security.twoFactorFailures` 一件；`twoFactorFailures` 通知一封；15 分鐘後恢復；`Demo:LoginEnabled` 關閉的對照組明寫帳號層生效 |
 | F8 | 憑證發出 6 分鐘 | 送正確碼 | `twoFactorExpired` |
 | F9 | 已啟用 | 用復原碼登入 | 成功、剩 9 組、`recoveryCodeUsed` 通知；同一組再用拒絕 |
 | F10 | 有雙因素的帳號 | 用重設信改密碼後登入 | 仍要第二步 |
@@ -775,11 +786,16 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | F36b | Production、SQLite 記憶體資料庫；Production、`Data Source=file:/…?cache=shared`；都沒設 `KeysDirectory` | 啟動 | 兩者都啟動失敗；同樣設定換成 Development 則照常啟動、開 `infra.keysNotPersisted` |
 | F37 | SQLite 檔案資料庫、沒設 `KeysDirectory`、出廠政策 | 沒啟用的系統管理員登入、開始綁定 | 被要求綁定；綁定成功（金鑰在 `<資料庫目錄>/keys`）；沒有 `infra.keysNotPersisted` |
 | F38 | 帳號被暫停中 | 管理員重設其雙因素 | 計數與暫停清除；本人用密碼登入後被導去綁定 |
-| F39 | 帳號第二步連錯 10 次被暫停兩輪（24 小時內） | — | 只寄一封 `twoFactorFailures`；安全事件一件、次數 2 |
+| F39 | 帳號第二步連錯 10 次被暫停兩輪（24 小時內；PostgreSQL 與 SQLite 都跑，測試時鐘帶 1 tick 尾數） | — | 只寄一封 `twoFactorFailures`；安全事件一件、次數 2 |
 | F40 | 第一次被判定應啟用、寬限 7 天；第 3 天政策改回選用；第 20 天再改強制；期間本人都沒登入 | 第 20 天登入 | 重新顯示 7 天寬限，不立即擋（存政策時批次清了起點） |
 | F41 | 已啟用；測試在第 10 次佔名額後、驗碼前丟例外 | 15 分鐘後送正確碼 | 登入成功；計數與暫停時間都清掉 |
-| F42 | 已啟用；換一套金鑰（TOTP 金鑰解不開） | 第二步連送 12 次驗證碼，再送復原碼 | 驗證碼都拒絕、計數一直是 0；復原碼登入成功 |
-| F43 | 已有帳號綁了雙因素；金鑰目錄換成空目錄 | 啟動 | 開 `infra.keysMayBeLost`；Demo 站建置流程（刪金鑰後啟動）不開 |
+| F42 | 已啟用；換一套金鑰（TOTP 金鑰解不開） | 第二步連送 12 次驗證碼（換三張憑證，比照 F35），再送復原碼 | 驗證碼都拒絕、每張憑證第 6 次起被拒、帳號層計數一直是 0；復原碼登入成功 |
+| F43 | 已有帳號綁了雙因素；金鑰目錄換成空目錄 | 啟動 | 開 `infra.keysMayBeLost`；只有寄信設定存了 SMTP 密碼、沒人綁雙因素時也開；開 `Demo:LoginEnabled` 時（Demo 映像刪金鑰後冷啟動）不開 |
+| F44 | 已啟用；AI 權杖已達每人上限 | 用正確密碼＋正確驗證碼建權杖 12 次 | 每次 403 上限；帳號層計數仍是 0；沒有 `twoFactorFailures`；`TotpLastStep` 沒推進 |
+| F45 | 已啟用、在強制對象內；剩 3 組復原碼 | 用密碼＋復原碼按「關閉雙因素」5 次 | 每次 409 `twoFactorRequired`；復原碼仍剩 3 組；帳號層計數仍是 0 |
+| F46 | 已啟用 | 第二步同時送 `code` 與 `recoveryCode` | 400；沒有呼叫 `TryBegin`、帳號層計數不變 |
+| F47 | 已啟用 | 兩個請求並行送同一組復原碼走第二步 | 只有一個登入成功；另一個回「驗證碼錯誤或已過期」、`twoFactorWrong`、沒有發 cookie |
+| F48 | 測試把 `IReauthVerifier` 放進交易型請求裡呼叫 | — | 丟例外；直接送內層請求而 `SecurityStamp` 已變 → 失敗 |
 
 ### 18.4 畫面
 
@@ -797,6 +813,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 - WebAPI：匿名白名單與強制綁定放行清單（逐條列出沒列進去的端點會被擋）、兩種 cookie 的屬性、Host 標頭不影響連結、`no-store`。
 - PostgreSQL 與 SQLite 都跑：條件式更新（領取、復原碼、`TotpLastStep`、帳號層計數）只成功一次。
 - 帳號層計數與 `reauthFailed` 不被回滾（F7、F34、M14）要走完整 MediatR 管線，不能只測 handler（複審 N5）。
+- 拿記憶體時間和資料庫讀回的時間比的地方（`@until`）要加進 PostgreSQL 雙跑集，測試時鐘帶非微秒整數倍的尾數（F7、F39，複審 N8）。
 - 測試主機的金鑰（複審建議 A）：`TestApp` 預設是記憶體 SQLite＋Development，`KeysPersisted` 永遠為否，au1c 的 WebAPI 測試預設都會被 409 擋住綁定、強制也被暫停。F2、F13–F16、F33、F34 等要設 `DataProtection:KeysDirectory` 暫存目錄，或替換 `KeyPersistenceStatus`；拒絕啟動之後，兩條既有的 Production 環境測試也要設金鑰目錄（§23）。
 - 前端：auth-guard 的 `passwordChangeRequired`、`twoFactorEnrollmentRequired` 先後；登入頁兩步狀態；fragment 讀完即清。
 
@@ -934,6 +951,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 - **T27**（主控裁決，安全守衛）金鑰落地以程式算出的 `keysDirectory` 為準；環境不是 Development、`keysDirectory` 為 null 就拒絕啟動，不分資料庫種類（複審 N7）；「暫停強制」只留給 Development（§8.7）。金鑰目錄有設但不持久時開 `infra.keysMayBeLost`（複審建議 B）。復原碼與其他雜湊值不經 Data Protection，是給 bk1 還原路徑的契約（§19）。
 - **T28** Demo 收件匣的信件內文存在 `Dynamic_MailOutbox.PreviewBody`（只在 Demo 寫，正式環境永遠 null；§5.5、§13.2）。初稿列在 Q12，改列技術類。
 - **T29** 第二步的限流結算：密碼那一次 `Release`、第二步每次送碼（含復原碼）自己 `TryBegin`／`Complete`，金鑰解不開、暫停中、例外時 `Release`（§8.3，複審 N1、建議 D）；帳號層用一條帶 `CASE` 的原子更新同時遞增與寫暫停，成功時兩欄一起清，金鑰解不開不佔名額（複審 N6）；帳號層與失敗路徑的寫入在請求交易外提交，第二步不是 `ITransactionalRequest`，重新驗證的端點拆成外層驗證、內層交易（§8.9，複審 N5）。
+- **T35** 重新驗證的結算（§8.9，複審 N9）：可預期檢查排在驗證前；驗證成功效果在外層當下提交；內層失敗時碼視為已用、名額不退；`IReauthVerifier` 在交易內丟例外；內層只收 `ReauthResult` 並重比 stamp。第二步成功走內層交易請求、觸發暫停的事件走小的交易型請求（§8.3，複審建議 G、H）；`@until` 截到微秒（複審 N8）。
 - **T33** 存強制政策時批次清掉不在新範圍內的寬限起點；群組異動與拿掉系統管理員不批次清（§8.7，複審建議 C）。
 - **T34** Demo 的 `mfa01` 被拖慢列已知限制，不寫 Demo 專屬限流分支（§8.3，複審建議 F）。
 - **T30** 記住的裝置每帳號上限 20 台、超過刪最舊；不受帳號層暫停影響（§8.5）。
@@ -1002,6 +1020,18 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | F | Demo 的 `mfa01` 被拖慢 | 列已知限制（§8.3、§19、T34），記進 `docs/demo.md` |
 
 另依領域顧問分流：Q20–Q22 改標顧問拍板，並補政策頁名稱（§9）、`adminEmailChanged` 的開立時機（§8.10）、Demo 忘記密碼頁提示（§12、§13.2）；Q23 依使用者 2026-11-21 裁決改寫（§8.3、§8.10、§22）；附件目錄刻意不一起強制、`docs/deploy.md:107` 回填列 §16。
+
+### 20.6 第三次安全複審的處置（必修 N8、N9，建議 G、H、I、L）
+
+| # | 項目 | 處置 |
+|---|---|---|
+| N8 | `@until` 在 PostgreSQL 比不相等 | 採第一種：寫入前 `StorageTime.ToMicroseconds`；F7、F39 兩種資料庫都跑（§8.3、§19、T35） |
+| N9 | 外層驗過、內層失敗的結算 | 採報告的組合 1–5（§8.9、T35、F44、F45、F48） |
+| G | 第二步成功路徑手開交易 | 採用：改送內層交易請求，重放更新失敗照碼錯結算，`ExecuteUpdate` 清兩欄，cookie 在提交後發（§8.3、F47） |
+| H | 失敗路徑的安全事件 | 採用：觸發暫停時送小的交易型請求；去重來源是 `Dynamic_MailOutbox`（§8.3） |
+| I | `keysMayBeLost` 在 Demo 與記憶體資料庫 | 採推薦：`Demo:LoginEnabled` 與 `keysDirectory` 為 null 時不偵測；重新加密 `mfa01` 排在建置分支之後；SMTP 密碼密文一起看（§8.7、§13.3、F43） |
+| L | 小處 | 採用：F42 換三張憑證、兩種碼都送回 400（F46）、第 10 次正確碼仍開事件寫明是刻意的（§8.3） |
+| 殘餘風險 | 正式機帶 Development | 採用：`docs/deploy.md` 回填加「正式機不得設 Development」（§16 第 15 點） |
 
 ## 21. 宗旨檢查（formwright-purpose-check）
 
