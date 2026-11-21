@@ -30,7 +30,7 @@ public static class PermissionResolver
             if (!inputs.AiMasked) return ForSystemAdmin();
             // MCP 通道的系統管理員：動作與範圍照管理員，只遮「不提供給 AI」與依賴它的欄位（mcp1a 計畫判斷 10 第 3 點）
             var aiOnly = AiExcluded(module);
-            HideDependents(module, aiOnly, sources, aiMasked: true, pricing: true);
+            HideDependents(module, aiOnly, sources, pricing: true);
             return Build(new HashSet<PermissionAction>(AllActions), DataScope.All, null, aiOnly, [], []);
         }
 
@@ -72,7 +72,7 @@ public static class PermissionResolver
             hidden.UnionWith(module.Blocks.SelectMany(b => b.Fields)
                 .Where(f => f.Type == FieldType.Currency
                             || (f is { Type: FieldType.Rollup, Config.ResultType: "currency" })).Select(f => f.Id));
-        HideDependents(module, hidden, sources, inputs.AiMasked, pricing);
+        HideDependents(module, hidden, sources, pricing);
         var readOnly = access.Where(p => p.Access == FieldAccess.ReadOnly).Select(p => p.FieldId)
             .Where(id => !hidden.Contains(id)).ToHashSet();
 
@@ -88,9 +88,9 @@ public static class PermissionResolver
     /// <summary>
     /// 彙總與公式不洩漏看不到的值：加總對象看不到、條件引用看不到欄位、條件解析失敗、或來源模組找不到的彙總一併隱藏
     /// （fail closed，mcp1a 第五輪審查必修 7、9）。公式引用任一隱藏欄位（含隱藏的公式）或金額結果但無 Pricing，就一併隱藏，
-    /// MCP 通道（<paramref name="aiMasked"/>）另含停用但值仍讀得到的公式（必修 8）。彙總部分畫面通道與 MCP 通道相同（#74、#75）。
+    /// 含停用但值仍讀得到的公式（必修 8）。畫面通道與 MCP 通道相同（#74、#75）。
     /// </summary>
-    private static void HideDependents(Module module, HashSet<long> hidden, RollupSourceMask? sources, bool aiMasked, bool pricing)
+    private static void HideDependents(Module module, HashSet<long> hidden, RollupSourceMask? sources, bool pricing)
     {
         foreach (var f in module.Blocks.SelectMany(b => b.Fields))
         {
@@ -108,7 +108,6 @@ public static class PermissionResolver
         bool Leaks(Field f) => FormulaGraph.RefsOf(f).Overlaps(hidden) || (f.Config.ResultType == "currency" && !pricing);
         foreach (var f in FormulaGraph.EvaluationOrder(module))
             if (Leaks(f)) hidden.Add(f.Id);
-        if (!aiMasked) return;
         // 停用的公式不在計算順序裡，但存過的值仍會由記錄與歷程回傳：連同啟用的公式反覆掃到沒有新增為止（引用鏈可能經過停用的公式）
         var formulas = module.Blocks.SelectMany(b => b.Fields).Where(f => f.Type == FieldType.Formula).ToList();
         bool changed;
