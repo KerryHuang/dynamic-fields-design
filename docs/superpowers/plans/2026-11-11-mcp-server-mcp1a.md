@@ -353,6 +353,7 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
          - 寫法照既有的 `AddActingOverrides`（`Common/Acting/ActingServiceCollectionExtensions.cs`）的 `Decorate<TService>`：
            - 找最後一筆非 keyed 的 `IPermissionRepository` descriptor 並捕捉它；用它的 type、factory 或 instance 建內層，不從 `IServiceProvider` 解析 `IPermissionRepository`，所以 factory 不會遞迴解析自己。
            - 保留原本的生命週期；找不到註冊就丟 `InvalidOperationException`。
+           - 包裝 factory 的簽章是 `(IServiceProvider sp, TService inner) => TService`：裝飾器要從 `sp` 取 scoped 的 `IRequestChannel`。既有 `Decorate` 只收 `inner`，搬成共用 helper 時一併擴充，`AddActingOverrides` 的呼叫端改成忽略 `sp`。
            - `Decorate<TService>` 從 private 改成同組件 internal 的共用 helper（搬到 `Common/ServiceCollectionDecoration.cs`），`AddActingOverrides` 改呼叫它，不複製一份。
          - ApplicationTests 各測試 host 照舊 `AddApplication()`＋`AddPersistenceRepositories()`，不改；需要 MCP 遮罩的測試 host（`McpChannelGateTests`、`McpAiExclusionTests`）在後面加呼叫 `AddChannelPermissionMasking()`。正式組裝另由 WebAPITests 經 `Program.cs` 驗（Task 5 的 `McpPermissionDiTests`）。
       3. `PermissionResolver.Resolve` 在 `inputs.AiMasked` 時：
@@ -441,6 +442,8 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
         - `Reserved`：進行中的保留數。
         - `Users`：拿著這個物件的呼叫數，含等待 semaphore 的、持有保留憑證的。
       - semaphore 內判斷每分鐘固定窗，再讀已提交數（資料庫）＋`Reserved`，`< callsPerDay` 才 `Reserved++` 並放行；工具在 semaphore 外執行。
+        - **讀取順序**（第四輪必修 1，主控補）：先在 `lock (_sync)` 內擷取 `reservedSnapshot = Reserved`，**之後**才查已提交數，以 `committed + reservedSnapshot` 判斷。反過來的順序在「B 查已提交數 → A 提交稽核並釋放保留 → B 讀 `Reserved`」的交錯下，A 兩邊都沒被算到，最後一個名額會超用；先擷取的順序最多把 A 算兩次，只會偏嚴。
+        - 測試：用可暫停的 `countCommitted` 假實作重現上述交錯（A 在 B 擷取之後、查詢之前提交並釋放），斷言只剩一個名額時 B 被擋。
       - **同步契約**（第三輪必修 2）：字典的取得與移除、`Users` 與 `Reserved` 的增減，全部在同一個 `lock (_sync)` 裡（短鎖，不在裡面 await）。
         1. 取得：`lock` 內 get-or-create、`Users++`；出了 `lock` 才 `WaitAsync`。
         2. 不放行，或等待時取消：有取得 semaphore 才釋放，再 `lock` 內 `Users--`。
@@ -552,6 +555,7 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
           - 理由：`AuditBehavior` 在確認 behavior 的內層，兩個都會在同一交易寫列，一次工具呼叫變成兩列、動作代碼不同。
           - 要合併時（例如把確認欄位寫到 `AuditBehavior` 那一列），由第一個需要的段（mcp2a 或 mcp2b）設計；mcp1a 沒有正式的確認請求，交付說明寫明。
         - 同一個 DI scope 連續兩次頂層執行：scope 在每次頂層確認請求開始時重設，`Consumed`、`Committed` 與確認列不跨請求。
+        - **重設邊界綁定 invoker 呼叫**（第四輪必修 2，主控補）：只在 behavior 入口重設太晚——若下一次呼叫在送進 MediatR 之前就丟例外，invoker 會讀到前一次的 `Committed = true`，漏寫本次失敗稽核。改成 invoker 每次 `tools/call` 一開始呼叫 `scope.BeginCall()` 取得本次的呼叫序號，`MarkCommitted` 只標記發起時的序號，invoker 只認本次序號的 `Committed`；behavior 入口的重設保留。補案例「同 scope 前次確認成功 → 下次在 Send 之前失敗 → 寫一列 `Failed`」。
       - 流程：
         1. 先依 `CodeHash` 讀列（追蹤式），以 `HashEquals` 比對，再驗未用、未作廢、未過期、`TokenId`、`UserId`、`ToolName`、`ArgumentsHash` 都相同。任一不符回 `ServiceResult.Invalid`，code `confirmation_invalid`，不說明是哪一項。
         2. 通過就把列放進 scoped `McpConfirmationScope`，再 `next()`。
@@ -572,6 +576,7 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
           - 格式化例外另記 Error log。
           - 不回 `isError` 的理由：回錯誤會讓模型重試；碼已經用掉，重試只會得到 `confirmation_invalid`，再多寫一列 `Mismatch`。
         - 取消：照常不回結果（client 已離開），也不寫列。
+        - **工具在已提交後丟例外**（第四輪必修 3，主控補）：`ExecuteAsync` 丟例外但 `Committed` 是 true（例如交易提交後的 after-commit 動作或工具本身的後處理失敗），同樣回上面的非錯誤固定結果，`dataOmitted: "post_commit_error"`，記 Error log，不落回 `internal_error`。補案例：`TestHighRiskTool` 設成提交後丟例外 → 回 `status: executed`、無 `isError`、稽核只有一列 `Confirmed`。
       - `Committed` 是 false：交易已回滾，照判斷 17 的結束路徑表寫（`Mismatch` 或 `Failed`）。
     - **`TryConsumeAsync` 是交易內的 `ExecuteUpdate`**：PostgreSQL 上同一請求已在全庫寫入鎖內，條件式更新保證兩個並行確認只有一個成功。在 `AuthorizationWriteInventoryTests.NonGuardBatchMethods` 登記並寫理由（i4d2 判斷 1 的教訓）。
     - **測試工具不進正式程式**：`ApplicationTests` 自己定義 `TestHighRiskTool : IMcpTool` 與 `TouchRecordForTestRequest : ITransactionalRequest, IMcpConfirmedRequest`（handler 改一筆記錄的 `ValuesJson` 一個欄位，可設定成在 consume 之後丟例外）。
@@ -631,6 +636,7 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
     - **`pageSize`**（第三輪必修 5）：四個分頁工具都有，選填，沒帶就是 `maxRows`。
       - 上限照各 handler 實際的夾值：`query_records`、`get_record_history` 是 200，`list_my_tasks`、`list_approval_tasks` 是 100。schema 寫 `minimum`／`maximum`，`McpArgs` 檢查超出範圍回 `invalid_arguments`、`fields.pageSize`。
       - 送出值是 `min(pageSize, maxRows)`；`meta.pageSize` 取回應 `PagedResponse.PagesSize`（判斷 14）。
+      - 只有**明確傳入**的 `pageSize` 超出範圍才回 `invalid_arguments`；沒帶時送 `maxRows`，即使 `maxRows`（政策上限 200）超過該工具的 100，也交給 handler 夾值，不報錯。
       - 沒有這個參數，判斷 14 的 `retry.pageSize` 模型照不了，這三個工具放不下時就無路可走。
     - 列舉參數的合法值由實作者讀既有 handler 或 validator 後寫進 schema 的 `enum`，不自創。
     - 記錄的附件欄位值本來就只有 `AttachmentRef(Id, Name, Size)`，沒有下載連結（§5.5「附件只回中繼資料」自然成立）。
