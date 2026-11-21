@@ -140,6 +140,13 @@ public static class AuditActions
         new("mcp.getTask", Mcp, R),
         new("mcp.listApprovalTasks", Mcp, R),
         new("mcp.getRecordApproval", Mcp, R),
+        new("mcp.createRecord", Mcp, W),
+        new("mcp.updateRecord", Mcp, W),
+        new("mcp.createTask", Mcp, W),
+        new("mcp.updateTask", Mcp, W),
+        new("mcp.addTaskComment", Mcp, W),
+        new("mcp.submitApproval", Mcp, W),
+        new("mcp.withdrawApproval", Mcp, W),
         new("mcp.unknownTool", Mcp, R),
         // 語系與語系包（語系包設計 §11；i4d1 計畫判斷 17）：一般寫入，高風險只留權限類
         new("locale.install", Locale, W),

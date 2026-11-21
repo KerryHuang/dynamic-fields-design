@@ -5,6 +5,7 @@ using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.McpService.Confirmations;
+using DynamicModules.Application.Dynamic.McpService.Writes;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Mcp;
 using MediatR;
@@ -32,8 +33,8 @@ public sealed record McpCallContext(string? ClientName = null, string? ClientVer
 /// </summary>
 public sealed class McpToolInvoker(
     IEnumerable<IMcpTool> tools, IRequestChannel channel, McpPolicies policies, McpRateGate rate, McpUsage usage, IAuditLog audit,
-    IMessageCatalog messages, RequestLocale locale, ISender sender, IMcpConfirmationScope confirmations, TimeProvider time,
-    ILogger<McpToolInvoker> log)
+    IMessageCatalog messages, RequestLocale locale, ISender sender, IMcpConfirmationScope confirmations, IMcpWriteScope writes,
+    IOperationContext operation, TimeProvider time, ILogger<McpToolInvoker> log)
 {
     private readonly IReadOnlyList<IMcpTool> _tools = tools.ToList();
 
@@ -48,6 +49,9 @@ public sealed class McpToolInvoker(
         if (channel.Channel != RequestChannel.Mcp) throw new InvalidOperationException("工具執行器只能在 MCP 通道使用");
         // 本次呼叫的序號（判斷 18）：只認這次的「確認已提交」，前一次呼叫的提交不會讓這次漏寫稽核
         var call = confirmations.BeginCall();
+        writes.Disarm();
+        // 寫入工具的確認或寫入稽核已在交易內寫了這次的那一列（判斷 3、18）
+        bool Committed() => confirmations.IsCommitted(call) || writes.IsCommitted(call);
         var started = time.GetTimestamp();
         var lc = locale.Current;
         string Text(MessageRef m) => m.Resolve(messages, lc);
@@ -75,9 +79,9 @@ public sealed class McpToolInvoker(
                 (result, auditResult, reason) = (McpResultFormatter.Error(McpErrorCodes.InternalError, Text(McpMessages.InternalError)),
                     AuditResult.Failed, "cancelled");
             }
-            catch (Exception ex) when (confirmations.IsCommitted(call))
+            catch (Exception ex) when (Committed())
             {
-                // 確認已提交之後才丟例外（提交後的收尾或工具的後處理）：動作已生效，不回錯誤免得模型重試（判斷 18）
+                // 確認或寫入已提交之後才丟例外（提交後的收尾或工具的後處理）：動作已生效，不回錯誤免得模型重試（判斷 18）
                 log.LogError(ex, "MCP 工具 {Tool} 的確認已提交，之後的處理失敗", name);
                 (result, auditResult, reason) = (Executed(name, McpDataOmitted.PostCommitError), AuditResult.Success, null);
             }
@@ -90,7 +94,7 @@ public sealed class McpToolInvoker(
             }
 
             // 確認已提交：behavior 在交易內寫的那一列就是這次呼叫唯一的一列（判斷 17），不再寫
-            if (!confirmations.IsCommitted(call))
+            if (!Committed())
                 try
                 {
                     // 稽核收尾與請求取消脫鉤：工具取消後照常回傳、或取消發生在稽核提交途中，都要恰好寫一列（名額才不會白白釋放）
@@ -105,6 +109,7 @@ public sealed class McpToolInvoker(
         }
         finally
         {
+            writes.Disarm();
             reservation?.Release();
         }
         ct.ThrowIfCancellationRequested();
@@ -131,14 +136,26 @@ public sealed class McpToolInvoker(
             }
             reservation = decision.Reservation;
 
+            if (tool.Descriptor.Risk == McpRisk.Write)
+            {
+                // 執行器自己的參數驗證（判斷 3）：只有冪等鍵與迴圈目標；不過就不上膛、不呼叫工具
+                if (WriteArgErrors(tool.Descriptor, args) is { Count: > 0 } errors)
+                {
+                    outcome = McpToolOutcome.InvalidArguments(errors);
+                    return (Format(tool.Descriptor.Name, outcome, Text), AuditResult.Invalid, McpErrorCodes.InvalidArguments);
+                }
+                writes.Arm(call, new McpWriteAudit(tool.Descriptor.AuditCode, name, McpArguments.Hash(args),
+                    Summary(args, null, context, started: null, op: operation.OperationId)));
+            }
+
             var toolCall = new McpToolCall(args, snapshot, lc.Locale);
             outcome = Mapped(tool.Descriptor.Risk != McpRisk.HighRisk ? await tool.RunAsync(toolCall, ct)
                 : confirmationCode is null ? await PreviewAsync(tool, toolCall, tokenId)
                 : await tool.ExecuteAsync(toolCall, new McpConfirmationTicket(confirmationCode, tokenId, name, McpArguments.Hash(args),
-                    tool.Descriptor.AuditCode, Summary(args, null, context, started: null)), ct));
+                    tool.Descriptor.AuditCode, Summary(args, null, context, started: null, strict: true)), ct));
 
-            // 確認已提交（判斷 18「確認提交之後」）：格式化成功而且放得下照常回，否則回非錯誤的「已執行、結果省略」
-            if (confirmations.IsCommitted(call)) return (Committed(tool.Descriptor.Name, outcome), AuditResult.Success, null);
+            // 確認或寫入已提交（判斷 18「確認提交之後」、mcp2a 判斷 3）：格式化成功而且放得下照常回，否則回非錯誤的「已執行、結果省略」
+            if (Committed()) return (CommittedResult(tool.Descriptor.Name, outcome), AuditResult.Success, null);
 
             if (outcome.IsError)
             {
@@ -153,7 +170,16 @@ public sealed class McpToolInvoker(
                 return (Format(tool.Descriptor.Name, outcome, Text), kind, code);
             }
             var fitted = McpResultFormatter.Fit(tool.Descriptor.Name, outcome, Text(McpMessages.ResultTooLarge));
-            return fitted.IsError ? (fitted, AuditResult.Failed, McpErrorCodes.ResultTooLarge) : (fitted, AuditResult.Success, null);
+            return fitted.IsError ? (fitted, AuditResult.Failed, McpErrorCodes.ResultTooLarge) : (fitted, AuditResult.Success, AuditReasonOf(outcome));
+        }
+
+        // 工具沒回錯誤、本次也沒提交時才採用；值限定常數集合（判斷 3）
+        string? AuditReasonOf(McpToolOutcome done)
+        {
+            if (done.AuditReason is not { } r) return null;
+            if (McpAuditReasons.All.Contains(r)) return r;
+            log.LogError("MCP 工具 {Tool} 回了未登記的稽核原因 {Reason}，不寫進稽核", name, r);
+            return null;
         }
 
         // 預演（判斷 18）：工具給摘要與目標版本 → 建確認碼（交易型請求）→ 回非錯誤結果，碼在 meta；稽核記 Preview 與確認列 id
@@ -171,7 +197,7 @@ public sealed class McpToolInvoker(
                 with { TargetKind = preview.TargetKind, TargetId = preview.TargetId };
         }
 
-        McpFormattedResult Committed(string tool, McpToolOutcome done)
+        McpFormattedResult CommittedResult(string tool, McpToolOutcome done)
         {
             try
             {
@@ -203,14 +229,19 @@ public sealed class McpToolInvoker(
         McpCallContext context, long started, long? confirmationId, AuditConfirmationOutcome? confirmationOutcome) =>
         new(tool?.Descriptor.AuditCode ?? McpToolCatalog.UnknownToolAuditCode, result,
             TargetKind: outcome?.TargetKind, TargetId: outcome?.TargetId, TargetLabel: name, ReasonCode: reason,
-            Summary: Summary(args, outcome?.RecordIds, context, started),
+            Summary: Summary(args, outcome?.RecordIds, context, started, strict: tool is null || tool.Descriptor.Risk != McpRisk.Read),
             ArgumentsHash: McpArguments.Hash(args), ResultCount: outcome is { IsError: false } ? outcome.ResultCount : null,
             ConfirmationId: confirmationId, ConfirmationOutcome: confirmationOutcome);
 
-    /// <summary>稽核摘要（判斷 17）：參數摘要、前 20 個記錄 id、client、耗時（確認稽核在交易內寫，不帶耗時）、任務標籤。</summary>
-    private string? Summary(JsonElement args, IReadOnlyList<long>? recordIds, McpCallContext context, long? started)
+    /// <summary>
+    /// 稽核摘要（判斷 17）：參數摘要、前 20 個記錄 id、client、耗時（確認與寫入稽核在交易內寫，不帶耗時）、任務標籤、
+    /// operation id（寫入稽核，mcp2a 判斷 3）。寫入、高風險、不存在的工具用 strict 摘要（mcp2a 判斷 15）。
+    /// </summary>
+    private string? Summary(JsonElement args, IReadOnlyList<long>? recordIds, McpCallContext context, long? started, bool strict = false,
+        string? op = null)
     {
-        var summary = new AuditSummary().Add("args", McpAuditSummary.Args(args));
+        var summary = new AuditSummary().Add("args", McpAuditSummary.Args(args, strict || op is not null));
+        if (op is not null) summary.Add("op", op);
         if (recordIds is { Count: > 0 } ids) summary.Add("ids", ids.Take(McpLimits.AuditRecordIdsMax).ToList());
         if (context.ClientName is not null || context.ClientVersion is not null)
             summary.Add("client", new { name = McpAuditSummary.Cut(context.ClientName), version = McpAuditSummary.Cut(context.ClientVersion) });
@@ -234,8 +265,12 @@ public sealed class McpToolInvoker(
             return outcome with { ErrorCode = McpErrorCodes.Forbidden, ErrorMessage = MessageRef.Of(MessageText.Forbidden) };
         if (r.IsNotFound)
             return outcome with { ErrorCode = McpErrorCodes.NotFound, ErrorMessage = MessageRef.Of(MessageText.ResourceNotFound) };
-        if (r.IsConflict)
+        if (r.IsConflict && r.Code == "stale")
             return outcome with { ErrorCode = McpErrorCodes.Stale, ErrorMessage = MessageRef.Of(MessageText.Stale) };
+        // 其他衝突（檢查失敗、子任務未完成、已在簽核中等）：訊息照 handler，欄位帶機器碼與參數，模型能據此修正重試（mcp2a 判斷 4）
+        if (r.IsConflict) return outcome with { ErrorCode = McpErrorCodes.Conflict, Fields = ConflictFields(r) };
+        if (r.IsUnprocessable && r.MessageKey == MessageText.IdempotencyKeyReused)
+            return outcome with { ErrorCode = McpErrorCodes.IdempotencyKeyReused };
         // 確認碼不符一律同一句、不帶欄位（不說明是哪一項，判斷 18）
         if (r.Code == McpErrorCodes.ConfirmationInvalid)
             return outcome with
@@ -245,6 +280,35 @@ public sealed class McpToolInvoker(
             };
         // 其餘（Invalid、Unprocessable、TooManyRequests）照 handler 的訊息
         return outcome with { ErrorCode = r.IsTooManyRequests ? McpErrorCodes.RateLimited : McpErrorCodes.Invalid };
+    }
+
+    /// <summary>衝突的機器碼與參數（<c>code</c>、<c>params.&lt;名稱&gt;</c>）；都沒有時是 null。</summary>
+    private static Dictionary<string, MessageRef>? ConflictFields(ServiceResult r)
+    {
+        var fields = new Dictionary<string, MessageRef>(StringComparer.Ordinal);
+        if (r.Code is { } code) fields["code"] = MessageRef.Literal(code);
+        if (r.Params is { } p && JsonSerializer.SerializeToElement(p, p.GetType(), McpResultFormatter.Json) is { ValueKind: JsonValueKind.Object } o)
+            foreach (var prop in o.EnumerateObject())
+                fields["params." + prop.Name] = MessageRef.Literal(prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString()! : prop.Value.GetRawText());
+        return fields.Count > 0 ? fields : null;
+    }
+
+    /// <summary>寫入工具上膛前的參數驗證：<c>idempotencyKey</c> 的格式、迴圈目標是正整數（其他參數由工具自己驗）。</summary>
+    private static Dictionary<string, MessageRef> WriteArgErrors(McpToolDescriptor tool, JsonElement args)
+    {
+        var errors = new Dictionary<string, MessageRef>(StringComparer.Ordinal);
+        if (args.ValueKind != JsonValueKind.Object)
+        {
+            errors[McpArgs.ArgumentsKey] = McpMessages.InvalidArgument(McpArgs.ArgumentsKey);
+            return errors;
+        }
+        if (args.TryGetProperty(McpArgs.IdempotencyKey, out var key) && key.ValueKind != JsonValueKind.Null
+            && (key.ValueKind != JsonValueKind.String || !McpArgs.IsIdempotencyKey(key.GetString())))
+            errors[McpArgs.IdempotencyKey] = McpMessages.InvalidArgument(McpArgs.IdempotencyKey);
+        if (tool.LoopTargetArg is { } target && args.TryGetProperty(target, out var t) && t.ValueKind != JsonValueKind.Null
+            && (t.ValueKind != JsonValueKind.Number || !t.TryGetInt64(out var id) || id < 1))
+            errors[target] = McpMessages.InvalidArgument(target);
+        return errors;
     }
 
     private McpFormattedResult Format(string tool, McpToolOutcome outcome, Func<MessageRef, string> text)

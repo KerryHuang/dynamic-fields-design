@@ -26,6 +26,8 @@ public static class DependencyInjection
             cfg.AddOpenBehavior(typeof(TransactionBehavior<,>));
             // 在交易之內、稽核之外：確認碼的已用標記、業務寫入與確認稽核同一交易（mcp1a 計畫判斷 18）
             cfg.AddOpenBehavior(typeof(Dynamic.McpService.Confirmations.McpConfirmationBehavior<,>));
+            // 在交易之內、確認之後、稽核之外：MCP 寫入工具的稽核和業務寫入同交易（mcp2a 計畫判斷 3）
+            cfg.AddOpenBehavior(typeof(Dynamic.McpService.Writes.McpWriteAuditBehavior<,>));
             // 在交易之內、冪等之外：稽核和業務寫入同交易（維運設計 §17.2.1）
             cfg.AddOpenBehavior(typeof(AuditBehavior<,>));
             // 在交易之內：寫入鎖已持有，冪等查詢與寫入、事件與驗證才在同一把鎖之下（設計 §2）
@@ -235,6 +237,8 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.GetRecordApprovalTool>();
         services.AddScoped<Dynamic.McpService.Tools.McpToolInvoker>();
         services.AddScoped<Dynamic.McpService.Confirmations.McpConfirmationScope>();
+        services.AddScoped<Dynamic.McpService.Writes.McpWriteScope>();
+        services.AddScoped<Dynamic.McpService.Writes.IMcpWriteScope>(sp => sp.GetRequiredService<Dynamic.McpService.Writes.McpWriteScope>());
         services.AddScoped<Dynamic.McpService.Confirmations.IMcpConfirmationScope>(sp =>
             sp.GetRequiredService<Dynamic.McpService.Confirmations.McpConfirmationScope>());
         services.AddScoped<Dynamic.McpService.McpUsage>();

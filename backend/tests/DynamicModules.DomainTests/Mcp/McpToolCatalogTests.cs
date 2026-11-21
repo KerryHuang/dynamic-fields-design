@@ -7,10 +7,11 @@ namespace DynamicModules.DomainTests.Mcp;
 public class McpToolCatalogTests
 {
     [Fact]
-    public void Production_TwelveTools_IncludingWhoami() =>
+    public void Production_NineteenTools_IncludingWhoami() =>
         McpToolCatalog.Production.Select(t => t.Name).Should().BeEquivalentTo(
             "whoami", "list_modules", "describe_module", "query_records", "get_record", "get_record_history",
-            "list_reports", "run_report", "list_my_tasks", "get_task", "list_approval_tasks", "get_record_approval");
+            "list_reports", "run_report", "list_my_tasks", "get_task", "list_approval_tasks", "get_record_approval",
+            "create_record", "update_record", "create_task", "update_task", "add_task_comment", "submit_approval", "withdraw_approval");
 
     [Fact]
     public void Names_UniqueSnakeCase()
@@ -30,11 +31,17 @@ public class McpToolCatalogTests
     }
 
     [Fact]
-    public void Scopes_WhoamiNull_OthersBusinessRead_AllRead()
+    public void Scopes_ReadToolsBusinessRead_WriteToolsBusinessWrite()
     {
         McpToolCatalog.Find("whoami")!.Scope.Should().BeNull();
-        McpToolCatalog.Production.Where(t => t.Name != "whoami").Should().OnlyContain(t => t.Scope == McpScopes.BusinessRead);
-        McpToolCatalog.Production.Should().OnlyContain(t => t.Risk == McpRisk.Read && !t.HighRiskFloor);
+        var read = McpToolCatalog.Production.Where(t => t.Risk == McpRisk.Read).ToList();
+        var write = McpToolCatalog.Production.Where(t => t.Risk != McpRisk.Read).ToList();
+        (read.Count, write.Count).Should().Be((12, 7));
+        read.Where(t => t.Name != "whoami").Should().OnlyContain(t => t.Scope == McpScopes.BusinessRead);
+        write.Should().OnlyContain(t => t.Scope == McpScopes.BusinessWrite && t.Risk == McpRisk.Write);
+        McpToolCatalog.Production.Should().OnlyContain(t => !t.HighRiskFloor);
+        McpToolCatalog.Production.Where(t => t.LoopTargetArg != null).Select(t => (t.Name, t.LoopTargetArg))
+            .Should().BeEquivalentTo([("update_record", "recordId"), ("submit_approval", "recordId")]);
     }
 
     [Fact]

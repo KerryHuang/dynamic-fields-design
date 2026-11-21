@@ -1,5 +1,10 @@
 using System.Reflection;
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
+using DynamicModules.Application.Dynamic.McpService.Confirmations;
 using DynamicModules.Application.Dynamic.McpService.Tools;
+using DynamicModules.Application.Dynamic.McpService.Writes;
+using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Mcp;
 using DynamicModules.Domain.Repositories.Dynamic;
 using FluentAssertions;
@@ -38,6 +43,19 @@ public class McpToolArchitectureTests
         var tools = ToolsIn(typeof(IMcpTool).Assembly).ToList();
         tools.Should().NotBeEmpty();
         Violations(tools).Should().BeEmpty();
+    }
+
+    /// <summary>寫入工具送的請求：不是稽核或確認請求（一次呼叫只能一列，mcp2a 判斷 3），而且都是 IIdempotentRequest。</summary>
+    [Fact]
+    public void WriteTargets_NotAuditedOrConfirmed_AllIdempotent()
+    {
+        McpWriteTargets.Covered.Should().HaveCount(9);
+        McpWriteTargets.Covered.Where(t => typeof(IAuditedRequest).IsAssignableFrom(t) || typeof(IMcpConfirmedRequest).IsAssignableFrom(t))
+            .Should().BeEmpty();
+        // 任務與留言的 request 在 Task 3 加上 IIdempotentRequest，屆時拿掉這份例外
+        Type[] untilTask3 = [typeof(CreateTaskRequest), typeof(CreateRecordTaskRequest), typeof(CreateSubtaskRequest),
+            typeof(UpdateTaskRequest), typeof(AddTaskCommentRequest)];
+        McpWriteTargets.Covered.Except(untilTask3).Where(t => !typeof(IIdempotentRequest).IsAssignableFrom(t)).Should().BeEmpty();
     }
 
     [Fact]

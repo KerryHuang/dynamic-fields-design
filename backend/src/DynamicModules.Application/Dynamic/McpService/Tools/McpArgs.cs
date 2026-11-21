@@ -12,6 +12,13 @@ public sealed class McpArgs
     /// <summary>參數本身不是物件時的錯誤鍵。</summary>
     public const string ArgumentsKey = "arguments";
 
+    /// <summary>寫入工具的冪等鍵參數（mcp2a 判斷 5）。</summary>
+    public const string IdempotencyKey = "idempotencyKey";
+
+    /// <summary>冪等鍵格式，沿用 <see cref="OperationContext.KeyPattern"/>（與 REST 的 Idempotency-Key 標頭同一條）。</summary>
+    public static bool IsIdempotencyKey(string? key) =>
+        key is not null && System.Text.RegularExpressions.Regex.IsMatch(key, OperationContext.KeyPattern);
+
     private readonly JsonElement _args;
     private readonly Dictionary<string, MessageRef> _errors = new(StringComparer.Ordinal);
 

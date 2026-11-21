@@ -20,6 +20,8 @@ public sealed class ServiceResult
     /// <summary>429：被降速（例如建立 MCP 權杖時重新輸入密碼，與登入同一套限流）。</summary>
     public bool IsTooManyRequests { get; private init; }
     private MessageRef? MessageSource { get; init; }
+    /// <summary>訊息的字串表鍵（字面值是 null）：給 MCP 執行器對照錯誤代碼用，不給使用者。</summary>
+    public string? MessageKey => MessageSource?.Key;
     /// <summary>繁中，只給 log 與測試；回給使用者的文字由 WebAPI 依請求語系用 <see cref="MessageIn(IMessageCatalog, LocaleContext)"/> 解析。</summary>
     public string? Message => MessageIn(I18nText.FallbackLocale);
     /// <summary>給前端判斷用的機器代碼（如 stale）；沒有時是 null。</summary>

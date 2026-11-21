@@ -44,11 +44,13 @@ public sealed record McpToolCall(JsonElement Arguments, McpPolicySnapshot Limits
 /// 由 invoker 依 §6.5 對照成錯誤代碼（工具拿不到訊息目錄）。<see cref="TargetKind"/> 以下是稽核欄位。
 /// 結果放不下時（判斷 14）：沒有 <see cref="Resize"/> 的單筆結果回 <c>result_too_large</c>（可附 <see cref="OversizeHint"/>）；
 /// 分頁列表回建議的 <c>pageSize</c>；報表明細截斷。
+/// <see cref="AuditReason"/> 是寫入工具沒有提交時的稽核原因（<see cref="McpAuditReasons"/>，例如 <c>previewOnly</c> 的 <c>preview</c>）：
+/// 執行器只在工具沒回錯誤、本次也沒提交時採用，不在常數集合裡的值不寫。
 /// </summary>
 public sealed record McpToolOutcome(bool IsError, object? Meta, object? Data, string? ErrorCode = null, MessageRef? ErrorMessage = null,
     IReadOnlyDictionary<string, MessageRef>? Fields = null, int? RetryAfterSeconds = null,
     string? TargetKind = null, string? TargetId = null, int? ResultCount = null, IReadOnlyList<long>? RecordIds = null,
-    ServiceResult? Failure = null, McpResize? Resize = null, string? OversizeHint = null)
+    ServiceResult? Failure = null, McpResize? Resize = null, string? OversizeHint = null, string? AuditReason = null)
 {
     public static McpToolOutcome Ok(object? data, object? meta = null) => new(false, meta, data);
 
@@ -76,5 +78,14 @@ public static class McpErrorCodes
 {
     public const string Stale = "stale", Invalid = "invalid", Forbidden = "forbidden", NotFound = "not_found", RateLimited = "rate_limited",
         ConfirmationInvalid = "confirmation_invalid", AuditUnavailable = "audit_unavailable", ResultTooLarge = "result_too_large",
-        UnknownTool = "unknown_tool", InvalidArguments = "invalid_arguments", ScopeDenied = "scope_denied", InternalError = "internal_error";
+        UnknownTool = "unknown_tool", InvalidArguments = "invalid_arguments", ScopeDenied = "scope_denied", InternalError = "internal_error",
+        Conflict = "conflict", IdempotencyKeyReused = "idempotency_key_reused", WriteLoop = "write_loop";
+}
+
+/// <summary>寫入工具成功但沒有提交時，稽核列 <c>ReasonCode</c> 允許的值（mcp2a 判斷 3、9）。</summary>
+public static class McpAuditReasons
+{
+    public const string Preview = "preview";
+
+    public static IReadOnlySet<string> All { get; } = new HashSet<string>(StringComparer.Ordinal) { Preview };
 }

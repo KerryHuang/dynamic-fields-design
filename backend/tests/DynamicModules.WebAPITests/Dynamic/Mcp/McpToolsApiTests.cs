@@ -66,7 +66,9 @@ public class McpToolsApiTests : IAsyncLifetime
     public async Task ToolsList_Lists12ProductionTools()
     {
         var tools = await _mcp.ListToolsAsync();
-        tools.Select(t => t.Name).Should().BeEquivalentTo(McpToolCatalog.Production.Select(t => t.Name));
+        // business.read 權杖只看得到唯讀工具（寫入工具在 McpTransportTests）
+        tools.Select(t => t.Name).Should().BeEquivalentTo(
+            McpToolCatalog.Production.Where(t => t.Scope is null || t.Scope == McpScopes.BusinessRead).Select(t => t.Name));
         tools.Should().HaveCount(12);
         foreach (var t in tools) t.ProtocolTool.Annotations!.ReadOnlyHint.Should().BeTrue();
     }
