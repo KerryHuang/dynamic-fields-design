@@ -172,8 +172,10 @@ function logout() {
 .brand-link {
   color: inherit;
   text-decoration: none;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  height: 100%;
+  width: fit-content;
   gap: 0.4em;
 }
 /* #76：頂列按鈕變多後 820 以下放不下品牌字，只留 mark（連結仍有 aria-label 與 title） */
