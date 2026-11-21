@@ -2,7 +2,6 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Observability;
 using DynamicModules.Application.Common.Security;
-using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Application.Dynamic.AccountService.Data;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
@@ -27,20 +26,17 @@ public class LoginHandler(
 
     public async Task<ServiceResult> Handle(LoginRequest request, CancellationToken ct)
     {
-        // 登入的稽核身分情境：不從請求帶的舊 cookie 取行為者（維運設計 §17.2.1）
-        using var signIn = AuditOrigin.BeginSignIn();
         var outcome = await AttemptAsync(request, ct);
         if (outcome.Throttled)
         {
             OpsMetrics.LoginThrottled.Add(1);
             return outcome.Result;
         }
-        // 寫不進稽核不擋登入（§5.6）：TryWriteNowAsync 只記 Error log
+        // 寫不進稽核不擋登入（§5.6）：TryWriteNowAsync 只記 Error log。
+        // 行為者明確傳入剛驗證的帳號（失敗為 null），不從請求帶的舊 cookie 取（維運設計 §17.2.1）
         await audit.TryWriteNowAsync(outcome.Result.Data is AuthUserResponse ok
-            ? new AuditEntry("login.succeeded", AuditResult.Success, AuditTargets.User, ok.UserId, ok.DisplayName,
-                Summary: Method, ActorOverride: new ActorOverride(ok.UserId))
-            : new AuditEntry("login.failed", AuditResult.Denied, outcome.UserId is null ? null : AuditTargets.User, outcome.UserId,
-                ReasonCode: outcome.Reason, Summary: Method), ct);
+            ? SignInAudit.Succeeded(ok.UserId, ok.DisplayName, Method)
+            : SignInAudit.Failed(outcome.UserId, outcome.Reason, Method), ct);
         return outcome.Result;
     }
 

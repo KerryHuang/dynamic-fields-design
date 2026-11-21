@@ -166,18 +166,17 @@ public class AuditLogTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ActorOverride_WithoutIdentity_Allowed_SignInScopeClosedToOtherCallers()
+    public async Task ActorOverride_WithoutIdentity_Allowed_WithIdentity_RecordsTheEnvironment()
     {
         var (log, _, _, scope) = NewLog(_sp);
         using (scope)
         {
             // 沒有身分：可以覆寫
             await log.WriteNowAsync(Entry(new ActorOverride("sales01")), CancellationToken.None);
-            // 登入範圍內（環境有身分也不取）只有兩個登入 handler 開得了，由 WebAPITests 的 A11 經真的登入驗證；這裡只驗測試碼開不了
+            // 登入稽核（環境有身分也不取）只有兩個登入 handler 組得出（internal 的 SignInAudit，WebAPITests 的架構測試把關），
+            // 行為由 WebAPITests 的 A11 與 SignInRows 經真的登入驗證
             _user.UserId = "admin";
-            FluentActions.Invoking(AuditOrigin.BeginSignIn).Should().Throw<InvalidOperationException>();
-            AuditOrigin.InSignIn.Should().BeFalse();
-            // 範圍外、有身分：記環境的身分
+            // 有身分、不覆寫：記環境的身分
             await log.WriteNowAsync(Entry(), CancellationToken.None);
         }
         (await Rows()).Select(r => (r.ActorUserId, r.ActorKind)).Should().Equal(

@@ -301,6 +301,53 @@ public class AuditApiTests
         (await Rows(app, "login.failed")).Should().BeEmpty("被總量擋下的嘗試不寫稽核");
     }
 
+    private static (string?, AuditActorKind, AuditChannel, string, AuditResult, string?, string?, string?, string?, string?) Content(AuditLogEntry r) =>
+        (r.ActorUserId, r.ActorKind, r.Channel, r.Action, r.Result, r.TargetKind, r.TargetId, r.TargetLabel, r.ReasonCode, r.SummaryJson);
+
+    [Fact]
+    public async Task SignInRows_PasswordLogin_ExactContent()
+    {
+        // 鎖住登入稽核列的完整內容（行為者、種類、管道、動作、目標、原因、摘要），改寫登入稽核的寫法前後要一致
+        using var app = new TestApp(realAuth: true);
+        await AddUser(app, "audit01");
+        await AddUser(app, "other01");
+        var c = app.CreateClient();
+        (await Login(c, "other01", Password)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var before = (await Rows(app)).Count;
+
+        // 帶 other01 的有效 cookie：成功、錯密碼、帳號不存在
+        (await Login(c, "audit01", Password)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Login(c, "audit01", "wrong-pass-9")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await Login(c, "ghost-user-x", "whatever-1")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var method = new AuditSummary().Add("method", "password").ToJson();
+        (await Rows(app)).Skip(before).Select(Content).Should().Equal(
+            ("audit01", AuditActorKind.User, AuditChannel.Ui, "login.succeeded", AuditResult.Success, "user", "audit01", "audit01 名稱", null, method),
+            (null, AuditActorKind.System, AuditChannel.Ui, "login.failed", AuditResult.Denied, "user", "audit01", null, "wrongPassword", method),
+            (null, AuditActorKind.System, AuditChannel.Ui, "login.failed", AuditResult.Denied, null, null, null, "unknownAccount", method));
+    }
+
+    [Fact]
+    public async Task SignInRows_DemoLogin_ExactContent_IgnoresTheRequestIdentity()
+    {
+        using var app = new DemoSiteApp();
+        await AddUser(app, "audit02");
+        // 請求帶著 audit02 的身分（X-User）：行為者仍只來自 handler 剛驗證的帳號
+        var c = app.AsUser("audit02");
+        (await c.PostAsJsonAsync($"{Auth}/demo-login", new { userId = "admin" })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await c.PostAsJsonAsync($"{Auth}/demo-login", new { userId = "audit02" })).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await c.PostAsJsonAsync($"{Auth}/demo-login", new { userId = "ghost-user-x" })).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var adminName = await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AppUser>()
+            .Where(u => u.UserId == "admin").Select(u => u.DisplayName).SingleAsync();
+        var method = new AuditSummary().Add("method", "demo").ToJson();
+        (await Rows(app)).Where(r => r.Action.StartsWith("login.")).Select(Content).Should().Equal(
+            ("admin", AuditActorKind.User, AuditChannel.Ui, "login.succeeded", AuditResult.Success, "user", "admin", adminName, null, method),
+            (null, AuditActorKind.System, AuditChannel.Ui, "login.failed", AuditResult.Denied, "user", "audit02", null, "notDemoAccount", method),
+            (null, AuditActorKind.System, AuditChannel.Ui, "login.failed", AuditResult.Denied, null, null, null, "unknownAccount", method));
+    }
+
     // ---- 匯入缺名稱：驗證先於補稽核目標（審查 P2：曾因 Name 為 null 變 500） ----
 
     [Fact]

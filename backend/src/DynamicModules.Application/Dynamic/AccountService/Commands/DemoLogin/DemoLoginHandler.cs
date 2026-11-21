@@ -2,7 +2,6 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Observability;
 using DynamicModules.Application.Common.Security;
-using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Application.Dynamic.AccountService.Data;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
@@ -26,8 +25,6 @@ public class DemoLoginHandler(
     {
         if (!settings.DemoLoginEnabled) return ServiceResult.NotFound(MessageRef.Of(MessageText.ResourceNotFound));
 
-        // 登入的稽核身分情境（維運設計 §17.2.1）；寫不進稽核不擋登入
-        using var signIn = AuditOrigin.BeginSignIn();
         var userId = (request.UserId ?? "").Trim().ToLowerInvariant();
         var ip = string.IsNullOrEmpty(request.ClientIp) ? "unknown" : request.ClientIp;
         var key = userId.Length > 128 ? userId[..128] : userId;
@@ -60,8 +57,8 @@ public class DemoLoginHandler(
             if (user is null) logger.LogWarning("一鍵登入失敗：帳號不存在（不記錄輸入）");
             else logger.LogWarning("帳號 {UserId} 一鍵登入失敗", user.UserId);
             var reason = user is null ? "unknownAccount" : !user.IsActive ? "inactive" : "notDemoAccount";
-            await audit.TryWriteNowAsync(new AuditEntry("login.failed", AuditResult.Denied, user is null ? null : AuditTargets.User,
-                user?.UserId, ReasonCode: reason, Summary: Method), ct);
+            // 寫不進稽核不擋登入；行為者明確傳入（失敗為 null），不從請求帶的舊 cookie 取（維運設計 §17.2.1）
+            await audit.TryWriteNowAsync(SignInAudit.Failed(user?.UserId, reason, Method), ct);
             return ServiceResult.Unauthorized(MessageRef.Of(MessageText.LoginFailed));
         }
 
@@ -72,8 +69,7 @@ public class DemoLoginHandler(
         }
 
         logger.LogInformation("帳號 {UserId} 一鍵登入成功", user.UserId);
-        await audit.TryWriteNowAsync(new AuditEntry("login.succeeded", AuditResult.Success, AuditTargets.User, user.UserId, user.DisplayName,
-            Summary: Method, ActorOverride: new ActorOverride(user.UserId)), ct);
+        await audit.TryWriteNowAsync(SignInAudit.Succeeded(user.UserId, user.DisplayName, Method), ct);
         return ServiceResult.Success(new AuthUserResponse(user.UserId, user.DisplayName, false, user.SecurityStamp));
     }
 }

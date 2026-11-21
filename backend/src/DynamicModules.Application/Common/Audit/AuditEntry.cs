@@ -7,14 +7,18 @@ namespace DynamicModules.Application.Common.Audit;
 /// request id、來源 IP 由 <see cref="IAuditLog"/> 從環境補，呼叫端不填；只有 <see cref="ActorOverride"/> 例外。
 /// </summary>
 /// <param name="Summary">由 <see cref="AuditSummary"/> 組成的摘要 JSON；不自動序列化請求物件。</param>
-/// <param name="ActorOverride">只在環境沒有身分時可給（例外：登入的 <see cref="AuditOrigin.BeginSignIn"/> 範圍）。</param>
+/// <param name="ActorOverride">只在環境沒有身分時可給；登入的行為者不走這裡，見 <see cref="SignInAudit"/>。</param>
 public sealed record AuditEntry(
     string Action, AuditResult Result,
     string? TargetKind = null, string? TargetId = null, string? TargetLabel = null,
     string? ReasonCode = null, string? Summary = null,
     string? ArgumentsHash = null, int? ResultCount = null,
     long? ConfirmationId = null, AuditConfirmationOutcome? ConfirmationOutcome = null,
-    ActorOverride? ActorOverride = null);
+    ActorOverride? ActorOverride = null)
+{
+    /// <summary>登入稽核的行為者（只由 <see cref="SignInAudit"/> 設定）；有值時不從環境取行為者。</summary>
+    internal SignInActor? SignIn { get; init; }
+}
 
 public sealed record ActorOverride(string UserId, AuditActorKind Kind = AuditActorKind.User);
 

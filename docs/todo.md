@@ -8,4 +8,3 @@
 
 - 修正略過標記檢查註解引用的設計章節（a5d 複審 N5）：註解 §6.3 改 §6.1，build 過即可｜依賴：無｜基準 3c024feb｜backend/src（略過標記檢查處）｜CPU 輕｜任一 commit 後｜可開工｜未指派
 - 持續追蹤 vitest 在 jsdom 拆除後 Quasar 計時器觸發「window is not defined」：本機無法重現，根因未證實；已做局部修正（ApproverSourceEditor spec 每個測試後卸載元件，QSelect 卸載時清 filter／input 計時器），曾試全域包裝 setTimeout 但可能吞掉真實錯誤已撤。CI 再出現時看是哪個 spec、哪個計時器；其他用 QSelect use-input 的 spec 尚未處理
-- 登入稽核改用登入專用 API 明確傳入行為者，取代 `AuditOrigin.BeginSignIn` 的呼叫堆疊檢查（o2a 複審建議：目前正確，但依賴呼叫端是 async 狀態機，抽 helper 或換 runtime 時要重核對）：驗收 A04、A11、架構測試全過、BeginSignIn 移除｜依賴：無｜基準 7748ed07｜backend/src/DynamicModules.Application/Common/Audit、Login／DemoLogin handler｜CPU 中｜任一 commit 後｜可開工｜未指派

@@ -77,7 +77,7 @@ public sealed class AuditLog(
 
     private AuditLogEntry Build(AuditEntry e)
     {
-        var (actor, kind) = ResolveActor(e.ActorOverride);
+        var (actor, kind) = ResolveActor(e);
         var channel = AuditOrigin.Channel;
         return new AuditLogEntry
         {
@@ -105,15 +105,18 @@ public sealed class AuditLog(
         };
     }
 
-    private (string? Actor, AuditActorKind Kind) ResolveActor(ActorOverride? actorOverride)
+    private (string? Actor, AuditActorKind Kind) ResolveActor(AuditEntry e)
     {
-        // 登入的稽核身分情境：不看請求帶的 cookie，一律當成沒有身分（§17.2.1）
-        if (AuditOrigin.InSignIn)
-            return actorOverride is { } signedIn ? (signedIn.UserId, signedIn.Kind) : (null, AuditActorKind.System);
+        // 登入稽核：行為者是 handler 明確傳入的帳號，不看請求帶的 cookie（§17.2.1）
+        if (e.SignIn is { } signIn)
+        {
+            if (e.ActorOverride is not null) throw new InvalidOperationException("登入稽核的行為者只能由 SignInAudit 給");
+            return signIn.UserId is { } signedIn ? (signedIn, AuditActorKind.User) : (null, AuditActorKind.System);
+        }
 
         var identity = currentUser.UserId;
         var hasIdentity = !string.IsNullOrEmpty(identity);
-        if (actorOverride is { } o)
+        if (e.ActorOverride is { } o)
         {
             if (hasIdentity) throw new InvalidOperationException("環境已有身分時不能覆寫稽核的行為者（避免冒用）");
             return (o.UserId, o.Kind);

@@ -1100,9 +1100,9 @@ O2 做六件事：
 - `AuditEntry` 是值物件，呼叫端填的欄位（與 §17.4 `Dynamic_AuditLog` 一一對應）：
   - 必填：動作代碼、結果（`success`、`denied`、`invalid`、`failed`）。
   - 選填：目標（種類、id、顯示名快照）、原因代碼、摘要（結構化物件，由 `AuditSummary` 組成）、參數雜湊、回傳筆數、確認 id 與確認結果（`preview`、`confirmed`、`expired`、`mismatch`）。後四項 O2 不用，mcp1 填。
-  - 行為者覆寫 `ActorOverride(userId, kind)`：一般呼叫只有環境裡**沒有身分**時才能給；環境已有身分還給覆寫就丟 `InvalidOperationException`，避免冒用。唯一的例外是登入的稽核身分情境（見下一條）。
-  - **登入的稽核身分情境**：登入端點本身不清除既有身分。`SessionMiddleware` 對 `auth/login`、`auth/demo-login` 直接放行、不比對資料庫，`ctx.User` 仍是 cookie 驗證中介層從請求 cookie 解出的身分（可能是另一個帳號、或已停用、已重設密碼而失效的舊 cookie），`ClaimsCurrentUser` 照樣讀得到它；新 cookie 要等 handler 回來、`AuthController.SignInOnSuccess` 才寫。所以「登入時環境是匿名」不成立。做法：新增 AsyncLocal 的 `AuditOrigin.BeginSignIn()`，只有 `LoginHandler`、`DemoLoginHandler` 開（架構測試限定呼叫者只有這兩個）。範圍內 `IAuditLog` **不從 `ICurrentUser` 取行為者**，一律當成沒有身分：成功時必須給 `ActorOverride`（剛登入的帳號），失敗時行為者 null；範圍外的守衛不變。請求帶的舊 cookie 不進稽核的行為者欄，也不另記（舊 cookie 可能是失效的，記成行為者會誤導）。
-  - 範圍內允許覆寫，不等於任何程式都能冒用：`BeginSignIn` 只放在兩個登入 handler 裡，覆寫的使用者 id 只能來自 handler 剛驗證通過的帳號；其他寫入點在範圍外，守衛照舊。
+  - 行為者覆寫 `ActorOverride(userId, kind)`：一般呼叫只有環境裡**沒有身分**時才能給；環境已有身分還給覆寫就丟 `InvalidOperationException`，避免冒用。登入不走覆寫，改用登入稽核列（見下一條）。
+  - **登入的稽核身分情境**：登入端點本身不清除既有身分。`SessionMiddleware` 對 `auth/login`、`auth/demo-login` 直接放行、不比對資料庫，`ctx.User` 仍是 cookie 驗證中介層從請求 cookie 解出的身分（可能是另一個帳號、或已停用、已重設密碼而失效的舊 cookie），`ClaimsCurrentUser` 照樣讀得到它；新 cookie 要等 handler 回來、`AuthController.SignInOnSuccess` 才寫。所以「登入時環境是匿名」不成立。做法（2026-11-21 起，取代原本的 `AuditOrigin.BeginSignIn()` 範圍與它的呼叫堆疊檢查）：登入 handler 用 internal 的 `SignInAudit.Succeeded(userId, displayName, summary)`／`SignInAudit.Failed(userId?, reasonCode, summary)` 組稽核列，行為者由呼叫端明確傳入（成功是剛驗證通過的帳號，失敗是 null），列上帶 internal 的 `SignInActor` 標記。帶標記的列 `IAuditLog` **不從 `ICurrentUser` 取行為者**；標記與 `ActorOverride` 同時出現就丟例外；沒有標記的列守衛不變。請求帶的舊 cookie 不進稽核的行為者欄，也不另記（舊 cookie 可能是失效的，記成行為者會誤導）。
+  - 行為者由呼叫端傳入，不等於任何程式都能冒用：`SignInAudit`、`SignInActor`、`AuditEntry.SignIn` 都是 internal，Application 不開 `InternalsVisibleTo`，其他組件編譯不到；組件內的引用者由架構測試限定為兩個登入 handler（標記本身只有 `SignInAudit` 建立）；而且只組得出 `login.succeeded`（行為者＝目標）與 `login.failed`（行為者 null），借到了也寫不出其他動作。其他寫入點守衛照舊。
   - 行為者、行為者種類、來源管道、權杖 id、request id、來源 IP 其餘一律由 `IAuditLog` 從環境補，呼叫端不填。
 - 環境來源：
   - 行為者：`ICurrentUser`（`ActingScope` 內是被代為執行的使用者）；排程工作與沒有身分的寫入記行為者種類「系統」、行為者 null（B3）。
@@ -1117,7 +1117,7 @@ O2 做六件事：
 - 新增 `AuditBehavior`，註冊在 `TransactionBehavior` 之內、`IdempotencyBehavior` 之外。請求是 `IAuditedRequest` 且結果成功時，組好 `AuditEntry` 呼叫 `IAuditLog.Add`，再 `SaveChanges` 一次（交易還沒提交，所以和業務寫入同交易）。稽核寫不進去就整筆失敗（§5.6）。
 - 新舊值由 handler 補：handler 在 scoped 的 `AuditContext` 呼叫 `Describe(before, after)`；沒補的只記請求層的摘要（目標與參數代碼，不含值）。一定要補差異的：權限、群組成員、使用者（顯示名、群組、系統管理員旗標、啟用）、政策（舊值、新值）、健康檢查門檻、告警通道（密碼只記「已變更」）。設計類（模組、欄位、規則、事件、檢查、任務規則、流程、簽核流程、列印範本、轉單、分錄、應用程式套件）只記目標與變更種類，不存整份定義的差異（量大；記錄歷程與套件本身是另一份來源）。
 - 不經 `AuditBehavior` 的寫入點：
-  - **登入**（`LoginHandler`、`DemoLoginHandler`）：登入成功、失敗都用 `TryWriteNowAsync`，寫不進去不擋登入（§5.6）。整個 handler 包在 `AuditOrigin.BeginSignIn()` 裡（見上）。成功時以 `ActorOverride` 記剛登入的使用者（行為者與目標都是他），不論請求帶的是誰的 cookie、有效或失效；失敗時行為者 null（帶著別人的有效 cookie 輸錯密碼也一樣），帳號存在就記為目標，不存在只記原因 `unknownAccount`、不記輸入的帳號字串（沿用 `LoginHandler` 的規則）。被 `LoginThrottle` 擋下的嘗試不逐筆記，只累加指標 `formwright.login.throttled`（O2-T3）。
+  - **登入**（`LoginHandler`、`DemoLoginHandler`）：登入成功、失敗都用 `TryWriteNowAsync`，寫不進去不擋登入（§5.6）。稽核列由 `SignInAudit` 組（見上）。成功時記剛登入的使用者（行為者與目標都是他），不論請求帶的是誰的 cookie、有效或失效；失敗時行為者 null（帶著別人的有效 cookie 輸錯密碼也一樣），帳號存在就記為目標，不存在只記原因 `unknownAccount`、不記輸入的帳號字串（沿用 `LoginHandler` 的規則）。被 `LoginThrottle` 擋下的嘗試不逐筆記，只累加指標 `formwright.login.throttled`（O2-T3）。
   - **自動暫停**：寫在暫停那一個獨立交易裡（§17.2.7）。
   - **保留天數清理**：每次 `ops.upkeep` 清完寫一列 `ops.retention.purge`，摘要帶各表刪除筆數。
 - **只記成功**的畫面操作；被權限擋下（403）、驗證失敗（400）的畫面操作不記，看 log（O2-U9）。結果欄的「被拒」「驗證錯誤」「失敗」給登入失敗與 mcp1 用。
@@ -1982,7 +1982,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | A07 | 400 列稽核、時間分散 | 依動作分組、行為者、時間區間分頁查詢 | 結果與篩選一致、keyset 不重不漏；非管理員 403；Demo 登入開啟時回應沒有 `clientIp` | ✓ |
 | A08 | 稽核列超過保留天數 | 跑 `ops.upkeep` | 超過的被刪、未超過的留著、多一列 `ops.retention.purge`；分批時每批一個交易 | ✓ |
 | A09 | 讓稽核寫入失敗 | 呼叫 `WriteNowAsync`；在交易型請求裡呼叫 `WriteNowAsync`、`TryWriteNowAsync` | 前者丟 `AuditWriteException`（MCP fail closed 用得到的失敗）；交易內呼叫一律丟 `InvalidOperationException`（`TryWriteNowAsync` 也丟、不回 `false`），而且沒有建立新的 DI scope（以計數的 scope factory 驗：守衛在建 scope 之前） | ✓ |
-| A10 | 已登入的管理員 | 在 `AuditOrigin.BeginSignIn` 範圍外寫一筆帶 `ActorOverride` 的稽核 | 丟 `InvalidOperationException`，沒有寫入；架構測試：`BeginSignIn` 的呼叫者只有 `LoginHandler`、`DemoLoginHandler` | — |
+| A10 | 已登入的管理員 | 寫一筆帶 `ActorOverride` 的稽核 | 丟 `InvalidOperationException`，沒有寫入；架構測試：`SignInAudit` 的引用者只有 `LoginHandler`、`DemoLoginHandler`，標記只由 `SignInAudit` 建立，三者都不出 Application 組件 | — |
 | A11 | 帳號 `sales01`、`admin01`；瀏覽器分別帶：`sales01` 的有效 cookie、`sales01` 已重設密碼而失效的 cookie、已停用帳號的 cookie | 各用 `admin01` 正確密碼登入（切換帳號）；帶 `sales01` 有效 cookie 用 `admin01` 錯密碼登入 | 三次成功列的行為者與目標都是 `admin01`、不是 cookie 裡的帳號，也沒有因環境已有身分而丟例外；失敗列行為者 null、目標 `admin01`、原因 `wrongPassword`；登入回應照常寫入新 cookie | — |
 | B01 | 兩個實例的收件匣 | 同一指紋各送 3 次、各自 flush | 一列事件、次數 6、狀態開啟；站內通知只發一次 | ✓ 無鎖 |
 | B02 | 一件已結案事件 | 同指紋再出現 | 同一列重開、`Regression` 真、`ReopenCount` 1、再通知 | ✓ |
@@ -2118,7 +2118,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 告警信、站內通知（以及 O3 的事件推送）只放標題代碼與白名單參數，不放正規化訊息、原始訊息、stack、記錄值；正規化訊息另經遮蔽，只在監控頁顯示。
 - SMTP：信任邊界是系統管理員，產品不限制目的位址；憑證一律驗證、不提供略過；STARTTLS 失敗不退回明文；加密方式 `none` 時不准填帳號密碼；錯誤只回階段與 SMTP 回應碼。
 - 資料庫連不上時，需要登入的 API（含監控頁）一律 503，不開免驗證的診斷入口。
-- 稽核的 `ActorOverride` 只在環境沒有身分時可用；唯一例外是兩個登入 handler 的 `AuditOrigin.BeginSignIn` 範圍，行為者只來自 handler 剛驗證的帳號，不從請求帶的 cookie 取。`BeginSignIn` 執行期驗直接呼叫者，其他呼叫者（含反射）一律丟例外。
+- 稽核的 `ActorOverride` 只在環境沒有身分時可用；登入稽核改由兩個登入 handler 以 internal 的 `SignInAudit` 明確傳入行為者（只來自 handler 剛驗證的帳號，不從請求帶的 cookie 取），只組得出兩種登入列；可見性與 IL 掃描的架構測試把關（§17.2.1）。
 - Demo 一鍵登入每來源 15 分鐘 30 次總嘗試量（成功也算），在查資料庫、寫稽核之前；與 `LoginThrottle` 其他門檻同屬登入防濫用守衛（§17.11）。
 - `WriteNowAsync`、`TryWriteNowAsync` 在建立新 scope 前檢查呼叫端交易，交易內呼叫一律丟例外。
 - 故障注入只在 `Development` 環境生效。
@@ -2402,6 +2402,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
   - 擋得住：`MethodInfo.Invoke`（直接呼叫者是反射框架）、`CreateDelegate` 或方法群組轉成委派再呼叫（呼叫者是轉手的型別）、其他組件裡同名的型別、測試碼直接呼叫。測試替身 `SneakyReflection` 以拼接字串反射呼叫，IL 掃描看不到它，執行期檢查擋下（`AuditArchitectureTests`）。
   - 擋不住：反射直接改 `AuditOrigin` 的私有 `AsyncLocal`／`Frame`（不經 `BeginSignIn`）；兩個 handler 自己呼叫的輔助方法以尾呼叫轉進 `BeginSignIn`（堆疊上看起來是 handler 本身）。兩者都要改到產品程式碼，由審查把關；IL 掃描仍保留，抓一般的直接引用。
   - ApplicationTests 的 `AuditLogTests` 因此開不了登入範圍，改成驗證測試碼呼叫會丟例外；範圍內不取 cookie 身分的行為由 WebAPITests 的 A11 經真的登入驗證。
+  - **後續（2026-11-21，o2a 複審建議）：`BeginSignIn` 與執行期呼叫者檢查已移除**，改成 §17.2.1 的 `SignInAudit`：堆疊檢查依賴呼叫端是 async 狀態機，抽 helper 或換 runtime 就要重核對。新寫法擋冒用靠 internal 可見性（其他組件編譯不到）＋IL 掃描（組件內只有兩個 handler）＋只組得出兩種登入列；反射仍繞得過可見性，與上一條已列的「反射改私有狀態」同類，而且產品程式碼本來就能直接用 `IAuditLogRepository` 寫任意列，都由審查把關。登入列的完整內容由 `AuditApiTests.SignInRows_*` 鎖住，改寫前後一致。
 - `WriteNowAsync`／`TryWriteNowAsync` 在交易內一律丟 `InvalidOperationException`，守衛在建立新 scope 之前（A09，以計數的 scope factory 驗證）。
 - 遮蔽：鍵名剛好是 `password`、`token`、`secret`（不分大小寫）的值，與 `fwp_`、`fwc_` 開頭的字串值都換成 `***`。超過 16000 字元時只留有變的鍵並標 `truncated`，仍超過就從最大的項目開始丟。
 - 覆蓋率：`AuditCoverageTests` 用反射找出所有交易型請求中屬於 `ISystemAdminRequest`、或 `IDesignerRequest` 且需要的設計權限不是唯讀的，每個都要實作 `IAuditedRequest`，例外清單目前是空的；反向也檢查：實作 `IAuditedRequest` 的（含 struct）都要是交易型、回 `ServiceResult`（A05）。巢狀成功、內層失敗、外層失敗、外層不是稽核請求四種情況由 `AuditBehaviorTests` 驗證；400、403 不留稽核。
