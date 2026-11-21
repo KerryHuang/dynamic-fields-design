@@ -210,6 +210,59 @@ public class McpTransportTests : IDisposable
         }
     }
 
+    /// <summary>補充 D：兩個 client 交錯並行各呼叫 20 次，每次 await 前後看到的都只有自己那把的身分與權杖（審查必修 4）。</summary>
+    [Fact]
+    public async Task ConcurrentClients_Twenty_Each_NeverCross()
+    {
+        Use(NewApp(services: s =>
+        {
+            s.AddSingleton(new BarrierState(1));
+            s.AddScoped<IMcpTool, BarrierProbeTool>();
+        }));
+        EnableMcp(_app);
+        var (rawA, idA) = IssueToken(_app);
+        var (rawB, idB) = IssueToken(_app, OtherUserId);
+        await using var a = await ConnectAsync(_app, rawA);
+        await using var b = await ConnectAsync(_app, rawB);
+
+        // 同一 IP 進行中的認證嘗試也計入降速（15 分鐘 20 次，寫死清單）；40 個同時送會被當成猜測擋下 429，所以同時最多 8 個
+        using var gate = new SemaphoreSlim(8);
+        async Task Check(McpClient client, string user, long token)
+        {
+            await gate.WaitAsync();
+            CallToolResult r;
+            try { r = await client.CallToolAsync(BarrierProbeTool.Name); }
+            finally { gate.Release(); }
+            r.IsError.Should().NotBe(true, TextOf(r));
+            var data = Structured(r).GetProperty("data");
+            foreach (var phase in new[] { "before", "after" })
+            {
+                var seen = data.GetProperty(phase);
+                (seen.GetProperty("userId").GetString(), seen.GetProperty("tokenId").GetInt64(), seen.GetProperty("auditTokenId").GetInt64())
+                    .Should().Be((user, token, token), phase);
+            }
+        }
+
+        await Task.WhenAll(Enumerable.Range(0, 20).SelectMany(_ => new[]
+        {
+            Task.Run(() => Check(a, UserId, idA)), Task.Run(() => Check(b, OtherUserId, idB)),
+        }));
+    }
+
+    /// <summary>經 SDK 呼叫工具成功 → 執行器真的以 WriteNowAsync 寫稽核 → 資料庫的那一列行為者、管道、權杖都是這把權杖（審查必修 3）。</summary>
+    [Fact]
+    public async Task SdkCall_AuditRow_HasTokenIdentity()
+    {
+        var (raw, tokenId) = IssueToken(_app, OtherUserId);
+        await using var client = await ConnectAsync(_app, raw);
+
+        (await client.CallToolAsync("whoami")).IsError.Should().NotBe(true);
+
+        var row = Query(_app, db => db.Set<AuditLogEntry>().Where(a => a.Action == "mcp.whoami").ToList()).Should().ContainSingle().Subject;
+        (row.ActorUserId, row.ActorKind, row.Channel, row.TokenId, row.Result, row.TargetLabel)
+            .Should().Be((OtherUserId, AuditActorKind.User, AuditChannel.Mcp, tokenId, AuditResult.Success, "whoami"));
+    }
+
     public sealed class BarrierState(int parties)
     {
         private int _arrived;

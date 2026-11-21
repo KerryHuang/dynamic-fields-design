@@ -116,8 +116,11 @@ internal static class McpTestKit
     }
 
     /// <summary>照 SDK client 實際送出的格式（2026-07-28：每個請求帶 _meta 與標準標頭，不握手）組原始 POST。</summary>
+    /// <param name="methodHeader">Mcp-Method 標頭：預設與 <paramref name="method"/> 相同；<see cref="OmitHeader"/> 不帶。</param>
+    /// <param name="nameHeader">Mcp-Name 標頭：預設取 params 的 name；給了就用它。</param>
+    /// <param name="notification">true 時不帶 id（JSON-RPC 通知）。</param>
     public static HttpRequestMessage RawPost(string? token, string method = "tools/list", string paramsJson = "{}", string path = "/mcp",
-        IReadOnlyDictionary<string, string>? headers = null)
+        IReadOnlyDictionary<string, string>? headers = null, string? methodHeader = null, string? nameHeader = null, bool notification = false)
     {
         var parameters = JsonNode.Parse(paramsJson)!.AsObject();
         parameters["_meta"] = new JsonObject
@@ -126,16 +129,20 @@ internal static class McpTestKit
             ["io.modelcontextprotocol/clientInfo"] = new JsonObject { ["name"] = "test-client", ["version"] = "1.0" },
             ["io.modelcontextprotocol/clientCapabilities"] = new JsonObject(),
         };
-        var body = new JsonObject { ["jsonrpc"] = "2.0", ["id"] = 1, ["method"] = method, ["params"] = parameters };
+        var body = new JsonObject { ["jsonrpc"] = "2.0", ["method"] = method, ["params"] = parameters };
+        if (!notification) body["id"] = 1;
         var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json") };
         request.Headers.TryAddWithoutValidation("Accept", "application/json, text/event-stream");
         request.Headers.Add("MCP-Protocol-Version", "2026-07-28");
-        request.Headers.Add("Mcp-Method", method);
-        if (parameters["name"] is JsonValue name) request.Headers.Add("Mcp-Name", name.GetValue<string>());
+        if (methodHeader != OmitHeader) request.Headers.Add("Mcp-Method", methodHeader ?? method);
+        if ((nameHeader ?? (parameters["name"] as JsonValue)?.GetValue<string>()) is { } name) request.Headers.Add("Mcp-Name", name);
         if (token is not null) request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
         foreach (var (k, v) in headers ?? new Dictionary<string, string>()) request.Headers.TryAddWithoutValidation(k, v);
         return request;
     }
+
+    /// <summary><see cref="RawPost"/> 的 <c>methodHeader</c> 給這個值就不帶 Mcp-Method。</summary>
+    public const string OmitHeader = "\0omit";
 
     public static async Task<HttpResponseMessage> RawPostAsync(HttpClient client, string? token, string method = "tools/list",
         string paramsJson = "{}", IReadOnlyDictionary<string, string>? headers = null, string path = "/mcp") =>
