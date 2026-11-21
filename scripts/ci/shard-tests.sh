@@ -59,7 +59,7 @@ if [ -f "$out/result.trx" ]; then
   { echo "### $proj $idx/$total 各類別耗時前 40 名（秒，更新 shard-weights.tsv 用）"
     grep -o 'testName="[^"]*" computerName="[^"]*" duration="[^"]*"' "$out/result.trx" \
       | sed -E 's/testName="([^"(]*)[^"]*" computerName="[^"]*" duration="([0-9]+):([0-9]+):([0-9.]+)"/\1 \2 \3 \4/' \
-      | awk '{c=$1; sub(/\.[^.]*$/,"",c); t[c]+=$2*3600+$3*60+$4} END{for(k in t) printf "%8.1f %s\n", t[k], k}' | sort -nr | head -40
+      | awk '{c=$1; sub(/\.[^.]*$/,"",c); t[c]+=$2*3600+$3*60+$4} END{for(k in t) printf "%8.1f %s\n", t[k], k}' | sort -nr | awk 'NR<=40'  # 不用 head：提早關管線會讓 sort 收到 SIGPIPE，pipefail 下整步失敗（#84）
   } | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
 fi
 
