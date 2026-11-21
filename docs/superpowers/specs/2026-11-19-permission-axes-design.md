@@ -548,7 +548,7 @@
 
 **接點與回歸**
 
-- **PAX-22**（mcp1a 實作，算 mcp1a 的驗收）MCP 通道（在 ApplicationTests 把通道服務設成 MCP、權杖擁有者是 admin）：
+- **PAX-22**（mcp1a 實作，算 mcp1a 的驗收；2026-11-21 已實作並通過，測試在 WebAPITests 的 `McpChannelGateTests`，合併 SHA 見 roadmap mcp1a 列）MCP 通道（在 ApplicationTests 把通道服務設成 MCP、權杖擁有者是 admin）：
   - behavior：`SaveModulePermissionsRequest`、`OpenAppRequest`、`CloseAppRequest`、`ReopenAppRequest`、`DeleteAppRequest`、`StartDemoDataRequest`、系統權限兩支、`SetGroupMembersRequest`、`CreateUserRequest`、`UpdateUserRequest`、`DeleteGroupRequest` 皆 403 `mcpPermissionAdminDenied`，沒有任何寫入。
   - 條件式 gate：建立含 `allowHiddenSource = true` 的事件 → 403 `mcpPermissionAdminDenied`；`AddFieldRequest` 帶「不提供給 AI」true → 403 同碼。
   - 巢狀：從範本建立 `t-perm` → 201、權限建議略過、warnings 有提示；開啟套件（內含巢狀權限存檔）→ 403、整批回滾。
