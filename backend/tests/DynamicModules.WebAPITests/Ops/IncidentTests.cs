@@ -364,6 +364,8 @@ public class IncidentTests
         var now = app.Time.GetUtcNow().UtcDateTime;
 
         inbox.Post(Defect("fp-b11-tick", now));
+        // .NET 10 的 BackgroundService 在背景才建 PeriodicTimer：等計時器掛上手動時鐘再快轉，否則這次快轉不會觸發 flush
+        await Until(() => clock.TimerCount > 0);
         clock.Advance(DynamicModules.WebAPI.Ops.IncidentInboxFlusher.Interval);
         await Within(Task.Run(async () =>
         {
