@@ -67,6 +67,14 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
   - 工具數改正為 12（含 `whoami`）；稽核動作改 camelCase；不加 `AuditCoverageTests.Exempt`（判斷 17、26）。
   - Task 0 加「補充：機械門檻」小節；Task 5 的 PostgreSQL 篩選補齊；受影響的既有畫面做四種寬度走查。
   - 子段從三個改成四個（見「子段切法」）。
+- 2026-11-21 第三輪：收短核對必修 5 條與建議 2 條。主要變動：
+  - `ChannelPermissionRepository` 改在 provider 註冊完成後裝飾，沿用 `AddActingOverrides` 的寫法，補正式 DI 路徑的測試（判斷 10、Task 5）。
+  - 每日名額的 `TokenGate` 補取得、保留、釋放、清理的同步契約與「工具卡住時清理」案例（判斷 13、Task 7）。
+  - 確認碼的巢狀改用共用的交易深度判定，一律丟例外退出外層交易；確認請求不與 `IAuditedRequest` 並用（判斷 18、Task 8）。
+  - 確認提交之後格式化失敗或放不下：回非錯誤的「已執行、結果省略」，不寫第二列（判斷 17、18、Task 8）。
+  - `get_record_history`、`list_my_tasks`、`list_approval_tasks` 補 `pageSize`（判斷 20、Task 9）。
+  - 系統管理員的 AI 遮罩案例；SSE 說法改照實測（Task 10、已知限制）。
+  - Task 1–3 不必補，見「Task 0–3 差異」。
 
 ---
 
@@ -339,9 +347,16 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
       - 只在 guard 加，這些路徑會帶出被排除的欄位與公式。
     - **做法：旗標跟著權限輸入走**
       1. `PermissionInputs`（Domain）加 `bool AiMasked = false`。
-      2. Application 新增裝飾器 `ChannelPermissionRepository : IPermissionRepository`：`LoadInputsAsync` 取得內層結果後，通道是 MCP 就回 `inputs with { AiMasked = true }`；其他方法直通。Persistence 照舊註冊 `PermissionRepository`，Application 以手寫 factory 換掉 `IPermissionRepository` 的註冊（不引新套件；實作者先 grep 既有的 decorator 寫法沿用）。`LoadProgramInputsAsync` 不加：程式層動作軸不涉欄位。
+      2. Application 新增裝飾器 `ChannelPermissionRepository : IPermissionRepository`：`LoadInputsAsync` 取得內層結果後，通道是 MCP 就回 `inputs with { AiMasked = true }`；其他方法直通。`LoadProgramInputsAsync` 不加：程式層動作軸不涉欄位。
+         - **註冊順序**（第三輪必修 1）：`Program.cs` 先 `AddApplication()`，之後才 `AddSqliteDatabase`／`AddPostgresDatabase`，兩者都經 `AddPersistenceRepositories` 註冊 `PermissionRepository`。在 `AddApplication` 裡換註冊會被後面蓋掉，所以**不放在 `AddApplication`**。
+         - 做法：Application 提供 `services.AddChannelPermissionMasking()`，`Program.cs` 在 provider 那段 `if/else` 的下一行呼叫（provider 註冊完成之後）。
+         - 寫法照既有的 `AddActingOverrides`（`Common/Acting/ActingServiceCollectionExtensions.cs`）的 `Decorate<TService>`：
+           - 找最後一筆非 keyed 的 `IPermissionRepository` descriptor 並捕捉它；用它的 type、factory 或 instance 建內層，不從 `IServiceProvider` 解析 `IPermissionRepository`，所以 factory 不會遞迴解析自己。
+           - 保留原本的生命週期；找不到註冊就丟 `InvalidOperationException`。
+           - `Decorate<TService>` 從 private 改成同組件 internal 的共用 helper（搬到 `Common/ServiceCollectionDecoration.cs`），`AddActingOverrides` 改呼叫它，不複製一份。
+         - ApplicationTests 各測試 host 照舊 `AddApplication()`＋`AddPersistenceRepositories()`，不改；需要 MCP 遮罩的測試 host（`McpChannelGateTests`、`McpAiExclusionTests`）在後面加呼叫 `AddChannelPermissionMasking()`。正式組裝另由 WebAPITests 經 `Program.cs` 驗（Task 5 的 `McpPermissionDiTests`）。
       3. `PermissionResolver.Resolve` 在 `inputs.AiMasked` 時：
-         - 系統管理員不走 early return：動作與範圍照 `ForSystemAdmin()`，隱藏集合照下面算。
+         - 系統管理員不走 early return：動作與範圍照 `ForSystemAdmin()`，隱藏集合照下面算。管理員的隱藏集合**只有** AI 排除欄位及其依賴（公式閉包、彙總）；一般群組的欄位權限不套到管理員身上（抽共用方法時容易誤帶，Task 5 有案例鎖住）。
          - 模組裡 `ExcludeFromAi` 的欄位併進 `hidden`，放在彙總與公式閉包**之前**。
          - 彙總：既有的「加總對象在 `hiddenSourceFieldIds`」之外，再隱藏「條件（`Config.Rollup.Condition`）引用的欄位與 `hiddenSourceFieldIds` 相交」的彙總；引用欄位用 `ConditionParser.Parse`＋`ConditionFields.Collect` 取。條件解析失敗一律隱藏：`RollupCalculator` 解析失敗會略過條件，遮罩不能跟著放寬。
          - 公式閉包照舊，在上面之後跑；閉包與彙總那幾行抽成私有方法，管理員與一般路徑共用。
@@ -420,7 +435,19 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
       - `sinceUtc`＝營運時區今天 00:00 換成 UTC（Q2），由應用層算，不用資料庫日期函式。
       - 權杖列表的 `todayCalls` 用同一個計數。
     - **名額保留**（第二輪必修 7）：先查已提交數、執行、再寫稽核，中間沒有保留的話，並行呼叫會同時看到還有額度。
-      - `McpRateGate.TryReserveAsync(tokenId, limits, countCommitted, ct)`：每把權杖一個 `SemaphoreSlim(1)`（字典存，閒置清掉）。鎖內判斷每分鐘固定窗，再讀已提交數（資料庫）＋進行中保留數，`< callsPerDay` 才把保留數加一並放行；工具在鎖外執行。
+      - `McpRateGate.TryReserveAsync(tokenId, limits, countCommitted, ct)`：每把權杖一個狀態物件 `TokenGate`，存在字典。內容：
+        - `SemaphoreSlim(1)`：只用來把「判斷每分鐘窗、讀已提交數、決定放不放行」排成一個一個來。
+        - 每分鐘窗的起點與次數。
+        - `Reserved`：進行中的保留數。
+        - `Users`：拿著這個物件的呼叫數，含等待 semaphore 的、持有保留憑證的。
+      - semaphore 內判斷每分鐘固定窗，再讀已提交數（資料庫）＋`Reserved`，`< callsPerDay` 才 `Reserved++` 並放行；工具在 semaphore 外執行。
+      - **同步契約**（第三輪必修 2）：字典的取得與移除、`Users` 與 `Reserved` 的增減，全部在同一個 `lock (_sync)` 裡（短鎖，不在裡面 await）。
+        1. 取得：`lock` 內 get-or-create、`Users++`；出了 `lock` 才 `WaitAsync`。
+        2. 不放行，或等待時取消：有取得 semaphore 才釋放，再 `lock` 內 `Users--`。
+        3. 放行：`lock` 內 `Reserved++`，釋放 semaphore；憑證留著這個 `TokenGate` 的參考，`Users` 不減。
+        4. 釋放憑證（冪等，第二次呼叫不做事）：`lock` 內 `Reserved--`、`Users--`。
+        5. 清理：`TryReserveAsync` 開頭在 `lock` 內最多每分鐘掃一次。只移除 `Users == 0`、`Reserved == 0`、每分鐘窗也已經過去的項目，其他情況一律不移除。
+      - **為什麼要 `Users`**：工具在鎖外執行，semaphore 沒被持有時仍可能有等待者或保留名額。只看 semaphore 就移除，新呼叫會建立另一個 `TokenGate`，保留數分成兩份，名額就能超用。窗還沒過就移除，每分鐘次數會歸零。
       - 回傳可釋放的保留憑證：invoker 在**稽核寫完之後**才釋放，工具丟例外或取消也在 `finally` 釋放。寫完稽核到釋放之間同一次呼叫會被算兩次，只會偏嚴。
       - 重啟：進行中的保留歸零，已提交的稽核列還在，每日上限照樣生效。
       - 只保證單一實例（已知限制，同設計 §8.2）。
@@ -438,6 +465,8 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
       - 分組結果（`Groups` 與跟組平行的 `Cumulative` 等）放不下時回 `result_too_large`，不截組，避免平行陣列對不齊。
     - 單筆類（`get_record`、`describe_module`、`get_task`）超過時回 `isError` `result_too_large`，附提示（例：`get_record` 改 `includeDetails=false`）。
     - 筆數另受 `mcp.maxRows`：`pageSize` 大於它時以它為準，`meta.pageSize` 寫實際值。
+      - 實際值以回應帶回的頁大小為準：既有的 `GetMyTasksHandler` 與 `GetApprovalTasksHandler` 另外把頁大小夾在 1–100，`GetPagedRecordsHandler`、`GetRecordHistoryHandler` 夾在 `PagedRequest.MaxPagesSize`（200）。`retry.pageSize` 不會大於實際值。
+      - 四個分頁工具都收 `pageSize`（判斷 20，第三輪必修 5），模型才照得了 `retry.pageSize`。
 
 15. 〔技術〕**伺服器網址用既有的 `Ops:PublicUrl`，不另設 `Mcp:PublicUrl`**（設計 §13.4）。同一個站台的公開網址只設一次，`/mcp` 接在後面。
 
@@ -477,10 +506,11 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
       | 取消 | Failed／`cancelled` | invoker |
       | 高風險預演 | Success＋Preview | invoker |
       | 高風險確認成功 | Success＋Confirmed | behavior（交易內） |
+      | 高風險確認成功並已提交，之後格式化失敗、放不下、丟例外或取消 | 不另寫；behavior 那一列就是唯一一列 | — |
       | 高風險確認失敗 | Invalid＋Mismatch | invoker（交易回滾後） |
 
       - 例外路徑回 `isError` `internal_error`（訊息不帶例外內容），另記 Error log；取消路徑的稽核用 `CancellationToken.None` 寫。
-      - 高風險確認成功時 invoker **不再寫**交易外的成功列。
+      - 高風險確認成功時 invoker **不再寫**交易外的成功列。判斷依據是 `IMcpConfirmationScope.Committed`（判斷 18「確認提交之後」），不是工具回傳的結果。
       - 稽核本身寫不進去：不回資料，回 `audit_unavailable`。
     - `AuditLog.Build` 的 `RiskLevel` 來自 `AuditActions`；mcp2b 讓高風險清單可調之後要改成由呼叫端傳。mcp1a 不改，記進交付說明給 mcp2b。
 
@@ -488,7 +518,7 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
     ```csharp
     public interface IMcpConfirmedRequest { McpConfirmationTicket? Confirmation { get; } }
     public sealed record McpConfirmationTicket(string Code, long TokenId, string ToolName, string ArgumentsHash);
-    public interface IMcpConfirmationScope { Task<bool> ConsumeAsync(string currentTargetVersion, CancellationToken ct); bool Consumed { get; } long? ConfirmationId { get; } }
+    public interface IMcpConfirmationScope { Task<bool> ConsumeAsync(string currentTargetVersion, CancellationToken ct); bool Consumed { get; } bool Committed { get; } long? ConfirmationId { get; } }
     public sealed class McpConfirmationService   // 預演：建碼
     {
         Task<(string Code, DateTime ExpiresUtc, long Id)> CreateAsync(long tokenId, string userId, string toolName, string argsHash,
@@ -510,8 +540,18 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
         - 通道是 MCP 而 `Confirmation` 是 null → 回 `confirmation_invalid`：MCP 通道執行高風險請求一定要帶碼。
         - 通道是 UI 而 `Confirmation` 不是 null → 丟 `InvalidOperationException`；UI 通道 `Confirmation` 為 null 照常放行。
         - ticket 的 `TokenId` 必須等於 `IRequestChannel.TokenId`；確認列的 `UserId` 必須等於 `ICurrentUser.UserId`。
-        - 巢狀：behavior 記深度，深度大於 1 的 `IMcpConfirmedRequest` 一律丟 `InvalidOperationException`（mcp1a 不支援一個確認涵蓋多個高風險請求）。
-        - 同一個 DI scope 連續兩次頂層執行：scope 在每次頂層請求開始時重設，`Consumed` 與確認列不跨請求。
+        - **巢狀**（第三輪必修 3）：判定用共用的**交易深度**，不在確認 behavior 裡自己計數。
+          - 只數確認請求的深度，抓不到「一般交易型請求的 handler 裡送確認請求」。
+          - 深度來源：`AfterCommitActions` 既有的 `_depth`（`TransactionBehavior` 每進一層 `Enter`、出一層 `Leave`），公開成唯讀的 `internal int TransactionDepth`，不另造計數器。確認 behavior 在 `TransactionBehavior` 之內，最外層時深度是 1。
+          - MCP 通道、深度大於 1 → 丟 `McpConfirmationNestingException`（繼承 `InvalidOperationException`）。這個檢查排在「`Confirmation` 是不是 null」、讀確認列與 `next()` 之前：沒帶碼、碼有效、碼無效都丟例外，不回 `confirmation_invalid` 結果。behavior 入口的檢查順序因此是：不是確認請求就放行 → 與 `IAuditedRequest` 並用就丟例外 → UI 通道分支 → MCP 通道巢狀就丟例外 → 才看 ticket。
+          - **為什麼一定丟例外**：巢狀時 transaction manager 回的是 Noop handle（`EfTransactionManager`、`PostgresTransactionManager` 都是），內層回失敗結果時 `RollbackAsync` 不做事，外層照樣可能提交。例外要一路退出外層的 `TransactionBehavior`，由最外層那個真的 handle 回滾。確認 behavior 與工具都不接這個例外；invoker 照「工具或 handler 丟例外」寫 Failed。
+          - UI 通道、`Confirmation` 是 null 時照常放行，不看深度（UI 沒有確認碼）。
+          - mcp1a 不支援一個確認涵蓋多個高風險請求。
+        - **不與 `IAuditedRequest` 並用**（第三輪必修 4）：`IMcpConfirmedRequest` 不得同時實作 `IAuditedRequest`。
+          - 架構測試 `McpConfirmedRequests_NotAudited` 掃組件鎖住；behavior 入口也檢查，違反就丟 `InvalidOperationException`。
+          - 理由：`AuditBehavior` 在確認 behavior 的內層，兩個都會在同一交易寫列，一次工具呼叫變成兩列、動作代碼不同。
+          - 要合併時（例如把確認欄位寫到 `AuditBehavior` 那一列），由第一個需要的段（mcp2a 或 mcp2b）設計；mcp1a 沒有正式的確認請求，交付說明寫明。
+        - 同一個 DI scope 連續兩次頂層執行：scope 在每次頂層確認請求開始時重設，`Consumed`、`Committed` 與確認列不跨請求。
       - 流程：
         1. 先依 `CodeHash` 讀列（追蹤式），以 `HashEquals` 比對，再驗未用、未作廢、未過期、`TokenId`、`UserId`、`ToolName`、`ArgumentsHash` 都相同。任一不符回 `ServiceResult.Invalid`，code `confirmation_invalid`，不說明是哪一項。
         2. 通過就把列放進 scoped `McpConfirmationScope`，再 `next()`。
@@ -520,7 +560,19 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
            - 相同 → `IMcpConfirmationRepository.TryConsumeAsync`（`ExecuteUpdate` 條件 `UsedUtc == null && VoidedUtc == null && ExpiresUtc > now`，影響 1 列才算）→ true。
         4. `next()` 回來是成功，但 `scope.Consumed` 為否 → 丟 `InvalidOperationException`（fail closed，整筆回滾）。
         5. 成功時 `IAuditLog.Add` 一列 `ConfirmationOutcome.Confirmed`（帶 `ConfirmationId`），**接著 `await uow.CommitAsync(ct)`**：`Add` 只加進追蹤，外層 `TransactionBehavior` 提交交易時不會自動 SaveChanges（寫法照 `AuditBehavior`）。存檔失敗丟例外，業務異動與 `UsedUtc` 一起回滾。
+        6. 存檔成功後以 `AfterCommitActions.Add("mcp.confirmed", scope.MarkCommitted)` 登記：最外層交易真的提交了，`scope.Committed` 才會變 true；回滾時這個動作被丟掉，`Committed` 維持 false。
       - 失敗時交易已回滾，invoker 另以 `WriteNowAsync` 寫 `Mismatch`。
+    - **確認提交之後**（第三輪必修 4）：稽核由 behavior 寫，回應由 invoker 給。
+      - invoker 在高風險執行分支，`ExecuteAsync` 回來、丟例外或取消之後，都先看 `scope.Committed`。
+      - `Committed` 是 true：之後任何路徑 invoker 都不寫稽核列。格式化失敗、放不下、序列化例外、取消都一樣，不記成確認失敗，也不寫第二列。
+        - 格式化成功而且放得下 → 照常回成功結果。
+        - 放不下，或格式化丟例外 → 回**非錯誤**的固定結果，沒有 `data`：
+          - `meta = { tool, confirmation: { status: "executed", id }, dataOmitted: "result_too_large" | "format_failed" }`。
+          - `meta.instruction` 是固定英文 `McpTexts.ConfirmedResultOmitted`：「The action was executed and committed, but its result could not be returned. Do not call it again; use read tools to check the current state.」。
+          - 格式化例外另記 Error log。
+          - 不回 `isError` 的理由：回錯誤會讓模型重試；碼已經用掉，重試只會得到 `confirmation_invalid`，再多寫一列 `Mismatch`。
+        - 取消：照常不回結果（client 已離開），也不寫列。
+      - `Committed` 是 false：交易已回滾，照判斷 17 的結束路徑表寫（`Mismatch` 或 `Failed`）。
     - **`TryConsumeAsync` 是交易內的 `ExecuteUpdate`**：PostgreSQL 上同一請求已在全庫寫入鎖內，條件式更新保證兩個並行確認只有一個成功。在 `AuthorizationWriteInventoryTests.NonGuardBatchMethods` 登記並寫理由（i4d2 判斷 1 的教訓）。
     - **測試工具不進正式程式**：`ApplicationTests` 自己定義 `TestHighRiskTool : IMcpTool` 與 `TouchRecordForTestRequest : ITransactionalRequest, IMcpConfirmedRequest`（handler 改一筆記錄的 `ValuesJson` 一個欄位，可設定成在 consume 之後丟例外）。
       - 以 DI 登記到 invoker 的工具集合。流程案例可用記錄型的假 `IAuditLog`；但「確認稽核存不進去時整筆回滾」必須用真的 `IAuditLog`＋資料庫驗。測試請求的稽核代碼借用已登記的代碼（例如 `mcp.getRecord`），註解寫明只為測試，不在正式目錄加測試代碼。
@@ -553,8 +605,8 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
       4. 參數形狀：`McpArgs` 小工具做型別、必填、範圍檢查，錯誤回 `invalid_arguments`＋`fields`，不另引 JSON Schema 套件。
       5. 速率與名額保留（判斷 13）。
       6. 依級別執行。
-      7. 格式化與大小判斷（判斷 14）。
-      8. 稽核（判斷 17 的結束路徑表）；最後釋放名額保留。
+      7. 格式化與大小判斷（判斷 14）。高風險確認已提交時改走判斷 18「確認提交之後」。
+      8. 稽核（判斷 17 的結束路徑表；確認已提交時跳過）；最後釋放名額保留。
     - 第 1–8 步包在 `try/finally` 裡，任何路徑都恰好寫一列稽核。
     - 工具類別建構函式只收 `ISender`（`IMediator`）；`whoami` 例外收 `ISender` 之外不收別的，資料由 `GetMcpWhoAmIRequest` 給。
     - 架構測試 `McpToolArchitectureTests`：所有 `IMcpTool` 實作的建構函式參數型別 ⊆ {`ISender`, `IMediator`}，欄位與屬性型別沒有 `DynamicDbContext`、`*Repository`（T4）。
@@ -568,14 +620,18 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
     | `describe_module` | `moduleKey`（必填） | `GetModuleSchemaRequest(key)` | schema 原樣，外加 `filterSyntax`：固定英文說明與一個範例條件樹，常數 `McpTexts.FilterSyntax` |
     | `query_records` | `moduleKey`、`filter`（物件，條件樹）、`sort`（`[{ field, order }]`）、`keyword`、`page`（≥1）、`pageSize`（1–200） | `GetPagedRecordsRequest(key, page, min(pageSize, maxRows), filter 序列化成字串, sortBy, sortOrder, keyword)` | 每筆 `{ id, title, values, references, rowVersion }`；`meta.total`、`next` |
     | `get_record` | `recordId`、`includeDetails`（預設 true） | `GetRecordRequest(id)` | `includeDetails=false` 拿掉 `details` |
-    | `get_record_history` | `recordId`、`page` | `GetRecordHistoryRequest(id, page, maxRows, locale)` | 原樣 |
+    | `get_record_history` | `recordId`、`page`、`pageSize`（1–200） | `GetRecordHistoryRequest(id, page, min(pageSize, maxRows), locale)` | 原樣 |
     | `list_reports` | 無 | `GetReportsRequest` | `[{ id, name, moduleKey }]` |
     | `run_report` | `reportId`、`from`、`to`（`yyyy-MM-dd`，選填） | `RunReportRequest(id, range, locale)` | 列超過 `maxRows` 截斷、標 `truncated` |
-    | `list_my_tasks` | `tab`（列舉，照 `GetMyTasksRequest` 既有可用值）、`filter`、`page` | `GetMyTasksRequest(tab, filter, page, maxRows)` | 原樣 |
+    | `list_my_tasks` | `tab`（列舉，照 `GetMyTasksRequest` 既有可用值）、`filter`、`page`、`pageSize`（1–100） | `GetMyTasksRequest(tab, filter, page, min(pageSize, maxRows))` | 原樣 |
     | `get_task` | `taskId` | `GetTaskRequest(id)`＋`GetTaskCommentsRequest(id)`（兩次 Send） | `{ task, comments }`；附件只留 `id`、`name`、`size` |
-    | `list_approval_tasks` | `box`（列舉）、`moduleKey`、`from`、`to`、`page` | `GetApprovalTasksRequest(box, key, from, to, page, maxRows)` | 原樣（標題快照照判斷 10、Q7） |
+    | `list_approval_tasks` | `box`（列舉）、`moduleKey`、`from`、`to`、`page`、`pageSize`（1–100） | `GetApprovalTasksRequest(box, key, from, to, page, min(pageSize, maxRows))` | 原樣（標題快照照判斷 10、Q7） |
     | `get_record_approval` | `recordId` | `GetRecordApprovalRequest(id)` | 原樣（同上） |
 
+    - **`pageSize`**（第三輪必修 5）：四個分頁工具都有，選填，沒帶就是 `maxRows`。
+      - 上限照各 handler 實際的夾值：`query_records`、`get_record_history` 是 200，`list_my_tasks`、`list_approval_tasks` 是 100。schema 寫 `minimum`／`maximum`，`McpArgs` 檢查超出範圍回 `invalid_arguments`、`fields.pageSize`。
+      - 送出值是 `min(pageSize, maxRows)`；`meta.pageSize` 取回應 `PagedResponse.PagesSize`（判斷 14）。
+      - 沒有這個參數，判斷 14 的 `retry.pageSize` 模型照不了，這三個工具放不下時就無路可走。
     - 列舉參數的合法值由實作者讀既有 handler 或 validator 後寫進 schema 的 `enum`，不自創。
     - 記錄的附件欄位值本來就只有 `AttachmentRef(Id, Name, Size)`，沒有下載連結（§5.5「附件只回中繼資料」自然成立）。
     - `references` 保留既有 `DynamicRecordResponse.References`（參照顯示名，已經過 `ReferenceResolver` 遮罩）；只給參照鍵會讓 AI 看不懂參照欄位。
@@ -742,7 +798,7 @@ Q1–Q7 全部是**主控暫定**，還沒經使用者裁決；相依的實作�
 | `Origin` 只認 `Ops:PublicUrl` 與可信 loopback 的固定 origin，不認請求 Host；`Origin: null` 拒絕 | `McpGateMiddleware` | 安全 |
 | 非 HTTPS 只收可信 loopback（連線來源是 loopback 且沒開轉送標頭），或明確設 `Mcp:AllowHttp` | `McpGateMiddleware` | 安全 |
 | 認證失敗依 IP：15 分鐘 20 次，擋 15 分鐘；進行中的嘗試也計入 | `McpAuthThrottle` | 安全（數字對齊 `LoginThrottle`） |
-| 高風險請求在 MCP 通道必須帶確認碼；確認請求必為交易型、不可巢狀 | `McpConfirmationBehavior` | 安全 |
+| 高風險請求在 MCP 通道必須帶確認碼；確認請求必為交易型、不可巢狀（依交易深度判定）、不與 `IAuditedRequest` 並用 | `McpConfirmationBehavior` | 安全 |
 | 工具名稱、描述、參數說明、伺服器說明、不可信提醒是固定英文 | `McpTexts` | 安全（§9.2） |
 | 單次結果文字 40,000 字元 | `McpLimits.MaxResultChars` | 技術限制 |
 | 每把權杖未使用的確認碼最多 20 個 | `McpLimits.MaxOpenConfirmations` | 技術限制 |
@@ -767,7 +823,7 @@ Q1–Q7 全部是**主控暫定**，還沒經使用者裁決；相依的實作�
 | ★ EF migration（兩個 provider） | 1a-1 Task 1 | `Persistence/Migrations/*_McpFoundation.cs`、`Persistence.Postgres/Migrations/*_McpFoundation.cs`、兩份 `DynamicDbContextModelSnapshot.cs` |
 | ★ DbContext 模型設定 | 1a-1 Task 1 | 新 `Domain/Data/Configurations/McpConfigurations.cs`；`Domain/Entities/Dynamic/Field.cs`（`ExcludeFromAi`）；`FieldConfiguration.cs` 照既有寫法加預設值 |
 | ★ 授權攔截器 | 1a-2 Task 5 | `Domain/Data/AuthorizationSaveChangesInterceptor.cs` |
-| ★ DI 註冊 | 1a-1 到 1a-4 | `Application/DependencyInjection.cs`（McpService、behavior 順序）、`Persistence/DependencyInjection.cs`（兩個 repository）、`WebAPI/Program.cs`（`IRequestChannel`、gate 中介軟體、`AddFormwrightMcp`／`MapFormwrightMcp`） |
+| ★ DI 註冊 | 1a-1 到 1a-4 | `Application/DependencyInjection.cs`（McpService、behavior 順序）、`Persistence/DependencyInjection.cs`（兩個 repository）、`WebAPI/Program.cs`（`IRequestChannel`、provider 註冊之後的 `AddChannelPermissionMasking()`、gate 中介軟體、`AddFormwrightMcp`／`MapFormwrightMcp`）；`Common/Acting/ActingServiceCollectionExtensions.cs`（`Decorate` 搬成共用） |
 | ★ 政策目錄 | 1a-1 Task 2 | `Domain/Policies/PolicyCatalog.cs`、`shared/policy-catalog.json` |
 | ★ 介面文字 | 1a-1 Task 2 | `shared/i18n/{zh-TW,en-US,th,vi}/ui.json`：`policies.items.mcp.*`、`policies.categories.mcp`、`audit.actions.mcp.*` |
 | ★ 後端訊息表 | 1a-1 Task 2 | `Application/Common/MessageText.cs`、新基準檔 `mcp.json` |
@@ -788,7 +844,7 @@ Q1–Q7 全部是**主控暫定**，還沒經使用者裁決；相依的實作�
 - `Domain/Entities/Dynamic/{McpToken,McpConfirmation}.cs`
 - `Domain/Repositories/Dynamic/{IMcpTokenRepository,IMcpConfirmationRepository}.cs`
 - `Persistence/Repositories/Dynamic/{McpTokenRepository,McpConfirmationRepository}.cs`
-- `Application/Common/Security/{IRequestChannel,ChannelPermissionRepository}.cs`
+- `Application/Common/Security/{IRequestChannel,ChannelPermissionRepository}.cs`、`Application/Common/ServiceCollectionDecoration.cs`
 - `Application/Dynamic/McpService/`：
   - `McpMessages.cs`、`McpPolicies.cs`、`McpUsage.cs`、`McpTokenRevoker.cs`、`McpTexts.cs`、`McpAuditSummary.cs`
   - `Tokens/{McpTokenRequests,McpTokenHandlers,McpTokenModels}.cs`
@@ -806,10 +862,19 @@ Q1–Q7 全部是**主控暫定**，還沒經使用者裁決；相依的實作�
   - `McpTokenHandlerTests`、`McpAuthTests`、`McpAccountLinkTests`
   - `McpChannelGateTests`（PAX-22）、`McpAiExclusionTests`
   - `McpToolInvokerTests`、`McpConfirmationTests`、`McpResultFormatterTests`、`McpAuditSummaryTests`、`McpToolArchitectureTests`、`McpUpkeepTests`
-- `ApplicationTests/Common/ServerTextBaseline/mcp.json`
+- `ApplicationTests/Common/ServerTextBaseline/mcp.json`、`ApplicationTests/Common/ChannelPermissionDecorationTests.cs`
 - `WebAPITests/Dynamic/Mcp/`：
-  - `McpTestKit`、`McpTokenApiTests`、`McpAuthApiTests`、`McpTransportTests`、`McpFieldFlagApiTests`
+  - `McpTestKit`、`McpTokenApiTests`、`McpAuthApiTests`、`McpTransportTests`、`McpFieldFlagApiTests`、`McpPermissionDiTests`
   - `McpToolsApiTests`、`McpParityTests`、`McpAuditApiTests`
+
+## Task 0–3 差異（第三輪；主控轉給 Task 1–3 實作者）
+
+第三輪必修全部落在 Task 5、7、8、9 與判斷 10、13、14、17、18、20，**Task 1–3 的程式與測試不必補**：
+
+- 沒有新的稽核代碼、政策、訊息鍵或資料欄。`McpTexts.ConfirmedResultOmitted` 是協定用的英文常數，不進 `MessageText` 與 `mcp.json` 基準檔。
+- `IAuditLogRepository.CountForTokenSinceAsync` 的簽章不變：鎖清理契約只動 `McpRateGate`（Task 7）。
+
+只有一處 Task 0 的文字與後文不一致，不必動作：Task 0 Step 4 的「Step 3 第 4 項不成立：在 `ListToolsAsync` 自己設，不停工」已由「Task 0 補充 C」取代，以補充 C 的判讀為準（只有第 7 項可以自己補，第 1–6 項不成立就停下回報）。
 
 ---
 
@@ -1087,14 +1152,15 @@ bearer_token_env_var = "FORMWRIGHT_TOKEN"
 ### Task 5: 呼叫通道、PAX-22、「不提供給 AI」寫入規則與權限解析遮罩
 
 **Files:**
-- Create: `Application/Common/Security/{IRequestChannel,ChannelPermissionRepository}.cs`、`WebAPI/Mcp/HttpRequestChannel.cs`
+- Create: `Application/Common/Security/{IRequestChannel,ChannelPermissionRepository}.cs`（後者含 `AddChannelPermissionMasking`）、`Application/Common/ServiceCollectionDecoration.cs`（從 `AddActingOverrides` 搬出的 `Decorate<TService>`）、`WebAPI/Mcp/HttpRequestChannel.cs`
 - Modify:
-  - 通道：`Common/Security/PermissionAdminGate.cs`（注入 `IRequestChannel`，第一行判斷 MCP）、`Application/DependencyInjection.cs`（`DefaultRequestChannel` 用 `TryAddScoped`；`IPermissionRepository` 換成裝飾器）、`WebAPI/Program.cs`（`AddScoped<IRequestChannel, HttpRequestChannel>`）。
+  - 通道：`Common/Security/PermissionAdminGate.cs`（注入 `IRequestChannel`，第一行判斷 MCP）、`Application/DependencyInjection.cs`（`DefaultRequestChannel` 用 `TryAddScoped`；**不在這裡**換 `IPermissionRepository`，判斷 10 第 2 點）、`Common/Acting/ActingServiceCollectionExtensions.cs`（改呼叫共用的 `Decorate`）、`WebAPI/Program.cs`（`AddScoped<IRequestChannel, HttpRequestChannel>`；provider 註冊那段 `if/else` 的下一行呼叫 `AddChannelPermissionMasking()`）。
   - 遮罩（判斷 10）：`Domain/Repositories/Dynamic/PermissionInputs.cs`（`AiMasked`）、`Common/Security/PermissionResolver.cs`（AI 分支，抽出閉包）、`Common/Security/DynamicAccessGuard.cs`（`HiddenSourceFieldsAsync` 觸發條件）、`ApprovalService/ApprovalHiddenFields.cs`（`SourceAsync` 觸發條件）、`ApprovalService/ApprovalQueryHandlers.cs`（`GetApprovalTasksHandler`、`GetRecordApprovalHandler` 的標題快照，Q7）。
   - 旗標寫入（判斷 3、4）：`Domain/Data/AuthorizationSaveChangesInterceptor.cs`、`FieldService/Commands/{AddField,UpdateField}/*`、`ModulesController.AddFieldBody`、`FieldsController.UpdateFieldBody`、`ModuleService/Data/ModuleResponses.cs`（`FieldResponse.ExcludeFromAi`）與其對應程式。
 - Test：
   - `ApplicationTests/Dynamic/Mcp/{McpChannelGateTests,McpAiExclusionTests}.cs`，兩個類別都標 `[Trait("Category", "Postgres")]`。
-  - `WebAPITests/Dynamic/Mcp/McpFieldFlagApiTests.cs`（`Category=Postgres`）。
+  - `WebAPITests/Dynamic/Mcp/{McpFieldFlagApiTests,McpPermissionDiTests}.cs`（`Category=Postgres`）。
+  - `ApplicationTests/Common/ChannelPermissionDecorationTests.cs`；既有的 `ApplicationTests/Common/ActingScopeTests.cs` 不改預期值，搬 `Decorate` 後照跑。
   - `ApplicationTests/Dynamic/PermissionAxes/AuthorizationWriteInventoryTests.cs`（守衛欄）。
 
 - [ ] **Step 1: 寫失敗的測試**
@@ -1114,6 +1180,7 @@ bearer_token_env_var = "FORMWRIGHT_TOKEN"
     - 基本：
       - `Guard_Mcp_HidesExcluded`：欄位 `salary` 標 `ExcludeFromAi` → MCP 通道 `HiddenFieldIds` 含它；`Ui` 通道不含。
       - `Guard_Mcp_SystemAdminAlsoHidden`：系統管理員在 MCP 通道一樣隱藏。
+      - `Guard_Mcp_SystemAdmin_OnlyAiHidden`：模組另有欄位 `bonus`，一般群組的欄位權限設成看不到 → 系統管理員在 MCP 通道看得到 `bonus`，`HiddenFieldIds` 只有 `salary` 與引用它的公式、彙總；動作與範圍等於 `ForSystemAdmin()`（判斷 10 第 3 點）。
       - `Guard_Mcp_FormulaClosure`：公式 `salary * 1` 一併隱藏（Q3）。
       - `Guard_Mcp_TitleTemplate`：標題樣板引用被遮的欄位 → `TitleVisibleTo` 為否。
       - `Guard_SystemIdentity_NotAffected`：`system.Active` 時不加。
@@ -1139,6 +1206,16 @@ bearer_token_env_var = "FORMWRIGHT_TOKEN"
       - `UpdateField_ChangeFlag_NeedsPermissionAdmin`。
       - `UpdateField_NullFlag_NoGate`：不帶旗標的修改不經 gate，只有設計權也能改。
       - `UpdateField_SameValue_NoGate`。
+  - `ChannelPermissionDecorationTests`（Application，直接對 `ServiceCollection` 測，寫法照 `ActingScopeTests.AddActingOverrides_*`）：
+    - `KeepsLifetime`：原本 scoped，裝飾後仍是 scoped。
+    - `WrapsLastRegistration`：依序 `AddApplication()`、`AddPersistenceRepositories()`、`AddChannelPermissionMasking()` → 解析出 `ChannelPermissionRepository`，內層是 `PermissionRepository`。
+    - `NoRecursion`：同一個 provider 開兩個 scope 各解析一次，都成功（factory 不解析自己）。
+    - `ThrowsWhenMissing`：沒註冊 `IPermissionRepository` 就呼叫 → `InvalidOperationException`。
+  - `McpPermissionDiTests`（WebAPI，經 `Program.cs` 的正式組裝，第三輪必修 1）：
+    - `ProgramDi_IsChannelDecorated`：從 `TestApp.Services` 開 scope 解析 `IPermissionRepository` → `ChannelPermissionRepository`。
+    - `ProgramDi_McpClaims_Masked`：在 scope 內把 `IHttpContextAccessor.HttpContext` 設成帶 `fw:channel=mcp`、`fw:token` 的身分（claim 名稱用 `McpClaims` 常數）→ `LoadInputsAsync` 的 `AiMasked` 是 true；用同一 scope 的 `ISender` 送 `GetRecordRequest`，`values` 沒有 `salary`。測試結束還原 accessor。
+    - `ProgramDi_Ui_Unchanged`：同一位使用者經 REST `GET` 同一筆記錄 → 有 `salary`；沒有 HttpContext 的 scope → `AiMasked` 是 false。
+    - 經真的 `/mcp` 的端到端驗證在 Task 9 的 `McpToolsApiTests.AiExcluded_NotInMcp`。
   - `McpFieldFlagApiTests`（WebAPI，HTTP 層）：
     - `POST /api/v3/dynamic/modules/{key}/fields` 帶 `excludeFromAi: true`：只有設計權 → 403 `permissionAdminRequired`；系統管理員 → 201，`GET /api/v3/dynamic/modules/{key}` 的 `FieldResponse.excludeFromAi` 是 true。
     - `PUT /api/v3/dynamic/fields/{id}` 不帶 `excludeFromAi` → 值不變；帶 false → 經 gate。
@@ -1151,19 +1228,19 @@ bearer_token_env_var = "FORMWRIGHT_TOKEN"
 - [ ] **Step 2: 跑測試確認失敗**：
   ```bash
   cd backend
-  dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~McpChannelGateTests|FullyQualifiedName~McpAiExclusionTests|FullyQualifiedName~AuthorizationWriteInventoryTests|FullyQualifiedName~PermissionResolverTests|FullyQualifiedName~PermissionAxes"
-  dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~McpFieldFlagApiTests"
+  dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~McpChannelGateTests|FullyQualifiedName~McpAiExclusionTests|FullyQualifiedName~AuthorizationWriteInventoryTests|FullyQualifiedName~PermissionResolverTests|FullyQualifiedName~PermissionAxes|FullyQualifiedName~ChannelPermissionDecorationTests|FullyQualifiedName~ActingScopeTests"
+  dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~McpFieldFlagApiTests|FullyQualifiedName~McpPermissionDiTests"
   ```
 - [ ] **Step 3: 實作**（判斷 3、4、9、10）。
   - 改 `PermissionResolver` 前先跑一次 `PermissionResolverTests`、`RecordPermissionTests`、`ApprovalReadGrant` 與簽核查詢的既有測試，全綠當基準；改完 `Ui` 通道的預期值不變。
 - [ ] **Step 4: 跑測試確認通過**：
   - 同 Step 2。
   - 加跑 `--filter "FullyQualifiedName~RecordPermissionTests|FullyQualifiedName~ReferenceReadTests|FullyQualifiedName~FieldService|FullyQualifiedName~Approval|FullyQualifiedName~ReportSqlEquivalenceTests|FullyQualifiedName~Export"`。
-  - WebAPITests：`--filter "FullyQualifiedName~PermissionAxes|FullyQualifiedName~McpFieldFlagApiTests"`。
+  - WebAPITests：`--filter "FullyQualifiedName~PermissionAxes|FullyQualifiedName~McpFieldFlagApiTests|FullyQualifiedName~McpPermissionDiTests"`。
   - PostgreSQL（兩個專案各一次）：
     ```bash
     FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.ApplicationTests --filter "Category=Postgres&(FullyQualifiedName~PermissionAxes|FullyQualifiedName~McpChannelGateTests|FullyQualifiedName~McpAiExclusionTests)"
-    FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.WebAPITests --filter "Category=Postgres&FullyQualifiedName~McpFieldFlagApiTests"
+    FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.WebAPITests --filter "Category=Postgres&(FullyQualifiedName~McpFieldFlagApiTests|FullyQualifiedName~McpPermissionDiTests)"
     ```
   - 核對：PostgreSQL 的執行數等於同一篩選在 SQLite 的執行數，而且大於 0；數字寫進交棒說明。
 - [ ] **Step 5: Commit**：分三個 commit。
@@ -1264,6 +1341,12 @@ bearer_token_env_var = "FORMWRIGHT_TOKEN"
     - `RateLimit_Day_LastSlot_Concurrent`：剩一個名額，兩個呼叫並行（假工具在執行中卡住等訊號）→ 恰一個執行，另一個 `rate_limited`。
     - `RateLimit_Day_AfterRestart`：新建一個 `McpRateGate`（模擬重啟），稽核表已滿額 → 仍 `rate_limited`。
     - `Reservation_ReleasedOnException`：工具丟例外後名額釋放，下一次呼叫照常計算。
+    - 清理（判斷 13 同步契約，第三輪必修 2；`McpRateGate` 開一個 internal 的 `TrackedTokenCount` 給測試觀察）：
+      - `Cleanup_WhileToolStuck_NoSplit`：剩一個名額；呼叫 A 放行後卡在工具內。`TimeProvider` 前進 2 分鐘（每分鐘窗已過、到了掃描時間），另一把權杖的呼叫觸發清理 → A 的項目還在；同一把權杖的呼叫 B → `rate_limited`，全程恰一個執行。放開 A、稽核寫完、名額釋放。
+      - `Cleanup_AfterRelease_Removed`：接上一條，再前進 2 分鐘觸發清理 → 項目被移除；同一把權杖的呼叫 C 重建項目，仍 `rate_limited`（已提交數來自稽核表）。
+      - `Cleanup_KeepsWaiter`：A 在 semaphore 內卡在「讀已提交數」（假的 `countCommitted` 等訊號），B 在等 semaphore；前進時間並觸發清理 → 項目還在；放開後 A、B 依序判斷，合計放行數不超過剩餘名額。
+      - `Cleanup_WindowNotOver_Kept`：沒有使用者但每分鐘窗還沒過 → 不移除，同一分鐘內的次數照算。
+      - `Release_Idempotent`：同一張憑證釋放兩次，`Reserved` 只減一。
     - `RateLimit_PolicyChange_NextWindow`：改政策後下一次呼叫就用新值。
     - `Channel_NotMcp_Throws`。
     - `PageSize_CappedByMaxRows`：`pageSize` 500、`maxRows` 50 → 工具收到 50、`meta.pageSize` 50。
@@ -1294,7 +1377,7 @@ bearer_token_env_var = "FORMWRIGHT_TOKEN"
 
 **Files:**
 - Create: `McpService/Confirmations/*`（判斷 18）
-- Modify: `Application/DependencyInjection.cs`（`McpConfirmationBehavior` 登記在 `TransactionBehavior` 之後、`AuditBehavior` 之前；scoped `McpConfirmationScope`）、`McpToolInvoker.cs`（高風險分支）、`AuthorizationWriteInventoryTests.cs`（`NonGuardBatchMethods` 加 `TryConsumeAsync`）。`AuditCoverageTests` 不改（判斷 18）。
+- Modify: `Application/DependencyInjection.cs`（`McpConfirmationBehavior` 登記在 `TransactionBehavior` 之後、`AuditBehavior` 之前；scoped `McpConfirmationScope`）、`Common/AfterCommitActions.cs`（公開唯讀 `TransactionDepth`，判斷 18 巢狀）、`McpToolInvoker.cs`（高風險分支、確認提交之後的回應）、`McpTexts.cs`（`ConfirmedResultOmitted`）、`AuthorizationWriteInventoryTests.cs`（`NonGuardBatchMethods` 加 `TryConsumeAsync`）。`AuditCoverageTests` 不改（判斷 18）。
 - Test: `ApplicationTests/Dynamic/Mcp/McpConfirmationTests.cs`（`Category=Postgres`；`TestHighRiskTool`、`TouchRecordForTestRequest` 定義在同一檔）
 
 - [ ] **Step 1: 寫失敗的測試**（§13.8「確認碼」）
@@ -1319,7 +1402,17 @@ bearer_token_env_var = "FORMWRIGHT_TOKEN"
     - `Ui_WithTicket_Throws`：UI 通道帶 ticket → `InvalidOperationException`。
     - `CrossTool_Invalid`：碼是工具 A 預演的，拿去執行工具 B → invalid。
     - `OtherUser_Invalid`：確認列的 `UserId` 與目前使用者不同 → invalid。
-    - `Nested_Throws`：一個交易型請求的 handler 裡再送 `IMcpConfirmedRequest` → `InvalidOperationException`、整筆回滾。
+    - 巢狀（第三輪必修 3，【雙跑】）：
+      - `Nested_InTransactionalOuter_Throws`：MCP 通道，外層是一般交易型測試請求，handler 先改記錄 A 一個欄位，再送帶**有效**碼的 `TouchRecordForTestRequest` → `McpConfirmationNestingException` 一路丟出外層；記錄 A 與目標記錄都沒變、碼仍未用、沒有 `Confirmed` 列。
+      - `Nested_InvalidTicket_StillThrows`：同上，但碼無效 → 一樣丟例外，不回 `confirmation_invalid` 結果；記錄 A 沒變（Noop handle 不會替外層回滾，只能靠例外）。
+      - `Nested_ConfirmedInConfirmed_Throws`：確認請求的 handler 先 consume，再送另一個確認請求 → 丟例外；外層的 consume 與異動都回滾，外層的碼可以重試成功。
+      - `Nested_UiChannel_NoTicket_Allowed`：UI 通道、`Confirmation` 是 null 的巢狀照常成功（巢狀規則只在 MCP 通道）。
+    - 確認提交之後（第三輪必修 4，【雙跑】，用真的 `IAuditLog` 與資料庫；`TestHighRiskTool` 可設定回超大結果、回序列化會丟例外的物件、在 Send 回來後取消）：
+      - `Confirmed_ResultTooLarge_NotError_OneRow`：`isError` false、`meta.confirmation.status` 是 `executed`、`meta.dataOmitted` 是 `result_too_large`、沒有 `data`；記錄已改、`UsedUtc` 有值；這次呼叫在稽核表恰一列（`Confirmed`），沒有 `Failed` 列。
+      - `Confirmed_FormatThrows_NotError_OneRow`：同上，`dataOmitted` 是 `format_failed`；Error log 一筆。
+      - `Confirmed_CancelledAfterCommit_OneRow`：Send 回來後取消 → 稽核表恰一列（`Confirmed`），沒有 `cancelled` 列。
+      - `Confirmed_RolledBack_InvokerWrites`：確認稽核存檔失敗（同 `ConfirmedAudit_SaveFails_RollsBackAll` 的攔截器）→ `Committed` 是 false，invoker 照結束路徑表處理（同一個攔截器也擋住 invoker 的寫入，所以回 `audit_unavailable`），不回 `executed`。
+      - `Confirmed_AuditedRequest_Rejected`：測試組件裡同時實作 `IAuditedRequest` 的確認請求 → behavior 入口丟 `InvalidOperationException`、記錄沒變；`McpConfirmedRequests_NotAudited` 掃 Application 組件沒有違規、掃測試組件抓得到這個型別。
     - `SameScope_Sequential`：同一個 DI scope 先成功執行一次，再用同一個碼送一次 → invalid；換新碼 → 成功。
     - `McpConfirmedRequests_AreTransactional`：掃 Application 組件與測試組件，所有 `IMcpConfirmedRequest` 都實作 `ITransactionalRequest`。
 - [ ] **Step 2: 跑測試確認失敗**：`cd backend && dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~McpConfirmationTests|FullyQualifiedName~AuthorizationWriteInventoryTests|FullyQualifiedName~AuditCoverageTests|FullyQualifiedName~TransactionBehaviorTests"`
@@ -1346,6 +1439,9 @@ bearer_token_env_var = "FORMWRIGHT_TOKEN"
     - `get_record`：`includeDetails=false` 沒有 `details`；看不到的記錄 → `forbidden`。
     - `get_record_history`、`list_reports`、`run_report`（`from`／`to` 生效；列多於 `maxRows` 時截斷標記）。
     - `list_my_tasks`：tab 合法值與非法值。
+    - `pageSize`（判斷 20，第三輪必修 5），`get_record_history`、`list_my_tasks`、`list_approval_tasks` 各一組：
+      - `<工具>_PageSize_Forwarded`：真資料帶 `pageSize: 2` → 回 2 筆、`meta.pageSize` 2、`meta.next.page` 2；`pageSize` 0 或超過該工具上限 → `invalid_arguments`、`fields.pageSize`；`pageSize` 大於 `maxRows` → 夾成 `maxRows`。
+      - `<工具>_RetryPageSize_Completes`：`ExtraServices` 換掉該工具的 request handler，替身回 120 筆、每筆約 1,000 字的假資料，並照收到的頁碼與頁大小分頁 → 第一次（不帶 `pageSize`）回 `result_too_large` 與 `retry.pageSize`；照建議值從第 1 頁翻到最後一頁，id 聯集等於 120 筆、沒有重複；替身記下的 `PagesSize` 每次都等於建議值。走的是正式的工具、參數解析、invoker 與格式化，只換資料來源。
     - `get_task`：留言附件只有 `id`／`name`／`size`。
     - `list_approval_tasks`、`get_record_approval`；模組有被遮欄位時標題快照是空字串（Q7）。
     - `ScopeDenied`：權杖範圍是 `design.read`、呼叫 `query_records` → `isError`、`scope_denied`（從 Task 6 移來）。
@@ -1394,7 +1490,7 @@ bearer_token_env_var = "FORMWRIGHT_TOKEN"
   - §9.3：Origin 允許清單的來源、可信 loopback 的定義、轉送標頭的部署前提（判斷 11）。
   - §5.5 已知限制另加：簽核標題快照的處理（Q7）；畫面通道「彙總條件引用隱藏欄位」的既有缺口（另開票的票號）。
   - §15：本計畫的寫死清單。
-  - §17 第 5 點、§18 第 2、10 條：已查證，回應一律是 SSE。
+  - §17 第 5 點、§18 第 2、10 條：照 Task 0 補充 C 第 8 項記下的實測結果寫，逐種回應（成功、JSON-RPC 錯誤、通知）列 `Content-Type`；已實測的 `initialize`、`tools/list`、`tools/call` 是 SSE（「與設計的矛盾」第 5 點），其餘照實測，不寫「一律」。
   - 加「mcp1a 計畫」連結。
   - Q 若被使用者推翻，照裁決改，並標明使用者裁決或規劃者暫定。
 - Modify: `docs/superpowers/specs/2026-11-19-permission-axes-design.md` §14：PAX-22 已由 mcp1a 實作（附 commit SHA 由主控在合併後補）
@@ -1535,25 +1631,26 @@ git diff --stat main...HEAD -- backend/tests/DynamicModules.ApplicationTests/Com
 | | 3 權杖 API | 4（含 2 個測試檔） | 1 | ≈ 460（測試約 250） |
 | | 小計 | 20 | 18 | ≈ 1590 |
 | mcp1a-2 | 4 帳號連動 | 2（含 1 個測試檔） | 2 | ≈ 150（測試約 90） |
-| | 5 通道、PAX-22、AI 遮罩、旗標與 API | 6（含 3 個測試檔） | 15 | ≈ 1050（測試約 650） |
-| | 小計 | 8 | 17 | ≈ 1200 |
+| | 5 通道、PAX-22、AI 遮罩、旗標與 API | 9（含 5 個測試檔） | 16 | ≈ 1120（測試約 700） |
+| | 小計 | 11 | 18 | ≈ 1270 |
 | mcp1a-3 | 6 `/mcp` endpoint 與 `whoami` | 13（含 4 個測試檔） | 3 | ≈ 800（測試約 450） |
-| | 7 執行器：速率與名額、稽核結束路徑、結果大小 | 6（含 4 個測試檔） | 2 | ≈ 700（測試約 400） |
-| | 小計 | 19 | 5 | ≈ 1500 |
-| mcp1a-4 | 8 確認碼機制 | 6（含 1 個測試檔） | 3 | ≈ 600（測試約 360） |
-| | 9 12 個工具、對照、清理 | 17（含 4 個測試檔） | 2 | ≈ 750（測試約 400） |
+| | 7 執行器：速率與名額、稽核結束路徑、結果大小 | 6（含 4 個測試檔） | 2 | ≈ 760（測試約 440） |
+| | 小計 | 19 | 5 | ≈ 1560 |
+| mcp1a-4 | 8 確認碼機制 | 6（含 1 個測試檔） | 5 | ≈ 720（測試約 450） |
+| | 9 12 個工具、對照、清理 | 17（含 4 個測試檔） | 2 | ≈ 830（測試約 460） |
 | | 10 文件、走查與收尾 | 0 | 6 | ≈ 120 |
-| | 小計 | 23 | 11 | ≈ 1470 |
-| 合計 | | 約 70 | 約 51 | ≈ 5760，其中測試約 57% |
+| | 小計 | 23 | 13 | ≈ 1670 |
+| 合計 | | 約 73 | 約 54 | ≈ 6090，其中測試約 57% |
 
 - 第二輪比初版多約 1160 行，多在 Task 5（簽核與彙總遮罩、匯出與報表回歸、HTTP 層）與 Task 7、8 的契約測試；因此從三個子段改成四個。
-- mcp1a-1 略超過 1500 行：Task 0 已開工，不再切。其餘三批都在 1500 行以內；migration 與 snapshot 是產生檔，不計。
-- 單一 Task 超過 700 行就照各自 Step 5 的說明拆 commit。
+- 第三輪再多約 330 行：Task 5 的裝飾器組裝與正式 DI 測試（+70）、Task 7 的鎖清理契約（+60）、Task 8 的巢狀與提交後契約（+120）、Task 9 三個工具的 `pageSize`（+80）。
+- mcp1a-1 略超過 1500 行：Task 0 已開工，不再切。mcp1a-3（≈ 1560）、mcp1a-4（≈ 1670）也略超過：多出來的都是同一個 Task 內的契約測試，拆子段會把實作和它的測試分開，不再切；migration 與 snapshot 是產生檔，不計。
+- 單一 Task 超過 700 行就拆 commit：Task 5、9 照各自 Step 5；Task 7 拆「速率與名額」「稽核結束路徑與結果大小」兩個；Task 8 拆「確認碼機制」「巢狀與提交後契約」兩個。
 - 若 Task 0 需要自製 JSON-RPC endpoint：不在本計畫範圍，照 Task 0 補充 E 另立計畫。
 
 ## 已知限制（mcp1a，交付時寫回設計 §15 或已知限制）
 
-- 回應一律是 SSE 格式（單一事件），沒有純 JSON 模式（SDK 限制）。
+- 已實測的 `initialize`、`tools/list`、`tools/call` 回應是 SSE 格式（單一事件），2.4.0 沒有改回純 JSON 的選項（SDK 限制）；通知與錯誤回應的格式照 Task 0 補充 C 第 8 項的實測結果寫。
 - 每分鐘速率、每日名額保留、認證失敗降速只在單一實例記憶體；重啟後歸零。每日已提交數走稽核表，重啟後每日上限照樣生效。
 - `Auth:TrustForwardedHeaders` 開著時，HTTPS 判斷採用 `X-Forwarded-Proto`，現行設定不限定可信代理；部署前提是應用程式只能經代理到達、由代理覆寫這個標頭。這時也不給 loopback 例外。
 - 分頁列表放不下時回錯誤與建議筆數，不截斷；報表明細會截斷、沒有續取，要全部用匯出。
@@ -1601,10 +1698,10 @@ git diff --stat main...HEAD -- backend/tests/DynamicModules.ApplicationTests/Com
 3. **型別一致**：
    - Domain：`McpScopes.{All,Issuable,TryParse,Join}`、`McpRisk`、`McpToolDescriptor`（含 `AuditCode`）、`McpToolCatalog.{Production,Find}`、`McpSecrets.{NewToken,NewConfirmationCode,LooksLikeToken,Hash,HashEquals,Last4}`、`McpArguments.{Canonical,Hash}`、`McpLimits`。
    - 實體與 repository：`McpToken`、`McpConfirmation`、`Field.ExcludeFromAi`、`IMcpTokenRepository`、`IMcpConfirmationRepository.TryConsumeAsync`、`IAuditLogRepository.CountForTokenSinceAsync`、`AuditLogQuery.TokenId`。
-   - 通道與權限：`IRequestChannel`／`RequestChannel`／`DefaultRequestChannel`／`HttpRequestChannel`、`PermissionInputs.AiMasked`、`ChannelPermissionRepository`、`PolicyResolution.SystemUnusable`。
+   - 通道與權限：`IRequestChannel`／`RequestChannel`／`DefaultRequestChannel`／`HttpRequestChannel`、`PermissionInputs.AiMasked`、`ChannelPermissionRepository`、`AddChannelPermissionMasking`、`PolicyResolution.SystemUnusable`。
    - 認證與權杖：`AuthenticateMcpTokenRequest`／`McpAuthResult`／`McpAuthStatus`、`TouchMcpTokenRequest`、`McpPolicies`／`McpPolicySnapshot`、`McpTokenRevoker`。
    - 工具：`IMcpTool`、`McpToolCall`、`McpToolOutcome`、`McpToolInvoker`、`McpRateGate.TryReserveAsync`、`McpUsage`、`McpResultFormatter`、`McpAuditSummary`、`McpTexts`。
-   - 確認碼：`IMcpConfirmedRequest`、`McpConfirmationTicket`、`IMcpConfirmationScope`、`McpConfirmationBehavior`、`McpConfirmationService`、`CreateMcpConfirmationRequest`。
+   - 確認碼：`IMcpConfirmedRequest`、`McpConfirmationTicket`、`IMcpConfirmationScope`（含 `Committed`）、`McpConfirmationBehavior`、`McpConfirmationNestingException`、`McpConfirmationService`、`CreateMcpConfirmationRequest`、`AfterCommitActions.TransactionDepth`、`McpTexts.ConfirmedResultOmitted`。
    - 清理：`PurgeMcpConfirmationsBatchRequest`、`PurgeMcpTokensBatchRequest`。
    - WebAPI：`McpGateMiddleware`、`McpAuthThrottle`、`McpEndpoints.{AddFormwrightMcp,MapFormwrightMcp}`、`McpSdkAdapter.{ListToolsAsync,CallToolAsync}`。
 4. **前段踩過的坑**：
