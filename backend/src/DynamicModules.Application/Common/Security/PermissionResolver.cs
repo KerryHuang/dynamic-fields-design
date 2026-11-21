@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Formulas;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -23,7 +24,13 @@ public static class PermissionResolver
     {
         var grantSource = accessModule ?? module;
         if (inputs.User.IsSystemAdmin)
-            return ForSystemAdmin();
+        {
+            if (!inputs.AiMasked) return ForSystemAdmin();
+            // MCP 通道的系統管理員：動作與範圍照管理員，只遮「不提供給 AI」與依賴它的欄位（mcp1a 計畫判斷 10 第 3 點）
+            var aiOnly = AiExcluded(module);
+            HideDependents(module, aiOnly, hiddenSourceFieldIds, aiMasked: true, pricing: true);
+            return Build(new HashSet<PermissionAction>(AllActions), DataScope.All, null, aiOnly, [], []);
+        }
 
         var actions = Actions(grantSource.ProgramCode, inputs);
         var groups = inputs.GroupIds.ToHashSet();
@@ -58,19 +65,12 @@ public static class PermissionResolver
         // 限定可見的貢獻欄位：使用者的群組都不在可見列裡就隱藏（fail closed，設計 §6）；可見列只解除這一層，Hidden 仍優先
         var granted = (inputs.FieldGrants ?? []).Where(g => groups.Contains(g.GroupId)).Select(g => g.FieldId).ToHashSet();
         hidden.UnionWith(module.Blocks.SelectMany(b => b.Fields).Where(f => f.VisibilityRestricted && !granted.Contains(f.Id)).Select(f => f.Id));
+        if (inputs.AiMasked) hidden.UnionWith(AiExcluded(module));
         if (!pricing)
             hidden.UnionWith(module.Blocks.SelectMany(b => b.Fields)
                 .Where(f => f.Type == FieldType.Currency
                             || (f is { Type: FieldType.Rollup, Config.ResultType: "currency" })).Select(f => f.Id));
-        if (hiddenSourceFieldIds is { Count: > 0 })
-            hidden.UnionWith(module.Blocks.SelectMany(b => b.Fields)
-                .Where(f => f is { Type: FieldType.Rollup, Config.Rollup.AggregateFieldId: { } agg } && hiddenSourceFieldIds.Contains(agg))
-                .Select(f => f.Id));
-        // 公式不洩漏看不到的值：引用任一隱藏欄位（含隱藏的公式）或金額結果但無 Pricing，就一併隱藏。
-        foreach (var f in FormulaGraph.EvaluationOrder(module))
-            if (FormulaGraph.RefsOf(f).Overlaps(hidden)
-                || (f.Config.ResultType == "currency" && !pricing))
-                hidden.Add(f.Id);
+        HideDependents(module, hidden, hiddenSourceFieldIds, inputs.AiMasked, pricing);
         var readOnly = access.Where(p => p.Access == FieldAccess.ReadOnly).Select(p => p.FieldId)
             .Where(id => !hidden.Contains(id)).ToHashSet();
 
@@ -78,6 +78,54 @@ public static class PermissionResolver
             .Where(g => !g.Any(s => groups.Contains(s.GroupId))).Select(g => g.Key).ToHashSet();
 
         return Build(actions, scope, owners, hidden, readOnly, unselectable);
+    }
+
+    private static HashSet<long> AiExcluded(Module module) =>
+        module.Blocks.SelectMany(b => b.Fields).Where(f => f.ExcludeFromAi).Select(f => f.Id).ToHashSet();
+
+    /// <summary>
+    /// 彙總與公式不洩漏看不到的值：加總對象看不到的彙總一併隱藏；MCP 通道（<paramref name="aiMasked"/>）另外隱藏條件引用看不到欄位、
+    /// 或條件讀不懂的彙總（fail closed，Q3）。公式引用任一隱藏欄位（含隱藏的公式）或金額結果但無 Pricing，就一併隱藏。
+    /// </summary>
+    private static void HideDependents(Module module, HashSet<long> hidden, IReadOnlySet<long>? hiddenSourceFieldIds, bool aiMasked, bool pricing)
+    {
+        var source = hiddenSourceFieldIds ?? new HashSet<long>();
+        foreach (var f in module.Blocks.SelectMany(b => b.Fields))
+        {
+            if (f is not { Type: FieldType.Rollup, Config.Rollup: { } rollup }) continue;
+            if (rollup.AggregateFieldId is { } agg && source.Contains(agg)) hidden.Add(f.Id);
+            else if (aiMasked && rollup.Condition is { } condition
+                     && (ConditionFieldIds(condition) is not { } refs || refs.Overlaps(source))) hidden.Add(f.Id);
+        }
+        foreach (var f in FormulaGraph.EvaluationOrder(module))
+            if (FormulaGraph.RefsOf(f).Overlaps(hidden)
+                || (f.Config.ResultType == "currency" && !pricing))
+                hidden.Add(f.Id);
+    }
+
+    /// <summary>
+    /// 彙總條件引用的欄位 Id（含 value.fieldRef）；結構讀不懂回 null。只看結構不驗型別：resolver 手上沒有來源模組，
+    /// 語意檢查仍由 RollupCalculator 的 ConditionParser 負責（它讀不懂時略過條件，所以這裡讀不懂就當成會洩漏）。
+    /// </summary>
+    private static HashSet<long>? ConditionFieldIds(JsonElement condition)
+    {
+        var ids = new HashSet<long>();
+        bool Walk(JsonElement el)
+        {
+            if (el.ValueKind != JsonValueKind.Object) return false;
+            var props = el.EnumerateObject().ToList();
+            if (props.Count == 1 && props[0].Name is "all" or "any")
+                return props[0].Value.ValueKind == JsonValueKind.Array && props[0].Value.EnumerateArray().All(Walk);
+            if (!el.TryGetProperty("field", out var field) || !field.TryGetInt64(out var id)) return false;
+            ids.Add(id);
+            if (el.TryGetProperty("value", out var value) && value.ValueKind == JsonValueKind.Object)
+            {
+                if (!value.TryGetProperty("fieldRef", out var r) || !r.TryGetInt64(out var refId)) return false;
+                ids.Add(refId);
+            }
+            return true;
+        }
+        return Walk(condition) ? ids : null;
     }
 
     /// <summary>系統管理員的有效權限：全部動作、資料範圍 All、沒有隱藏或唯讀欄位（設計器預覽也用它）。</summary>

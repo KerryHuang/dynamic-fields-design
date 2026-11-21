@@ -32,11 +32,12 @@ public sealed class ApprovalHiddenFields(IPermissionRepository permissions, IMod
 
     /// <summary>
     /// 明細來源隱藏：module 有以明細欄位為加總對象的彙總時，使用者在各明細模組看不到的欄位（動作軸取 inputs，欄位例外取明細）。
-    /// 沒有這類彙總回 (true, null)；任一明細讀不到權限輸入回 (false, null)（不放行）。
+    /// 沒有這類彙總回 (true, null)；任一明細讀不到權限輸入回 (false, null)（不放行）。MCP 通道有條件的彙總也算（同 DynamicAccessGuard）。
     /// </summary>
     public async Task<(bool Ok, IReadOnlySet<long>? Source)> SourceAsync(Module module, PermissionInputs inputs, string userId, CancellationToken ct)
     {
-        if (!module.Blocks.SelectMany(b => b.Fields).Any(f => f is { Type: FieldType.Rollup, Config.Rollup.AggregateFieldId: not null }))
+        if (!module.Blocks.SelectMany(b => b.Fields).Any(f => f is { Type: FieldType.Rollup, Config.Rollup: { } r }
+                && (r.AggregateFieldId is not null || (inputs.AiMasked && r.Condition is not null))))
             return (true, null);
         var hidden = new HashSet<long>();
         foreach (var (child, _) in await modules.ListDetailModulesAsync(module.Key, ct))

@@ -1,0 +1,352 @@
+using System.Text;
+using System.Text.Json;
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Security;
+using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.ExportService.Queries.ExportRecords;
+using DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
+using DynamicModules.Application.Dynamic.PermissionService.Data;
+using DynamicModules.Application.Dynamic.RecordService;
+using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
+using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
+using DynamicModules.Application.Dynamic.RecordService.Data;
+using DynamicModules.Application.Dynamic.RecordService.Queries.GetPagedRecords;
+using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
+using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecordHistory;
+using DynamicModules.Application.Dynamic.References;
+using DynamicModules.ApplicationTests.Dynamic.Approvals;
+using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
+using DynamicModules.TestSupport;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace DynamicModules.ApplicationTests.Dynamic.Mcp;
+
+/// <summary>
+/// 「不提供給 AI」在 MCP 通道的權限解析遮罩（mcp1a 計畫判斷 10、Q3、Q7，Task 5）。每個「MCP 被遮」的案例都對照畫面通道的既有結果不變。
+/// 情境：單據 po（薪資標旗標、薪資公式＝薪資 × 1、獎金對 buyers 隱藏）；明細單價標旗標，所以小計（數量 × 單價）、明細合計、總額、折扣後總額
+/// 都依賴它；另加「單價合計」（加總對象是單價）、「高價筆數」（計數、條件是單價 &gt; 100）、「數量筆數」（計數、條件是數量，不受影響）。
+/// buyers（buyer1、buyer2）有單據全部權限；fin1 只有簽核任務。
+/// </summary>
+[Trait("Category", "Postgres")]
+public class McpAiExclusionTests : ApprovalTestBase
+{
+    protected override bool ScopePerRequest => true;
+
+    private readonly TestRequestChannel _channel = new();
+    private PurchaseRig _r = null!;
+    private long _salary, _salaryX, _bonus, _priceSum, _countCond, _countQty, _buyers;
+
+    protected override void ConfigureServices(IServiceCollection services)
+    {
+        base.ConfigureServices(services);
+        services.AddSingleton<IRequestChannel>(_channel);
+        services.AddChannelPermissionMasking();
+    }
+
+    private async Task Rig(bool flag = true)
+    {
+        _r = await BuildPurchase();
+        _salary = (await MustAdd(_r.Module, FieldType.Decimal, new FieldConfig { IsFilterable = true, IsSortable = true, Scale = 0 }, "薪資")).Id;
+        _salaryX = (await MustAdd(_r.Module, FieldType.Formula,
+            new FieldConfig { Formula = $"{{{_salary}}} * 1", ResultType = "number", Scale = 0 }, "薪資公式")).Id;
+        _bonus = (await MustAdd(_r.Module, FieldType.Decimal, new FieldConfig { IsFilterable = true, Scale = 0 }, "獎金")).Id;
+        _priceSum = (await MustAdd(_r.Module, FieldType.Rollup,
+            new FieldConfig { Rollup = new RollupConfig(_r.LineHead, RollupFunction.Sum, _r.LinePrice, null) }, "單價合計")).Id;
+        _countCond = (await MustAdd(_r.Module, FieldType.Rollup, new FieldConfig
+        {
+            Rollup = new RollupConfig(_r.LineHead, RollupFunction.Count, null, J($$"""{"field":{{_r.LinePrice}},"op":"gt","value":100}"""))
+        }, "高價筆數")).Id;
+        _countQty = (await MustAdd(_r.Module, FieldType.Rollup, new FieldConfig
+        {
+            Rollup = new RollupConfig(_r.LineHead, RollupFunction.Count, null, J($$"""{"field":{{_r.LineQty}},"op":"gt","value":0}"""))
+        }, "數量筆數")).Id;
+        await SeedFlow(_r, "po-g", _r.Confirmed, 1, Def(null, Stage("fin", Group(FinanceGroup), editable: [_salary])));
+        (await SaveWorkflow(_r, [Needs(_r.Draft, _r.Confirmed), Plain(_r.Confirmed, _r.Partial), Plain(_r.Partial, _r.Received),
+            Plain(_r.Confirmed, _r.Cancelled)])).IsSuccess.Should().BeTrue();
+
+        var group = new PermissionGroup { Key = "buyers", NameI18n = Text("buyers") };
+        Db.Context.Add(group);
+        await Db.Context.SaveForTestsAsync();
+        _buyers = group.Id;
+        Db.Context.AddRange(new UserGroupMapping { GroupId = _buyers, UserId = "buyer1" }, new UserGroupMapping { GroupId = _buyers, UserId = "buyer2" });
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+        As("admin");
+        foreach (var m in new[] { _r.Module, _r.Extra })
+        {
+            var fields = m == _r.Module ? new[] { new FieldPermissionDto(_bonus, _buyers, FieldAccess.Hidden) } : [];
+            var res = await Send(new SaveModulePermissionsRequest(m, new ModulePermissionsDto(
+                [new GroupPermissionDto(_buyers, new PrivilegesDto(true, true, true, true, true, true, false), DataScope.All)], [], [.. fields], [])));
+            res.IsSuccess.Should().BeTrue(Dump(res));
+        }
+        if (flag) await Exclude(_salary, _r.LinePrice);
+    }
+
+    /// <summary>直接在資料庫標「不提供給 AI」（測試許可；正式路徑的寫入規則見 McpAiExclusionWriteRuleTests）。</summary>
+    private async Task Exclude(params long[] fieldIds)
+    {
+        foreach (var f in await Db.Context.Set<Field>().Where(f => fieldIds.Contains(f.Id)).ToListAsync()) f.ExcludeFromAi = true;
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+    }
+
+    private async Task<T> In<T>(RequestChannel channel, string user, Func<Task<T>> body)
+    {
+        As(user);
+        _channel.Channel = channel;
+        try { return await body(); }
+        finally { _channel.Channel = RequestChannel.Ui; }
+    }
+
+    private Task<ServiceResult> Mcp(string user, MediatR.IRequest<ServiceResult> request) => In(RequestChannel.Mcp, user, () => Send(request));
+    private Task<ServiceResult> Ui(string user, MediatR.IRequest<ServiceResult> request) => In(RequestChannel.Ui, user, () => Send(request));
+
+    private Task<EffectivePermissions> Perms(RequestChannel channel, string user, string? module = null, Action<IServiceProvider>? before = null) =>
+        In(channel, user, async () =>
+        {
+            using var scope = NewScope();
+            var sp = scope.ServiceProvider;
+            before?.Invoke(sp);
+            var m = (await sp.GetRequiredService<IModuleRepository>().GetByKeyAsync(module ?? _r.Module, includeChildren: true, CancellationToken.None))!;
+            return (await sp.GetRequiredService<IDynamicAccessGuard>().AuthorizeAsync(m, PermissionAction.Read, CancellationToken.None)).Permissions!;
+        });
+
+    private async Task<(long RecordId, long InstanceId)> Pending()
+    {
+        As("buyer1");
+        var po = await NewPo(_r, qty: 2, price: 300, extra: V((_salary, 50000), (_bonus, 7)));
+        return (po.Id, (await MustSubmit(po.Id, _r.Confirmed)).InstanceId!.Value);
+    }
+
+    private long[] AiDependents => [_salary, _salaryX, _priceSum, _countCond, _r.LineSum, _r.Total, _r.NetTotal];
+
+    // ───────── guard ─────────
+
+    [Fact]
+    public async Task Guard_Mcp_HidesExcluded()
+    {
+        await Rig();
+        var mcp = await Perms(RequestChannel.Mcp, "buyer1");
+        var ui = await Perms(RequestChannel.Ui, "buyer1");
+
+        mcp.HiddenFieldIds.Should().Contain(AiDependents).And.Contain(_bonus).And.NotContain(_countQty);
+        ui.HiddenFieldIds.Should().BeEquivalentTo([_bonus]);
+        ui.Hash.Should().NotBe(mcp.Hash);
+    }
+
+    [Fact]
+    public async Task Guard_Mcp_SystemAdminAlsoHidden_OnlyAiHidden()
+    {
+        await Rig();
+        var mcp = await Perms(RequestChannel.Mcp, "admin");
+        var ui = await Perms(RequestChannel.Ui, "admin");
+        var admin = PermissionResolver.ForSystemAdmin();
+
+        // 獎金對 buyers 隱藏，但一般群組的欄位權限不套到管理員：只有 AI 排除欄位與依賴它的公式、彙總（判斷 10 第 3 點）
+        mcp.HiddenFieldIds.Should().BeEquivalentTo(AiDependents);
+        (mcp.Actions, mcp.Scope, mcp.OwnerUserIds).Should().BeEquivalentTo((admin.Actions, admin.Scope, admin.OwnerUserIds));
+        mcp.ReadOnlyFieldIds.Should().BeEmpty();
+        ui.HiddenFieldIds.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Guard_Mcp_FormulaClosure_AndRollups()
+    {
+        await Rig();
+        var mcp = await Perms(RequestChannel.Mcp, "admin");
+        // Q3：公式 salary * 1；Rollup_SumOfExcluded（加總對象是被遮的單價）；Rollup_SourceFormulaOfExcluded（加總對象是引用單價的小計）；
+        // Rollup_CountWithConditionOnExcluded（沒有加總對象、條件引用單價）；條件只引用數量的計數照給
+        mcp.HiddenFieldIds.Should().Contain([_salaryX, _priceSum, _r.LineSum, _countCond]).And.NotContain(_countQty);
+        (await Perms(RequestChannel.Ui, "buyer1")).HiddenFieldIds.Should().NotContain(_countCond, "畫面通道的彙總條件缺口本段不改");
+    }
+
+    [Fact]
+    public async Task Rollup_ConditionUnparsable_Hidden()
+    {
+        await Rig();
+        var field = await Db.Context.Set<Field>().SingleAsync(f => f.Id == _countQty);
+        field.Config = field.Config with { Rollup = field.Config.Rollup! with { Condition = J("""{"bogus":1}""") } };
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        (await Perms(RequestChannel.Mcp, "admin")).HiddenFieldIds.Should().Contain(_countQty);
+        (await Perms(RequestChannel.Ui, "admin")).HiddenFieldIds.Should().NotContain(_countQty);
+    }
+
+    [Fact]
+    public async Task Guard_Mcp_TitleTemplate()
+    {
+        await Rig();
+        var module = await Db.Context.Set<Module>().SingleAsync(m => m.Key == _r.Module);
+        module.TitleTemplate = $"{{{module.TitleFieldId}}} {{{_salary}}}";
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        var withFields = (await Svc<IModuleRepository>().GetByKeyAsync(_r.Module, includeChildren: true, CancellationToken.None))!;
+
+        withFields.TitleVisibleTo(await Perms(RequestChannel.Mcp, "buyer1")).Should().BeFalse();
+        withFields.TitleVisibleTo(await Perms(RequestChannel.Ui, "buyer1")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Guard_SystemIdentity_NotAffected()
+    {
+        await Rig();
+        IDisposable? entered = null;
+        var p = await Perms(RequestChannel.Mcp, "buyer1", before: sp => entered = sp.GetRequiredService<ISystemIdentity>().Enter("buyer1"));
+        entered?.Dispose();
+        p.HiddenFieldIds.Should().BeEmpty("事件效果的系統身分不讀權限輸入（判斷 10 第 5 點）");
+    }
+
+    // ───────── 讀取路徑 ─────────
+
+    [Fact]
+    public async Task Filter_ByExcluded_Invalid()
+    {
+        await Rig();
+        GetPagedRecordsRequest Filter(long field) => new(_r.Module, 1, 20, $$"""{"field":{{field}},"op":"gt","value":1}""", [], [], null);
+        GetPagedRecordsRequest Sort(long field) => new(_r.Module, 1, 20, null, [$"f_{field}"], ["asc"], null);
+
+        var mcp = await Mcp("buyer1", Filter(_salary));
+        var hiddenByGroup = await Ui("buyer1", Filter(_bonus));
+        mcp.IsInvalid.Should().BeTrue();
+        hiddenByGroup.IsInvalid.Should().BeTrue();
+        mcp.Errors.Keys.Should().BeEquivalentTo(hiddenByGroup.Errors.Keys, "與使用者沒有該欄位讀取權時同一個錯誤");
+        mcp.Errors.Values.Single().Single().Should().Be(hiddenByGroup.Errors.Values.Single().Single().Replace($"{_bonus}", $"{_salary}"));
+        (await Mcp("buyer1", Sort(_salary))).IsInvalid.Should().BeTrue();
+        (await Ui("buyer1", Filter(_salary))).IsSuccess.Should().BeTrue();
+        (await Ui("buyer1", Sort(_salary))).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task History_HidesExcluded()
+    {
+        await Rig();
+        As("buyer1");
+        var po = await NewPo(_r, extra: V((_salary, 50000)));
+        (await Send(new UpdateRecordRequest(po.Id, V((_salary, 60000)), Rec(po.Id).Row.RowVersion))).IsSuccess.Should().BeTrue();
+
+        static List<string?> Keys(ServiceResult r) => ((PagedResponse<RecordHistoryResponse>)r.Data!).Items.Select(i => i.FieldKey).ToList();
+        Keys(await Mcp("buyer1", new GetRecordHistoryRequest(po.Id, 1, 100, null))).Should().NotContain([$"f_{_salary}", $"f_{_salaryX}"]);
+        Keys(await Ui("buyer1", new GetRecordHistoryRequest(po.Id, 1, 100, null))).Should().Contain($"f_{_salary}");
+    }
+
+    [Fact]
+    public async Task Reference_TitleRestricted()
+    {
+        await Rig();
+        var module = await Db.Context.Set<Module>().SingleAsync(m => m.Key == _r.Module);
+        module.TitleTemplate = $"{{{module.TitleFieldId}}} {{{_salary}}}";
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        As("buyer1");
+        var po = await NewPo(_r, extra: V((_salary, 50000)));
+        var created = await Send(new CreateRecordRequest(_r.Extra, new Dictionary<string, JsonElement?>
+        {
+            [$"f_{TitleId(_r.Extra)}"] = JsonSerializer.SerializeToElement("運費"), [$"f_{_r.ExtraRef}"] = JsonSerializer.SerializeToElement(po.Id),
+        }));
+        created.IsCreated.Should().BeTrue(Dump(created));
+        var extra = ((DynamicRecordResponse)created.Data!).Id;
+
+        ReferenceInfo Ref(ServiceResult r) => ((DynamicRecordResponse)r.Data!).References[$"f_{_r.ExtraRef}"];
+        var mcp = Ref(await Mcp("buyer1", new GetRecordRequest(extra)));
+        (mcp.State, mcp.Title).Should().Be((ReferenceInfo.Restricted, null));
+        Ref(await Ui("buyer1", new GetRecordRequest(extra))).State.Should().Be(ReferenceInfo.Ok);
+    }
+
+    [Fact]
+    public async Task Export_Mcp_ExcludesColumn()
+    {
+        await Rig();
+        As("buyer1");
+        await NewPo(_r, extra: V((_salary, 50000)));
+        static string Csv(ServiceResult r) => Encoding.UTF8.GetString(((ExportFile)r.Data!).Content);
+        var request = new ExportRecordsRequest(_r.Module, "csv", null, [], [], null, "zh-TW");
+
+        var mcp = Csv(await Mcp("admin", request));
+        mcp.Should().NotContain("薪資").And.NotContain("50000");
+        Csv(await Ui("admin", request)).Should().Contain("薪資").And.Contain("50000");
+    }
+
+    // ───────── 簽核路徑 ─────────
+
+    [Fact]
+    public async Task ApprovalGrant_Mcp_HidesExcluded()
+    {
+        await Rig();
+        var (po, _) = await Pending();
+
+        var mcp = (DynamicRecordResponse)(await Mcp("fin1", new GetRecordRequest(po))).Data!;
+        var ui = (DynamicRecordResponse)(await Ui("fin1", new GetRecordRequest(po))).Data!;
+
+        mcp.Values.Keys.Should().NotContain([$"f_{_salary}", $"f_{_salaryX}", $"f_{_r.LineSum}", $"f_{_r.Total}"]);
+        ui.Values[$"f_{_salary}"]!.Value.GetDecimal().Should().Be(50000);
+        ui.Values.Keys.Should().Contain($"f_{_salaryX}");
+    }
+
+    [Fact]
+    public async Task ApprovalGrant_Detail_Mcp_HidesExcluded()
+    {
+        await Rig();
+        var (po, _) = await Pending();
+
+        var mcp = ((DynamicRecordResponse)(await Mcp("fin1", new GetRecordRequest(po))).Data!).Details![_r.Line].Single();
+        var ui = ((DynamicRecordResponse)(await Ui("fin1", new GetRecordRequest(po))).Data!).Details![_r.Line].Single();
+
+        mcp.Values.Keys.Should().NotContain([$"f_{_r.LinePrice}", $"f_{_r.LineSubtotal}"]).And.Contain($"f_{_r.LineQty}");
+        ui.Values.Keys.Should().Contain([$"f_{_r.LinePrice}", $"f_{_r.LineSubtotal}"]);
+    }
+
+    [Fact]
+    public async Task ApprovalHistory_Mcp_HidesExcludedEdits()
+    {
+        await Rig();
+        var (po, id) = await Pending();
+        As("fin1");
+        var task = TasksOf(id).Single(t => t.AssigneeUserId == "fin1");
+        var approved = await Send(new ApproveTaskRequest(task.Id, Inst(id).RowVersion, null, V((_salary, 48000))));
+        approved.IsSuccess.Should().BeTrue(Dump(approved));
+
+        static string Data(ServiceResult r)
+        {
+            var view = (RecordApprovalResponse)r.Data!;
+            var all = (view.Current is null ? view.Previous : [view.Current, .. view.Previous]).SelectMany(i => i.Actions);
+            return string.Join("\n", all.Select(a => a.Data?.GetRawText() ?? ""));
+        }
+        var key = $"\"f_{_salary}\"";   // 同意時改過的欄位記在動作的 Data（鍵清單）
+        Data(await Ui("buyer1", new GetRecordApprovalRequest(po))).Should().Contain(key);
+        Data(await Mcp("buyer1", new GetRecordApprovalRequest(po))).Should().NotContain(key);
+        Data(await Mcp("admin", new GetRecordApprovalRequest(po))).Should().NotContain(key);
+    }
+
+    [Fact]
+    public async Task ApprovalTitleSnapshot_Mcp_Blank()
+    {
+        await Rig(flag: false);
+        var (po, _) = await Pending();
+
+        async Task<List<string>> Titles(RequestChannel channel)
+        {
+            var list = new List<string>();
+            foreach (var (user, box) in new[] { ("fin1", "todo"), ("buyer1", "submitted"), ("admin", "all") })
+            {
+                var r = await In(channel, user, () => Send(new GetApprovalTasksRequest(box, null, null, null, 1, 20)));
+                list.Add(((PagedResponse<ApprovalInboxItem>)r.Data!).Items.Single().TitleSnapshot);
+            }
+            foreach (var user in new[] { "buyer1", "fin1", "admin" })
+            {
+                var r = await In(channel, user, () => Send(new GetRecordApprovalRequest(po)));
+                list.Add(((RecordApprovalResponse)r.Data!).Current!.TitleSnapshot);
+            }
+            return list;
+        }
+
+        (await Titles(RequestChannel.Mcp)).Should().AllBe("單據", "模組沒有被遮的欄位時照給");
+        await Exclude(_salary);
+        (await Titles(RequestChannel.Mcp)).Should().AllBe("", "Q7：發起人、簽核人、簽核管理者一律空字串");
+        (await Titles(RequestChannel.Ui)).Should().AllBe("單據");
+    }
+}

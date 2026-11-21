@@ -54,10 +54,14 @@ public class DynamicAccessGuard(
     private static PermissionInputs DetailInputs(PermissionInputs parentInputs, PermissionInputs childInputs) =>
         parentInputs with { FieldPermissions = childInputs.FieldPermissions, OptionScopes = childInputs.OptionScopes, FieldGrants = childInputs.FieldGrants };
 
-    /// <summary>module 有以明細欄位為加總對象的彙總時，算出使用者在各明細模組看不到的欄位（沿用明細模組自己的隱藏規則）。</summary>
+    /// <summary>
+    /// module 有以明細欄位為加總對象的彙總時，算出使用者在各明細模組看不到的欄位（沿用明細模組自己的隱藏規則）。
+    /// MCP 通道另外看彙總條件（mcp1a 計畫判斷 10、Q3），所以有條件的彙總也要算。
+    /// </summary>
     private async Task<IReadOnlySet<long>?> HiddenSourceFieldsAsync(Module module, PermissionInputs inputs, CancellationToken ct)
     {
-        if (!module.Blocks.SelectMany(b => b.Fields).Any(f => f is { Type: FieldType.Rollup, Config.Rollup.AggregateFieldId: not null }))
+        if (!module.Blocks.SelectMany(b => b.Fields).Any(f => f is { Type: FieldType.Rollup, Config.Rollup: { } r }
+                && (r.AggregateFieldId is not null || (inputs.AiMasked && r.Condition is not null))))
             return null;
         var hidden = new HashSet<long>();
         foreach (var (child, _) in await modules.ListDetailModulesAsync(module.Key, ct))

@@ -149,7 +149,7 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
 public class GetRecordApprovalHandler(
     IRecordRepository records, IModuleRepository modules, IApprovalInstanceRepository repo, IDynamicAccessGuard guard,
     IPermissionRepository permissions, ApprovalReader reader, ApprovalReadGrant grant, ICurrentUser user, ApprovalPolicies policies,
-    IMessageCatalog messages)
+    IMessageCatalog messages, IRequestChannel channel)
     : IRequestHandler<GetRecordApprovalRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetRecordApprovalRequest request, CancellationToken ct)
@@ -173,8 +173,10 @@ public class GetRecordApprovalHandler(
         // 標題快照的遮蔽（同記錄頁的 TitleVisibleTo）：發起人、在該實例有任務的人、簽核管理者一律看得到；
         // 其他人（例如有 Read、但標題欄位對他隱藏的旁觀者）要標題對他可見才給
         var titleVisible = read is not null && module.TitleVisibleTo(read);
-        bool ShowTitle(ApprovalInstance i) => titleVisible || manager || i.InitiatorUserId == me
-            || tasks.Any(t => t.InstanceId == i.Id && (t.AssigneeUserId == me || t.OriginalUserId == me));
+        // MCP 通道：模組有任一「不提供給 AI」欄位，快照一律不給（Q7；快照是送簽當下的字串，無法逐欄判斷）
+        var aiBlank = ApprovalViews.AiBlanksTitle(channel, module);
+        bool ShowTitle(ApprovalInstance i) => !aiBlank && (titleVisible || manager || i.InitiatorUserId == me
+            || tasks.Any(t => t.InstanceId == i.Id && (t.AssigneeUserId == me || t.OriginalUserId == me)));
         var ownStages = !canRead && !manager ? ApprovalReader.OwnStages(instances, tasks, everyAction, me) : new Dictionary<long, HashSet<long>>();
         var visible = instances.Where(i => !ownStages.TryGetValue(i.Id, out var own) || own.Count > 0).ToList();
         if (!canRead && !manager && visible.Count == 0) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
@@ -218,7 +220,7 @@ public class GetRecordApprovalHandler(
 /// </summary>
 public class GetApprovalTasksHandler(
     IApprovalInstanceRepository repo, IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard,
-    IPermissionRepository permissions, ICurrentUser user, IBusinessTime time)
+    IPermissionRepository permissions, ICurrentUser user, IBusinessTime time, IRequestChannel channel)
     : IRequestHandler<GetApprovalTasksRequest, ServiceResult>
 {
     private sealed record Row(ApprovalInstance Inst, ApprovalTask? Task, DateTime? Due);
@@ -332,7 +334,7 @@ public class GetApprovalTasksHandler(
             var active = def is not null && ApprovalGraphMode.Applies(r.Inst, def) ? ApprovalReader.ActiveStages(def, runsByInstance[r.Inst.Id]) : null;
             if (active is not null && request.Box == ApprovalInboxBoxes.Done && !await SeesWhole(r.Inst)) active = null;
             items.Add(new ApprovalInboxItem(r.Task?.Id ?? 0, r.Inst.Id, r.Inst.RecordId, module?.Key ?? "", module?.NameI18n ?? new I18nText(),
-                r.Inst.TitleSnapshot, stage, r.Inst.InitiatorUserId, names.GetValueOrDefault(r.Inst.InitiatorUserId) ?? r.Inst.InitiatorUserId,
+                ApprovalViews.AiBlanksTitle(channel, module) ? "" : r.Inst.TitleSnapshot, stage, r.Inst.InitiatorUserId, names.GetValueOrDefault(r.Inst.InitiatorUserId) ?? r.Inst.InitiatorUserId,
                 r.Inst.SubmittedTime, r.Due, pending && r.Due < now, module is null || !module.IsWritable(), r.Inst.Status, active));
         }
         return ServiceResult.Success(new PagedResponse<ApprovalInboxItem>(items, rows.Count, page, size));
@@ -343,7 +345,7 @@ public class GetApprovalTasksHandler(
 internal static class ApprovalViews
 {
     /// <summary>
-    /// 歷程的 Data；content-changed 只留讀者看得到的欄位，reroute 的 editedKeys 只留讀者看得到的鍵（hidden 為 null 時全部遮蔽）。
+    /// 歷程的 Data；content-changed 只留讀者看得到的欄位，同意的鍵清單、加簽與 reroute 的 editedKeys 只留讀者看得到的鍵（hidden 為 null 時全部遮蔽）。
     /// </summary>
     private static JsonElement? Data(ApprovalAction a, IReadOnlySet<long>? hidden)
     {
@@ -355,6 +357,15 @@ internal static class ApprovalViews
                 .Where(k => k.StartsWith("f_") && long.TryParse(k.AsSpan(2), out var fid) && Visible(fid)).Select(k => (JsonNode?)k).ToArray());
             return JsonSerializer.SerializeToElement(reroute);
         }
+        bool VisibleKey(JsonNode? k) => k?.GetValue<string>() is { } key && key.StartsWith("f_") && long.TryParse(key.AsSpan(2), out var fid) && Visible(fid);
+        // 同意、加簽時改過的欄位鍵也照讀者欄位權限遮蔽（同 reroute；MCP 通道的「不提供給 AI」欄位因此不出現，mcp1a Task 5）
+        if (a.Action == ApprovalActions.Approve && JsonNode.Parse(a.DataJson) is JsonArray approved)
+            return JsonSerializer.SerializeToElement(new JsonArray(approved.Where(VisibleKey).Select(k => (JsonNode?)k!.GetValue<string>()).ToArray()));
+        if (a.Action == ApprovalActions.AddSign && JsonNode.Parse(a.DataJson) is JsonObject addSign && addSign["editedKeys"] is JsonArray edited)
+        {
+            addSign["editedKeys"] = new JsonArray(edited.Where(VisibleKey).Select(k => (JsonNode?)k!.GetValue<string>()).ToArray());
+            return JsonSerializer.SerializeToElement(addSign);
+        }
         using var doc = JsonDocument.Parse(a.DataJson);
         if (a.Action != ApprovalActions.ContentChanged || doc.RootElement.ValueKind != JsonValueKind.Array) return doc.RootElement.Clone();
         var visible = doc.RootElement.EnumerateArray()
@@ -362,6 +373,10 @@ internal static class ApprovalViews
             .Select(e => e.Clone()).ToList();
         return JsonSerializer.SerializeToElement(visible);
     }
+
+    /// <summary>MCP 通道且模組有任一「不提供給 AI」欄位（不分狀態）時，標題快照給空字串（mcp1a 計畫判斷 10、Q7）；模組讀不到也不給。</summary>
+    public static bool AiBlanksTitle(IRequestChannel channel, Module? module) =>
+        channel.Channel == RequestChannel.Mcp && (module is null || module.Blocks.SelectMany(b => b.Fields).Any(f => f.ExcludeFromAi));
 
     public static async Task<Dictionary<string, string>> UserNamesAsync(IPermissionRepository permissions, CancellationToken ct) =>
         (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => string.IsNullOrEmpty(u.DisplayName) ? u.UserId : u.DisplayName);
