@@ -1,3 +1,5 @@
+using DynamicModules.Domain.Mcp;
+
 namespace DynamicModules.Domain.Entities.Dynamic;
 
 /// <summary>權杖撤銷原因（存成 camelCase 文字）。</summary>
@@ -26,6 +28,6 @@ public class McpToken
     public string? RevokedBy { get; set; }
     public McpRevokeReason? RevokeReason { get; set; }
 
-    // 技術限制（計畫判斷 2）
-    public const int NameMax = 100, ScopesMax = 200;
+    // 技術限制（計畫判斷 2）；名稱上限的單一來源是 McpLimits
+    public const int NameMax = McpLimits.TokenNameMax, ScopesMax = 200;
 }

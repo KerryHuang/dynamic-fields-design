@@ -1,3 +1,5 @@
+using DynamicModules.Domain.Mcp;
+
 namespace DynamicModules.Domain.Entities.Dynamic;
 
 /// <summary>
@@ -20,6 +22,6 @@ public class McpConfirmation
     public DateTime? UsedUtc { get; set; }
     public DateTime? VoidedUtc { get; set; }
 
-    // 技術限制（計畫判斷 2）
-    public const int ToolNameMax = 64, TargetVersionMax = 100, PreviewSummaryMax = 2000;
+    // 技術限制（計畫判斷 2）；摘要上限的單一來源是 McpLimits
+    public const int ToolNameMax = 64, TargetVersionMax = 100, PreviewSummaryMax = McpLimits.PreviewSummaryMax;
 }
