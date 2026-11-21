@@ -6,7 +6,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests;
 
-/// <summary>第 4 階段驗收情境：模具維修申請用公式、自動編號與規則做連動、驗證與唯讀。</summary>
+/// <summary>第 4 階段驗收情境：設備維修申請用公式、自動編號與規則做連動、驗證與唯讀。</summary>
 public class Phase4AcceptanceTests : IClassFixture<TestApp>
 {
     private const string Module = "repair-rules";
@@ -58,7 +58,7 @@ public class Phase4AcceptanceTests : IClassFixture<TestApp>
     public async Task Phase4_Scenario()
     {
         // 1. admin 建模組與欄位：標題欄位換成自動編號，原本的文字標題欄位改名成「申請人」
-        (await _admin.PostAsJsonAsync($"{Base}/modules", new { key = Module, name = Zh("模具維修申請") }))
+        (await _admin.PostAsJsonAsync($"{Base}/modules", new { key = Module, name = Zh("設備維修申請") }))
             .StatusCode.Should().Be(HttpStatusCode.Created);
         var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Module}"));
         var blockId = module.GetProperty("blocks")[0].GetProperty("id").GetInt64();
@@ -70,17 +70,17 @@ public class Phase4AcceptanceTests : IClassFixture<TestApp>
         })).StatusCode.Should().Be(HttpStatusCode.OK);
 
         var number = await AddField(blockId, "autonumber", "申請單號", new { format = "REP-{yyyyMM}-{0000}" });
-        (await _admin.PutAsJsonAsync($"{Base}/modules/{Module}", new { name = Zh("模具維修申請"), titleFieldId = number.Id }))
+        (await _admin.PutAsJsonAsync($"{Base}/modules/{Module}", new { name = Zh("設備維修申請"), titleFieldId = number.Id }))
             .StatusCode.Should().Be(HttpStatusCode.OK);
         var applied = await AddField(blockId, "date", "申請日", new { });
         var needed = await AddField(blockId, "date", "需求日", new { });
         var category = await AddField(blockId, "enum", "故障類別", new { });
-        var catMold = await AddOption(category.Id, "模具損壞");
+        var catEquip = await AddOption(category.Id, "設備損壞");
         var catMachine = await AddOption(category.Id, "機台異常");
         var catOutsource = await AddOption(category.Id, "外包");
         var detail = await AddField(blockId, "enum", "故障細項", new { });
-        var moldA = await AddOption(detail.Id, "模仁崩裂");
-        var moldB = await AddOption(detail.Id, "頂針斷裂");
+        var equipA = await AddOption(detail.Id, "主軸損傷");
+        var equipB = await AddOption(detail.Id, "軸承斷裂");
         var machineA = await AddOption(detail.Id, "油壓異常");
         var machineB = await AddOption(detail.Id, "加熱失效");
         var outsourceA = await AddOption(detail.Id, "委外修復");
@@ -105,7 +105,7 @@ public class Phase4AcceptanceTests : IClassFixture<TestApp>
                     new { field = needed.Id, op = "gte", value = new { fieldRef = applied.Id } }
                 }
             }, message: dateMessage),
-            Rule("optionFilter", [$"field:{detail.Id}"], Cond(category.Id, "eq", $"opt_{catMold}"), [moldA, moldB]),
+            Rule("optionFilter", [$"field:{detail.Id}"], Cond(category.Id, "eq", $"opt_{catEquip}"), [equipA, equipB]),
             Rule("optionFilter", [$"field:{detail.Id}"], Cond(category.Id, "eq", $"opt_{catMachine}"), [machineA, machineB]),
             Rule("optionFilter", [$"field:{detail.Id}"], Cond(category.Id, "eq", $"opt_{catOutsource}"), [outsourceA]),
             Rule("readOnly", ["*"], Cond(status.Id, "eq", $"opt_{closed}")),

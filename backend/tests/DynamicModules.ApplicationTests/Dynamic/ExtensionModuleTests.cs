@@ -188,10 +188,10 @@ public class ExtensionModuleTests : IAsyncLifetime
     [Fact]
     public async Task CreateRecord_Extension_HostEntityNoLongerRegistered_RejectedInsteadOfCrash()
     {
-        // 舊資料庫：擴充模組指向的既有實體已從程式移除（例如 s2d-0 拿掉的 design.mold），找不到提供者
+        // 舊資料庫：擴充模組指向的既有實體已從程式移除（例如 s2d-0 拿掉的模擬實體），找不到提供者
         var note = await NewExt("ext12");
         await _db.Context.Set<Module>().Where(m => m.Key == "ext12")
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.HostEntityKey, "design.mold"));
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.HostEntityKey, "design.removed"));
         _db.Context.ChangeTracker.Clear();
         var r = await CreateExtRec("ext12", note, "M-0001");
         r.IsInvalid.Should().BeTrue();

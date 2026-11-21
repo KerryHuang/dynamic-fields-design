@@ -380,18 +380,18 @@ public class ReportRunnerTests : ReportTestBase
     public async Task Run_ViaEntityTarget_OnlyTitle_GroupsByKey_DeletedIsMissing()
     {
         await Arrange();
-        var mold = await MustAdd("order", FieldType.Reference,
-            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") }, "模具");
-        await Insert("order", "admin", (mold, "E-0001"), (Amount, 1m));
-        await Insert("order", "admin", (mold, "NO-SUCH"), (Amount, 2m));
-        var via = new ReportFieldRef(Main, ReportRunner.EntityTitleFieldId, mold.Id);
+        var equip = await MustAdd("order", FieldType.Reference,
+            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") }, "設備");
+        await Insert("order", "admin", (equip, "E-0001"), (Amount, 1m));
+        await Insert("order", "admin", (equip, "NO-SUCH"), (Amount, 2m));
+        var via = new ReportFieldRef(Main, ReportRunner.EntityTitleFieldId, equip.Id);
         var r = await Run(Def(groups: [G(via)], measures: [M("sum", "sum", MainF(Amount))]));
         var g = r.Groups!.Single(x => x.GroupKeys[0] == "E-0001");
         g.GroupLabels[0].Should().StartWith("E-0001 ");
         GroupOf(r, "（已刪除）").Values["sum"].Should().Be(2m);
-        r.Columns[0].Label.Should().Be("模具．標題");
+        r.Columns[0].Label.Should().Be("設備．標題");
 
-        (await Run(Def(columns: [new ReportFieldRef(Main, Region.Id, mold.Id)]))).State.Should().Be("fieldMissing");
+        (await Run(Def(columns: [new ReportFieldRef(Main, Region.Id, equip.Id)]))).State.Should().Be("fieldMissing");
     }
 
     [Fact]

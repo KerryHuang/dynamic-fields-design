@@ -4,7 +4,7 @@ using FluentAssertions;
 namespace DynamicModules.ApplicationTests.Dynamic;
 
 /// <summary>
-/// 四個舊範本（tests/Fixtures/templates）併入「MES 模具廠」套件（apps/mes-mold.app.json）時沒有丟東西：
+/// 四個舊範本（tests/Fixtures/templates）併入「MES 生產製造」套件（apps/mes.app.json）時沒有丟東西：
 /// 每個模組、區塊、欄位（型別與設定）、選項、規則、檢視、權限逐項等價，只允許設計文件 §4.2 列出的改動（白名單）。
 /// </summary>
 public class MesMigrationEquivalenceTests
@@ -12,7 +12,7 @@ public class MesMigrationEquivalenceTests
     private static JsonNode Load(string path) => JsonNode.Parse(File.ReadAllText(path))!;
 
     // 白名單：舊範本只有 zh-TW、en-US，套件另外補了 th、vi（機器翻譯），這裡去掉再比
-    private static readonly JsonNode Mes = StripAddedLocales(Load(Path.Combine(AppContext.BaseDirectory, "apps", "mes-mold.app.json")));
+    private static readonly JsonNode Mes = StripAddedLocales(Load(Path.Combine(AppContext.BaseDirectory, "apps", "mes.app.json")));
 
     private static JsonNode StripAddedLocales(JsonNode node)
     {
@@ -29,7 +29,7 @@ public class MesMigrationEquivalenceTests
         return node;
     }
 
-    public static IEnumerable<object[]> Templates => new[] { "order", "repair", "mold-care", "quality" }.Select(t => new object[] { t });
+    public static IEnumerable<object[]> Templates => new[] { "order", "repair", "equipment-care", "quality" }.Select(t => new object[] { t });
 
     private static JsonObject MesModule(string code) =>
         Mes["modules"]!.AsArray().Select(m => m!.AsObject()).Single(m => (string)m["code"]! == code);
@@ -47,24 +47,24 @@ public class MesMigrationEquivalenceTests
     // 白名單（設計 §4.2）：這些欄位的型別／設定允許不同，或套件多出來的欄位／規則／權限
     private static readonly HashSet<string> ChangedFields =
         ["line.unit"];                                                                            // 下拉改文字：轉換不能複製下拉
-    // 只改參照目標（s2d-0 模具參照改指 MES 自己的模組 mold）：型別、其他設定、選項照比，refTarget 斷言等於預期值
+    // 只改參照目標（s2d-0 設備參照改指 MES 自己的模組 equipment）：型別、其他設定、選項照比，refTarget 斷言等於預期值
     private static readonly Dictionary<string, (string Kind, string Key)> RetargetedRefs =
-        new() { ["repair.mold"] = ("module", "mold"), ["care.mold"] = ("module", "mold"), ["order.customer"] = ("module", "partner") };
+        new() { ["repair.equipment"] = ("module", "equipment"), ["care.equipment"] = ("module", "equipment"), ["order.customer"] = ("module", "partner") };
     // 改指共用主檔的參照（s2d-1f）：目標帶主檔 id，另加角色守衛（只收客戶或兩者）
     private static readonly Dictionary<string, string> MasterRefs = new() { ["order.customer"] = "partner" };
     // 客戶擴充模組移除（s2d-1f，共用主檔設計 §11.2）：欄位變 MES 在往來對象上的貢獻欄位，或併入往來對象的基本欄位（舊代號 → 基本欄位代號）
     private const string MovedToMaster = "customer";
     private static readonly Dictionary<string, string> MergedIntoBaseFields =
         new() { ["paymentTerms"] = "salesPaymentTerms", ["accountRep"] = "owner", ["email"] = "email", ["phone"] = "phone" };
-    // 模具從核心實體的擴充模組改為 MES 自己的模組（s2d-0）：代碼、型態、宿主、標題欄位與區塊都不同，欄位逐一比對
-    private static readonly HashSet<string> RehomedModules = ["mold"];
+    // 設備從核心實體的擴充模組改為 MES 自己的模組（s2d-0）：代碼、型態、宿主、標題欄位與區塊都不同，欄位逐一比對
+    private static readonly HashSet<string> RehomedModules = ["equipment"];
     // 舊範本沒有分區、選單歸到「自訂功能」的模組，套件補上分區：只比對期望的新值
     private static readonly Dictionary<string, string> AddedSections = new() { ["part"] = "設備" };
-    // CRM 與 MES 同時開啟時選單同名，過渡期 MES 顯示名稱加「（模具廠）」（使用者 2026-11-12 裁決）：只比對期望的新繁中名稱
-    private static readonly Dictionary<string, string> RenamedModules = new() { ["order"] = "訂單（模具廠）", ["quote"] = "報價單（模具廠）" };
+    // CRM 與 MES 同時開啟時選單同名，過渡期 MES 顯示名稱加「（MES）」（使用者 2026-11-12 裁決，2026-11-21 改後綴）：只比對期望的新繁中名稱
+    private static readonly Dictionary<string, string> RenamedModules = new() { ["order"] = "訂單（MES）", ["quote"] = "報價單（MES）" };
     private static readonly HashSet<string> AddedFields =
         ["order.fromQuote", "order.qualityCount", "line.sourceLine", "quality.workOrder",      // 追溯、彙總、掛工令
-         "mold.no", "mold.name"];                                                                // 模具自己的編號與名稱（s2d-0）
+         "equipment.no", "equipment.name"];                                                                // 設備自己的編號與名稱（s2d-0）
     private static readonly Dictionary<string, string[]> AddedPermissionGroups =
         new() { ["order"] = ["planner", "qa"], ["quality"] = ["planner"] };                      // 原本 Demo 用指令補的權限、生管可讀
     private static readonly HashSet<string> DroppedRules = ["order:readOnly:*"];                 // 整單唯讀規則改由狀態機的唯讀狀態達成

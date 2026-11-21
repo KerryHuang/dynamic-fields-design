@@ -348,17 +348,17 @@ public class ImportTests : DesignerTestBase
             (await Send(new CreateRecordRequest(tgt, Vals((tt, t))))).IsCreated.Should().BeTrue();
         await NewModule("src");
         var toTgt = await MustAdd("src", FieldType.Reference, RefTo(tgt), "目標");
-        var mold = await MustAdd("src", FieldType.Reference,
-            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") }, "模具");
+        var equip = await MustAdd("src", FieldType.Reference,
+            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") }, "設備");
         (await Send(new ActivateModuleRequest("src"))).IsSuccess.Should().BeTrue();
         var title = await TitleKey("src");
 
-        var p = await Preview("src", Csv($"{title},目標,模具", "a,甲,E-0002 乙號", "b,乙,E-0002", "c,丙,"));
+        var p = await Preview("src", Csv($"{title},目標,設備", "a,甲,E-0002 乙號", "b,乙,E-0002", "c,丙,"));
 
         p.Valid.Should().Be(1);
         p.Errors.Select(e => e.Line).Should().Equal(3, 4);
         p.Errors[0].Errors[toTgt.Key].Should().Equal("「乙」有多筆同名資料");
-        p.Errors[0].Errors[mold.Key].Should().Equal("找不到「E-0002」");
+        p.Errors[0].Errors[equip.Key].Should().Equal("找不到「E-0002」");
         p.Errors[1].Errors[toTgt.Key].Should().Equal("找不到「丙」");
     }
 

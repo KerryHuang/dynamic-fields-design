@@ -279,10 +279,10 @@ describe('ListPage', () => {
   it('extension module list shows host title column', async () => {
     schemaPatch = { kind: 'extension', hostEntityKey: 'test.entity', titleFieldKey: null };
     const w = await mountPage();
-    api.getPagedRecords.mockResolvedValue({ items: [{ ...row, title: 'M-0001 外殼上蓋模' }], totalCount: 1, currentPage: 1, pagesSize: 20 });
+    api.getPagedRecords.mockResolvedValue({ items: [{ ...row, title: 'EQ-0001 CNC 車床 A' }], totalCount: 1, currentPage: 1, pagesSize: 20 });
     w.findComponent(quasar.QTable).vm.$emit('update:pagination', { page: 2, rowsPerPage: 20 });
     await flushPromises();
-    expect(w.find('tbody tr').text()).toContain('M-0001 外殼上蓋模');
+    expect(w.find('tbody tr').text()).toContain('EQ-0001 CNC 車床 A');
   });
   it('workflow status column carries a state dot (shown by the command style only): initial = draft, read-only = done, else active', async () => {
     const status: SchemaField = { ...field(5, '狀態'), key: 'status', type: 'enum' };

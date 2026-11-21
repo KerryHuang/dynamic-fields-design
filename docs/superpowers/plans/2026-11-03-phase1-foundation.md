@@ -673,11 +673,11 @@ public sealed class FieldTypeRegistry {
 - Consumes：所有前面的任務。
 
 - [ ] **Step 1：寫驗收測試** `Phase1_Scenario`，用 API 走完下面的流程，每一步都斷言：
-  1. 建立模組 `repair-request`（模具維修申請），代碼要是 `DYN00001`。
+  1. 建立模組 `repair-request`（設備維修申請），代碼要是 `DYN00001`。
   2. 加區塊「故障資訊」。
   3. 加以下欄位：
      - 申請日：`date`，必填。
-     - 故障類別：`enum`，選項有模具損壞、機台異常、外包。
+     - 故障類別：`enum`，選項有設備損壞、機台異常、外包。
      - 檢查項目：`multienum`。
      - 預估費用：`currency`，scale 0。
      - 是否急件：`boolean`，預設 false。

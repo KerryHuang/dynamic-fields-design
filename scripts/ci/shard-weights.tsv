@@ -92,7 +92,7 @@ ApplicationTests.Dynamic.Demo.DesignCaseUploadDisabledTests	306
 ApplicationTests.Dynamic.Demo.InventoryPoApprovalScenarioTests	1
 ApplicationTests.Dynamic.Demo.MasterScenarioTests	0
 ApplicationTests.Dynamic.Demo.MesInventoryScenarioTests	1
-ApplicationTests.Dynamic.Demo.MoldCareQualityScenarioTests	1
+ApplicationTests.Dynamic.Demo.EquipmentCareQualityScenarioTests	1
 ApplicationTests.Dynamic.Demo.OrderRepairScenarioTests	2
 ApplicationTests.Dynamic.Demo.TaskBoardScenarioTests	0
 ApplicationTests.Dynamic.DetailAccessTests	3

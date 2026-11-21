@@ -37,9 +37,9 @@ public sealed class InventoryScenario : IDemoScenario
 
     private static readonly (string Name, string Category, string Unit, int Price, int Safety)[] Items =
     [
-        ("鋼材 S45C 板", "raw", "kg", 85, 200), ("合金鋼棒", "raw", "kg", 120, 150), ("標準導柱", "part", "pcs", 180, 50),
-        ("標準導套", "part", "pcs", 150, 50), ("頂針組", "part", "set", 640, 20), ("潤滑油", "consumable", "L", 260, 30),
-        ("拋光砂紙", "consumable", "pack", 95, 40), ("成品模仁", "finished", "pcs", 5200, 5)
+        ("鋼材 S45C 板", "raw", "kg", 85, 200), ("合金鋼棒", "raw", "kg", 120, 150), ("標準軸承", "part", "pcs", 180, 50),
+        ("標準襯套", "part", "pcs", 150, 50), ("定位銷組", "part", "set", 640, 20), ("潤滑油", "consumable", "L", 260, 30),
+        ("拋光砂紙", "consumable", "pack", 95, 40), ("成品外殼", "finished", "pcs", 5200, 5)
     ];
 
     private static readonly string[] Warehouses = ["主倉", "成品倉"];

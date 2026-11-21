@@ -112,7 +112,7 @@ public class CrmMasterTests
     public async Task OpeningOnlyMes_DoesNotOpenTheContactMaster()
     {
         using var rig = new SharedMasterRig();
-        await rig.OpenOkAsync("mes-mold", new { groupMap = new Dictionary<string, object>() });
+        await rig.OpenOkAsync("mes", new { groupMap = new Dictionary<string, object>() });
 
         rig.StatusOf("contact").Should().BeNull("MES 沒有用到聯絡人");
         rig.Db(db => db.Set<App>().Where(a => a.Kind == AppKind.Master).Select(a => a.Key).ToList()).Should().Equal(["partner"], "MES 的客戶用往來對象");

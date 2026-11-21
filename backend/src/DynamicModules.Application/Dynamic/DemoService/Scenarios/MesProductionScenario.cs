@@ -5,9 +5,9 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 
 /// <summary>
-/// 「MES 模具廠」的工令到出貨：從前面情境建立的訂單挑 9 張開工令（生管建立、發放，現場報工，生管完工，生管出貨）。
+/// 「MES 生產製造」的工令到出貨：從前面情境建立的訂單挑 9 張開工令（生管建立、發放，現場報工，生管完工，生管出貨）。
 /// 各種結局都有：全數出貨、只出一部分、短交結案、進行中、逾期未完工、暫停（缺料）、已發放未開工、草稿、取消。
-/// 現場每道工序報工一次（良品數 = 工令數量），粗加工有不良品；其中一張有一筆報錯後沖銷再重報。
+/// 現場每道工序報工一次（良品數 = 工令數量），第二道工序（裁切）有不良品；其中一張有一筆報錯後沖銷再重報。
 /// 全部走一般的建立、更新與沖銷指令，狀態機、檢查、事件與彙總照常生效；步驟一律晚於訂單的建立，且 At ≥ 今天的步驟會被丟掉。
 /// </summary>
 public sealed class MesProductionScenario : IDemoScenario
@@ -17,14 +17,14 @@ public sealed class MesProductionScenario : IDemoScenario
 
     private const string Planner = "planner01";
     private const string Floor = "floor01";
-    private const int FinishedItem = 7;      // InventoryScenario.Items 的「成品模仁」
+    private const int FinishedItem = 7;      // InventoryScenario.Items 的「成品外殼」
     private const int FinishedWarehouse = 1; // InventoryScenario.Warehouses 的「成品倉」
 
-    private static readonly string[] Processes = ["material", "rough", "cnc", "edm", "polish", "assemble"];
-    private static readonly string[] Stations = ["SAW-1", "MILL-2", "CNC-3", "EDM-4", "POL-1", "ASM-1"];
+    private static readonly string[] Processes = ["material", "cut", "rough", "cnc", "surface", "assemble"];
+    private static readonly string[] Stations = ["SAW-1", "LSR-1", "MILL-2", "CNC-3", "SUR-1", "ASM-1"];
     private static readonly (string No, string Name)[] Items =
     [
-        ("GP-01", "導柱"), ("GB-02", "導套"), ("EP-03", "頂針"), ("MB-04", "模板"), ("CR-05", "模仁"), ("SL-06", "滑塊"), ("RN-07", "澆口套"), ("CK-08", "冷卻水路板"), ("LF-09", "頂出板")
+        ("SH-01", "傳動軸"), ("BS-02", "軸承座"), ("PN-03", "定位銷"), ("BP-04", "底板"), ("HS-05", "鋁合金外殼"), ("GR-06", "齒輪"), ("FL-07", "法蘭"), ("HP-08", "散熱板"), ("BR-09", "固定支架")
     ];
 
     private enum End { Shipped, ShippedPartly, ShortClose, Running, Overdue, Hold, Released, Draft, Cancelled }
@@ -178,7 +178,7 @@ public sealed class MesProductionScenario : IDemoScenario
         (ctx, r) => new UpdateRecordRequest(r.Id, ctx.Values(module, ("status", ctx.Opt(module, code))), r.RowVersion);
 
     /// <summary>
-    /// 出貨單。進銷存同時開啟時，「出貨扣庫存」整合要求每張出貨單帶庫存品項與倉庫：一律從進銷存情境建立的「成品模仁」「成品倉」扣
+    /// 出貨單。進銷存同時開啟時，「出貨扣庫存」整合要求每張出貨單帶庫存品項與倉庫：一律從進銷存情境建立的「成品外殼」「成品倉」扣
     /// （期初每品每倉 500，所有工令的出貨量加起來遠小於此）。進銷存情境排在本情境之前，所以這兩筆記錄的 Id 執行時已回填。
     /// </summary>
     private static DemoRecord CreateShipment(DemoPlan plan, DemoRecord wo, DemoRecord customer, DateOnly date, int qty, string carrier, DateTime at, string label)

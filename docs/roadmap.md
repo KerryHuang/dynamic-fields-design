@@ -74,7 +74,7 @@
 | s2d-1g | Demo 公司跨應用程式共用、移除模擬客戶與全部內建模擬實體 | ✅ 已上線（2026-11-14，8719cc5b） | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
 | s2d-1h | 主檔收尾：參照挑選器守衛、CRM 補測試等 | 未開始 | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
 | s2d-2 | 品項共用主檔；併入品項實物／服務類型、預留所屬款式參照、往來對象多送貨地址（使用者 11-17 裁決，開工前先更新共用主檔設計） | 未開始 | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
-| mg1 | MES 改為通用生產管理：應用程式改名、製程與不良原因選項通用化、完工入庫不限單一末道、模具模組改範例、Demo 與手冊同步（使用者 11-17 裁決，排在 s2e 前避免重工；開工前先寫設計） | 未開始（設計待寫） | [ERP 路線](superpowers/specs/2026-11-06-erp-roadmap-design.md) 2026-11-17 一節 |
+| mg1 | MES 改為通用生產管理：應用程式改名、製程與不良原因選項通用化、完工入庫不限單一末道、專屬主檔改為通用設備主檔（mfg1 處理）、Demo 與手冊同步（使用者 11-17 裁決，排在 s2e 前避免重工；開工前先寫設計） | 未開始（設計待寫） | [ERP 路線](superpowers/specs/2026-11-06-erp-roadmap-design.md) 2026-11-17 一節 |
 | s2e-a | 訂單到出貨：追溯與履約核心 | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |
 | s2e-b | 訂單到出貨：應用程式間整合 | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |
 | s2f | 訂單變更單；併入可設定的超交容許量（使用者 11-17 裁決） | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |

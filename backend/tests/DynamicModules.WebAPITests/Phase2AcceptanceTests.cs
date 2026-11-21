@@ -6,7 +6,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests;
 
-/// <summary>第 2 階段驗收情境：模具維修申請列表的篩選、排序與清單檢視。</summary>
+/// <summary>第 2 階段驗收情境：設備維修申請列表的篩選、排序與清單檢視。</summary>
 public class Phase2AcceptanceTests : IClassFixture<TestApp>
 {
     private const string Module = "repair-request";
@@ -58,7 +58,7 @@ public class Phase2AcceptanceTests : IClassFixture<TestApp>
     public async Task Phase2_Scenario()
     {
         // 1. 建立模組並加欄位
-        (await _admin.PostAsJsonAsync($"{Base}/modules", new { key = Module, name = Zh("模具維修申請") }))
+        (await _admin.PostAsJsonAsync($"{Base}/modules", new { key = Module, name = Zh("設備維修申請") }))
             .StatusCode.Should().Be(HttpStatusCode.Created);
         var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Module}"));
         var blockId = module.GetProperty("blocks")[0].GetProperty("id").GetInt64();
@@ -78,7 +78,7 @@ public class Phase2AcceptanceTests : IClassFixture<TestApp>
         var category = await AddField(blockId, "enum", "故障類別", new { isFilterable = true, isSortable = true });
         var options = new[]
         {
-            await AddOption(category.Id, "模具損壞"),
+            await AddOption(category.Id, "設備損壞"),
             await AddOption(category.Id, "機台異常"),
             await AddOption(category.Id, "外包"),
         };

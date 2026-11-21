@@ -37,7 +37,7 @@
    - 參照欄位的目標可以是動態模組，也可以是外部系統的既有實體。
    - 明細頁有反向關聯清單。
    - 刪除時可選限制、清空或連帶刪除（§9）。
-6. **擴充既有實體**：替外部系統的既有實體（如客戶、模具）加自訂欄位，值存在動態儲存區，不碰外部系統的資料表。POC 用一個模擬的既有實體示範。
+6. **擴充既有實體**：替外部系統的既有實體（如客戶、設備）加自訂欄位，值存在動態儲存區，不碰外部系統的資料表。POC 用一個模擬的既有實體示範。
 7. **列表**：
    - 欄位選擇、依型別的篩選運算子、多欄排序、伺服器分頁。
    - 儲存清單檢視（個人與共用）。
@@ -134,7 +134,7 @@
 
 欄位補充：
 
-- `Module.Kind` 有兩種值：`Standalone`（獨立模組）與 `Extension`（擴充既有實體，`HostEntityKey` 指向既有實體，例如 `design.mold`）。
+- `Module.Kind` 有兩種值：`Standalone`（獨立模組）與 `Extension`（擴充既有實體，`HostEntityKey` 指向既有實體，例如 `design.equipment`）。
 - `Module.Status` 有三種值：草稿、啟用、停用。只有啟用的模組會出現在選單和通用 API。
 - `Module.Version` 在任何 metadata 異動時遞增，作為快取鍵與 ETag。
 - `Field.Key` 由系統產生（`f_<id>`），不讓使用者輸入；畫面上顯示的是 `LabelI18n`。
@@ -442,7 +442,7 @@ public sealed class DynamicRecordResponse {
 - `useDynamicSchema(moduleKey)`：TanStack Query，staleTime 長，用 ETag 驗證版本。
 - **型別註冊表** `fieldTypeRegistry`：`type → { component, zod(field), format(value), filterInput, operators }`，可覆寫。
 - **表單**：
-  - `buildZodSchema(schema)` 依欄位設定產生 zod，用 `superRefine` 疊加規則引擎的條件必填與跨欄位驗證，經 `toTypedSchema` 交給 `useRForm`。這是 `mold-form-schema.ts` 先例的通用版。
+  - `buildZodSchema(schema)` 依欄位設定產生 zod，用 `superRefine` 疊加規則引擎的條件必填與跨欄位驗證，經 `toTypedSchema` 交給 `useRForm`。這是 `equipment-form-schema.ts` 先例的通用版。
   - 區塊用 `SectionedForm`。
   - 規則求值器監看表單值，控制顯示與唯讀。
 - **列表**：
@@ -455,7 +455,7 @@ public sealed class DynamicRecordResponse {
 
 ### 12.4 設計器
 
-- 模組清單用 `DataTable`；區塊與欄位編輯沿用 `mold-field-config` 頁的 `InlineEditableDataTable` 樣式。
+- 模組清單用 `DataTable`；區塊與欄位編輯沿用 `equipment-field-config` 頁的 `InlineEditableDataTable` 樣式。
 - 規則編輯器：條件樹的 UI（全部符合／任一符合，加上欄位、運算子、值）。
 - 權限頁：群組 × 八軸的矩陣、欄位例外清單、資料範圍。
 - 「預覽」分頁：用執行期同一套渲染元件，以草稿 metadata 即時呈現表單。
@@ -477,7 +477,7 @@ formwright/
 - **權限表**：形狀貼近 ProgramCode 權限模型，正式版可以直接對映（§14）。
 - **framework 元件**：POC 建一層薄包裝元件，正式版換成正式元件庫時只換 import（§15 風險 2）。
 - **既有實體模擬**：種子資料建兩個唯讀實體，各有自己的 light 端點，用來示範參照既有實體與擴充欄位：
-  - 「模具」（`design.mold`）。
+  - 「設備」（`design.equipment`）。
   - 「客戶」（`sales.customer`），給訂單範本用。
 
 ### 13.1 模組範本
@@ -554,21 +554,21 @@ formwright/
 - 業務看不到別人的訂單。
 - 沒有 Pricing 權限的群組看不到單價與金額。
 
-**Demo 情境二：手動建模組**。從空白建一個「模具維修申請」模組，涵蓋範本沒用到的目標。
+**Demo 情境二：手動建模組**。從空白建一個「設備維修申請」模組，涵蓋範本沒用到的目標。
 
 - 欄位：
   - 自動編號申請單號 `REP-{yyyyMM}-{0000}`。
-  - 參照既有實體「模具」。
+  - 參照既有實體「設備」。
   - 下拉「故障類別」，連動「故障細項」。
   - 金額「預估費用」，受 Pricing 遮罩。
   - 日期「需求日」，跨欄位驗證：不得早於申請日。
   - 公式「距需求日天數」。
 - 規則：故障類別為「外包」時，才顯示並必填「外包廠商」。
-- 第二個模組「維修紀錄」：參照「模具維修申請」，申請明細頁出現反向關聯分頁；刪除申請單時套用 `Restrict`。
+- 第二個模組「維修紀錄」：參照「設備維修申請」，申請明細頁出現反向關聯分頁；刪除申請單時套用 `Restrict`。
 - 權限：
   - 「現場人員」群組：資料範圍只有本人，看不到預估費用。
   - 「主管」群組：可以看全部、可以匯出。
-- 擴充模組：替「模具」加兩個自訂欄位。
+- 擴充模組：替「設備」加兩個自訂欄位。
 
 ## 14. POC 到正式產品的對應
 
@@ -578,7 +578,7 @@ formwright/
 | POC `Program` 等權限表 | 正式的權限表（`Program`、`GroupProgramPrivilege`、`UserGroupMapping`） |
 | `DynamicAccessGuard` 的模擬判定 | 正式的權限判定服務 |
 | 模擬 `ICurrentUser` 與 `X-User` | 正式登入（如 OIDC 的 JWT） |
-| 模擬「模具」light 端點 | 外部系統整合（既有實體的 `GET .../light`） |
+| 模擬「設備」light 端點 | 外部系統整合（既有實體的 `GET .../light`） |
 | `SqliteDialect` | 各資料庫的方言（如 `SqlServerDialect`），依客戶選擇 |
 | POC 的薄包裝元件 | 正式元件庫 |
 | 自寫的 axios client | 由 OpenAPI 生成的 client |
@@ -617,7 +617,7 @@ formwright/
 25. **含公式或自動編號條件的規則不即時套用**（第 4 階段）：前端不計算公式，記錄表單不套用條件引用公式或自動編號欄位的規則，儲存時才由伺服器判斷。因此「條件引用公式欄位或自動編號欄位」的規則（如 Visibility），在表單與明細頁的結果可能不同（明細頁用已儲存的計算結果）。新增記錄時，引用自動編號欄位的規則一律看到空值，連伺服器也一樣，因為編號在規則求值之後才產生。
 26. **「今天」的時區不一致**（第 4 階段）：規則條件的相對日期（如「今天之前」），前端用機器本地日期，後端用營運時間（+08:00）。UTC+8 以外的使用者在日期交界會看到表單與伺服器判斷不一致。
 27. **同時被規則隱藏、被 OptionFilter 限制，且帶著過期值的 enum 子欄位**（第 4 階段）：這種欄位若持有已超出可選範圍的舊值，會擋住存檔，直到使用者把上層欄位改回去並清掉該值為止；錯誤顯示在頁面頂端的橫幅。前後端行為一致（決策 8），刻意保留。
-28. **mock 既有實體不檢查權限**（第 5 階段）：參照欄位指向既有實體時，light 查詢、存在檢查與擴充資料建立都不檢查權限，任何登入的使用者都能查到 `Mock_Mold`、`Mock_Customer`。正式版整合外部系統後，light、存在檢查、擴充資料建立都要依宿主實體的 `ProgramCode` 套用權限與資料範圍。
+28. **mock 既有實體不檢查權限**（第 5 階段）：參照欄位指向既有實體時，light 查詢、存在檢查與擴充資料建立都不檢查權限，任何登入的使用者都能查到 `Mock_Equipment`、`Mock_Customer`。正式版整合外部系統後，light、存在檢查、擴充資料建立都要依宿主實體的 `ProgramCode` 套用權限與資料範圍。
 29. **連帶刪除不檢查來源模組的刪除權限**（第 5 階段）：連帶刪除（Cascade）只看發起刪除的那筆記錄，使用者有沒有被連帶刪除的來源模組的 `Delete` 權限不影響結果。正式版要決定是否改成「無權刪除來源就視同 Restrict」。
 30. **SetNull 不寫歷程**（第 5 階段；第 7 階段已處理）：第 5 階段刪除時把來源記錄的參照清空，只更新值、索引、`RowVersion` 與修改稽核欄位，不寫變更歷程。第 7 階段起，被清空的來源記錄寫一列 `Update` 歷程：舊值是原本的參照、新值空白，修改者是發起刪除的人。
 31. **刪除行為的併發**（第 5 階段）：刪除分成「規劃」與「提交」兩步。兩步之間若有人新增了 Restrict 來源，或修改了要清空或連帶刪除的來源記錄，POC（SQLite 序列化寫入）不會出事；SQL Server 讀已提交的隔離等級下，可能漏擋 Restrict，或蓋掉別人剛做的修改。上線時要在交易內鎖定相關記錄，或提交前重新驗證 `RowVersion`。

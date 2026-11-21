@@ -42,8 +42,8 @@ public static class DemoDashboards
             new("近 90 天報修狀態", "donut", 4, 0, 4, 4, Plain, null),
             new("近 90 天各類別報修與停機時數", "table", 8, 0, 4, 4, Plain, null),
             new("近 6 個月保養次數趨勢", "line", 0, 2, 4, 4, Plain, null),
-            new("近 180 天各模具保養費用", "bar", 4, 4, 8, 4,
-                CardOptions.None with { TopN = 6, SortKey = "cost", SortDesc = true }, "保養費用前 6 名的模具"),
+            new("近 180 天各設備保養費用", "bar", 4, 4, 8, 4,
+                CardOptions.None with { TopN = 6, SortKey = "cost", SortDesc = true }, "保養費用前 6 名的設備"),
         ]),
         new(Quality, ["qa", "mis"],
         [
@@ -58,7 +58,7 @@ public static class DemoDashboards
             new("商機階段分布", "donut", 0, 0, 5, 4, Plain, null),
             new("各業務訂單金額（未稅）", "bar", 5, 0, 7, 4, Plain, null),
         ]),
-        // 引用「MES 模具廠」「進銷存」套件自帶的報表
+        // 引用「MES 生產製造」「進銷存」套件自帶的報表
         new(Production, ["planner", "floor", "mis"],
         [
             new("工令狀態分布", "donut", 0, 0, 4, 4, Plain, null),

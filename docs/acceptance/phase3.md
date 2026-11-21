@@ -15,7 +15,7 @@
 
 `Phase3_Scenario`（`backend/tests/DynamicModules.WebAPITests/Phase3AcceptanceTests.cs`）以 API 走完下列情境，每步皆斷言：
 
-1. `admin` 建模組 `repair-request` 並啟用：申請人（標題欄，`text`）、故障類別（`enum`，選項「模具損壞」「機台異常」「外包」）、預估費用（`currency`，必填、可排序）、說明（`textarea`）
+1. `admin` 建模組 `repair-request` 並啟用：申請人（標題欄，`text`）、故障類別（`enum`，選項「設備損壞」「機台異常」「外包」）、預估費用（`currency`，必填、可排序）、說明（`textarea`）
 2. 用 `PUT /modules/repair-request/permissions` 設定：`sales` 為 `Read`／`Add`／`Edit`、範圍 `Own`、沒有 `Pricing`；`sales-manager` 為 `Read`／`Add`／`Edit`／`Delete`／`Pricing`、範圍 `All`；`floor` 為 `Read`／`Add`／`Edit`、範圍 `Own`，「說明」唯讀；選項「外包」只給 `sales-manager`
 3. `sales01` 建 2 筆、`sales02` 建 1 筆，都沒送預估費用，皆回 201（沒有 `Pricing` 的人不必填金額）
 4. `sales01` 的列表只有自己 2 筆，`values` 沒有預估費用；schema 沒有預估費用欄，`permissions.delete` 為 `false`

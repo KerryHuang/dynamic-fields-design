@@ -42,7 +42,7 @@ public class MasterScenarioTests(DemoGeneratedFixture fx)
 
         var inventory = PlanFor(DemoCatalog.InventoryAppId).Created;
         var stock = inventory.Where(r => r.ModuleCode == MasterScenario.PartnerModule).ToList();
-        stock.Select(p => (string)p.Facts["name"]!).Should().Equal(["晨曦機械", "遠見電子", "新航物流", "綠野食品", "昌盛鋼鐵", "宏達五金", "精工模料", "恆久工業"],
+        stock.Select(p => (string)p.Facts["name"]!).Should().Equal(["晨曦機械", "遠見電子", "新航物流", "綠野食品", "昌盛鋼鐵", "宏達五金", "精工材料", "恆久工業"],
             "三家供應商與一家只有進銷存用的客戶沿用原本的虛構名稱，其餘四家客戶由 CRM 的客戶兼任");
         stock.Count(p => (string)p.Facts["role"]! == "supplier").Should().Be(3);
         inventory.Count(r => r.ModuleCode == MasterScenario.ContactModule).Should().Be(8, "原本的聯絡人文字改成聯絡人主檔");

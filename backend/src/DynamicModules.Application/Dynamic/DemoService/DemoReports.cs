@@ -33,8 +33,8 @@ public static class DemoReports
             measures: [Count(), Sum("downtime", Main(ids, "repair.downtime"))],
             primary: Main(ids, "repair.reportDate"), range: Last(90))),
 
-        new("近 180 天各模具保養費用", ["maint"], ids => Def(ids, "care", "bar",
-            groups: [Group(Main(ids, "care.mold"))],
+        new("近 180 天各設備保養費用", ["maint"], ids => Def(ids, "care", "bar",
+            groups: [Group(Main(ids, "care.equipment"))],
             measures: [Count(), Sum("cost", Main(ids, "care.cost"))],
             primary: Main(ids, "care.careDate"), range: Last(180))),
         new("近 6 個月保養次數趨勢", ["maint"], ids => Def(ids, "care", "line",

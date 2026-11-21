@@ -6,45 +6,45 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 
 /// <summary>
-/// 今天前 180 天：maint01 在 MES 的模具資料建 12 支模具；manager01 替 MES 的 8 家客戶（<see cref="MasterScenario"/> 建在共用主檔往來對象）
+/// 今天前 180 天：maint01 在 MES 的設備資料建 12 台設備；manager01 替 MES 的 8 家客戶（<see cref="MasterScenario"/> 建在共用主檔往來對象）
 /// 補上 MES 貢獻的信用等級與網站。
-/// 之後每支模具每隔一個保養週期一筆保養紀錄（含更換零件），每筆保養後 maint01 更新模具的上次保養日與累計射出數。
-/// 規劃順序排在報修之前：報修要參照這裡建的模具記錄。
+/// 之後每台設備每隔一個保養週期一筆保養紀錄（含更換零件），每筆保養後 maint01 更新設備的上次保養日與累計運轉時數。
+/// 規劃順序排在報修之前：報修要參照這裡建的設備記錄。
 /// </summary>
-public sealed class MoldCareScenario : IDemoScenario
+public sealed class EquipmentCareScenario : IDemoScenario
 {
-    public string Key => "mold-care";
+    public string Key => "equipment-care";
     public int Seed => 20261103;
 
     private const string Maint = "maint01";
     private const string Manager = "manager01";
     private const int HistoryDays = 180;
 
-    /// <summary>第 n 支模具最後一筆保養的下次保養日 = 今天 + δ。</summary>
+    /// <summary>第 n 台設備最後一筆保養的下次保養日 = 今天 + δ。</summary>
     private static readonly int[] Deltas = [-10, -3, 0, 2, 4, 6, 9, 15, 20, 25, 30, 40];
 
-    /// <summary>12 支模具（虛構），依序對應 <see cref="Deltas"/>。</summary>
-    public static readonly (string No, string Name)[] Molds =
+    /// <summary>12 台設備（虛構），依序對應 <see cref="Deltas"/>。</summary>
+    public static readonly (string No, string Name)[] Equipment =
     [
-        ("M-0001", "外殼上蓋模"), ("M-0002", "外殼下蓋模"), ("M-0003", "按鍵模"), ("M-0004", "電池蓋模"), ("M-0005", "支架模"),
-        ("M-0006", "射出模"), ("M-0007", "側蓋模"), ("M-0008", "旋鈕模"), ("M-0009", "面板模"),
-        ("M-0010", "底座模"), ("M-0011", "導光板模"), ("M-0012", "連接器模")
+        ("EQ-0001", "CNC 車床 A"), ("EQ-0002", "CNC 車床 B"), ("EQ-0003", "立式加工中心"), ("EQ-0004", "臥式加工中心"), ("EQ-0005", "平面研磨機"),
+        ("EQ-0006", "雷射切割機"), ("EQ-0007", "折彎機"), ("EQ-0008", "焊接機器人"), ("EQ-0009", "空壓機"),
+        ("EQ-0010", "三次元量測儀"), ("EQ-0011", "包裝機"), ("EQ-0012", "堆高機")
     ];
 
     /// <summary>
     /// 週期依序輪流。最後一筆保養日 = 今天 + δ − 週期，要 ≤ 昨天，所以週期必須大於 δ；
-    /// 這個輪流順序剛好讓 δ 30、40 的模具分到 60、90 天，每支都滿足，不必另外調整。
+    /// 這個輪流順序剛好讓 δ 30、40 的設備分到 60、90 天，每支都滿足，不必另外調整。
     /// </summary>
     private static readonly int[] Cycles = [30, 45, 60, 90];
 
-    private static readonly string[] Categories = ["clean", "parts", "calibrate", "lubricate", "polish"];
+    private static readonly string[] Categories = ["clean", "parts", "calibrate", "lubricate", "inspect"];
 
     private static readonly (string Name, int MinCost, int MaxCost)[] Parts =
     [
-        ("頂針", 200, 800), ("彈簧", 50, 200), ("密封圈", 80, 300), ("導柱", 800, 3000), ("滑塊", 2000, 8000), ("水路接頭", 150, 600)
+        ("軸承", 200, 800), ("彈簧", 50, 200), ("密封圈", 80, 300), ("傳動皮帶", 800, 3000), ("線性滑軌", 2000, 8000), ("油管接頭", 150, 600)
     ];
 
-    private static readonly string[] Notes = ["分模面有輕微積碳，已清除", "水路流量偏低，下次保養複查", "頂出順暢，無異音"];
+    private static readonly string[] Notes = ["主軸周邊有輕微油污，已清除", "冷卻液流量偏低，下次保養複查", "運轉順暢，無異音"];
 
     public void Plan(DemoPlan plan)
     {
@@ -65,14 +65,14 @@ public sealed class MoldCareScenario : IDemoScenario
 
         for (var m = 0; m < Deltas.Length; m++)
         {
-            var (code, name) = Molds[m];
+            var (code, name) = Equipment[m];
             var cycle = Cycles[m % Cycles.Length];
-            var shots = rnd.Next(10_000, 200_001);
-            var initialShots = shots;
+            var hours = rnd.Next(500, 20_001);
+            var initialHours = hours;
             var createdAt = plan.At(start);
-            var info = plan.Create("mold", createdAt, Maint, $"模具資料 {code} 建立", ctx => new CreateRecordRequest(
-                ctx.Ids.ModuleKeys["mold"],
-                ctx.Values("mold", ("no", code), ("name", name), ("cycleDays", cycle), ("shotCount", initialShots))));
+            var info = plan.Create("equipment", createdAt, Maint, $"設備資料 {code} 建立", ctx => new CreateRecordRequest(
+                ctx.Ids.ModuleKeys["equipment"],
+                ctx.Values("equipment", ("no", code), ("name", name), ("cycleDays", cycle), ("runHours", initialHours))));
 
             // 最後一筆往前每隔一個週期一筆，不早於今天前 180 天；由舊到新規劃
             var dates = new List<DateOnly>();
@@ -93,7 +93,7 @@ public sealed class MoldCareScenario : IDemoScenario
                 var care = plan.Create("care", at, Maint, label, ctx =>
                 {
                     var values = ctx.Values("care",
-                        ("mold", info.Id), ("categories", ctx.Opts("care", categories)), ("technician", Maint),
+                        ("equipment", info.Id), ("categories", ctx.Opts("care", categories)), ("technician", Maint),
                         ("careDate", Iso(careDate)), ("startTime", startTime), ("cycleDays", cycle), ("cost", (decimal)cost));
                     if (note is not null) values[ctx.Key("care.note")] = JsonSerializer.SerializeToElement(note);
                     return new CreateRecordRequest(ctx.Ids.ModuleKeys["care"], values);
@@ -113,10 +113,10 @@ public sealed class MoldCareScenario : IDemoScenario
                     }
                 }
 
-                shots += rnd.Next(5_000, 30_001);
-                var total = shots;
-                plan.Update(info, at, Maint, $"{label} 更新模具資料", (ctx, r) => new UpdateRecordRequest(r.Id,
-                    ctx.Values("mold", ("lastCareDate", Iso(careDate)), ("shotCount", total)), r.RowVersion));
+                hours += rnd.Next(100, 801);
+                var total = hours;
+                plan.Update(info, at, Maint, $"{label} 更新設備資料", (ctx, r) => new UpdateRecordRequest(r.Id,
+                    ctx.Values("equipment", ("lastCareDate", Iso(careDate)), ("runHours", total)), r.RowVersion));
             }
         }
     }

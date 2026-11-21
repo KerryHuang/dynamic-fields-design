@@ -10,7 +10,7 @@ using FluentAssertions;
 namespace DynamicModules.ApplicationTests.Dynamic.Demo;
 
 [Collection(DemoGeneratedCollection.Name)]
-public class MoldCareQualityScenarioTests(DemoGeneratedFixture fx)
+public class EquipmentCareQualityScenarioTests(DemoGeneratedFixture fx)
 {
     private static readonly DateOnly Today = DemoTestHost.Today;
 
@@ -26,15 +26,15 @@ public class MoldCareQualityScenarioTests(DemoGeneratedFixture fx)
         (ModuleSchemaResponse)(await fx.As(userId, new GetModuleSchemaRequest(module))).Data!;
 
     [Fact]
-    public async Task Molds_12_MesCustomers_8()
+    public async Task Equipment_12_MesCustomers_8()
     {
         fx.Generated();
 
-        // 模具是 MES 自己的模組（s2d-0），不是核心實體的擴充資料
-        var no = await fx.Key("mes-mold", "模具編號");
-        var molds = await fx.Records("mes-mold");
-        molds.Select(r => DemoGeneratedFixture.Text(r, no)).Should().BeEquivalentTo(Enumerable.Range(1, 12).Select(i => $"M-{i:0000}"));
-        molds.Should().OnlyContain(r => r.HostKey == null);
+        // 設備是 MES 自己的模組（s2d-0），不是核心實體的擴充資料
+        var no = await fx.Key("mes-equipment", "設備編號");
+        var equipment = await fx.Records("mes-equipment");
+        equipment.Select(r => DemoGeneratedFixture.Text(r, no)).Should().BeEquivalentTo(Enumerable.Range(1, 12).Select(i => $"EQ-{i:0000}"));
+        equipment.Should().OnlyContain(r => r.HostKey == null);
 
         // MES 的客戶是共用主檔往來對象（s2d-1f），信用等級與網站是 MES 貢獻的欄位
         const string partner = "master-partner";
@@ -66,22 +66,22 @@ public class MoldCareQualityScenarioTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
-    public async Task Care_30To80_AtLeast2PerMold_NextDateSpread()
+    public async Task Care_30To80_AtLeast2PerEquipment_NextDateSpread()
     {
         fx.Generated();
-        var mold = await fx.Key("mes-mold-care", "模具");
-        var careDate = await fx.Key("mes-mold-care", "保養日期");
-        var next = await fx.Key("mes-mold-care", "下次保養日");
-        var cares = await fx.Records("mes-mold-care");
+        var machine = await fx.Key("mes-equipment-care", "設備");
+        var careDate = await fx.Key("mes-equipment-care", "保養日期");
+        var next = await fx.Key("mes-equipment-care", "下次保養日");
+        var cares = await fx.Records("mes-equipment-care");
 
         cares.Count.Should().BeInRange(30, 80);
-        var moldIds = (await fx.Records("mes-mold")).Select(r => r.Id).ToHashSet();
-        cares.Should().OnlyContain(c => moldIds.Contains(Id(c, mold) ?? 0));
-        var byMold = cares.GroupBy(c => Id(c, mold)).ToList();
-        byMold.Should().HaveCount(12).And.OnlyContain(g => g.Count() >= 2 && g.Count() <= 6);
+        var equipmentIds = (await fx.Records("mes-equipment")).Select(r => r.Id).ToHashSet();
+        cares.Should().OnlyContain(c => equipmentIds.Contains(Id(c, machine) ?? 0));
+        var byEquipment = cares.GroupBy(c => Id(c, machine)).ToList();
+        byEquipment.Should().HaveCount(12).And.OnlyContain(g => g.Count() >= 2 && g.Count() <= 6);
         cares.Should().OnlyContain(c => Date(DemoGeneratedFixture.Text(c, careDate)) < Today
                                         && Date(DemoGeneratedFixture.Text(c, careDate)) >= Today.AddDays(-180));
-        var latestNext = byMold.Select(g => Date(DemoGeneratedFixture.Text(
+        var latestNext = byEquipment.Select(g => Date(DemoGeneratedFixture.Text(
             g.MaxBy(c => Date(DemoGeneratedFixture.Text(c, careDate)))!, next))).ToList();
         latestNext.Count(d => d < Today).Should().BeGreaterThanOrEqualTo(2);
         latestNext.Count(d => d >= Today && d <= Today.AddDays(6)).Should().BeGreaterThanOrEqualTo(2);
@@ -91,25 +91,25 @@ public class MoldCareQualityScenarioTests(DemoGeneratedFixture fx)
     public async Task Care_Parts_CascadeTargetExists()
     {
         fx.Generated();
-        var care = await fx.Key("mes-mold-care-part", "保養紀錄");
-        var careIds = (await fx.Records("mes-mold-care")).Select(c => c.Id).ToHashSet();
-        var parts = await fx.Records("mes-mold-care-part");
+        var care = await fx.Key("mes-equipment-care-part", "保養紀錄");
+        var careIds = (await fx.Records("mes-equipment-care")).Select(c => c.Id).ToHashSet();
+        var parts = await fx.Records("mes-equipment-care-part");
 
         parts.Count.Should().BeGreaterThanOrEqualTo(5);
         parts.Should().OnlyContain(p => careIds.Contains(Id(p, care) ?? 0));
     }
 
     [Fact]
-    public async Task Mold_LastCareDate_MatchesLatestCare()
+    public async Task Equipment_LastCareDate_MatchesLatestCare()
     {
         fx.Generated();
-        var mold = await fx.Key("mes-mold-care", "模具");
-        var careDate = await fx.Key("mes-mold-care", "保養日期");
-        var last = await fx.Key("mes-mold", "上次保養日");
-        var latest = (await fx.Records("mes-mold-care")).GroupBy(c => Id(c, mold)!.Value)
+        var machine = await fx.Key("mes-equipment-care", "設備");
+        var careDate = await fx.Key("mes-equipment-care", "保養日期");
+        var last = await fx.Key("mes-equipment", "上次保養日");
+        var latest = (await fx.Records("mes-equipment-care")).GroupBy(c => Id(c, machine)!.Value)
             .ToDictionary(g => g.Key, g => g.Max(c => Date(DemoGeneratedFixture.Text(c, careDate))));
 
-        foreach (var info in await fx.Records("mes-mold"))
+        foreach (var info in await fx.Records("mes-equipment"))
         {
             Date(DemoGeneratedFixture.Text(info, last)).Should().Be(latest[info.Id], info.Title);
             (await History(info.Id)).Should().Contain(h => h.Operation == "update" && h.ChangedUserId == "maint01"

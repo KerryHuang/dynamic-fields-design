@@ -16,7 +16,7 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.DemoService;
 
 /// <summary>
-/// 建 Demo 的結構（一律以 admin）：開啟內建的「MES 模具廠」「CRM 與銷售」「進銷存」三個應用程式（群組對應到 Demo 的既有群組），
+/// 建 Demo 的結構（一律以 admin）：開啟內建的「MES 生產製造」「CRM 與銷售」「進銷存」三個應用程式（群組對應到 Demo 的既有群組），
 /// 再建示範報表與預設儀表板。呼叫端要在交易內；任何一步失敗就回 Failed（訊息前面加步驟名），由外層回滾。
 /// </summary>
 public sealed class DemoStructure(

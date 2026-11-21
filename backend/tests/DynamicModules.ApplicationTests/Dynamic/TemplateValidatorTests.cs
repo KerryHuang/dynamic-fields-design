@@ -87,7 +87,7 @@ public class TemplateValidatorTests
         TemplateValidator.Validate(package!).Should().BeEmpty();
     }
 
-    [Theory, InlineData("repair"), InlineData("mold-care"), InlineData("quality")]
+    [Theory, InlineData("repair"), InlineData("equipment-care"), InlineData("quality")]
     public void BuiltIn_IsValid(string key)
     {
         var (package, error) = TemplateJson.Parse(File.ReadAllText(OrderTemplate.PathOf(key)));
@@ -99,7 +99,7 @@ public class TemplateValidatorTests
     [Fact]
     public void Fixtures_LoadFourTemplates() =>
         TemplateCatalog.Load(TemplateCatalog.DefaultDirectory).BuiltIns.Select(t => t.Key)
-            .Should().Equal("mold-care", "order", "quality", "repair");
+            .Should().Equal("equipment-care", "order", "quality", "repair");
 
     /// <summary>缺漏時為 null（開啟時用新區塊的欄數，政策 form.defaultColumns），驗證不報錯。</summary>
     [Fact]

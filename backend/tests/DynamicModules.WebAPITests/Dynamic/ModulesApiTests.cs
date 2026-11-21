@@ -109,7 +109,7 @@ public class ModulesApiTests : IClassFixture<TestApp>
         var key = NewKey();
         var res = await _admin.PostAsJsonAsync($"{Base}/modules", new
         {
-            key, name = new Dictionary<string, string> { ["zh-TW"] = "模具擴充" }, kind = "extension", hostEntityKey = "test.entity"
+            key, name = new Dictionary<string, string> { ["zh-TW"] = "設備擴充" }, kind = "extension", hostEntityKey = "test.entity"
         });
         res.StatusCode.Should().Be(HttpStatusCode.Created);
         var created = await JsonOf(res);

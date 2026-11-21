@@ -777,7 +777,7 @@ poc/frontend/src/
 - [ ] **Step 1：寫驗收測試** `Phase3_Scenario`，用 API 走完以下流程，每一步都要斷言：
   1. admin 建模組 `repair-request`，欄位如下，然後啟用：
      - 申請人：`text`，標題。
-     - 故障類別：`enum`，選項「模具損壞」「機台異常」「外包」。
+     - 故障類別：`enum`，選項「設備損壞」「機台異常」「外包」。
      - 預估費用：`currency`，必填。
      - 說明：`textarea`。
   2. 用 `PUT /permissions` 設定：

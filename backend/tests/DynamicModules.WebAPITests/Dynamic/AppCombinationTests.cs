@@ -9,7 +9,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
-/// <summary>三個內建應用程式（CRM 與銷售、MES 模具廠、進銷存）彼此獨立：只開其中一個、兩個、三個都能用；關掉一個，其他的與既有資料不受影響。</summary>
+/// <summary>三個內建應用程式（CRM 與銷售、MES 生產製造、進銷存）彼此獨立：只開其中一個、兩個、三個都能用；關掉一個，其他的與既有資料不受影響。</summary>
 public class AppCombinationTests : IDisposable
 {
     private const string Apps = Base + "/apps";
@@ -36,7 +36,7 @@ public class AppCombinationTests : IDisposable
     {
         var body = id switch
         {
-            "mes-mold" => MapOf(("sales", "sales"), ("salesManager", "sales-manager"), ("floor", "floor"), ("maint", "maint"), ("qa", "qa"), ("planner", "planner")),
+            "mes" => MapOf(("sales", "sales"), ("salesManager", "sales-manager"), ("floor", "floor"), ("maint", "maint"), ("qa", "qa"), ("planner", "planner")),
             "crm-sales" => MapOf(("sales", "sales"), ("manager", "sales-manager")),
             _ => MapOf(("buyer", "purchasing"), ("keeper", "warehouse"), ("manager", "ops-manager"))
         };
@@ -75,7 +75,7 @@ public class AppCombinationTests : IDisposable
     [Fact]
     public async Task MesOnly_OpensAndCreatesNothingOfTheOthers()
     {
-        var mes = await Open("mes-mold");
+        var mes = await Open("mes");
 
         var menu = await MenuKeys();
         menu.Should().Contain(KeyOf(mes, "workorder")).And.OnlyContain(k => !k.StartsWith("inv-"));
@@ -95,14 +95,14 @@ public class AppCombinationTests : IDisposable
     public async Task AllThree_OpenTogether_AndEachKeepsItsOwnModulesReportsAndCodes()
     {
         var crm = await Open("crm-sales");
-        var mes = await Open("mes-mold");
+        var mes = await Open("mes");
         var inv = await Open("inventory");
 
         var keys = new[] { crm, mes, inv }.SelectMany(a => a.GetProperty("modules").EnumerateArray().Select(m => m.GetProperty("key").GetString()!)).ToList();
         keys.Should().OnlyHaveUniqueItems("模組鍵不重複");
         var apps = await JsonOf(await _admin.GetAsync(Apps));
         apps.EnumerateArray().Select(a => a.GetProperty("key").GetString()).Should()
-            .BeEquivalentTo(["crm-sales", "mes-mold", "inventory", "partner", "contact"], "CRM 用到的共用主檔隨它自動開啟");
+            .BeEquivalentTo(["crm-sales", "mes", "inventory", "partner", "contact"], "CRM 用到的共用主檔隨它自動開啟");
 
         // 事件、檢查、列印範本、轉換的代碼全站不重複（各套件用 mes-／inv-／crm- 前綴）
         var catalog = _app.Services.GetRequiredService<DynamicModules.Application.Dynamic.AppService.AppCatalog>();
@@ -115,12 +115,12 @@ public class AppCombinationTests : IDisposable
     [Fact]
     public async Task ClosingOne_LeavesTheOthersWritable_AndItsOwnDataReadable_AndReopenKeepsIt()
     {
-        var mes = await Open("mes-mold");
+        var mes = await Open("mes");
         var inv = await Open("inventory");
         (await CreateItem(inv, "示範品項")).StatusCode.Should().Be(HttpStatusCode.Created);
         (await CreateWarehouse(inv, "WH-1", "主倉")).StatusCode.Should().Be(HttpStatusCode.Created);
 
-        (await _admin.PostAsJsonAsync($"{Apps}/mes-mold/close", new { cascade = false })).EnsureSuccessStatusCode();
+        (await _admin.PostAsJsonAsync($"{Apps}/mes/close", new { cascade = false })).EnsureSuccessStatusCode();
 
         // 進銷存不受影響，MES 的模組唯讀
         (await CreateItem(inv, "關閉後新增的品項")).StatusCode.Should().Be(HttpStatusCode.Created);
@@ -130,14 +130,14 @@ public class AppCombinationTests : IDisposable
         var blocked = await _admin.PostAsJsonAsync($"{Base}/modules/{woKey}/records", new { values = new Dictionary<string, object?>() });
         ((int)blocked.StatusCode).Should().BeInRange(400, 499);
 
-        (await _admin.PostAsync($"{Apps}/mes-mold/reopen", null)).EnsureSuccessStatusCode();
+        (await _admin.PostAsync($"{Apps}/mes/reopen", null)).EnsureSuccessStatusCode();
         (await Count(KeyOf(inv, "item"))).Should().Be(2);
     }
 
     [Fact]
     public async Task ClosingInventory_LeavesMesWritable()
     {
-        var mes = await Open("mes-mold");
+        var mes = await Open("mes");
         var inv = await Open("inventory");
         (await _admin.PostAsJsonAsync($"{Apps}/inventory/close", new { cascade = false })).EnsureSuccessStatusCode();
 

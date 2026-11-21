@@ -24,7 +24,7 @@ Each application can be enabled on its own, or you can enable none and build up 
 |---|---|---|
 | CRM and Sales | Done | Leads, customers and contacts, opportunities, interactions, campaigns (tasks assigned automatically on creation); quote-to-order conversion, orders with line items and tax-inclusive totals |
 | Inventory | Done | Items, warehouses, suppliers, purchase orders, receipts, shipments, stock movements and adjustments; stock is posted from documents |
-| MES (mold shop) | Done | Quotes, orders, work orders and operations, production reports, shipments, quality issues, mold maintenance and repair requests |
+| Manufacturing MES | Done | Quotes, orders, work orders and operations, production reports, shipments, quality issues, equipment maintenance and repair requests |
 | Accounting | Planned | Journal entries and income statement |
 | HRM | Planned | Staff, leave and approvals |
 | Project time tracking | Planned | Projects and timesheets |
@@ -58,7 +58,7 @@ Planned items are not implemented yet; see the [roadmap](docs/roadmap.md) (zh-TW
 | System administrator | Everything, including the module designer and user and group management |
 | Sales 1, Sales 2, Sales manager | CRM and Sales, and MES quotes and orders |
 | Warehouse, Purchasing, Inventory manager | Inventory receipts, issues, purchasing and stock |
-| Production planner, Maintenance, QA | Work orders and reports, mold maintenance, quality issues |
+| Production planner, Maintenance, QA | Work orders and reports, equipment maintenance, quality issues |
 
 The accounts appear on the login page under their Chinese display names. See the [demo script](docs/demo.md) (zh-TW) for the scenarios.
 

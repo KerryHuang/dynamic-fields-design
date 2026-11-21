@@ -11,7 +11,7 @@ namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 /// <summary>
 /// 任務看板的示範資料（看板設計 §4）：業務與倉管人員的個人任務，給主管範圍（部屬的任務）示範。全部虛構。
 /// 每個任務都由負責人自己建立（不產生「指派給你」通知）；到期日相對 plan.Today，建立與後續變更都在昨天上班時間內。
-/// 「整理樣品櫃」建立後清空負責人，留下「未指派、建立者是部屬」的情況；「確認標準導柱庫存」掛在進銷存品號記錄上，
+/// 「整理樣品櫃」建立後清空負責人，留下「未指派、建立者是部屬」的情況；「確認標準軸承庫存」掛在進銷存品號記錄上，
 /// 業務主管讀不到那個模組，示範「相關記錄（無權限查看）」。
 /// 業務主管另建兩個看板：「業務部負載」（依負責人、不分享）與「業務部任務」（依狀態、分享給業務部）。
 /// </summary>
@@ -20,8 +20,8 @@ public sealed class TaskBoardScenario : IDemoScenario
     public string Key => "task-board";
     public int Seed => 20261114;
 
-    /// <summary>InventoryScenario 的品號清單裡「標準導柱」的位置。</summary>
-    private const int GuidePostItem = 2;
+    /// <summary>InventoryScenario 的品號清單裡「標準軸承」的位置。</summary>
+    private const int BearingItem = 2;
 
     /// <param name="DaysFromToday">到期日相對今天的天數；null 表示無到期日。WeekEnd 表示本週最後一天。</param>
     private sealed record Spec(string Owner, string Title, int? DaysFromToday, string End, bool WeekEnd = false);
@@ -75,12 +75,12 @@ public sealed class TaskBoardScenario : IDemoScenario
             ctx.Sender.Send(new UpdateTaskRequest(cabinet.Id, JsonSerializer.SerializeToElement(new { assigneeUserId = (string?)null })), ct));
 
         // 掛在進銷存品號記錄上（業務一在查詢群組裡讀得到、業務主管讀不到）
-        if (plan.Records.TryGetValue("inv-item", out var items) && items.Count > GuidePostItem)
+        if (plan.Records.TryGetValue("inv-item", out var items) && items.Count > BearingItem)
         {
-            var item = items[GuidePostItem];
-            plan.Run(Next(), "sales01", "任務 確認標準導柱庫存 建立", (ctx, ct) =>
+            var item = items[BearingItem];
+            plan.Run(Next(), "sales01", "任務 確認標準軸承庫存 建立", (ctx, ct) =>
                 ctx.Sender.Send(new CreateRecordTaskRequest(item.Id,
-                    new TaskInput("確認標準導柱庫存", null, "sales01", today.AddDays(2))), ct));
+                    new TaskInput("確認標準軸承庫存", null, "sales01", today.AddDays(2))), ct));
         }
 
         PlanBoards(plan, Next);

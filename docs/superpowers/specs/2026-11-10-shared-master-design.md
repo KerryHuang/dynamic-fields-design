@@ -1,4 +1,4 @@
-# s2d 設計：共用主檔（往來對象、品項）與模具歸位
+# s2d 設計：共用主檔（往來對象、品項）與設備歸位
 
 > 起草 2026-11-08｜路線階段 2 的收尾，排在 s2e（CRM 與 MES 的訂單合併）與階段 3 會計（s3c）之前｜前置：[路線](2026-11-06-erp-roadmap-design.md)、[應用程式套件](2026-11-06-app-package-design.md)、[進銷存與 MES](2026-11-08-inventory-mes-design.md)、[應用程式整合層（s2c）](2026-11-09-app-integration-design.md)
 > 本文件**只寫設計，不改程式**。實作等 s3a（報表引擎）合併後才開始，因為兩者都會動 `poc/backend/apps/*.app.json`。
@@ -17,11 +17,11 @@
 | 供應商 | 1：進銷存 `inv-supplier`（但同一家公司可能既是客戶又是供應商，沒有辦法表達） |
 | 聯絡人 | CRM `crm-contact`（掛在 CRM 客戶下），加上進銷存客戶與供應商用文字欄位 `contact` 存聯絡人 |
 | 品項 | CRM `crm-product`（欄位 `sku`、`price`）、進銷存 `inv-item`（`category`、`price`、`safetyStock`）、MES 報價明細／訂單明細／工令用文字欄位 `itemNo`、`itemName` |
-| 模具 | 核心模擬 `design.mold`，MES 以擴充模組 `mes-mold-info` 加欄位 |
+| 設備 | 核心模擬 `design.equipment`，MES 以擴充模組 `mes-equipment-info` 加欄位 |
 
 幾個值得注意的點：
 
-- 核心裡寫死的 `sales.customer`、`design.mold`（`MockCustomerProvider`、`MockMoldProvider`、兩張 `Mock_*` 表、`DemoPeople` 種子）是 POC 遺留，違反鐵則 1「ERP 邏輯不寫死」。
+- 核心裡寫死的 `sales.customer`、`design.equipment`（`MockCustomerProvider`、`MockEquipmentProvider`、兩張 `Mock_*` 表、`DemoPeople` 種子）是 POC 遺留，違反鐵則 1「ERP 邏輯不寫死」。
 - 「品項價格」在進銷存是同一個欄位 `price`，採購明細和出貨明細都從它帶值（`item.price`）：採購時它是進價，出貨時它是售價，語意混在一起。這是拆主檔時要順手釐清的（§5.3、§12.4）。
 - MES 與進銷存各有一張出貨單、MES 與 CRM 各有一套報價和訂單。這是 s2e 的範圍，這份設計只負責讓它們**共用同一份客戶與品項**，使 s2e 能直接動手（§14）。
 
@@ -32,7 +32,7 @@
 1. 往來對象（客戶、供應商、聯絡人）合成一份，品項合成一份；各應用程式只在這一份上加自己的欄位。
 2. 每個應用程式仍能單獨開關；空系統仍是合法起點，**主檔不是平台必裝**，只在有應用程式需要它時才出現。
 3. 核心不寫死任何主檔：主檔本身也是用套件格式描述的定義，核心只補通用能力。
-4. 移除 `sales.customer`、`design.mold` 模擬實體；模具改為 MES 自己的模組。
+4. 移除 `sales.customer`、`design.equipment` 模擬實體；設備改為 MES 自己的模組。
 
 **不做：**
 
@@ -257,7 +257,7 @@ CRM 的「潛在客戶轉客戶」現在建立 `crm-customer`。改成建立 `pa
 
 | 欄位 | 型別 | 說明 |
 |---|---|---|
-| `no` | 文字，必填，可篩選 | 品號。用文字而不是自動編號：模具廠的品號常是客戶料號，不能由系統產生（草稿 §2.4）。取代 CRM `sku`、MES `itemNo`、進銷存自動編號 `no` |
+| `no` | 文字，必填，可篩選 | 品號。用文字而不是自動編號：工廠的品號常是客戶料號，不能由系統產生（草稿 §2.4）。取代 CRM `sku`、MES `itemNo`、進銷存自動編號 `no` |
 | `name` | 文字，必填，標題欄位 | |
 | `unit` | 文字 | 維持文字，因為帶值與轉換不能複製下拉（進銷存設計 §3.3） |
 | `price` | 金額 | **參考售價**（Odoo `list_price`） |
@@ -387,9 +387,9 @@ CRM 的「潛在客戶轉客戶」現在建立 `crm-customer`。改成建立 `pa
 
 **相依檢查要排除自己的貢獻欄位：** 現行 `AppDependencyChecker.DependentsOfAsync` 逐一查「誰有參照欄位指向 A 的成員模組」，並把那個欄位所在模組的應用程式算成 A 的依賴者（`AppDependencyChecker.cs` 約 65 行）。CRM 貢獻的 `fromLead` 放在主檔 `partner` 上、指向 CRM 的 `lead`，照現行邏輯主檔會被算成 CRM 的依賴者，關閉 CRM 時要求 cascade，連帶關閉主檔，主檔關閉又讓進銷存失去主檔。改法：比照現行排除整合欄位的做法，把**A 自己貢獻的欄位**（A 名下含 `/` 的對照列）從入向參照中排除；關閉與刪除都排除，因為關閉時它們跟著凍結，刪除時依上面第 4 點一起清除。主檔不得因 A 的貢獻被要求 cascade 關閉。`requires.masters` 不算進「誰依賴 A」：主檔的狀態由不變式驅動、不走使用者的相依檢查流程，關閉 A 時不需要使用者決定主檔，所以不產生新的 `cascade` 提示。
 
-## 8. 資料模型（migration：s2d-0 的 `RemoveMockMold`、s2d-1 的 `SharedMasters`）
+## 8. 資料模型（migration：s2d-0 的 `RemoveMockEquipment`、s2d-1 的 `SharedMasters`）
 
-只走 EF migration，沒有執行期 DDL。s2d-0 自帶一個只移除 `Mock_Mold` 的 migration `RemoveMockMold`；其餘異動都在 s2d-1 的 `SharedMasters`（第二輪準備度 1，主控裁決，待使用者確認）。
+只走 EF migration，沒有執行期 DDL。s2d-0 自帶一個只移除 `Mock_Equipment` 的 migration `RemoveMockEquipment`；其餘異動都在 s2d-1 的 `SharedMasters`（第二輪準備度 1，主控裁決，待使用者確認）。
 
 | 異動 | 內容 |
 |---|---|
@@ -401,7 +401,7 @@ CRM 的「潛在客戶轉客戶」現在建立 `crm-customer`。改成建立 `pa
 | 新表 `Dynamic_FieldGrant` | 貢獻欄位的可見群組（§6），代理主鍵 |
 | 新表 `Dynamic_AppOrphan` | 已刪除貢獻者留下的欄位、選項、區塊（§7 刪除第 5、6 點），唯一鍵（`FormerAppKey`, `Kind`, `Name`） |
 | 欄位新增 `VisibilityRestricted` | 布林，預設否 |
-| 移除 | s2d-0：`Mock_Mold`；s2d-1：`Mock_Customer`（§11.4） |
+| 移除 | s2d-0：`Mock_Equipment`；s2d-1：`Mock_Customer`（§11.4） |
 
 **貢獻的所有權：** 貢獻者的 `AppId` 加上名稱 `<主檔 id>/<模組代號>.<欄位代號>`（選項是 `<主檔 id>/<模組代號>.<選項代號>`），含 `/` 的就是貢獻列，外鍵 cascade 照舊。第一輪的「因關閉停用」旗標隨備案取消（§7），不加。設計器在主檔上新增的欄位、選項、區塊也在建立時寫對照列，名稱用持久代號（§5.4）。
 
@@ -523,16 +523,16 @@ Demo 每次部署重建，正式客戶尚未上線，所以**不寫舊資料庫�
 | 轉換 `crm-lead-to-customer` | 目標改為 `partner/partner`；`header.set` 把 `role` 設為 `customer`（§4.5），補測試劇本：轉換後的往來對象可在 CRM 訂單的客戶欄位選到 |
 | 群組 `sales`、`manager` | 保留；對往來對象、聯絡人、品項的權限改由 `contributions[].permissions` 授予（品項：業務唯讀，主管讀寫）。`requires.masters`：`partner`、`contact`、`item` |
 
-### 11.2 MES（`mes-mold`）
+### 11.2 MES（`mes`）
 
 | 現有 | 新做法 |
 |---|---|
-| `requires.entities`：`sales.customer`、`design.mold` | s2d-0 移除 `design.mold`；s2d-1 移除 `sales.customer` 後清空，改 `requires.masters`：`partner`、`item` |
+| `requires.entities`：`sales.customer`、`design.equipment` | s2d-0 移除 `design.equipment`；s2d-1 移除 `sales.customer` 後清空，改 `requires.masters`：`partner`、`item` |
 | 擴充模組 `mes-customer-info`（`sales.customer`） | 移除；`creditLevel`、`website` 變貢獻欄位（區塊「MES」）；`paymentTerms`（併入 `salesPaymentTerms`）、`accountRep`（併入 `owner`）、`phone`、`email` 併入基本欄位 |
 | `mes-quote.customer`、`mes-order.customer`、`mes-shipment.customer`（實體參照） | 改指 `partner`（守衛：客戶） |
 | 報價明細、訂單明細、工令的 `itemNo`／`itemName` 文字 | 新增 `item` 參照（工令與訂單明細必填，報價明細選填，見 §17 問題 1）；`itemNo`、`itemName` 保留為帶值（`fill` 預設，可改），列印與報表不用動 |
-| 擴充模組 `mes-mold-info`（`design.mold`） | 移除；改為 MES 自己的模組 `mes-mold`「模具資料」（只有 MES 用，不共用）：`no` 模具編號（文字，必填）、`name` 名稱（標題、必填），加上原擴充欄位 `lastCareDate`、`cycleDays`、`shotCount`（放「維護」區塊） |
-| `mes-repair.mold`、`mes-mold-care.mold`（實體參照 `design.mold`） | 改為模組參照 `mold` |
+| 擴充模組 `mes-equipment-info`（`design.equipment`） | 移除；改為 MES 自己的模組 `mes-equipment`「設備資料」（只有 MES 用，不共用）：`no` 設備編號（文字，必填）、`name` 名稱（標題、必填），加上原擴充欄位 `lastCareDate`、`cycleDays`、`runHours`（放「維護」區塊） |
+| `mes-repair.equipment`、`mes-equipment-care.equipment`（實體參照 `design.equipment`） | 改為模組參照 `equipment` |
 | 整合 `stockOut` | JSON：`stockItem` 的 `refTarget` 改為 `{ "key": "item", "app": "item" }`，`with[].modules` 移除 `item`。核心：驗證、目錄對帳、`IntegrationWorld`、`ConfigOf` 改成可解析主檔目標（§10） |
 
 ### 11.3 進銷存（`inventory`）
@@ -548,19 +548,19 @@ Demo 每次部署重建，正式客戶尚未上線，所以**不寫舊資料庫�
 ### 11.4 核心與測試
 
 - **移除，分兩段**（第二輪準備度 1，主控裁決，待使用者確認）：
-  - s2d-0：`MockMoldProvider`、`MockMold`、`MockConfigurations` 裡模具的設定、`DependencyInjection` 的模具註冊、`DemoPeople` 的模具種子與衝突檢查；migration `RemoveMockMold` 只刪 `Mock_Mold`。
+  - s2d-0：`MockEquipmentProvider`、`MockEquipment`、`MockConfigurations` 裡設備的設定、`DependencyInjection` 的設備註冊、`DemoPeople` 的設備種子與衝突檢查；migration `RemoveMockEquipment` 只刪 `Mock_Equipment`。
   - s2d-1：`MockCustomerProvider`、`MockCustomer`、`MockConfigurations` 剩下的部分（檔案隨之移除）、`DependencyInjection` 的客戶註冊、`DemoPeople` 的客戶種子與衝突檢查；`Mock_Customer` 在 `SharedMasters` 刪除。
 - **保留機制：** `IReferenceProvider`、`/entities`、擴充模組（`Kind = Extension`）是給「外部系統既有實體」的核心能力，不隨模擬實體移除。
-- **測試：** 目前有約 30 個測試檔使用 `sales.customer`／`design.mold` 當夾具（`ExtensionModuleTests`、`ReferenceReadTests`、`EntitiesApiTests`、`Phase5`～`Phase7AcceptanceTests`、`TemplateValidatorTests` 等）。改為**只在測試專案註冊**的測試用實體提供者（命名為與業務無關的 `test.entity`、`test.host`），產品程式碼不留任何模擬實體。s2d-0 建立測試用提供者，並只改用到 `design.mold` 的夾具；用到 `sales.customer` 的夾具在 s2d-1 改。這是實作時最大的機械性工作量，每段各自單獨一個 commit。
+- **測試：** 目前有約 30 個測試檔使用 `sales.customer`／`design.equipment` 當夾具（`ExtensionModuleTests`、`ReferenceReadTests`、`EntitiesApiTests`、`Phase5`～`Phase7AcceptanceTests`、`TemplateValidatorTests` 等）。改為**只在測試專案註冊**的測試用實體提供者（命名為與業務無關的 `test.entity`、`test.host`），產品程式碼不留任何模擬實體。s2d-0 建立測試用提供者，並只改用到 `design.equipment` 的夾具；用到 `sales.customer` 的夾具在 s2d-1 改。這是實作時最大的機械性工作量，每段各自單獨一個 commit。
 - **舊範本夾具**（`tests/Fixtures/templates/*.json`，引用 `sales.customer`）：同樣改指測試用實體。
 - **`NoBusinessWordsTests`：** 新增的核心程式不得出現業務名詞，用 master、contribution、binding 這類詞。
 
 ### 11.5 Demo
 
 - Demo 的「資料」改由一個新的 `MasterScenario` 先行建立，其他情境引用它：往來對象約 12 家公司（客戶、供應商、兩者並存）與約 10 位聯絡人（共用主檔聯絡人，掛在客戶公司下），品項約 24 個（原進銷存品項為基礎，CRM、MES 的報價與訂單明細從其中的成品類取用）。**只建立當下已開啟的應用程式需要的角色與品項**（沒開進銷存就不建供應商與原料）。
-- MES 情境自己建立模具記錄（原 12 筆）；CRM 與進銷存情境刪除各自建立客戶、供應商、產品的步驟，改引用主檔記錄。
+- MES 情境自己建立設備記錄（原 12 筆）；CRM 與進銷存情境刪除各自建立客戶、供應商、產品的步驟，改引用主檔記錄。
 - 資料全部虛構，沿用現有虛構名稱，不新增真實公司。
-- `DemoPeople` 不再種子模具與客戶；`DemoPreflight` 對已有舊擴充模組的資料庫維持衝突判定（需重建資料庫，寫進結果檔）。
+- `DemoPeople` 不再種子設備與客戶；`DemoPreflight` 對已有舊擴充模組的資料庫維持衝突判定（需重建資料庫，寫進結果檔）。
 - 品項的 `supplyType` 逐筆指定（§5.3）：被 MES 工令種子參照的成品設 `make`，原料與其他品項設 `buy`。
 - 開啟順序不影響結果：三種內建應用程式任意順序開啟，主檔欄位集合與區塊**序列**（基本區塊在前、貢獻區塊依應用程式 id 排序，§4.3）相同（Id 無關），要有測試。
 
@@ -575,7 +575,7 @@ Demo 每次部署重建，正式客戶尚未上線，所以**不寫舊資料庫�
 | 往來對象（客戶、供應商） | 4 份客戶、1 份供應商 | **併成共用主檔 `partner`**（s2d） |
 | 聯絡人 | CRM 聯絡人、進銷存兩個文字欄位 | **共用主檔 `contact`**，掛在往來對象下（s2d） |
 | 品項 | CRM 產品、進銷存品項、MES 文字欄位 | **併成共用主檔 `item`**（s2d） |
-| 模具 | 模擬實體加 MES 擴充 | 改成 MES 自有模組（s2d），不共用 |
+| 設備 | 模擬實體加 MES 擴充 | 改成 MES 自有模組（s2d），不共用 |
 | 報價單、銷售訂單 | CRM 與 MES 各一套 | **s2e**：兩者都開時，CRM 訂單是唯一銷售訂單，確認後經整合建立 MES 工令 |
 | 出貨單 | MES 與進銷存各一張 | **s2e**：兩者都開時，MES 報工完工成品入庫，出貨只用進銷存出貨單、依銷售訂單開立；MES 出貨單只在單開 MES 時用 |
 | 倉庫、採購單、進貨單、庫存異動 | 只有進銷存有 | 不重複，不處理 |
@@ -607,7 +607,7 @@ s2d 完成時，報價單、訂單、出貨單仍是兩套並存（s2e 才合併
 |---|---|---|---|---|
 | 空系統 | 不存在 | — | — | 合法起點 |
 | 只開 C | 往來對象、品項由 C 建立 | CRM | 無 | C 的品項沒有庫存欄位（進銷存貢獻的欄位不存在） |
-| 只開 M | 往來對象、品項由 M 建立 | MES | MES 出貨單，不動庫存 | 模具是 MES 自有模組 |
+| 只開 M | 往來對象、品項由 M 建立 | MES | MES 出貨單，不動庫存 | 設備是 MES 自有模組 |
 | 只開 I | 由 I 建立 | 無 | 進銷存出貨單 | 品項帶 `category`、`cost` |
 | C＋M | 一份，兩邊貢獻欄位並存 | s2d：兩套並存；s2e 後只有 CRM 訂單 | s2d：MES 出貨單 | 同一個客戶不用再對應 |
 | M＋I | 一份 | MES | s2d：兩張出貨單並存，`stockOut` 整合讓 MES 出貨扣庫存；s2e 後只用進銷存出貨單 | 同一個品項，MES 完工入庫可直接用同一筆品項 |
@@ -685,7 +685,7 @@ s2d 完成時，報價單、訂單、出貨單仍是兩套並存（s2e 才合併
 
 | 段 | 內容 | 驗收 |
 |---|---|---|
-| s2d-0 模具歸位 | MES 自有模組 `mes-mold`、移除 `design.mold`、`MockMoldProvider`；migration `RemoveMockMold`；模具相關夾具改測試專用實體提供者 | MES 單開仍可開啟；模具保養、報修、Demo 正常；既有測試全綠 |
+| s2d-0 設備歸位 | MES 自有模組 `mes-equipment`、移除 `design.equipment`、`MockEquipmentProvider`；migration `RemoveMockEquipment`；設備相關夾具改測試專用實體提供者 | MES 單開仍可開啟；設備保養、報修、Demo 正常；既有測試全綠 |
 | s2d-1 核心能力＋往來對象與聯絡人 | 開頭先做可行性驗證（§15.1）；格式 6、主檔套件、`requires.masters`、`contributions`、生命週期、資料表；`partner`、`contact` 主檔；CRM、進銷存、MES 改用；移除 `sales.customer`、`MockCustomerProvider` 與客戶夾具；Demo | §15 的測試清單中與往來對象有關的全部；四種版型實機 |
 | s2d-2 品項 | `item` 主檔；CRM、進銷存、MES 改用品項；`stockOut` 整合調整（含整合解析主檔目標的核心改動，§10）；Demo | 同上，加上價格／進價拆分的行為測試 |
 
@@ -777,7 +777,7 @@ s2c 的 `stockOut` 整合讓 MES 出貨扣進銷存庫存。s2d 不改兩張出�
 - 往來對象與聯絡人行為：`refGuard` 限制客戶／供應商；角色為兩者的可被銷售與採購單據挑選；聯絡人必填所屬公司，出現在公司的反向關聯分頁；只開進銷存或只開 CRM 時聯絡人主檔自動出現，只開 MES 時不出現。
 - 品項行為：採購明細從 `cost` 帶值、出貨明細從 `price` 帶值；MES 工令選品項後 `itemNo`／`itemName` 帶值且可改；`supplyType` 必填（沒選不能存）；Demo 種子每個品項都有 `supplyType`。
 - 整合解析主檔目標（s2d-2）：MES 套件的 `stockOut` 指向 `item/item`、`with` 不列品項 → 驗證與目錄對帳通過；MES＋進銷存開啟後 `stockItem` 狀態不是 `unbound`、不產生 `Waiting`，MES 出貨扣得到進銷存庫存。
-- 模具：MES 單開可開啟；保養、報修的模具參照；`design.mold` 不再出現在 `/entities`。
+- 設備：MES 單開可開啟；保養、報修的設備參照；`design.equipment` 不再出現在 `/entities`。
 - 既有測試：`MesAppEquivalenceTests` 白名單、`DemoStructure`、`DemoGeneration`、`SeedDataTests`、`NoBusinessWordsTests`、`EntitiesApiTests` 等同步更新；**最後完整全跑一次**。
 - 公開 repo 掃描：程式、文件、commit message 不得出現公司名稱、個人絕對路徑、內網 IP。
 
@@ -785,7 +785,7 @@ s2c 的 `stockOut` 整合讓 MES 出貨扣進銷存庫存。s2d 不改兩張出�
 
 ### 15.3 實作順序
 
-1. s2d-0：模具歸位、migration `RemoveMockMold`、模具相關測試夾具（獨立 commit 群，不等可行性驗證）。
+1. s2d-0：設備歸位、migration `RemoveMockEquipment`、設備相關測試夾具（獨立 commit 群，不等可行性驗證）。
 2. s2d-1 開頭：可行性驗證（§15.1 的 1～7、9、11、12、14～17；#10 已在 s2d-0 用到）。#4、#7、#14、#16 走備案前先回報。
 3. 資料表與 migration `SharedMasters`（`Dynamic_AppOrphan` 的 `Kind` 與唯一索引已在 §8 定案，產生前照它建）；格式 6 與驗證。
 4. 主檔套件讀取；`AppOpener` 自動開啟與綁定、主檔狀態重算；貢獻實例化與區塊排序；權限來源記錄、逐動作範圍與重算、貢獻欄位限定可見與手動授予。
@@ -809,7 +809,7 @@ s2c 的 `stockOut` 整合讓 MES 出貨扣進銷存庫存。s2d 不改兩張出�
 10. **主檔權限改為來源記錄＋聯集重算（§6；第一輪必修 3、6，第二輪必修 2、建議 1，主控裁決，待使用者確認）。** 動作取聯集、範圍逐動作取較寬（新增逐動作範圍表，只用在主檔模組，一般模組不變是我的判斷）；來源記錄只存 `GroupId`，匯出群組代號走 `GroupCode()`；匯出只帶自己授予的；刪除只收回自己的全部。**其中「關閉只收回自己的寫入動作、保留讀取」是我對裁決「關閉時只收回它自己的部分」的解讀**，理由是與既有「關閉＝唯讀保留」一致、貢獻欄位關閉後仍可讀；若裁決原意是關閉就收回全部，改成重算時不計入關閉應用程式的記錄即可，代價是它的群組關閉後讀不到主檔。管理員存檔以存檔當下重算的有效值為基準取差異，拿掉的動作只從目前有計入的來源移除，收回以管理員為準；主檔模組的權限頁逐動作設定範圍（第三輪必修 5，主控裁決，待使用者確認）。
 11. **主檔模組 key 用 `master-` 前綴（§4.1）。**
 12. **MES 的報價明細品項選填、訂單明細與工令必填（§11.2）。** 見 §17 問題 1。
-13. **模具不共用，歸 MES（§11.2）。** 依派工指示。
+13. **設備不共用，歸 MES（§11.2）。** 依派工指示。
 14. **進價與售價分欄（§5.3）：** 主檔 `price` 是售價，進銷存貢獻 `cost`。這是順手修正現有混用，行為改變：進銷存採購明細的單價帶值來源變了。
 15. **`stockOut` 整合只調整目標、不提前改寫（§14.2）；整合的驗證、目錄對帳、`IntegrationWorld`、`ConfigOf` 要能解析 `requires.masters` 主檔目標（§10；第三輪必修 3，主控裁決，待使用者確認）。**
 16. **三段切分、同一位 worker 依序做（§13）。**
@@ -829,7 +829,7 @@ s2c 的 `stockOut` 整合讓 MES 出貨扣進銷存庫存。s2d 不改兩張出�
 
 ## 17. 待主控裁決的問題（各附建議）
 
-1. **MES 的品項是否強制參照主檔？** 模具廠接單的零件常常是一次性的，要先建品項才能開訂單會增加輸入負擔。**建議：** 訂單明細與工令必填（才能與庫存、CRM 訂單串接），報價明細選填（報價時品項常常還不存在，轉訂單時補）。替代：全部必填（最乾淨，輸入最重）；全部選填（輕，但工令無品項時 s2e 的串接與入庫無法進行）。
+1. **MES 的品項是否強制參照主檔？** 工廠接單的零件常常是一次性的，要先建品項才能開訂單會增加輸入負擔。**建議：** 訂單明細與工令必填（才能與庫存、CRM 訂單串接），報價明細選填（報價時品項常常還不存在，轉訂單時補）。替代：全部必填（最乾淨，輸入最重）；全部選填（輕，但工令無品項時 s2e 的串接與入庫無法進行）。
 2. **統編、付款條件、負責人放基本欄位，還是照範例由會計貢獻？** 範例是「CRM 加產業與來源、進銷存加出貨地址、會計加統編與付款條件」。**建議：** 放基本欄位（整體設計草稿 §2.2 也是這樣定）。理由：報價單、出貨單也要印統編；付款條件 MES 與進銷存已各有一份；Odoo 與 SAP 都在一般資料或共用欄位。沒有更新入口，事後從貢獻升為基本欄位對已開啟的資料庫無效。若堅持放會計貢獻，CRM、MES 報價單就無法引用統編。
 3. **CRM、進銷存的「客戶」「供應商」「產品」選單消失，改在「主檔」分區的「往來對象」（客戶、供應商兩個共用檢視）、「聯絡人」「品項」，可以嗎？** 這是使用者看得到的介面變化。**建議：** 接受。選單項目目前只能是模組，沒有「檢視連結」；若要保留各應用程式自己的入口，需要選單項目支援指向共用檢視，是另一個核心能力，建議延後。
 4. ~~敏感的貢獻欄位要不要有「僅貢獻者群組可見」的白名單？~~ **已由第一輪審查裁決（必修 2，主控裁決，待使用者確認）：** 要，而且是預設：貢獻欄位只對貢獻者的群組與系統管理員可見，其他群組要管理員授予（§6）。
@@ -858,9 +858,9 @@ s2c 的 `stockOut` 整合讓 MES 出貨扣進銷存庫存。s2d 不改兩張出�
 
 我讀了草稿 §2、§6.1、§9（分支 `docs/erp-model`，commit 6e9a557），沒有修改它。
 
-**採用草稿的做法（原本不同）：** 聯絡人獨立成共用主檔（我原本用同表加 `parent`）；角色用單一下拉 `role`（我原本用複選，要新能力）；品號用文字 `no`（我原本用自動編號加 `sku`）；模具欄位名 `no`、`name`；主檔的設計器修改要系統管理員；關閉應用程式時貢獻區塊在表單收起。
+**採用草稿的做法（原本不同）：** 聯絡人獨立成共用主檔（我原本用同表加 `parent`）；角色用單一下拉 `role`（我原本用複選，要新能力）；品號用文字 `no`（我原本用自動編號加 `sku`）；設備欄位名 `no`、`name`；主檔的設計器修改要系統管理員；關閉應用程式時貢獻區塊在表單收起。
 
-**與草稿一致：** 往來對象基本欄位（付款條件拆分除外，見下表）、貢獻者欄位（CRM 產業與來源、MES 信用等級與網站）、統編與付款條件與負責人進基本欄位、倉庫與模具與科目不共用、移除模擬實體後保留外部實體機制、欄位歸屬與關閉唯讀、各應用程式替自己的群組宣告權限、代號以應用程式為命名空間且匯出保留代號、不做子地址與變體。
+**與草稿一致：** 往來對象基本欄位（付款條件拆分除外，見下表）、貢獻者欄位（CRM 產業與來源、MES 信用等級與網站）、統編與付款條件與負責人進基本欄位、倉庫與設備與科目不共用、移除模擬實體後保留外部實體機制、欄位歸屬與關閉唯讀、各應用程式替自己的群組宣告權限、代號以應用程式為命名空間且匯出保留代號、不做子地址與變體。
 
 **不同之處與理由：**
 
@@ -925,7 +925,7 @@ s2c 的 `stockOut` 整合讓 MES 出貨扣進銷存庫存。s2d 不改兩張出�
 | 建議 5 | 區塊順序依開啟順序 | 基本區塊在前，貢獻區塊依應用程式 id | §4.3、§11.5、§15.2、§16 #29 |
 | 建議 6 | 刪除再重開不接回舊資料 | 依應用程式 id＋代號接回孤兒 | §6、§7 刪除第 5、6 點、§8、§12.6、§15.2、§16 #4、§18 #11、§19 |
 | 建議 7 | 循環檢查沒納入主檔的邊 | `requires.masters` 納入匯入與目錄載入的相依圖 | §4.2、§9、§15.2 |
-| 準備度 1 | s2d-0 邊界與 migration 衝突 | s2d-0 只做模具，自帶 `RemoveMockMold`；客戶移到 s2d-1；驗證放 s2d-1 開頭 | §8、§11.2、§11.4、§13、§15.3 |
+| 準備度 1 | s2d-0 邊界與 migration 衝突 | s2d-0 只做設備，自帶 `RemoveMockEquipment`；客戶移到 s2d-1；驗證放 s2d-1 開頭 | §8、§11.2、§11.4、§13、§15.3 |
 | 準備度 2 | 兩張新表的鍵在 EF Core 不可行 | 代理主鍵、`SourceKind`、篩選式唯一索引 | §8、§16 #28 |
 | 準備度 3 | 手動授予可見沒有入口 | 掛在既有模組權限 API 與欄位存取區 | §6、§15.2、§16 #27 |
 | 準備度 4 | `supplyType` 沒落到遷移與 Demo | 必填、Demo 逐筆指定、只有 `make` 建工令 | §5.3、§11.1、§11.5、§14.1、§15.2、§16 #26 |

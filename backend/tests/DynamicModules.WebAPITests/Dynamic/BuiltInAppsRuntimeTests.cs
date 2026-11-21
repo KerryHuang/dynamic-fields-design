@@ -35,7 +35,7 @@ public class BuiltInAppsRuntimeTests : IDisposable
 
     private Task OpenCrmAsync() => _rig.OpenOkAsync("crm-sales", CrmNewGroups);
 
-    private Task OpenMesAsync() => _rig.OpenOkAsync("mes-mold", Map(("sales", "sales")));
+    private Task OpenMesAsync() => _rig.OpenOkAsync("mes", Map(("sales", "sales")));
 
     private async Task<InventoryRig> OpenInventoryAsync() => await InventoryRig.OpenAsync(_rig.Admin, assignMembers: false, groupMap: Map(
         ("buyer", "purchasing"), ("keeper", "warehouse"), ("manager", "ops-manager"), ("viewer", "inv-viewer")));
@@ -106,7 +106,7 @@ public class BuiltInAppsRuntimeTests : IDisposable
 
         (await PutPartnerAsync(sales, id, new() { [k["電話"]] = "02-5550-1000" })).StatusCode.Should().Be(HttpStatusCode.OK, "MES 業務可以修改往來對象");
 
-        await _rig.CloseOkAsync("mes-mold");
+        await _rig.CloseOkAsync("mes");
         _rig.StatusOf("partner").Should().Be(Domain.Entities.Dynamic.AppStatus.Open, "CRM 還在用");
 
         (await PutPartnerAsync(sales, id, new() { [k["電話"]] = "02-5550-2000" })).StatusCode.Should().Be(HttpStatusCode.Forbidden, "權限隨 MES 關閉收回");
@@ -137,7 +137,7 @@ public class BuiltInAppsRuntimeTests : IDisposable
         var inv = await OpenInventoryAsync();
         var supplier = await inv.SupplierAsync("昌盛鋼鐵");
         var customer = await inv.CustomerAsync("晨曦機械");
-        var item = await inv.ItemAsync("導柱");
+        var item = await inv.ItemAsync("傳動軸");
         var po = await inv.PoDraftAsync(supplier, item, 5);
         var h = await inv.F("po");
 
@@ -155,7 +155,7 @@ public class BuiltInAppsRuntimeTests : IDisposable
         var inv = await OpenInventoryAsync();
         var (k, fields) = await PartnerSchemaAsync();
         var supplier = await inv.SupplierAsync("昌盛鋼鐵");
-        var item = await inv.ItemAsync("導柱");
+        var item = await inv.ItemAsync("傳動軸");
         var warehouse = await inv.WarehouseAsync("A", "主倉");
         var po = await ConfirmedPoWithWarehouseAsync(inv, supplier, item, warehouse);
         var lineId = po.GetProperty("details").GetProperty(inv.Key("po-line"))[0].GetProperty("id").GetInt64();

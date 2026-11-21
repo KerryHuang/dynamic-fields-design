@@ -17,7 +17,7 @@ public class TaskBoardScenarioTests(DemoGeneratedFixture fx)
     [
         ("sales01", "整理嵐岳精密報價比較"), ("sales01", "回覆恆川機械樣品問題"), ("sales01", "準備週會業績摘要"),
         ("sales01", "更新客戶聯絡人資料"), ("sales01", "整理名片"), ("sales01", "寄送曜陽電子型錄"),
-        ("sales01", "確認標準導柱庫存"), ("sales02", "確認岳峰精機交期"), ("sales02", "季度目標草稿"),
+        ("sales01", "確認標準軸承庫存"), ("sales02", "確認岳峰精機交期"), ("sales02", "季度目標草稿"),
         ("sales03", "整理展場報名資料"), ("keeper01", "盤點備品倉")
     ];
 
@@ -105,13 +105,13 @@ public class TaskBoardScenarioTests(DemoGeneratedFixture fx)
     public async Task Manager01_InventoryTask_RecordHidden()
     {
         fx.Generated();
-        var task = (await Subordinates("manager01")).Single(t => t.Title == "確認標準導柱庫存");
+        var task = (await Subordinates("manager01")).Single(t => t.Title == "確認標準軸承庫存");
 
         task.Record.Should().Be(new TaskRecordRef(false, null, null, null, false));
         task.Supervised.Should().BeTrue();
         // 掛記錄的人（業務一）自己看得到記錄
         var mine = await fx.As("sales01", new GetMyTasksRequest("assigned", "all", 1, 100));
-        ((PagedResponse<TaskSummaryResponse>)mine.Data!).Items.Single(t => t.Title == "確認標準導柱庫存").Record!.Accessible.Should().BeTrue();
+        ((PagedResponse<TaskSummaryResponse>)mine.Data!).Items.Single(t => t.Title == "確認標準軸承庫存").Record!.Accessible.Should().BeTrue();
     }
 
     private async Task<TaskViewListResponse> ViewsOf(string user)

@@ -3,19 +3,19 @@
  "formatVersion": 6,
  "x-translation": "th、vi 標籤為機器翻譯，待母語者校對",
  "manifest": {
-  "id": "mes-mold",
-  "version": "1.0.2",
+  "id": "mes",
+  "version": "1.1.0",
   "name": {
-   "zh-TW": "MES 模具廠",
-   "en-US": "Mold-shop MES",
-   "th": "MES โรงงานแม่พิมพ์",
-   "vi": "MES xưởng khuôn mẫu"
+   "zh-TW": "MES 生產製造",
+   "en-US": "Manufacturing MES",
+   "th": "MES การผลิต",
+   "vi": "MES sản xuất"
   },
   "description": {
-   "zh-TW": "報價、訂單、工令、製程、報工與出貨，含故障報修、模具保養與品質異常",
-   "en-US": "Quotes, orders, work orders, operations, reporting and shipping, with repairs, mold care and quality issues",
-   "th": "ใบเสนอราคา ใบสั่งขาย ใบสั่งผลิต กระบวนการ รายงานผลผลิต และการจัดส่ง รวมถึงการแจ้งซ่อม การบำรุงรักษาแม่พิมพ์ และปัญหาคุณภาพ",
-   "vi": "Báo giá, đơn hàng, lệnh sản xuất, công đoạn, báo cáo sản lượng và giao hàng, kèm báo sửa chữa, bảo dưỡng khuôn và sự cố chất lượng"
+   "zh-TW": "報價、訂單、工令、製程、報工與出貨，含設備報修、設備保養與品質異常",
+   "en-US": "Quotes, orders, work orders, operations, reporting and shipping, with equipment repairs, equipment care and quality issues",
+   "th": "ใบเสนอราคา ใบสั่งขาย ใบสั่งผลิต กระบวนการ รายงานผลผลิต และการจัดส่ง รวมถึงการแจ้งซ่อมอุปกรณ์ การบำรุงรักษาอุปกรณ์ และปัญหาคุณภาพ",
+   "vi": "Báo giá, đơn hàng, lệnh sản xuất, công đoạn, báo cáo sản lượng và giao hàng, kèm báo sửa chữa thiết bị, bảo dưỡng thiết bị và sự cố chất lượng"
   },
   "icon": "precision_manufacturing",
   "requires": {
@@ -90,10 +90,10 @@
    "code": "order",
    "key": "mes-order",
    "name": {
-    "zh-TW": "訂單（模具廠）",
-    "en-US": "Sales order (mold shop)",
-    "th": "ใบสั่งขาย (โรงงานแม่พิมพ์)",
-    "vi": "Đơn hàng bán (xưởng khuôn mẫu)"
+    "zh-TW": "訂單（MES）",
+    "en-US": "Sales order (MES)",
+    "th": "ใบสั่งขาย (MES)",
+    "vi": "Đơn hàng bán (MES)"
    },
    "icon": "receipt_long",
    "section": { "zh-TW": "業務", "en-US": "Sales operations", "th": "งานขาย", "vi": "Kinh doanh" },
@@ -794,10 +794,10 @@
    "code": "quote",
    "key": "mes-quote",
    "name": {
-    "zh-TW": "報價單（模具廠）",
-    "en-US": "Quotes (mold shop)",
-    "th": "ใบเสนอราคา (โรงงานแม่พิมพ์)",
-    "vi": "Báo giá (xưởng khuôn mẫu)"
+    "zh-TW": "報價單（MES）",
+    "en-US": "Quotes (MES)",
+    "th": "ใบเสนอราคา (MES)",
+    "vi": "Báo giá (MES)"
    },
    "icon": "request_quote",
    "section": { "zh-TW": "業務", "en-US": "Sales operations", "th": "งานขาย", "vi": "Kinh doanh" },
@@ -2109,6 +2109,16 @@
          "color": null
         },
         {
+         "code": "cut",
+         "label": {
+          "zh-TW": "裁切",
+          "en-US": "Cutting",
+          "th": "ตัดวัตถุดิบ",
+          "vi": "Cắt phôi"
+         },
+         "color": null
+        },
+        {
          "code": "rough",
          "label": {
           "zh-TW": "粗加工",
@@ -2129,26 +2139,6 @@
          "color": null
         },
         {
-         "code": "edm",
-         "label": {
-          "zh-TW": "放電",
-          "en-US": "EDM",
-          "th": "กัดไฟฟ้า (EDM)",
-          "vi": "Xung điện (EDM)"
-         },
-         "color": null
-        },
-        {
-         "code": "wire",
-         "label": {
-          "zh-TW": "線割",
-          "en-US": "Wire cutting",
-          "th": "ตัดลวด",
-          "vi": "Cắt dây"
-         },
-         "color": null
-        },
-        {
          "code": "heat",
          "label": {
           "zh-TW": "熱處理",
@@ -2159,12 +2149,12 @@
          "color": null
         },
         {
-         "code": "polish",
+         "code": "surface",
          "label": {
-          "zh-TW": "拋光",
-          "en-US": "Polishing",
-          "th": "ขัดเงา",
-          "vi": "Đánh bóng"
+          "zh-TW": "表面處理",
+          "en-US": "Surface treatment",
+          "th": "ปรับสภาพผิว",
+          "vi": "Xử lý bề mặt"
          },
          "color": null
         },
@@ -2179,12 +2169,22 @@
          "color": null
         },
         {
-         "code": "trial",
+         "code": "first-article",
          "label": {
-          "zh-TW": "試模",
-          "en-US": "Trial run",
-          "th": "ทดลองฉีดแม่พิมพ์",
-          "vi": "Chạy thử khuôn"
+          "zh-TW": "首件檢驗",
+          "en-US": "First article inspection",
+          "th": "ตรวจสอบชิ้นงานแรก",
+          "vi": "Kiểm tra sản phẩm đầu tiên"
+         },
+         "color": null
+        },
+        {
+         "code": "pack",
+         "label": {
+          "zh-TW": "包裝",
+          "en-US": "Packing",
+          "th": "บรรจุหีบห่อ",
+          "vi": "Đóng gói"
          },
          "color": null
         }
@@ -2385,6 +2385,16 @@
          "color": null
         },
         {
+         "code": "cut",
+         "label": {
+          "zh-TW": "裁切",
+          "en-US": "Cutting",
+          "th": "ตัดวัตถุดิบ",
+          "vi": "Cắt phôi"
+         },
+         "color": null
+        },
+        {
          "code": "rough",
          "label": {
           "zh-TW": "粗加工",
@@ -2405,26 +2415,6 @@
          "color": null
         },
         {
-         "code": "edm",
-         "label": {
-          "zh-TW": "放電",
-          "en-US": "EDM",
-          "th": "กัดไฟฟ้า (EDM)",
-          "vi": "Xung điện (EDM)"
-         },
-         "color": null
-        },
-        {
-         "code": "wire",
-         "label": {
-          "zh-TW": "線割",
-          "en-US": "Wire cutting",
-          "th": "ตัดลวด",
-          "vi": "Cắt dây"
-         },
-         "color": null
-        },
-        {
          "code": "heat",
          "label": {
           "zh-TW": "熱處理",
@@ -2435,12 +2425,12 @@
          "color": null
         },
         {
-         "code": "polish",
+         "code": "surface",
          "label": {
-          "zh-TW": "拋光",
-          "en-US": "Polishing",
-          "th": "ขัดเงา",
-          "vi": "Đánh bóng"
+          "zh-TW": "表面處理",
+          "en-US": "Surface treatment",
+          "th": "ปรับสภาพผิว",
+          "vi": "Xử lý bề mặt"
          },
          "color": null
         },
@@ -2455,12 +2445,22 @@
          "color": null
         },
         {
-         "code": "trial",
+         "code": "first-article",
          "label": {
-          "zh-TW": "試模",
-          "en-US": "Trial run",
-          "th": "ทดลองฉีดแม่พิมพ์",
-          "vi": "Chạy thử khuôn"
+          "zh-TW": "首件檢驗",
+          "en-US": "First article inspection",
+          "th": "ตรวจสอบชิ้นงานแรก",
+          "vi": "Kiểm tra sản phẩm đầu tiên"
+         },
+         "color": null
+        },
+        {
+         "code": "pack",
+         "label": {
+          "zh-TW": "包裝",
+          "en-US": "Packing",
+          "th": "บรรจุหีบห่อ",
+          "vi": "Đóng gói"
          },
          "color": null
         }
@@ -3150,10 +3150,10 @@
    "code": "repair",
    "key": "mes-repair",
    "name": {
-    "zh-TW": "故障報修",
-    "en-US": "Repair request",
-    "th": "แจ้งซ่อมเครื่อง",
-    "vi": "Báo sửa chữa"
+    "zh-TW": "設備報修",
+    "en-US": "Equipment repair request",
+    "th": "แจ้งซ่อมอุปกรณ์",
+    "vi": "Báo sửa chữa thiết bị"
    },
    "icon": "build",
    "section": { "zh-TW": "設備", "en-US": "Equipment", "th": "อุปกรณ์", "vi": "Thiết bị" },
@@ -3187,18 +3187,18 @@
        }
       },
       {
-       "code": "mold",
+       "code": "equipment",
        "type": "reference",
        "label": {
-        "zh-TW": "模具",
-        "en-US": "Mold",
-        "th": "แม่พิมพ์",
-        "vi": "Khuôn"
+        "zh-TW": "設備",
+        "en-US": "Equipment",
+        "th": "อุปกรณ์",
+        "vi": "Thiết bị"
        },
        "config": {
         "refTarget": {
          "kind": "module",
-         "key": "mold"
+         "key": "equipment"
         },
         "required": true,
         "showInList": true,
@@ -3273,20 +3273,20 @@
         {
          "code": "leak",
          "label": {
-          "zh-TW": "漏水",
+          "zh-TW": "洩漏",
           "en-US": "Leak",
-          "th": "น้ำรั่ว",
-          "vi": "Rò nước"
+          "th": "รั่วซึม",
+          "vi": "Rò rỉ"
          },
          "color": null
         },
         {
          "code": "crack",
          "label": {
-          "zh-TW": "裂模",
+          "zh-TW": "破裂",
           "en-US": "Crack",
-          "th": "แม่พิมพ์แตก",
-          "vi": "Nứt khuôn"
+          "th": "แตกร้าว",
+          "vi": "Nứt vỡ"
          },
          "color": null
         },
@@ -3303,10 +3303,10 @@
         {
          "code": "stuck",
          "label": {
-          "zh-TW": "卡模",
-          "en-US": "Stuck",
-          "th": "แม่พิมพ์ติด",
-          "vi": "Kẹt khuôn"
+          "zh-TW": "卡料",
+          "en-US": "Jam",
+          "th": "วัสดุติดขัด",
+          "vi": "Kẹt liệu"
          },
          "color": null
         },
@@ -3575,7 +3575,7 @@
      },
      "columns": [
       "no",
-      "mold",
+      "equipment",
       "reportDate",
       "category",
       "status",
@@ -3607,7 +3607,7 @@
      },
      "columns": [
       "no",
-      "mold",
+      "equipment",
       "reportDate",
       "category",
       "status",
@@ -3667,13 +3667,13 @@
    ]
   },
   {
-   "code": "mold",
-   "key": "mes-mold",
+   "code": "equipment",
+   "key": "mes-equipment",
    "name": {
-    "zh-TW": "模具資料",
-    "en-US": "Mold information",
-    "th": "ข้อมูลแม่พิมพ์",
-    "vi": "Thông tin khuôn"
+    "zh-TW": "設備資料",
+    "en-US": "Equipment information",
+    "th": "ข้อมูลอุปกรณ์",
+    "vi": "Thông tin thiết bị"
    },
    "icon": "precision_manufacturing",
    "section": { "zh-TW": "設備", "en-US": "Equipment", "th": "อุปกรณ์", "vi": "Thiết bị" },
@@ -3696,10 +3696,10 @@
        "code": "no",
        "type": "text",
        "label": {
-        "zh-TW": "模具編號",
-        "en-US": "Mold no.",
-        "th": "เลขที่แม่พิมพ์",
-        "vi": "Số khuôn"
+        "zh-TW": "設備編號",
+        "en-US": "Equipment no.",
+        "th": "เลขที่อุปกรณ์",
+        "vi": "Số thiết bị"
        },
        "config": {
         "required": true,
@@ -3764,13 +3764,13 @@
        }
       },
       {
-       "code": "shotCount",
+       "code": "runHours",
        "type": "integer",
        "label": {
-        "zh-TW": "累計射出數",
-        "en-US": "Total shots",
-        "th": "จำนวนการฉีดสะสม",
-        "vi": "Tổng số lần ép"
+        "zh-TW": "累計運轉時數",
+        "en-US": "Total run hours",
+        "th": "ชั่วโมงทำงานสะสม",
+        "vi": "Tổng giờ vận hành"
        },
        "config": {
         "showInList": true,
@@ -3813,12 +3813,12 @@
   },
   {
    "code": "care",
-   "key": "mes-mold-care",
+   "key": "mes-equipment-care",
    "name": {
-    "zh-TW": "模具保養紀錄",
-    "en-US": "Mold care records",
-    "th": "บันทึกการบำรุงรักษาแม่พิมพ์",
-    "vi": "Hồ sơ bảo dưỡng khuôn"
+    "zh-TW": "設備保養紀錄",
+    "en-US": "Equipment care records",
+    "th": "บันทึกการบำรุงรักษาอุปกรณ์",
+    "vi": "Hồ sơ bảo dưỡng thiết bị"
    },
    "icon": "handyman",
    "section": { "zh-TW": "設備", "en-US": "Equipment", "th": "อุปกรณ์", "vi": "Thiết bị" },
@@ -3852,18 +3852,18 @@
        }
       },
       {
-       "code": "mold",
+       "code": "equipment",
        "type": "reference",
        "label": {
-        "zh-TW": "模具",
-        "en-US": "Mold",
-        "th": "แม่พิมพ์",
-        "vi": "Khuôn"
+        "zh-TW": "設備",
+        "en-US": "Equipment",
+        "th": "อุปกรณ์",
+        "vi": "Thiết bị"
        },
        "config": {
         "refTarget": {
          "kind": "module",
-         "key": "mold"
+         "key": "equipment"
         },
         "required": true,
         "showInList": true,
@@ -3921,12 +3921,12 @@
          "color": null
         },
         {
-         "code": "polish",
+         "code": "inspect",
          "label": {
-          "zh-TW": "拋光",
-          "en-US": "Polishing",
-          "th": "ขัดเงา",
-          "vi": "Đánh bóng"
+          "zh-TW": "點檢",
+          "en-US": "Inspection",
+          "th": "ตรวจเช็ก",
+          "vi": "Kiểm tra định kỳ"
          },
          "color": null
         }
@@ -4042,7 +4042,7 @@
      },
      "columns": [
       "no",
-      "mold",
+      "equipment",
       "careDate",
       "categories",
       "technician",
@@ -4090,7 +4090,7 @@
   },
   {
    "code": "part",
-   "key": "mes-mold-care-part",
+   "key": "mes-equipment-care-part",
    "name": {
     "zh-TW": "更換零件",
     "en-US": "Replaced parts",

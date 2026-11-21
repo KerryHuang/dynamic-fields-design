@@ -7,7 +7,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 namespace DynamicModules.WebAPITests.Dynamic;
 
 /// <summary>
-/// 內建應用程式「MES 模具廠」（apps/mes-mold.app.json）的工令、報工、出貨流程。
+/// 內建應用程式「MES 生產製造」（apps/mes.app.json）的工令、報工、出貨流程。
 /// 程式碼裡沒有任何 MES 專用邏輯，這些行為全來自套件宣告（狀態機、規則、彙總、事件、檢查、分錄）。
 /// 同時是設計 §8 可行性假設的驗證。
 /// </summary>
@@ -33,7 +33,7 @@ public class MesAppTests : IDisposable
             groupMap = new[] { "sales", "salesManager", "floor", "maint", "qa", "planner" }
                 .ToDictionary(g => g, _ => (object)new { mode = "create" })
         };
-        var res = await _admin.PostAsJsonAsync($"{Apps}/packages/mes-mold/open", body);
+        var res = await _admin.PostAsJsonAsync($"{Apps}/packages/mes/open", body);
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
         _opened = await JsonOf(res);
         _customer = await PartnerAsync(_admin, "宏達科技");
@@ -102,7 +102,7 @@ public class MesAppTests : IDisposable
     private async Task<JsonElement> ReleasedWorkOrder(int qty = 100, int finalSeq = 3)
     {
         var (w, _) = await Layout("workorder");
-        var draft = await Create("workorder", new() { [w["品名"]] = "導柱", [w["工令數量"]] = qty, [w["末道工序序號"]] = finalSeq });
+        var draft = await Create("workorder", new() { [w["品名"]] = "傳動軸", [w["工令數量"]] = qty, [w["末道工序序號"]] = finalSeq });
         return await Move(draft, "workorder", "已發放");
     }
 
@@ -160,15 +160,15 @@ public class MesAppTests : IDisposable
     }
 
     [Fact]
-    public async Task OpenFromEmptySystem_QuoteAndOrderNamesCarryTheMoldShopSuffix_SoTheyDifferFromCrm()
+    public async Task OpenFromEmptySystem_QuoteAndOrderNamesCarryTheMesSuffix_SoTheyDifferFromCrm()
     {
         await OpenMes();
         string Name(string code, string lang) => _opened.GetProperty("modules").EnumerateArray()
             .Single(m => m.GetProperty("code").GetString() == code).GetProperty("name").GetProperty(lang).GetString()!;
-        Name("quote", "zh-TW").Should().Be("報價單（模具廠）");
-        Name("order", "zh-TW").Should().Be("訂單（模具廠）");
-        Name("quote", "en-US").Should().Be("Quotes (mold shop)");
-        Name("order", "en-US").Should().Be("Sales order (mold shop)");
+        Name("quote", "zh-TW").Should().Be("報價單（MES）");
+        Name("order", "zh-TW").Should().Be("訂單（MES）");
+        Name("quote", "en-US").Should().Be("Quotes (MES)");
+        Name("order", "en-US").Should().Be("Sales order (MES)");
     }
 
     // ---- 報工：累計上限、末道、完工量 ----
@@ -228,7 +228,7 @@ public class MesAppTests : IDisposable
     {
         await OpenMes();
         var (w, _) = await Layout("workorder");
-        var draft = await Create("workorder", new() { [w["品名"]] = "頂針板", [w["工令數量"]] = 10 });
+        var draft = await Create("workorder", new() { [w["品名"]] = "底板", [w["工令數量"]] = 10 });
         (await TryMove(draft, "workorder", "已發放")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var released = await Move(draft, "workorder", "已發放", new() { [w["末道工序序號"]] = 4 });
         var change = await _admin.PutAsJsonAsync($"{Base}/records/{Id(released)}", new

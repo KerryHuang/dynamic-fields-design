@@ -20,20 +20,20 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
 
     private static Dictionary<string, string> Zh(string s) => new() { ["zh-TW"] = s };
 
-    private sealed record Mold(string Key, long NameId, string NameKey, long NoId, string NoKey);
+    private sealed record Equip(string Key, long NameId, string NameKey, long NoId, string NoKey);
 
     /// <summary>啟用中的模組：預設的名稱標題欄位加一個文字欄位「編號」。</summary>
-    private async Task<Mold> MoldModule()
+    private async Task<Equip> EquipmentModule()
     {
         var key = await CreateModule(_admin);
         var nameKey = await TitleKey(_admin, key);
         var no = await AddField(_admin, key, "text");
         await Activate(_admin, key);
-        return new Mold(key, long.Parse(nameKey[2..]), nameKey, no.Id, no.Key);
+        return new Equip(key, long.Parse(nameKey[2..]), nameKey, no.Id, no.Key);
     }
 
     private Task<HttpResponseMessage> PutTitle(string key, long? titleFieldId, string? titleTemplate) =>
-        _admin.PutAsJsonAsync($"{Base}/modules/{key}", new { name = Zh("模具"), titleFieldId, titleTemplate });
+        _admin.PutAsJsonAsync($"{Base}/modules/{key}", new { name = Zh("設備"), titleFieldId, titleTemplate });
 
     private async Task<long> AddRecord(string key, Dictionary<string, object> values)
     {
@@ -57,8 +57,8 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
     [Fact]
     public async Task SetTemplate_RetitlesExistingRecords_NewRecordsFollow_AndPickerFindsEitherPart()
     {
-        var m = await MoldModule();
-        await AddRecord(m.Key, new() { [m.NameKey] = "上蓋模", [m.NoKey] = "MD-01" });
+        var m = await EquipmentModule();
+        await AddRecord(m.Key, new() { [m.NameKey] = "甲號車床", [m.NoKey] = "EQ-01" });
 
         var put = await PutTitle(m.Key, m.NameId, $"{{{m.NoId}}} {{{m.NameId}}}");
         put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
@@ -66,31 +66,31 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
         (await JsonOf(await _admin.GetAsync($"{Base}/modules/{m.Key}"))).GetProperty("titleTemplate").GetString()
             .Should().Be($"{{{m.NoId}}} {{{m.NameId}}}");
 
-        await AddRecord(m.Key, new() { [m.NameKey] = "下蓋模" });   // 編號空白：去掉頭尾空白
+        await AddRecord(m.Key, new() { [m.NameKey] = "乙號車床" });   // 編號空白：去掉頭尾空白
 
-        (await Titles(m.Key)).Should().BeEquivalentTo("MD-01 上蓋模", "下蓋模");
-        (await Titles(m.Key, "MD-01")).Should().Equal("MD-01 上蓋模");
-        (await Titles(m.Key, "上蓋")).Should().Equal("MD-01 上蓋模");
+        (await Titles(m.Key)).Should().BeEquivalentTo("EQ-01 甲號車床", "乙號車床");
+        (await Titles(m.Key, "EQ-01")).Should().Equal("EQ-01 甲號車床");
+        (await Titles(m.Key, "甲號")).Should().Equal("EQ-01 甲號車床");
     }
 
     [Fact]
     public async Task ClearTemplate_TitleIsTheTitleFieldAgain()
     {
-        var m = await MoldModule();
+        var m = await EquipmentModule();
         (await PutTitle(m.Key, m.NameId, $"{{{m.NoId}}}-{{{m.NameId}}}")).EnsureSuccessStatusCode();
-        await AddRecord(m.Key, new() { [m.NameKey] = "上蓋模", [m.NoKey] = "MD-01" });
-        (await Titles(m.Key)).Should().Equal("MD-01-上蓋模");
+        await AddRecord(m.Key, new() { [m.NameKey] = "甲號車床", [m.NoKey] = "EQ-01" });
+        (await Titles(m.Key)).Should().Equal("EQ-01-甲號車床");
 
         var put = await PutTitle(m.Key, m.NameId, null);
         put.StatusCode.Should().Be(HttpStatusCode.OK);
         (await JsonOf(put)).TryGetProperty("titleTemplate", out _).Should().BeFalse();   // null 不輸出
-        (await Titles(m.Key)).Should().Equal("上蓋模");
+        (await Titles(m.Key)).Should().Equal("甲號車床");
     }
 
     [Fact]
     public async Task InvalidTemplates_AreRejectedWithReasons()
     {
-        var m = await MoldModule();
+        var m = await EquipmentModule();
         var amount = await AddField(_admin, m.Key, "integer");
         var memo = await AddField(_admin, m.Key, "text");
         (await _admin.PutAsJsonAsync($"{Base}/fields/{memo.Id}/status", new { status = "inactive" })).EnsureSuccessStatusCode();
@@ -111,24 +111,24 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
     [Fact]
     public async Task EnumAndDate_RenderAsText_AndRenamingTheOptionRetitles()
     {
-        var m = await MoldModule();
+        var m = await EquipmentModule();
         var kind = await AddField(_admin, m.Key, "enum");
-        var optionRes = await _admin.PostAsJsonAsync($"{Base}/fields/{kind.Id}/options", new { label = Zh("上模"), color = (string?)null });
+        var optionRes = await _admin.PostAsJsonAsync($"{Base}/fields/{kind.Id}/options", new { label = Zh("主機型"), color = (string?)null });
         var optionId = (await JsonOf(optionRes)).GetProperty("id").GetInt64();
         var made = await AddField(_admin, m.Key, "date");
         (await PutTitle(m.Key, m.NameId, $"{{{m.NameId}}}（{{{kind.Id}}}，{{{made.Id}}}）")).EnsureSuccessStatusCode();
         await AddRecord(m.Key, new() { [m.NameKey] = "A1", [kind.Key] = $"opt_{optionId}", [made.Key] = "2026-11-09" });
-        (await Titles(m.Key)).Should().Equal("A1（上模，2026-11-09）");
+        (await Titles(m.Key)).Should().Equal("A1（主機型，2026-11-09）");
 
-        (await _admin.PutAsJsonAsync($"{Base}/options/{optionId}", new { label = Zh("公模"), color = (string?)null, active = true }))
+        (await _admin.PutAsJsonAsync($"{Base}/options/{optionId}", new { label = Zh("副機型"), color = (string?)null, active = true }))
             .EnsureSuccessStatusCode();
-        (await Titles(m.Key)).Should().Equal("A1（公模，2026-11-09）");
+        (await Titles(m.Key)).Should().Equal("A1（副機型，2026-11-09）");
     }
 
     [Fact]
     public async Task TemplateFields_CannotBeDeactivatedOrHidden()
     {
-        var m = await MoldModule();
+        var m = await EquipmentModule();
         (await PutTitle(m.Key, m.NameId, $"{{{m.NoId}}} {{{m.NameId}}}")).EnsureSuccessStatusCode();
 
         (await ErrorOf(await _admin.PutAsJsonAsync($"{Base}/fields/{m.NoId}/status", new { status = "inactive" }), "Status"))
@@ -146,16 +146,16 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
     [Fact]
     public async Task Import_ReferenceCellMatchesTheComposedTitle()
     {
-        var m = await MoldModule();
+        var m = await EquipmentModule();
         (await PutTitle(m.Key, m.NameId, $"{{{m.NoId}}} {{{m.NameId}}}")).EnsureSuccessStatusCode();
-        var moldId = await AddRecord(m.Key, new() { [m.NameKey] = "上蓋模", [m.NoKey] = "MD-01" });
+        var equipId = await AddRecord(m.Key, new() { [m.NameKey] = "甲號車床", [m.NoKey] = "EQ-01" });
 
         var job = await CreateModule(_admin);
         var jobTitle = await TitleKey(_admin, job);
-        var mold = await AddField(_admin, job, "reference", new { refTarget = new { kind = "module", key = m.Key }, onDelete = "restrict" });
+        var equip = await AddField(_admin, job, "reference", new { refTarget = new { kind = "module", key = m.Key }, onDelete = "restrict" });
         await Activate(_admin, job);
 
-        var file = new ByteArrayContent(Encoding.UTF8.GetBytes($"{jobTitle},{mold.Key}\r\n工單一,MD-01 上蓋模\r\n"));
+        var file = new ByteArrayContent(Encoding.UTF8.GetBytes($"{jobTitle},{equip.Key}\r\n工單一,EQ-01 甲號車床\r\n"));
         file.Headers.ContentType = new MediaTypeHeaderValue("text/csv");
         var commit = await _admin.PostAsync($"{Base}/modules/{job}/import?commit=true",
             new MultipartFormDataContent { { file, "file", "import.csv" } });
@@ -163,8 +163,8 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
 
         var list = await JsonOf(await _admin.GetAsync($"{Base}/modules/{job}/records/paged?currentPage=1&pagesSize=10"));
         var row = list.GetProperty("items")[0];
-        row.GetProperty("values").GetProperty(mold.Key).GetRawText().Trim('"').Should().Be(moldId.ToString());
-        row.GetProperty("references").GetProperty(mold.Key).GetProperty("title").GetString().Should().Be("MD-01 上蓋模");
+        row.GetProperty("values").GetProperty(equip.Key).GetRawText().Trim('"').Should().Be(equipId.ToString());
+        row.GetProperty("references").GetProperty(equip.Key).GetProperty("title").GetString().Should().Be("EQ-01 甲號車床");
     }
 
     // ---- 已固定的記錄（唯讀狀態、已記帳）：重組標題整筆回 409（必修 2） ----
@@ -184,9 +184,9 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
     [Fact]
     public async Task Retitling_IsRefusedWhole_WhenAnyRecordIsInAReadOnlyState()
     {
-        var m = await MoldModule();
+        var m = await EquipmentModule();
         var kind = await AddField(_admin, m.Key, "enum");
-        var upper = await Option(kind.Id, "上模");
+        var upper = await Option(kind.Id, "主機型");
         var status = await AddField(_admin, m.Key, "enum");
         var draft = await Option(status.Id, "草稿");
         var done = await Option(status.Id, "完成");
@@ -199,8 +199,8 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
         var template = $"{{{m.NoId}}} {{{m.NameId}}}（{{{kind.Id}}}）";
         (await PutTitle(m.Key, m.NameId, template)).EnsureSuccessStatusCode();   // 還沒有固定的記錄：照常可改
 
-        var id = await AddRecord(m.Key, new() { [m.NameKey] = "上蓋模", [m.NoKey] = "MD-01", [kind.Key] = $"opt_{upper}" });
-        await AddRecord(m.Key, new() { [m.NameKey] = "下蓋模", [m.NoKey] = "MD-02" });
+        var id = await AddRecord(m.Key, new() { [m.NameKey] = "甲號車床", [m.NoKey] = "EQ-01", [kind.Key] = $"opt_{upper}" });
+        await AddRecord(m.Key, new() { [m.NameKey] = "乙號車床", [m.NoKey] = "EQ-02" });
         var version = (await JsonOf(await _admin.GetAsync($"{Base}/records/{id}"))).GetProperty("rowVersion").GetString();
         (await _admin.PutAsJsonAsync($"{Base}/records/{id}",
             new { values = new Dictionary<string, object> { [status.Key] = $"opt_{done}" }, rowVersion = version })).EnsureSuccessStatusCode();
@@ -209,17 +209,17 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
         await ShouldBeFixedConflict(await PutTitle(m.Key, m.NameId, null));                         // 清除樣板
         await ShouldBeFixedConflict(await PutTitle(m.Key, m.NoId, template));                       // 換標題欄位
         await ShouldBeFixedConflict(await _admin.PutAsJsonAsync($"{Base}/options/{upper}",          // 改樣板用到的選項名稱
-            new { label = Zh("公模"), color = (string?)null, active = true }));
+            new { label = Zh("副機型"), color = (string?)null, active = true }));
 
         var module = await ModuleOf(m.Key);
         module.GetProperty("titleTemplate").GetString().Should().Be(template);
         module.GetProperty("titleFieldId").GetInt64().Should().Be(m.NameId);
         module.GetProperty("blocks")[0].GetProperty("fields").EnumerateArray().Single(f => f.GetProperty("id").GetInt64() == kind.Id)
-            .GetProperty("options").EnumerateArray().Single().GetProperty("label").GetProperty("zh-TW").GetString().Should().Be("上模");
-        (await Titles(m.Key)).Should().BeEquivalentTo("MD-01 上蓋模（上模）", "MD-02 下蓋模（）");
+            .GetProperty("options").EnumerateArray().Single().GetProperty("label").GetProperty("zh-TW").GetString().Should().Be("主機型");
+        (await Titles(m.Key)).Should().BeEquivalentTo("EQ-01 甲號車床（主機型）", "EQ-02 乙號車床（）");
 
         // 不重組標題的修改照常可做：模組名稱、不在樣板裡的選項
-        (await _admin.PutAsJsonAsync($"{Base}/modules/{m.Key}", new { name = Zh("模具（改名）"), titleFieldId = m.NameId, titleTemplate = template }))
+        (await _admin.PutAsJsonAsync($"{Base}/modules/{m.Key}", new { name = Zh("設備（改名）"), titleFieldId = m.NameId, titleTemplate = template }))
             .StatusCode.Should().Be(HttpStatusCode.OK);
         (await _admin.PutAsJsonAsync($"{Base}/options/{draft}", new { label = Zh("草擬"), color = (string?)null, active = true }))
             .StatusCode.Should().Be(HttpStatusCode.OK);
@@ -228,7 +228,7 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
     [Fact]
     public async Task Retitling_IsRefusedWhole_WhenAnyRecordHasEventFacts()
     {
-        var m = await MoldModule();
+        var m = await EquipmentModule();
         var move = await CreateModule(_admin);
         await Activate(_admin, move);
         var moveTitle = await TitleKey(_admin, move);
@@ -242,12 +242,12 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
             }
         });
         ev.StatusCode.Should().Be(HttpStatusCode.Created, await ev.Content.ReadAsStringAsync());
-        await AddRecord(m.Key, new() { [m.NameKey] = "上蓋模", [m.NoKey] = "MD-01" });
+        await AddRecord(m.Key, new() { [m.NameKey] = "甲號車床", [m.NoKey] = "EQ-01" });
 
         await ShouldBeFixedConflict(await PutTitle(m.Key, m.NameId, $"{{{m.NoId}}} {{{m.NameId}}}"));   // 設定樣板
         await ShouldBeFixedConflict(await PutTitle(m.Key, m.NoId, null));                              // 換標題欄位
         (await ModuleOf(m.Key)).TryGetProperty("titleTemplate", out _).Should().BeFalse();
-        (await Titles(m.Key)).Should().Equal("上蓋模");
+        (await Titles(m.Key)).Should().Equal("甲號車床");
     }
 
     /// <summary>明細列自己沒有狀態與事實，鎖在表頭上：表頭在唯讀狀態時，明細模組也不能重組標題。</summary>
@@ -316,7 +316,7 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
     [Fact]
     public async Task ListSort_OnTheTitleField_OrdersByTheComposedTitle_WhenThereIsATemplate()
     {
-        var m = await MoldModule();
+        var m = await EquipmentModule();
         await MakeSortable(m.Key, m.NameId);
         await AddRecord(m.Key, new() { [m.NameKey] = "Z", [m.NoKey] = "01" });
         await AddRecord(m.Key, new() { [m.NameKey] = "A", [m.NoKey] = "02" });
@@ -333,7 +333,7 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
     [Fact]
     public async Task ListSort_ByTitle_IsRefused_WhenATemplateFieldIsHiddenFromTheCaller()
     {
-        var m = await MoldModule();
+        var m = await EquipmentModule();
         await MakeSortable(m.Key, m.NameId);
         (await PutTitle(m.Key, m.NameId, $"{{{m.NoId}}} {{{m.NameId}}}")).EnsureSuccessStatusCode();
         app.GrantBusinessGroups(m.Key);
@@ -348,22 +348,22 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
 
     // ---- 安全回歸（審查建議）：Closed、分錄、已記帳來源上的拒寫，以及樣板欄位被隱藏時的挑選器、匯入、報表 ----
 
-    private sealed record EnumMold(Mold M, (long Id, string Key, long BlockId) Kind, long Upper, string Template);
+    private sealed record EnumEquipment(Equip M, (long Id, string Key, long BlockId) Kind, long Upper, string Template);
 
-    /// <summary>樣板 {no} {name}（{kind}）已設定的模具模組；回傳時還沒有記錄。</summary>
-    private async Task<EnumMold> EnumMoldModule(Func<string, Task>? beforeActivate = null)
+    /// <summary>樣板 {no} {name}（{kind}）已設定的設備模組；回傳時還沒有記錄。</summary>
+    private async Task<EnumEquipment> EnumEquipmentModule(Func<string, Task>? beforeActivate = null)
     {
         var key = await CreateModule(_admin);
         var nameKey = await TitleKey(_admin, key);
         var no = await AddField(_admin, key, "text");
         var kind = await AddField(_admin, key, "enum");
-        var upper = await Option(kind.Id, "上模");
+        var upper = await Option(kind.Id, "主機型");
         if (beforeActivate is not null) await beforeActivate(key);
         await Activate(_admin, key);
-        var m = new Mold(key, long.Parse(nameKey[2..]), nameKey, no.Id, no.Key);
+        var m = new Equip(key, long.Parse(nameKey[2..]), nameKey, no.Id, no.Key);
         var template = $"{{{m.NoId}}} {{{m.NameId}}}（{{{kind.Id}}}）";
         (await PutTitle(key, m.NameId, template)).EnsureSuccessStatusCode();
-        return new EnumMold(m, kind, upper, template);
+        return new EnumEquipment(m, kind, upper, template);
     }
 
     private Task<HttpResponseMessage> RenameOption(long optionId, string label) =>
@@ -375,12 +375,12 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
         (await res.Content.ReadAsStringAsync()).Should().Contain(message);
     }
 
-    private async Task TemplateAndTitlesUnchanged(EnumMold e, params string[] titles)
+    private async Task TemplateAndTitlesUnchanged(EnumEquipment e, params string[] titles)
     {
         var module = await ModuleOf(e.M.Key);
         module.GetProperty("titleTemplate").GetString().Should().Be(e.Template);
         module.GetProperty("blocks")[0].GetProperty("fields").EnumerateArray().Single(f => f.GetProperty("id").GetInt64() == e.Kind.Id)
-            .GetProperty("options").EnumerateArray().Single().GetProperty("label").GetProperty("zh-TW").GetString().Should().Be("上模");
+            .GetProperty("options").EnumerateArray().Single().GetProperty("label").GetProperty("zh-TW").GetString().Should().Be("主機型");
         (await Titles(e.M.Key)).Should().BeEquivalentTo(titles);
     }
 
@@ -395,23 +395,23 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
     [Fact]
     public async Task Closed_SetClearTemplateAndRenameTemplateOption_AreRefused()
     {
-        var e = await EnumMoldModule();
-        await AddRecord(e.M.Key, new() { [e.M.NameKey] = "上蓋模", [e.M.NoKey] = "MD-01", [e.Kind.Key] = $"opt_{e.Upper}" });
+        var e = await EnumEquipmentModule();
+        await AddRecord(e.M.Key, new() { [e.M.NameKey] = "甲號車床", [e.M.NoKey] = "EQ-01", [e.Kind.Key] = $"opt_{e.Upper}" });
         SetStatus(e.M.Key, DynamicModules.Domain.Entities.Dynamic.ModuleStatus.Closed);
         try
         {
             await ShouldBeConflict(await PutTitle(e.M.Key, e.M.NameId, $"{{{e.M.NameId}}}"), "應用程式已關閉");
             await ShouldBeConflict(await PutTitle(e.M.Key, e.M.NameId, null), "應用程式已關閉");
-            await ShouldBeConflict(await RenameOption(e.Upper, "公模"), "應用程式已關閉");
+            await ShouldBeConflict(await RenameOption(e.Upper, "副機型"), "應用程式已關閉");
         }
         finally { SetStatus(e.M.Key, DynamicModules.Domain.Entities.Dynamic.ModuleStatus.Active); }
-        await TemplateAndTitlesUnchanged(e, "MD-01 上蓋模（上模）");
+        await TemplateAndTitlesUnchanged(e, "EQ-01 甲號車床（主機型）");
     }
 
     [Fact]
     public async Task Ledger_SetClearTemplateAndRenameTemplateOption_AreRefused()
     {
-        var e = await EnumMoldModule(async key =>
+        var e = await EnumEquipmentModule(async key =>
         {
             var rev = await AddField(_admin, key, "reference", new { refTarget = new { kind = "module", key }, readOnly = true });
             var qty = await AddField(_admin, key, "decimal");
@@ -419,18 +419,18 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
             (await _admin.PutAsJsonAsync($"{Base}/modules/{key}/ledger",
                 new { reversalFieldId = rev.Id, negate = new[] { qty.Id }, swap = Array.Empty<long[]>(), confirmFreeze = false })).EnsureSuccessStatusCode();
         });
-        await AddRecord(e.M.Key, new() { [e.M.NameKey] = "上蓋模", [e.M.NoKey] = "MD-01", [e.Kind.Key] = $"opt_{e.Upper}" });
+        await AddRecord(e.M.Key, new() { [e.M.NameKey] = "甲號車床", [e.M.NoKey] = "EQ-01", [e.Kind.Key] = $"opt_{e.Upper}" });
 
         await ShouldBeConflict(await PutTitle(e.M.Key, e.M.NameId, $"{{{e.M.NameId}}}"), "分錄模組");
         await ShouldBeConflict(await PutTitle(e.M.Key, e.M.NameId, null), "分錄模組");
-        await ShouldBeConflict(await RenameOption(e.Upper, "公模"), "分錄模組");
-        await TemplateAndTitlesUnchanged(e, "MD-01 上蓋模（上模）");
+        await ShouldBeConflict(await RenameOption(e.Upper, "副機型"), "分錄模組");
+        await TemplateAndTitlesUnchanged(e, "EQ-01 甲號車床（主機型）");
     }
 
     [Fact]
     public async Task PostedSource_RenameTemplateOptionAndClearTemplate_AreRefused()
     {
-        var e = await EnumMoldModule();
+        var e = await EnumEquipmentModule();
         var move = await CreateModule(_admin);
         await Activate(_admin, move);
         var moveTitle = await TitleKey(_admin, move);
@@ -443,11 +443,11 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
                 effects = new[] { new { code = "log", kind = "create", targetModuleKey = move, set = new object[] { new { to = long.Parse(moveTitle[2..]), @const = "建檔" } } } }
             }
         })).StatusCode.Should().Be(HttpStatusCode.Created);
-        await AddRecord(e.M.Key, new() { [e.M.NameKey] = "上蓋模", [e.M.NoKey] = "MD-01", [e.Kind.Key] = $"opt_{e.Upper}" });
+        await AddRecord(e.M.Key, new() { [e.M.NameKey] = "甲號車床", [e.M.NoKey] = "EQ-01", [e.Kind.Key] = $"opt_{e.Upper}" });
 
-        await ShouldBeFixedConflict(await RenameOption(e.Upper, "公模"));
+        await ShouldBeFixedConflict(await RenameOption(e.Upper, "副機型"));
         await ShouldBeFixedConflict(await PutTitle(e.M.Key, e.M.NameId, null));
-        await TemplateAndTitlesUnchanged(e, "MD-01 上蓋模（上模）");
+        await TemplateAndTitlesUnchanged(e, "EQ-01 甲號車床（主機型）");
     }
 
     /// <summary>
@@ -457,13 +457,13 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
     [Fact]
     public async Task HiddenTemplateField_PickerImportAndReport_DoNotRevealTheComposedTitle()
     {
-        var m = await MoldModule();
+        var m = await EquipmentModule();
         (await PutTitle(m.Key, m.NameId, $"{{{m.NoId}}} {{{m.NameId}}}")).EnsureSuccessStatusCode();
         app.GrantBusinessGroups(m.Key);
-        await AddRecord(m.Key, new() { [m.NameKey] = "上蓋模", [m.NoKey] = "MD-01" });
+        await AddRecord(m.Key, new() { [m.NameKey] = "甲號車床", [m.NoKey] = "EQ-01" });
         var job = await CreateModule(_admin);
         var jobTitle = await TitleKey(_admin, job);
-        var mold = await AddField(_admin, job, "reference", new { refTarget = new { kind = "module", key = m.Key }, onDelete = "restrict" });
+        var equip = await AddField(_admin, job, "reference", new { refTarget = new { kind = "module", key = m.Key }, onDelete = "restrict" });
         await Activate(_admin, job);
         app.GrantBusinessGroups(job);
         HideFromSales(m.NoId);
@@ -471,15 +471,15 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
 
         // 挑選器
         (await sales.GetAsync($"{Base}/modules/{m.Key}/records/light?keyword=MD")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await Titles(m.Key, "MD-01")).Should().Equal("MD-01 上蓋模");
+        (await Titles(m.Key, "EQ-01")).Should().Equal("EQ-01 甲號車床");
 
         // 匯入比對
         HttpContent Csv() => new MultipartFormDataContent
         {
-            { new ByteArrayContent(Encoding.UTF8.GetBytes($"{jobTitle},{mold.Key}\r\n工單一,MD-01 上蓋模\r\n")) { Headers = { ContentType = new MediaTypeHeaderValue("text/csv") } }, "file", "import.csv" }
+            { new ByteArrayContent(Encoding.UTF8.GetBytes($"{jobTitle},{equip.Key}\r\n工單一,EQ-01 甲號車床\r\n")) { Headers = { ContentType = new MediaTypeHeaderValue("text/csv") } }, "file", "import.csv" }
         };
         var denied = await sales.PostAsync($"{Base}/modules/{job}/import?commit=true", Csv());
-        (await ErrorOf(denied, $"rows[2].{mold.Key}")).Should().Be("找不到「MD-01 上蓋模」");
+        (await ErrorOf(denied, $"rows[2].{equip.Key}")).Should().Be("找不到「EQ-01 甲號車床」");
         (await JsonOf(await _admin.GetAsync($"{Base}/modules/{job}/records/paged?currentPage=1&pagesSize=10"))).GetProperty("totalCount").GetInt32()
             .Should().Be(0, await denied.Content.ReadAsStringAsync());
         (await _admin.PostAsync($"{Base}/modules/{job}/import?commit=true", Csv())).StatusCode.Should().Be(HttpStatusCode.OK);
@@ -488,17 +488,17 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
         var def = new Dictionary<string, object?>
         {
             ["version"] = 1, ["mainModuleKey"] = job, ["child"] = null, ["columns"] = Array.Empty<object>(),
-            ["groups"] = new object[] { new { field = new { source = "main", fieldId = mold.Id, viaFieldId = (long?)null }, bucket = (string?)null } },
+            ["groups"] = new object[] { new { field = new { source = "main", fieldId = equip.Id, viaFieldId = (long?)null }, bucket = (string?)null } },
             ["measures"] = new object[] { new { id = "n", kind = "countMain", field = (object?)null, condition = (object?)null } },
             ["filters"] = Array.Empty<object>(), ["primaryDateField"] = null, ["dateRange"] = null, ["sort"] = Array.Empty<object>(), ["viz"] = "table"
         };
         var forSales = await sales.PostAsJsonAsync($"{Base}/reports/preview", def);
         forSales.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await forSales.Content.ReadAsStringAsync()).Should().NotContain("MD-01").And.NotContain("上蓋模");
+        (await forSales.Content.ReadAsStringAsync()).Should().NotContain("EQ-01").And.NotContain("甲號車床");
         (await JsonOf(forSales)).GetProperty("groups")[0].GetProperty("groupLabels")[0].GetString().Should().Be("（無權限）");
         var forAdmin = await _admin.PostAsJsonAsync($"{Base}/reports/preview", def);
         forAdmin.StatusCode.Should().Be(HttpStatusCode.OK, await forAdmin.Content.ReadAsStringAsync());
-        (await forAdmin.Content.ReadAsStringAsync()).Should().Contain("MD-01 上蓋模");
+        (await forAdmin.Content.ReadAsStringAsync()).Should().Contain("EQ-01 甲號車床");
     }
 
     /// <summary>繞過設計器的防護直接寫入隱藏例外（模擬舊資料）。</summary>
