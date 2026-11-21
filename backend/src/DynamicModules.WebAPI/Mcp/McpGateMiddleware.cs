@@ -70,7 +70,6 @@ public sealed class McpGateMiddleware(RequestDelegate next, McpAuthThrottle thro
         if (result.Status == McpAuthStatus.Unauthorized)
         {
             logger.LogInformation("MCP 權杖認證失敗，來源 {ClientIp}", ip);
-            ctx.Response.Headers.WWWAuthenticate = "Bearer";
             await Reject(ctx, StatusCodes.Status401Unauthorized, McpMessages.CodeUnauthorized, McpMessages.Unauthorized);
             return;
         }
@@ -144,9 +143,11 @@ public sealed class McpGateMiddleware(RequestDelegate next, McpAuthThrottle thro
         return header.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && header.Length > prefix.Length ? header[prefix.Length..].Trim() : null;
     }
 
+    /// <summary>所有拒絕回應的唯一出口；401 一律帶 <c>WWW-Authenticate: Bearer</c>（設計 §5.3）。</summary>
     private static Task Reject(HttpContext ctx, int status, string code, MessageRef message)
     {
         ctx.Response.StatusCode = status;
+        if (status == StatusCodes.Status401Unauthorized) ctx.Response.Headers.WWWAuthenticate = "Bearer";
         return ctx.Response.WriteAsJsonAsync(new { traceId = ctx.TraceIdentifier, message = RequestMessages.Text(ctx, message), code });
     }
 }

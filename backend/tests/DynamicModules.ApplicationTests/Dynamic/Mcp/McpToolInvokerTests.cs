@@ -100,14 +100,22 @@ public abstract class McpInvokerTestBase : McpTokenTestBase
 }
 
 /// <summary>可切換成寫不進去的稽核（包住真的 AuditLog）。</summary>
-public sealed class SwitchableAudit { public bool Fail { get; set; } }
+public sealed class SwitchableAudit
+{
+    public bool Fail { get; set; }
+    /// <summary>每次 <c>WriteNowAsync</c> 進來、交給真的稽核之前呼叫（例如在稽核提交途中取消請求）。</summary>
+    public Action? BeforeWrite { get; set; }
+}
 
 public sealed class SwitchableAuditLog(AuditLog inner, SwitchableAudit state) : IAuditLog
 {
     public AuditLogEntry Add(AuditEntry entry) => inner.Add(entry);
 
-    public Task WriteNowAsync(AuditEntry entry, CancellationToken ct) =>
-        state.Fail ? throw new AuditWriteException(new InvalidOperationException("db down")) : inner.WriteNowAsync(entry, ct);
+    public Task WriteNowAsync(AuditEntry entry, CancellationToken ct)
+    {
+        state.BeforeWrite?.Invoke();
+        return state.Fail ? throw new AuditWriteException(new InvalidOperationException("db down")) : inner.WriteNowAsync(entry, ct);
+    }
 
     public Task<bool> TryWriteNowAsync(AuditEntry entry, CancellationToken ct) =>
         state.Fail ? Task.FromResult(false) : inner.TryWriteNowAsync(entry, ct);
@@ -339,6 +347,51 @@ public class McpToolInvokerAuditTests : McpInvokerTestBase
 
         var row = await SingleRow();
         (row.Result, row.ReasonCode).Should().Be((AuditResult.Failed, "cancelled"));
+    }
+
+    [Fact]
+    public async Task Cancelled_ToolReturnsNormally_StillOneRow()
+    {
+        // 工具看到取消後照常回傳（不丟例外）：稽核寫入不能被同一個 ct 中斷（審查必修 1）
+        using var cts = new CancellationTokenSource();
+        List.Behavior = (_, _) =>
+        {
+            cts.Cancel();
+            return Task.FromResult(McpToolOutcome.Ok(new { ok = true }));
+        };
+
+        await FluentActions.Awaiting(() => Invoke(ct: cts.Token)).Should().ThrowAsync<OperationCanceledException>();
+
+        (await McpRows()).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Cancelled_DuringAuditCommit_StillOneRow()
+    {
+        // 格式化之後、稽核提交途中才取消：稽核仍要寫進去，名額才不會白白釋放（審查必修 1）
+        using var cts = new CancellationTokenSource();
+        Audit.BeforeWrite = cts.Cancel;
+
+        await FluentActions.Awaiting(() => Invoke(ct: cts.Token)).Should().ThrowAsync<OperationCanceledException>();
+
+        var row = (await McpRows()).Should().ContainSingle().Subject;
+        row.Result.Should().Be(AuditResult.Success);
+    }
+
+    [Fact]
+    public async Task ErrorResult_CappedAtMaxResultChars()
+    {
+        // 錯誤結果也受單次結果上限（審查建議）：handler 回的超長驗證訊息不能原樣送出
+        var longText = new string('x', McpLimits.MaxResultChars);
+        List.Behavior = (_, _) => Task.FromResult(McpToolOutcome.From(ServiceResult.Invalid(
+            new Dictionary<string, string[]> { ["a"] = [longText], ["b"] = [longText] })));
+
+        var r = await Invoke();
+
+        r.IsError.Should().BeTrue();
+        r.Size.Should().BeLessThanOrEqualTo(McpLimits.MaxResultChars);
+        CodeOf(r).Should().Be(McpErrorCodes.Invalid);
+        (await SingleRow()).Result.Should().Be(AuditResult.Invalid);
     }
 
     [Fact]

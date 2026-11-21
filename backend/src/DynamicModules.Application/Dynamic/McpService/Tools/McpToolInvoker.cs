@@ -47,7 +47,6 @@ public sealed class McpToolInvoker(
         McpFormattedResult result;
         AuditResult auditResult;
         string? reason;
-        var cancelled = false;
         try
         {
             try
@@ -56,7 +55,6 @@ public sealed class McpToolInvoker(
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                cancelled = true;
                 (result, auditResult, reason) = (McpResultFormatter.Error(McpErrorCodes.InternalError, Text(McpMessages.InternalError)),
                     AuditResult.Failed, "cancelled");
             }
@@ -70,8 +68,8 @@ public sealed class McpToolInvoker(
 
             try
             {
-                await audit.WriteNowAsync(Entry(tool, name, args, outcome, auditResult, reason, context, started),
-                    cancelled ? CancellationToken.None : ct);
+                // 稽核收尾與請求取消脫鉤：工具取消後照常回傳、或取消發生在稽核提交途中，都要恰好寫一列（名額才不會白白釋放）
+                await audit.WriteNowAsync(Entry(tool, name, args, outcome, auditResult, reason, context, started), CancellationToken.None);
             }
             catch (AuditWriteException ex)
             {
@@ -140,6 +138,9 @@ public sealed class McpToolInvoker(
 
     private int SecondsUntil(DateTime utc) => Math.Max(1, (int)Math.Ceiling((utc - time.GetUtcNow().UtcDateTime).TotalSeconds));
 
+    /// <summary>錯誤結果超過上限時，訊息截到這個長度（技術限制，遠小於結果上限）。</summary>
+    private const int ErrorMessageMax = 1000;
+
     private static readonly JsonElement EmptyObject = JsonDocument.Parse("{}").RootElement.Clone();
 
     /// <summary>handler 回的失敗對照成工具錯誤（設計 §6.5）：Forbidden 一律「沒有權限」、不透露存在；Invalid 帶欄位；Conflict 是 stale。</summary>
@@ -166,6 +167,11 @@ public sealed class McpToolInvoker(
         var message = outcome.ErrorMessage is { } m ? text(m)
             : outcome.Failure?.MessageIn(messages, locale.Current) ?? fields?.Values.FirstOrDefault() ?? text(McpMessages.InternalError);
         if (outcome.ErrorCode is null) log.LogError("MCP 工具 {Tool} 回了沒有錯誤代碼的錯誤結果", tool);
-        return McpResultFormatter.Error(outcome.ErrorCode ?? McpErrorCodes.InternalError, message, fields, outcome.RetryAfterSeconds);
+        var code = outcome.ErrorCode ?? McpErrorCodes.InternalError;
+        var error = McpResultFormatter.Error(code, message, fields, outcome.RetryAfterSeconds);
+        // 錯誤結果也受單次結果上限（判斷 14）：放不下就拿掉欄位明細、訊息截短，代碼不變
+        return error.Size <= McpLimits.MaxResultChars ? error
+            : McpResultFormatter.Error(code, message.Length > ErrorMessageMax ? message[..ErrorMessageMax] : message,
+                retryAfterSeconds: outcome.RetryAfterSeconds);
     }
 }

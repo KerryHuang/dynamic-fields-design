@@ -39,6 +39,8 @@ public class McpAuthApiTests : IDisposable
     private static async Task ShouldBeUnauthorized(HttpResponseMessage res, string code = McpMessages.CodeUnauthorized)
     {
         res.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        // 所有 401 都帶 Bearer challenge（設計 §5.3；審查必修 5：query 權杖原本缺）
+        res.Headers.WwwAuthenticate.ToString().Should().Be("Bearer");
         (await CodeOf(res)).Should().Be(code);
     }
 
