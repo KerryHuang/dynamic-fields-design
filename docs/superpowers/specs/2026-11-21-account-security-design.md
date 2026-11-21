@@ -2,7 +2,7 @@
 
 > 2026-11-21｜平台共用能力（非應用程式）｜前置：[使用者與群組](2026-11-05-users-groups-design.md)（§4 登入）、[維運與觀測](2026-11-11-ops-observability-design.md)（§14 U1、§17.2.6 寄信設定與告警佇列、§17.9 安全）、[政策設定](2026-11-11-policy-settings-design.md)、[MCP 伺服器](2026-11-11-mcp-server-design.md)（§5.1、§13 個人存取權杖）、[權限軸](2026-11-19-permission-axes-design.md)、bk1 備份設計（同日，§5.7 備份不帶金鑰）
 > 狀態：主控撰寫（2026-11-21），這次只寫設計、不改程式。第二版（同日）：收同家審查必修 1–12 與建議 15 條、套用使用者 2026-11-20 已確認的平台分流答案（A 區照推薦、B 區全部確認）與 2026-11-21 新裁決。
-> 標記：「（使用者裁決）」「（使用者確認）」是使用者已拍板的；「（Q#，顧問拍板）」是行為類，顧問與主控先定、待使用者確認，彙整在 §20.1；「（T#）」是技術類，主控已定、可推翻，彙整在 §20.2。分流答案以題號引用（例：au1-6），出處是 2026-11-19 的平台分流文件。
+> 標記：「（使用者裁決）」「（使用者確認）」是使用者已拍板的；「（Q#，顧問拍板）」是行為類，領域顧問先定、待使用者確認；「（Q#，主控裁決待確認）」是複審後主控依推薦先寫、待使用者確認的行為類；兩者彙整在 §20.1；「（主控裁決）」是安全守衛類的主控定案，列 §22；「（T#）」是技術類，主控已定、可推翻，彙整在 §20.2。分流答案以題號引用（例：au1-6），出處是 2026-11-19 的平台分流文件。
 
 ## 1. 目的
 
@@ -64,7 +64,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | 寄送 | MailKit，安全邊界寫死；介面以告警為名 | `WebAPI/Ops/AlertMail.cs`、`OpsService/Alerts/AlertContracts.cs:56` |
 | 告警佇列 | 條件式領取、交易外寄送、重試 1／5／15／60 分鐘最多 5 次、失敗開 `channel.smtp` | 維運設計 §17.2.6、`AlertContracts.cs:86–95`、`AlertDelivery.cs:107` |
 | 信件網址 | `Ops:PublicUrl`，沒設告警信就不放連結 | `AlertContracts.cs:73–79`、`Program.cs:101` |
-| Data Protection | 沒設 `DataProtection:KeysDirectory` 時金鑰不落地（PostgreSQL 與記憶體資料庫都是），PostgreSQL 只出啟動警告 | `Program.cs:139–147` |
+| Data Protection | 金鑰目錄 `keysDirectory`＝設定的 `DataProtection:KeysDirectory`；沒設而資料庫是檔案（SQLite）時是 `<資料庫目錄>/keys`，照樣落地；PostgreSQL 與記憶體資料庫沒設時為 null（不落地），PostgreSQL 只出啟動警告 | `Program.cs:139–147` |
 | 外觀設定 | 只有模式與風格兩個值，存 `SystemSetting`；Demo 站擋寫入；沒有站台名稱 | `ThemeService/Commands/UpdateSiteTheme/UpdateSiteThemeHandler.cs`、`Domain/ValueObjects/ThemeOptions.cs` |
 | AI 權杖 | 建立時重新輸入密碼、與登入同一套降速；可用條件 `IsActive && !IsDemoAccount && !MustChangePassword` | `McpService/Tokens/McpTokenRequests.cs:15`、`McpTokenHandlers.cs:42` |
 | 政策 | `PolicyCatalog` 唯一登記處；系統政策快取 60 秒；政策 API 在 Demo 站沒擋寫入 | `Domain/Policies/PolicyCatalog.cs`、`PolicyService/CachedSystemPolicy.cs:30`、`PolicyHandlers.cs` |
@@ -205,7 +205,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 1. 重新檢查資格，不符合就記 `skipped`、不產生權杖：
    - 帳號存在且啟用；
    - `ToAddress` 等於帳號目前的 Email（不分大小寫）；
-   - `passwordReset` 另外要 Email 已驗證、`auth.passwordResetEnabled` 為是、而且符合 §7.1 的帳號資格。
+   - `passwordReset` 另外要 Email 已驗證、而且符合 §7.1 的帳號資格；自助申請的（忘記密碼）還要 `auth.passwordResetEnabled` 為是，管理員寄的（§7.5，`ParamsJson` 標 `by: admin`）不看這項政策（Q20）。使用連結時不再查政策：連結有效期很短，關政策只擋之後的申請。
 2. 把同一帳號、同一用途、**同一個 Email** 還沒用過的權杖標 `superseded`（不同 Email 的不動：a 的舊驗證信重寄時，不會作廢 b 的驗證連結）。
 3. 產生新權杖（32 bytes 隨機），存雜湊、`ExpiresUtc`＝現在＋政策時效。
 4. 明文只放在記憶體裡組信，寄完就丟。
@@ -252,7 +252,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 3. 符合資格才寫一列 `passwordReset`（`NotAfterUtc`＝現在＋連結時效）。資格：
    - 帳號存在、啟用、Email 已驗證；
    - 政策 `auth.passwordResetEnabled` 為是、寄信可用（§7.4）；
-   - 正式環境：不是示範帳號；Demo 站：**只限**示範帳號（`IsDemoAccount`），`admin` 排除（§13、審查必修 4）；
+   - 正式環境：不是示範帳號；Demo 站：**只限** `mfa01`，其他示範帳號與 `admin` 一律排除（§13、審查必修 4、Q22）；
    - 系統管理員可以用（au1-5）。
 4. 使用者點連結 → `/reset-password#t=`，頁面先 `POST auth/reset-password/check { token }`（不消耗），有效才顯示新密碼表單，無效顯示「連結已失效或已使用過，請重新申請」與「重新申請」。
 5. `POST auth/reset-password { token, newPassword }`：權杖有效、沒用過、用途對、帳號仍啟用、**權杖的 Email 等於帳號目前已驗證的 Email** → 同一交易：
@@ -278,6 +278,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 
 - 同一個正規化輸入 1 小時內最多 `auth.passwordResetMaxPerHour` 次（出廠 3，政策，au1-4）。
 - 同一來源 IP 15 分鐘內最多 10 次申請（寫死，安全檢查，§22）。
+- 用權杖的匿名端點（`reset-password/check`、`reset-password`、`verify-email`）另有每 IP 15 分鐘 30 次（寫死，§22；複審建議 12）：權杖 256 位元猜不到，這是擋濫用與 PBKDF2 造成的負載。
 - 都存記憶體、單一實例，同 `LoginThrottle`。超過時照樣回 202、不寄。
 
 這是擋「替別人一直按忘記密碼」與「掃帳號」，不是佇列節流；使用者裁決的「不節流」指佇列裡已排的信不會被延後或併成摘要。
@@ -296,7 +297,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 - 使用者管理的「重設密碼」對話框有兩個選項：
   - 「寄重設連結到 Email」：對方 Email 已驗證時預設選這個。
   - 「設定暫時密碼（下次登入要改）」：既有行為。對方沒有已驗證 Email 時只有這個。
-- 寄連結：`POST admin/users/{id}/send-reset-link`，寫一列 `passwordReset`（系統預設語系），**不**改現有密碼、不登出對方；不受 `auth.passwordResetMaxPerHour` 限制，但同一帳號 60 秒一次（同重寄驗證信）；稽核 `user.sendResetLink`。Demo 站只能寄給示範帳號。
+- 寄連結：`POST admin/users/{id}/send-reset-link`，寫一列 `passwordReset`（系統預設語系），**不**改現有密碼、不登出對方；不受 `auth.passwordResetMaxPerHour` 限制，但同一帳號 60 秒一次（同重寄驗證信）；稽核 `user.sendResetLink`。Demo 站只能寄給 `mfa01`（Q22）。
 - 暫時密碼照既有流程，另加 §7.1 第 7 點的作廢與通知。
 
 ### 7.6 密碼最短長度（D25）
@@ -326,7 +327,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 
 - 綁定中超過 10 分鐘沒完成就作廢。
 - **重新綁定**（換手機）：同上四步，第 1 步另要目前的驗證碼或一組復原碼（用復原碼會用掉那一組）；完成時舊金鑰與舊復原碼全部取代。
-- `DataProtection:KeysDirectory` 沒設（金鑰不落地，PostgreSQL 與記憶體資料庫都算）時第 1 步回 409 `keysNotPersisted`：「伺服器沒有保存加密金鑰，重啟後雙因素會失效，請管理員先完成部署設定」（T8、審查必修 12）。
+- 金鑰不落地（`KeyPersistenceStatus.Persisted` 為否，§8.7）時第 1 步回 409 `keysNotPersisted`：「伺服器沒有保存加密金鑰，重啟後雙因素會失效，請管理員先完成部署設定」（T8、審查必修 12）。
 - Demo 站：只有種子的 `mfa01` 有雙因素，任何帳號都不能綁定，API 回 403 `demoSite`（§13）。
 
 ### 8.3 登入第二步與猜碼上限（T9；審查必修 1）
@@ -334,7 +335,11 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 1. `POST auth/login` 密碼正確、帳號已啟用雙因素：
    - 帶著有效的「記住這台裝置」cookie（§8.5）→ 直接發 session，稽核 `login.succeeded`、`method` 為 `password+device`。
    - 否則**不發 session cookie**，改發 5 分鐘的第二步憑證 cookie：Data Protection 加密（purpose `login-second-step`，和登入 cookie 分開）；內容是帳號、`SecurityStamp`、發出時間、隨機編號；HttpOnly、SameSite=Strict、`SecurePolicy` 比照 session cookie、Path 限 `/api/v3/dynamic/auth/two-factor`。回 200 `{ twoFactorRequired: true }`。
-   - 這時**不算登入成功**：`LoginThrottle` 不呼叫 `Complete(success: true)`，帳號＋IP 層的失敗紀錄不清；也不寫 `login.succeeded`。第二步通過才算成功。
+   - 這時**不算成功、也不算失敗**（複審 N1）：`LoginHandler` 對密碼那一次保留的名額呼叫 `LoginThrottle.Release`（歸還帳號＋IP、IP、帳號三層的進行中名額，不清失敗紀錄、也不記一次失敗），不寫 `login.succeeded`。
+   - 第二步每次送碼自己呼叫一次 `TryBegin`（同一組帳號、IP 鍵）：被擋就回暫停訊息；碼錯呼叫 `Complete(false)`；碼對呼叫 `Complete(true)`（這時才清帳號＋IP 層）；例外時 `Release`。
+   - 憑記住的裝置直接登入時，密碼那一次照現行 `Complete(true)`。
+   - Demo 一鍵登入的 `mfa01` 進到第二步時比照：`DemoLoginHandler` 對那一次改呼叫 `Release`，第二步照上述結算。
+   - 結果：正常的雙因素登入不會被算成失敗（同一個 NAT 出口的整間辦公室不會被擋），名額也不會卡住（F33）。
 2. 前端在同一個登入頁換成第二步：6 位數輸入框（`inputmode="numeric"`、`autocomplete="one-time-code"`）、「記住這台裝置 {days} 天」勾選框（政策為 0 時不顯示）、「改用復原碼」、「回到登入」。
 3. `POST auth/two-factor { code | recoveryCode, rememberDevice }`：
    - 先檢查：憑證解得開、未過期、隨機編號沒用過、stamp 沒變、帳號仍啟用（停用會換 stamp，這裡另外明寫一次，避免日後改停用流程時漏掉）、帳號層沒有暫停。
@@ -343,7 +348,10 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 4. 錯誤處理，三層：
    - **同一張憑證**最多 5 次（記憶體），用完要重新輸入密碼。
    - **帳號＋IP**：每次錯誤計入 `LoginThrottle`，和猜密碼同一個額度。
-   - **帳號層**（存資料庫，換 IP、反覆重新輸入密碼都不歸零）：`TwoFactorFailedCount` 累計到 10 次就暫停這個帳號的第二步 15 分鐘（`TwoFactorLockedUntilUtc`），暫停期間碼正確也拒絕；同時開安全事件 `security.twoFactorFailures`（§8.10）、寄 `twoFactorFailures` 通知到已驗證的 Email（「密碼正確但驗證碼錯誤多次」，Q19）。暫停到期後計數歸零重算。能走到第二步的人已經知道密碼，所以按帳號擋不會讓匿名者鎖住任何人。
+   - **帳號層**（存資料庫，換 IP、反覆重新輸入密碼都不歸零）：`TwoFactorFailedCount` 累計到 10 次就暫停這個帳號的第二步 15 分鐘（`TwoFactorLockedUntilUtc`），暫停期間碼正確也拒絕；開安全事件 `security.twoFactorFailures`（§8.10）、寄 `twoFactorFailures` 通知到已驗證的 Email（「密碼正確但驗證碼錯誤多次」，Q19）。能走到第二步的人已經知道密碼，所以按帳號擋不會讓匿名者鎖住任何人。
+     - 並行（複審建議 1）：驗碼前先用條件式遞增佔名額：先 `UPDATE … SET TwoFactorFailedCount = 0, TwoFactorLockedUntilUtc = NULL WHERE UserId = ? AND TwoFactorLockedUntilUtc < 現在`（到期歸零），再 `UPDATE … SET TwoFactorFailedCount = TwoFactorFailedCount + 1 WHERE UserId = ? AND TwoFactorFailedCount < 10 AND TwoFactorLockedUntilUtc IS NULL`，影響 0 列就當暫停中拒絕。驗碼成功再把計數歸零；遞增後達 10 就寫 `TwoFactorLockedUntilUtc`。多個 IP 同時送出也不會超過 10 次。
+     - 通知去重（複審建議 2，Q23）：同一帳號 24 小時內只寄一封 `twoFactorFailures`；安全事件同指紋聚合、只累加次數，24 小時內不重複發站內通知。
+     - **Demo 站不套帳號層**（領域顧問必修）：任何訪客都知道 `mfa01` 怎麼進第二步，套了就能反覆把 `mfa01` 鎖住；Demo 站只留同一憑證 5 次與帳號＋IP 兩層（F35）。
    - 數字寫死（安全檢查，§22）。估算：每 15 分鐘最多 10 次，一天最多約 960 次，TOTP 一次猜中約 3/10⁶，一天猜中機率約 0.3%，而且第一個 15 分鐘就會寄信、開安全事件讓本人與管理員知道。
 5. 稽核 `login.failed`，原因 `twoFactorWrong`、`recoveryCodeWrong`、`twoFactorExpired`、`twoFactorLocked`；既有的 `security.loginFailures` 健康檢查因此也算到猜碼。
 6. 回應訊息一律「驗證碼錯誤或已過期」；暫停時是「驗證碼錯誤次數過多，請 15 分鐘後再試」。
@@ -353,6 +361,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 ### 8.4 復原碼（T10、T24）
 
 - 10 組，每組 16 個 Base32 字元，顯示成 `ABCD-EFGH-JKLM-NPQR`（輸入時忽略大小寫、空白與連字號）；存 SHA-256，比對用固定時間比較。
+- 雜湊的輸入是**正規化後的 16 個大寫 Base32 字元**（去掉連字號與空白、轉大寫），產生與比對用同一個 Domain 函式；這是給 bk1 的契約的一部分（§19，複審建議 10）。
 - 每組只能用一次。用復原碼登入成功後提示「已使用 1 組復原碼，還剩 N 組」；剩 2 組以下時，登入後與「帳號安全」頁提示重新產生。
 - 重新產生：`POST account/two-factor/recovery-codes { password, code }`（回應 `no-store`），舊的全部作廢。稽核 `account.recoveryCodesRegenerate`。
 - TOTP 金鑰解不開時（§19 風險 1）驗證碼驗不了，所以重新產生也做不了；流程是「用復原碼登入 → 用復原碼重新綁定（§8.2）→ 綁定完成時自動拿到 10 組新復原碼」。
@@ -363,8 +372,10 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 - 第二步勾了「記住這台裝置」→ 發 cookie `fw.device`：明文 32 bytes 隨機值，HttpOnly、SameSite=Strict、`SecurePolicy` 比照 session、Path 限 `/api/v3/dynamic/auth`、`Expires`＝建立時間＋政策天數；資料庫存雜湊與當下的 `SecurityStamp`（§5.3）。
 - 有效條件（全部成立才跳過第二步）：雜湊對得到、屬於這個帳號、沒過期、`SecurityStamp` 等於帳號目前的 stamp、`CreatedUtc`＋**目前**政策天數還沒到（政策調短或設 0 立即生效，T23）。
 - **全部失效**（au1-9）：改密碼（任何路徑）、重設或關閉或重新綁定雙因素、管理員重設、停用帳號、救援設定都會換 stamp，所有記住的裝置隨之失效；同交易刪掉該帳號全部列（清理用，不靠它判斷）。
-- 「帳號安全」頁顯示「記住的裝置：N 台」與每台的標籤、最近使用時間，附「全部取消記住」（Q17）。
+- 「帳號安全」頁顯示「記住的裝置：N 台」與每台的標籤、最近使用時間，附「全部取消記住」（Q17）。Demo 站的「全部取消記住」回 403 `demoSite`（`mfa01` 是共用帳號，一位訪客按了會讓其他訪客記住的裝置失效）。
 - 只跳過第二步，密碼照樣要輸入。
+- 記住的裝置**不受帳號層暫停影響**（複審建議 3，刻意的取捨）：本人被攻擊時，自己記住的裝置仍能登入；攻擊者沒有那台裝置的 cookie。
+- 每個帳號最多 20 台（技術限制，§22），超過時刪最舊的一台。
 
 ### 8.6 本人關閉（Q15）
 
@@ -390,7 +401,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
   - 「系統管理員」指 `IsSystemAdmin`，不含只持有系統權限的一般使用者。
 - 強制模式下 `auth.twoFactorRequireAdmins` 在政策頁顯示為「強制時固定包含系統管理員」、不能改（存檔時忽略）。
 - **應啟用而沒啟用**的帳號：
-  1. 第一次被判定時記 `TwoFactorGraceStartUtc`。
+  1. 第一次被判定時記 `TwoFactorGraceStartUtc`；之後判定不在強制對象內（政策放寬、離開群組、不再是系統管理員）時清空，下次再進入範圍時寬限從頭算（複審建議 8）。
   2. 寬限期間（`TwoFactorGraceStartUtc`＋`auth.twoFactorGraceDays` 之前）：照常使用，每頁頂端顯示「請在 {date} 前啟用雙因素驗證」與「現在啟用」。
   3. 寬限期過了（出廠 0＝第一次就過了）：發一般 session，但 `SessionMiddleware` 只放行 `/auth/*`、`GET /me`、`account/two-factor/setup`、`account/two-factor/enable`，其餘回 403 `twoFactorEnrollmentRequired`；前端導到強制綁定頁 `/account/two-factor-setup`（同 §8.2，沒有「取消」）。
   4. 綁定完成時清 `TwoFactorGraceStartUtc`。
@@ -400,14 +411,17 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 - `GET /me` 多回 `twoFactor: { enabled, required, graceUntil, recoveryCodesLeft, rememberedDevices }` 與 `twoFactorEnrollmentRequired`。
 - 政策頁改這幾項時，若操作者自己因此要立即綁定而還沒綁，存檔前提示「存檔後你也必須立刻啟用雙因素驗證」。
 - 政策讀不到時沿用最後一次讀到的值，啟動後從沒讀到過就用出廠值（T13）。資料庫讀不到時本來就登不進來，實際上影響不到。
-- **金鑰不落地時暫停強制**（T27）：`DataProtection:KeysDirectory` 沒設時新綁定一律 409（§8.2），若照常強制，出廠「系統管理員強制」會讓每個沒設金鑰目錄的部署第一次登入就卡在綁定頁。所以這時強制對所有人暫停（已啟用的人第二步照常），啟動時記 Error log 並開基礎設施事件 `infra.keysNotPersisted`，監控頁與帳號安全頁顯示「伺服器沒有保存加密金鑰，雙因素無法啟用，請完成部署設定」。設好金鑰目錄重啟後強制恢復。
+- **金鑰落地的判斷與正式環境守衛**（T27，主控裁決，複審 N2、N3）：
+  - 判斷以 `Program.cs` 實際算出的 `keysDirectory` 為準，只算一次：`KeysPersisted = keysDirectory is not null`，以單一服務 `KeyPersistenceStatus` 注入，§8.2、本節、§14、監控頁都引用它，不各自讀設定鍵。SQLite 檔案資料庫沒設 `DataProtection:KeysDirectory` 時金鑰在 `<資料庫目錄>/keys`，**算落地**（客戶用的 `Dockerfile` 就是這種），綁定與強制照常。
+  - **正式環境拒絕啟動**：環境不是 Development、資料庫是 PostgreSQL、`keysDirectory` 為 null 時，啟動直接丟例外結束，訊息「PostgreSQL 部署必須設定 DataProtection:KeysDirectory（否則重啟後登入、寄信密碼與雙因素全部失效）」；取代 `Program.cs:146–147` 現在的啟動警告。正式環境因此不存在「金鑰不落地」的狀態，強制政策不會被暫停（不 fail-open，守住 au1-漏1 的「系統管理員一律強制」）。列 §22。
+  - **非正式環境**（Development，或記憶體資料庫）金鑰不落地時：新綁定照樣 409；強制對所有人暫停（否則開發機與測試主機的管理員會卡在綁不了的綁定頁），啟動記 Warning、開基礎設施事件 `infra.keysNotPersisted`，帳號安全頁顯示「伺服器沒有保存加密金鑰，雙因素無法啟用」。這個暫停只在非正式環境出現，正式環境走不到。
 - **Demo 站**（審查必修 4，守衛以站為準、不以帳號為準）：開 `Demo:LoginEnabled` 時強制政策對**所有帳號**（含 `admin`）都不生效；`auth` 分類的政策在 Demo 站唯讀（PUT 回 403 `demoSite`），訪客改不了。出廠的「系統管理員強制」因此不會讓 Demo 的 `admin` 卡在綁定頁（Demo 的 `admin` 密碼是啟動時隨機產生的，沒人能完成綁定）。
 
 ### 8.8 管理員重設雙因素（使用者確認，au1-8、au1-10）
 
 - 使用者管理每列多「重設雙因素」（對方已啟用時才出現），確認對話框寫明「會清除這位使用者的驗證器、復原碼與記住的裝置，並登出他所有的裝置」。`POST admin/users/{id}/reset-two-factor`（`ISystemAdminRequest`）。
 - `id` 是自己時拒絕（400 `useAccountSecurity`），要走本人關閉或重新綁定（要驗證碼），避免偷到 session 的人不用驗證碼就拿掉管理員的雙因素。
-- 清金鑰、刪復原碼、刪記住的裝置、換 stamp；**不**撤銷 AI 權杖（au1-10）；寄 `twoFactorDisabled` 通知（參數標「管理員」）；稽核 `user.resetTwoFactor`（一般寫入，T16）。
+- 清金鑰、刪復原碼、刪記住的裝置、清 `TwoFactorFailedCount`、`TwoFactorLockedUntilUtc`、`TotpPending*`、`TwoFactorGraceStartUtc`（暫停中的本人因此能立刻重新進來，Q19）、換 stamp；**不**撤銷 AI 權杖（au1-10）；寄 `twoFactorDisabled` 通知（參數標「管理員」）；稽核 `user.resetTwoFactor`（一般寫入，T16）。
 - 對方是系統管理員時開安全事件（au1-8，§8.10）。
 - 重設後對方若在強制對象內，下次登入照 §8.7 重新綁定（寬限從頭算）。
 - Demo 站回 403 `demoSite`（重設 `mfa01` 會讓當天的示範壞掉）。
@@ -422,16 +436,18 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 ### 8.10 安全事件
 
 - 新增事件代碼，類別「安全」，同 `admin.changed` 的規則（每次發生都通知站內收件人 `ops.alertRecipients`，Email 依告警通道設定）：
-  - `security.adminPasswordReset`：系統管理員帳號用寄信重設了密碼（au1-5）。
+  - `security.adminEmailChanged`：系統管理員改了另一位系統管理員的 Email（複審建議 11，Q21；Email 就是重設密碼的鑰匙）。歸 au1a。
+  - `security.adminPasswordReset`：系統管理員帳號用寄信重設了密碼（au1-5）。歸 au1b。
   - `security.adminTwoFactorReset`：重設了另一位系統管理員的雙因素（au1-8）。
   - `security.twoFactorFailures`：某帳號第二步連續失敗達上限（§8.3）。
   - `security.rescueConfigLeft`：啟動時偵測到 `Auth:ResetAdminPassword` 仍設著（§8.11）。
+  - 後三種（`adminTwoFactorReset`、`twoFactorFailures`、`rescueConfigLeft`）歸 au1c。安全事件代碼的登記機制隨第一個用到的段（au1a）建立。
 - 樣本只存稽核 Id 與帳號，不存碼、權杖、IP 以外的明細（同維運設計 §17.2.2）。
 - 收件人是政策設定的站內收件人（出廠全部系統管理員），會包含當事人自己；分流題 au1-5 的「對其他管理員發安全事件」以「全部管理員都看得到」落實（T25）。
 
 ### 8.11 啟動救援（使用者確認，au1-漏2）
 
-- `Auth:ResetAdminPassword` 重設 `admin` 密碼時，同時清除雙因素、復原碼、記住的裝置，作廢重設連結；log 留 Warning。
+- `Auth:ResetAdminPassword` 重設 `admin` 密碼時，同時清除雙因素（`TotpSecretProtected`、`TotpEnabledUtc`、`TotpLastStep`、`TotpPending*`）、復原碼、記住的裝置、`TwoFactorFailedCount`、`TwoFactorLockedUntilUtc`、`TwoFactorGraceStartUtc`，作廢重設連結；log 留 Warning（複審建議 7：避免救援後第一次綁定卡在舊的暫停或舊的寬限起點）。
 - 每次啟動都偵測到這個設定時開 `security.rescueConfigLeft`（審查建議），提醒用完要移除；否則每次重啟都會再清一次。
 
 ### 8.12 AI 連線權杖（使用者確認，au1-10）
@@ -491,7 +507,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | POST | `mcp/tokens` | 本人 | 既有；已啟用雙因素時多要 `code` |
 
 - 匿名白名單加五個 `auth/*` 匿名端點與 `auth/two-factor`；強制綁定放行清單見 §8.7。
-- Demo 站：本人的雙因素端點、`reset-two-factor`、`auth` 分類政策的修改、站台名稱的修改一律 403 `demoSite`；`send-reset-link` 與忘記密碼只對示範帳號有效。
+- Demo 站：本人的雙因素端點、`DELETE account/trusted-devices`、`reset-two-factor`、`auth` 分類政策的修改、站台名稱的修改一律 403 `demoSite`；`send-reset-link` 與忘記密碼只對 `mfa01` 有效（Q22）。
 - 回應不帶 TOTP 金鑰明文，只有 `setup` 那一次回給本人；`setup`、`enable`、`recovery-codes` 加 `Cache-Control: no-store`。
 
 ## 11. 權限
@@ -544,7 +560,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 - 開 `Demo:LoginEnabled` 時帳號信改由 `DemoMailSink` 處理：不連外，照常組信，把內文寫進 `PreviewBody`、記 `sent`。正式環境不註冊 sink、永遠不寫 `PreviewBody`。
 - 連結網址：Demo 沒設 `App:PublicUrl`（`Dockerfile.demo` 沒有這個變數），sink 寫站內相對路徑 `/reset-password#t=…`，「看信」視窗裡點得開。
 - `auth/options` 在 Demo 站的 `passwordReset` 是 `available`（不看寄信設定與站台網址）。
-- 忘記密碼與寄重設連結只對示範帳號有效，`admin` 排除（審查必修 4：否則訪客能替 `admin` 設自己知道的密碼）。
+- 忘記密碼與寄重設連結只對 `mfa01` 有效（Q22；複審建議 4）：`admin` 排除是審查必修 4（否則訪客能替 `admin` 設自己知道的密碼）；其他示範帳號排除，是因為重設會換 stamp，訪客反覆對 `sales01` 申請就能把所有正在用 `sales01` 的訪客登出。示範帳號重設後可以用密碼登入（`LoginHandler.cs:88` 只擋沒有密碼的帳號），示範路徑走得通。
 
 ### 13.3 `mfa01` 的金鑰在執行期解得開（審查必修 5）
 
@@ -557,7 +573,8 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 ### 13.4 Demo 驗證碼提示（Q13）
 
 - `mfa01` 走到第二步時，畫面顯示「Demo 站示範用：目前的驗證碼是 482913」與一組還沒用過的復原碼。
-- 伺服器依固定金鑰算出「比 `TotpLastStep` 新的下一個時間步」的碼（兩位訪客在同一個 30 秒內登入時，後一位拿到下一步的碼，不會被當成重放）；只在 `Demo:LoginEnabled` 且帳號是 `mfa01` 時回傳。
+- 伺服器依固定金鑰算出目前時間步的碼；只在 `Demo:LoginEnabled` 且帳號是 `mfa01` 時回傳。
+- Demo 站的 `mfa01` **不檢查重放**（不寫也不比 `TotpLastStep`）：同一個 30 秒內有三位以上訪客進來時，前一版「取下一個時間步」的做法會讓第三位拿到超出 ±1 的碼而被拒（複審建議 5）。正式環境照常檢查重放。
 - 復原碼在同一段喚醒期間會被用完（喚醒時資料庫回到映像狀態，兩次喚醒之間不會）；`docs/demo.md` 註明。
 
 ### 13.5 示範路徑（AGENTS.md「Demo 資料」）
@@ -567,13 +584,14 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | 成功：Email 驗證 | `admin` 把 `floor02` 的 Email 改成 `floor02b@example.com` → 寄送紀錄看信 → 開連結 | 使用者管理顯示已驗證 |
 | 成功：忘記密碼＋雙因素 | 登出 → 忘記密碼 → `mfa01` → 以 `admin` 看信 → 設新密碼 → 用新密碼登入 → 輸入提示的驗證碼 | 統一訊息；新密碼登入後仍要第二步（au1-7）；寄送紀錄多一筆「密碼已變更」（用 `mfa01` 而不是常用帳號，避免換 stamp 把其他訪客登出） |
 | 失敗：連結用過 | 再開同一連結 | 「連結已失效或已使用過」 |
-| 失敗：沒有已驗證 Email | 對 `floor02`（未改 Email 前）申請 | 同一句統一訊息；沒有新信；稽核看到 `noVerifiedEmail` |
+| 失敗：其他帳號收不到 | 對 `floor02` 申請 | 同一句統一訊息；沒有新信；稽核原因 `demoRestricted`（正式環境的「沒有已驗證 Email」分支以自動測試驗） |
 | 失敗：`admin` 不收重設信 | 對 `admin` 申請 | 同一句統一訊息；沒有新信 |
 | 成功：記住這台裝置 | `mfa01` 第二步勾記住 → 登出 → 再點 `mfa01` | 不再問驗證碼 |
 | 失敗：驗證碼錯 | 輸入 `000000` | 「驗證碼錯誤或已過期」 |
 | 成功：復原碼 | 改用復原碼，輸入提示的那組 | 進入首頁，提示剩幾組 |
 | 被擋：Demo 不能綁定 | `sales01` 開帳號安全 → 啟用 | 按鈕停用、寫「Demo 站不能啟用雙因素驗證」 |
 | 被擋：政策唯讀 | `admin` 開政策頁「帳號安全」 | 唯讀 |
+| 被擋：不能取消記住 | `mfa01` 開帳號安全 →「全部取消記住」 | 按鈕停用、寫「Demo 站不能變更」 |
 | 個人化：Email 狀態 | `floor02` 開帳號安全 | 「未驗證」 |
 
 強制綁定、寬限、管理員重設雙因素、帳號層暫停在 Demo 站不示範（Demo 的守衛就是要讓它們不生效），以自動測試與本機走查驗收，交付說明寫明。
@@ -588,10 +606,10 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | SMTP 寄不出去 | 重試 5 次後 `failed`，開 `channel.accountMail` | 照常 | 系統管理員 |
 | 政策關掉忘記密碼 | `contactAdmin` | 照常 | — |
 | 使用者沒有已驗證 Email | 收不到信（畫面不透露）；管理員只能設暫時密碼 | 照常；收不到安全通知 | 本人或管理員補 Email |
-| 沒設金鑰目錄 | 照常 | 不能新綁定（409）；強制暫停並開 `infra.keysNotPersisted`；已綁定的重啟後解不開，用復原碼 | 部署者 |
+| 金鑰不落地（`keysDirectory` 為 null） | 照常 | 正式環境（非 Development＋PostgreSQL）拒絕啟動；非正式環境不能新綁定（409）、強制暫停並開 `infra.keysNotPersisted`。SQLite 檔案沒設設定鍵時金鑰在資料庫旁，不算這一列 | 部署者 |
 | **不帶金鑰還原備份**（bk1 §5.7，使用者裁決備份不帶金鑰） | 照常（權杖存雜湊） | 所有 TOTP 金鑰失效：使用者用復原碼登入、用復原碼重新綁定；記住的裝置仍有效（存雜湊）；唯一管理員且沒有復原碼時走救援設定 | 部署者通知使用者；管理員在使用者管理看「無法讀取」名單 |
 | 資料庫唯讀或連不上 | `contactAdmin`、申請一律 202 | 登入本來就不能用 | 同維運設計 §17.2.11 |
-| Demo 站 | Demo 收件匣；只限示範帳號 | 只有 `mfa01`；不能綁定；強制不生效；`auth` 政策唯讀 | — |
+| Demo 站 | Demo 收件匣；只限 `mfa01` | 只有 `mfa01`；不能綁定；強制不生效；不套帳號層暫停；`auth` 政策唯讀 | — |
 | 雲端版 | 廠商在客戶的寄信設定填郵件服務；Render 是否擋 SMTP 埠待查證（T18） | 照政策 | 廠商（O3） |
 | 沒開任何應用程式 | 照常 | 照常 | — |
 
@@ -610,7 +628,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 2. **維運設計 O2-U1「`AppUser` 沒有 Email 欄位」、§17.1 範圍外**：au1 加欄，只用於帳號信；告警收件人仍在通道設定。實作時回填 §17.1 與 O2-U1，§17.2.6、§17.13 註記「連線設定已在核心寄信設定，帳號信佇列見 au1」（分流 E 第 9 點）。
 3. **維運設計 §17.2.6 寄件介面**：`IAlertMailSender` 改名 `IMailSender`（T6）。
 4. **維運設計 §14 U1「Render 免費方案擋 SMTP 埠（未查證）」**：Demo 用收件匣，不受影響；雲端版併入 O3（T18）。
-5. **`Ops:PublicUrl` → `App:PublicUrl`**（D20）：新鍵是核心設定，告警信、MCP 的 `ServerBaseUrl` 與 Origin 檢查都改讀新鍵、沒設時退回舊鍵；部署文件與 `render.yaml` 改用新鍵。
+5. **`Ops:PublicUrl` → `App:PublicUrl`**（D20）：新鍵是核心設定，告警信、MCP 的 `ServerBaseUrl` 與 Origin 檢查都改讀新鍵、沒設時退回舊鍵；部署文件（`docs/deploy.md`）與 `Dockerfile.demo` 若有用到也改用新鍵（repo 沒有 `render.yaml`，Render 的環境變數在後台設定，交付說明列出要改的變數）。
 6. **主控技術決定 D24「Demo 站忘記密碼與雙因素停用」**：本設計改成 Demo 收件匣與 `mfa01`（§13），理由是 AGENTS.md 要求有畫面的功能在 Demo 示範成功路徑與主要失敗分支；D24 要防的「訪客把示範帳號鎖住」改由站層守衛處理（§8.7、§13.2）。待使用者確認 Q12、Q13；若不採用，退回 D24（拿掉 `PreviewBody` 欄與 `mfa01`，Demo 交付說明寫「無可示範」）。
 7. **分流 au1-2「管理員填的 Email 立即生效」**：使用者 2026-11-21 裁決推翻（§6.5）。
 8. **初稿 T14（強制而沒綁時暫停 AI 權杖）**：和 au1-10「權杖照常使用」衝突，拿掉（§8.12）。MCP 設計 §13 改為「已綁雙因素者建權杖另要驗證碼」。
@@ -627,9 +645,9 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 
 | 段 | 內容 | migration | 共用檔 | 依賴 |
 |---|---|---|---|---|
-| au1a 核心寄信佇列、帳號 Email、站台設定 | 全部表與欄（§5，含 au1b、au1c 要用的）；`IMailSender` 改名；`MailDeliveryService`；寄送前重查資格與取消（§6.3）；`AccountMailText` 四語；Email 設定與驗證、`/verify-email`；「帳號安全」頁（Email、密碼兩張卡）與頁首入口；寄送紀錄；站台名稱（外觀設定）；`App:PublicUrl`；`mail.outboxRetentionDays`、`auth.emailVerifyLinkHours`；清理接 `ops.upkeep`；Demo 收件匣、示範帳號 Email、站台名稱種子；手冊 | **有**（`AccountSecurity`，SQLite＋PostgreSQL 各一） | `AppUser.cs`、`AppUserConfiguration.cs`、新設定類、`DynamicDbContext`、兩份 model snapshot、`Application/DependencyInjection.cs`、`Program.cs`、`SessionMiddleware.cs`、`PolicyCatalog.cs`、`shared/policy-catalog.json`、`AuditActions.cs`、`MessageText.cs`、`ui.json`×4、`routes.ts`、`MainLayout.vue`、`UsersPage.vue`、`MailSettingsPage.vue`、`AppearancePage.vue`、`UpdateSiteThemeHandler.cs`、`AlertDelivery.cs`、`AlertContracts.cs`、`McpTokenRequests.cs`（站台網址改鍵）、Demo 產生器、`render.yaml` | 無 |
-| au1b 寄信重設密碼 | 申請、檢查、重設 API；節流與 `auth.passwordResetMaxPerHour`；統一回應與稽核；所有改密碼路徑作廢連結與通知（§7.1 第 7 點）；管理員寄重設連結（§7.5）；管理員重設的安全事件；`emailChanged` 通知；登入頁連結、兩個新頁；`auth/options`；`auth.passwordResetEnabled`、`auth.passwordResetLinkMinutes`、`auth.passwordMinLength` 與收斂（§7.6）；改密碼限流；Demo 路徑；手冊 | 無 | `SessionMiddleware.cs`、`AuthController.cs`、`AdminUsersController.cs`、`GetAuthOptionsHandler.cs`、`AccountResponses.cs`、`ChangePasswordHandler.cs`、`ChangePasswordValidator.cs`、`CreateUserValidator.cs`、`ResetPasswordHandler.cs`、`ResetPasswordValidator.cs`、`SetUserActiveHandler.cs`、`AdminBootstrap.cs`、`LoginPage.vue`、`ChangePasswordPage.vue`、`UsersPage.vue`、`ui.json`×4、`routes.ts`、`PolicyCatalog.cs`、`AuditActions.cs` | au1a |
-| au1c 雙因素登入 | Domain TOTP；綁定、重新綁定、關閉、復原碼；第二步與三層猜碼上限；記住這台裝置；強制政策四項與寬限、middleware 封鎖、強制綁定頁、寬限提示；管理員重設；四種安全事件；救援清除；建 AI 權杖要驗證碼；`keysNotPersisted`；QR 碼；`mfa01` 種子、啟動時重新加密、Demo 驗證碼提示、`auth` 政策 Demo 唯讀；手冊與 `docs/demo.md` | 無 | `SessionMiddleware.cs`、`AuthController.cs`、`LoginHandler.cs`、`LoginThrottle.cs`、`DemoLoginHandler.cs`、`AuthCookies.cs`、`AdminBootstrap.cs`、`GetMeHandler.cs`、`McpTokenHandlers.cs`、`McpTokenRequests.cs`、`PolicyHandlers.cs`、`LoginPage.vue`、`AiTokensPage.vue`、`MainLayout.vue`、`auth-guard.ts`、`ui.json`×4、`routes.ts`、`UsersPage.vue`、`PolicyCatalog.cs`、`AuditActions.cs`、`frontend/package.json`、Demo 產生器、`Program.cs` | au1a |
+| au1a 核心寄信佇列、帳號 Email、站台設定 | 全部表與欄（§5，含 au1b、au1c 要用的）；`IMailSender` 改名；`MailDeliveryService`；寄送前重查資格與取消（§6.3）；`AccountMailText` 四語；Email 設定與驗證、`/verify-email`；`emailChanged` 通知；安全事件 `security.adminEmailChanged`（含安全事件代碼的登記）；「帳號安全」頁（Email、密碼兩張卡）與頁首入口；寄送紀錄；站台名稱（外觀設定）；`App:PublicUrl`；`mail.outboxRetentionDays`、`auth.emailVerifyLinkHours`；清理接 `ops.upkeep`；Demo 收件匣、示範帳號 Email、站台名稱種子；手冊 | **有**（`AccountSecurity`，SQLite＋PostgreSQL 各一） | `AppUser.cs`、`AppUserConfiguration.cs`、新設定類、`DynamicDbContext`、兩份 model snapshot、`Application/DependencyInjection.cs`、`Program.cs`、`SessionMiddleware.cs`、`PolicyCatalog.cs`、`shared/policy-catalog.json`、`AuditActions.cs`、`MessageText.cs`、`ui.json`×4、`routes.ts`、`MainLayout.vue`、`UsersPage.vue`、`MailSettingsPage.vue`、`AppearancePage.vue`、`UpdateSiteThemeHandler.cs`、`AlertDelivery.cs`、`AlertContracts.cs`、`McpTokenRequests.cs`（站台網址改鍵）、Demo 產生器、`docs/deploy.md` | 無 |
+| au1b 寄信重設密碼 | 申請、檢查、重設 API；節流與 `auth.passwordResetMaxPerHour`；統一回應與稽核；所有改密碼路徑作廢連結與通知（§7.1 第 7 點）；管理員寄重設連結（§7.5）；安全事件 `security.adminPasswordReset`；匿名權杖端點節流；登入頁連結、兩個新頁；`auth/options`；`auth.passwordResetEnabled`、`auth.passwordResetLinkMinutes`、`auth.passwordMinLength` 與收斂（§7.6）；改密碼限流；Demo 路徑；手冊 | 無 | `SessionMiddleware.cs`、`AuthController.cs`、`AdminUsersController.cs`、`GetAuthOptionsHandler.cs`、`AccountResponses.cs`、`ChangePasswordHandler.cs`、`ChangePasswordValidator.cs`、`CreateUserValidator.cs`、`ResetPasswordHandler.cs`、`ResetPasswordValidator.cs`、`SetUserActiveHandler.cs`、`AdminBootstrap.cs`、`LoginPage.vue`、`ChangePasswordPage.vue`、`UsersPage.vue`、`ui.json`×4、`routes.ts`、`PolicyCatalog.cs`、`AuditActions.cs` | au1a |
+| au1c 雙因素登入 | Domain TOTP；綁定、重新綁定、關閉、復原碼；第二步與三層猜碼上限；記住這台裝置；強制政策四項與寬限、middleware 封鎖、強制綁定頁、寬限提示；管理員重設；其餘三種安全事件（`adminTwoFactorReset`、`twoFactorFailures`、`rescueConfigLeft`）；救援清除；建 AI 權杖要驗證碼；`KeyPersistenceStatus`、正式環境拒絕啟動、`keysNotPersisted`；QR 碼；`mfa01` 種子、啟動時重新加密、Demo 驗證碼提示、`auth` 政策 Demo 唯讀；手冊與 `docs/demo.md` | 無 | `SessionMiddleware.cs`、`AuthController.cs`、`LoginHandler.cs`、`LoginThrottle.cs`、`DemoLoginHandler.cs`、`AuthCookies.cs`、`AdminBootstrap.cs`、`GetMeHandler.cs`、`McpTokenHandlers.cs`、`McpTokenRequests.cs`、`PolicyHandlers.cs`、`LoginPage.vue`、`AiTokensPage.vue`、`MainLayout.vue`、`auth-guard.ts`、`ui.json`×4、`routes.ts`、`UsersPage.vue`、`PolicyCatalog.cs`、`AuditActions.cs`、`frontend/package.json`、Demo 產生器、`Program.cs` | au1a |
 
 - au1a 是本段唯一的 migration，不和其他會加 migration 的段平行。
 - 三段都有畫面，各自在本機四種寬度走查。
@@ -678,8 +696,11 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | R15 | 系統管理員 `admin2` 用寄信重設 | 完成 | 開 `security.adminPasswordReset`，全部管理員收到站內通知 |
 | R16 | `sales01` 有已驗證 Email | 管理員開重設密碼對話框 | 預設「寄重設連結」；送出後一封信、`sales01` 舊密碼照常能登入；沒有 Email 的帳號只有暫時密碼 |
 | R17 | 資料庫唯讀 | 申請 | 202；`auth/options` 回 `contactAdmin` |
-| R18 | Demo 站 | 對 `admin` 申請；管理員對 `admin` 寄重設連結 | 前者 202 沒有信；後者 403 |
+| R18 | Demo 站 | 對 `admin`、`sales01` 申請；管理員對 `admin`、`sales01` 寄重設連結；對 `mfa01` 申請 | 前兩者 202 沒有信；寄連結 403；`mfa01` 有信 |
 | R19 | 寄信設定沒設好 | 開忘記密碼 | `contactAdmin`、「請聯絡系統管理員」 |
+| R20 | `auth.passwordResetEnabled` 關閉 | 自助申請；管理員寄重設連結 | 前者沒有信；後者照寄、連結可用 |
+| R21 | 同一 IP | 15 分鐘內對 `reset-password/check` 送 31 次 | 第 31 次被限流 |
+| R22 | 系統管理員 A 改系統管理員 B 的 Email | — | 開 `security.adminEmailChanged`；改一般使用者的 Email 不開（au1a 驗收） |
 
 ### 18.3 雙因素（au1c）
 
@@ -708,15 +729,23 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | F21 | 對方是系統管理員 | 重設其雙因素 | 開 `security.adminTwoFactorReset` |
 | F22 | 已啟用 | 建 AI 權杖只給密碼；再加驗證碼 | 前者 400；後者成功；權杖之後照常可用 |
 | F23 | `admin` 已啟用 | 設救援設定重啟兩次 | 雙因素、復原碼、記住的裝置清除；第二次啟動開 `security.rescueConfigLeft` |
-| F24 | 沒設 `KeysDirectory`（PostgreSQL；記憶體資料庫各一次） | 開始綁定 | 409 `keysNotPersisted` |
+| F24 | Development 環境、記憶體資料庫（金鑰不落地） | 開始綁定 | 409 `keysNotPersisted` |
 | F25 | 已啟用；換一套金鑰（模擬不帶金鑰還原） | 登入 | 驗證碼拒絕；復原碼可登入；帳號安全頁提示無法讀取；用復原碼重新綁定成功；使用者管理顯示「無法讀取」直到重綁 |
 | F26 | Demo 站 | 產生資料 → 刪金鑰 → 啟動 → 點 `mfa01` → 輸入提示碼 | 登入成功 |
-| F27 | Demo 站 | 兩位訪客同一個 30 秒內點 `mfa01` 並輸入各自看到的提示碼 | 兩位都成功 |
+| F27 | Demo 站 | 三位訪客同一個 30 秒內點 `mfa01` 並輸入各自看到的提示碼 | 三位都成功 |
 | F28 | Demo 站 | `sales01` 啟用雙因素；`admin` 改 `auth.twoFactorMode`；`admin` 啟用雙因素 | 三者都 403 `demoSite` |
 | F29 | Demo 站、測試直接把政策寫成 `all` | 點 `admin`、`sales01` | 都照常一鍵進入 |
 | F30 | 第二步、帳號在憑證發出後被停用 | 送正確碼 | 拒絕 |
 | F31 | 唯一的系統管理員 `admin` 已啟用雙因素、沒有復原碼；換一套金鑰（模擬不帶金鑰還原），有設金鑰目錄 | 設救援設定重啟 → 用新密碼登入 | 不經第二步；先改密碼；再被導去綁定並成功；帳號層計數沒有因金鑰解不開而累加 |
-| F32 | 沒設 `KeysDirectory`、出廠政策 | 沒啟用的系統管理員登入 | 不被要求綁定；開 `infra.keysNotPersisted`；帳號安全頁顯示無法啟用的原因 |
+| F32 | Development 環境、記憶體資料庫、出廠政策 | 沒啟用的系統管理員登入 | 不被要求綁定；開 `infra.keysNotPersisted`；帳號安全頁顯示無法啟用的原因 |
+| F33 | 同一 IP、10 個帳號都已啟用雙因素 | 各用正確密碼＋正確驗證碼登入，共 25 次 | 第 21 次之後仍照常登入；沒有任何一次被算成失敗 |
+| F34 | 已啟用 | `disable`、`recovery-codes` 用錯的驗證碼合計 10 次 | 帳號層暫停；第二步也被暫停；每次失敗寫 `account.reauthFailed` |
+| F35 | Demo 站 | 對 `mfa01` 第二步連錯 12 次（換三張憑證） | 每張憑證第 6 次起被拒；不出現帳號層暫停；下一位訪客照常登入 |
+| F36 | 非 Development、PostgreSQL、沒設 `KeysDirectory` | 啟動 | 啟動失敗並印出必須設定金鑰目錄的訊息 |
+| F37 | SQLite 檔案資料庫、沒設 `KeysDirectory`、出廠政策 | 沒啟用的系統管理員登入、開始綁定 | 被要求綁定；綁定成功（金鑰在 `<資料庫目錄>/keys`）；沒有 `infra.keysNotPersisted` |
+| F38 | 帳號被暫停中 | 管理員重設其雙因素 | 計數與暫停清除；本人用密碼登入後被導去綁定 |
+| F39 | 帳號第二步連錯 10 次被暫停兩輪（24 小時內） | — | 只寄一封 `twoFactorFailures`；安全事件一件、次數 2 |
+| F40 | 第一次被判定應啟用、寬限 7 天；第 3 天政策改回選用；第 20 天再改強制 | 登入 | 第 20 天重新顯示 7 天寬限，不立即擋 |
 
 ### 18.4 畫面
 
@@ -742,12 +771,12 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
    - **不帶金鑰還原備份**（使用者裁決 bk1 備份不帶金鑰）：還原後所有 TOTP 金鑰失效。處理：使用者用復原碼登入、用復原碼重新綁定；唯一的系統管理員沒有復原碼時走救援設定（§8.11）；管理員在使用者管理看「無法讀取」名單逐一提醒。
    - 共同緩解：復原碼存雜湊；管理員重設；手冊把金鑰目錄改成必設並建議和資料目錄分開放。
 
-   **給 bk1 的契約**（bk1 設計 55d753d6 的還原路徑以此為前提）：復原碼、記住的裝置、重設與驗證權杖一律存 SHA-256 雜湊，**不經 Data Protection 加密**，換一套金鑰仍驗得過；只有 TOTP 金鑰與既有的 SMTP 密碼、登入 cookie 依賴 Data Protection。實作不得把復原碼改成加密存放。
+   **給 bk1 的契約**（bk1 設計 55d753d6 的還原路徑以此為前提）：復原碼、記住的裝置、重設與驗證權杖一律存 SHA-256 雜湊，**不經 Data Protection 加密**，換一套金鑰仍驗得過；復原碼雜湊的輸入是正規化後的 16 個大寫 Base32 字元（§8.4）。只有 TOTP 金鑰與既有的 SMTP 密碼、登入 cookie 依賴 Data Protection。實作不得把復原碼改成加密存放，也不得改正規化方式。
 
    **兩條救回路徑在本設計成立的理由**（F25、F31 驗收）：
 
    - 一般使用者：第二步收到 `recoveryCode` 時只比對雜湊，**不解 TOTP 金鑰**（§8.3 第 3 點），所以金鑰解不開也登得進來；重新綁定的第 1 步收「密碼＋復原碼」，同樣不解舊金鑰（§8.2），完成時用新金鑰加密新金鑰並拿到 10 組新復原碼。金鑰解不開的帳號若在強制對象內，登入後被導去綁定，走的就是同一條重新綁定路徑。
-   - 唯一的系統管理員：`Auth:ResetAdminPassword` 直接清欄位，不需解任何密文（§8.11）。重啟後用新密碼登入（不需第二步，雙因素已清），被要求改密碼，再依出廠「系統管理員強制」被導去綁定；還原到的新主機有設金鑰目錄時綁定照常。沒設金鑰目錄時見 §8.7「金鑰不落地時暫停強制」，不會卡在綁定頁。
+   - 唯一的系統管理員：`Auth:ResetAdminPassword` 直接清欄位，不需解任何密文（§8.11）。重啟後用新密碼登入（不需第二步，雙因素已清），被要求改密碼，再依出廠「系統管理員強制」被導去綁定；還原到的新主機金鑰有落地時綁定照常（SQLite 檔案的預設 `keys` 目錄也算）；PostgreSQL 正式環境沒設金鑰目錄根本啟動不了（§8.7），所以不會出現「卡在綁不了的綁定頁」。
 2. **雲端版重設信寄不出去**：Render 免費方案是否擋 SMTP 埠未查證（T18）。若擋，O3 定郵件服務前雲端版忘記密碼只能 `contactAdmin`。
 3. **單一實例假設**：申請節流、帳號＋IP 層、同一憑證次數在記憶體，多實例時放大 N 倍；帳號層第二步計數存資料庫，猜碼上限不受影響。
 4. **信箱被盜**：重設信不繞過雙因素（au1-7）；沒啟用雙因素的一般使用者則信箱即帳號。出廠強制系統管理員（au1-漏1）把最大的風險收掉。
@@ -756,7 +785,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 
 ### 20.1 行為類
 
-**已由使用者拍板，不再問**：Q2（使用者 2026-11-21 裁決）、Q6（au1-漏1、au1-6）、Q7（au1-7）、Q8（au1-9）、Q1（au1-3）、Q10（au1-8、au1-10），以及 Q3、Q9 的主體（au1-2、au1-7）。內容見 §4。
+**已由使用者拍板，不再問**：Q2（使用者 2026-11-21 裁決）、Q6（au1-漏1、au1-6）、Q7（au1-7）、Q8（au1-9）、Q1（au1-3）、Q10（au1-8、au1-9、au1-10；登出所有裝置靠換 stamp，現行換 stamp 的寫法見 `ResetPasswordHandler.cs:25`、`SetUserActiveHandler.cs:29`），以及 Q3、Q9 的主體（au1-2、au1-7）。內容見 §4。領域顧問分流確認 Q1、Q10 成立。
 
 **顧問拍板，待使用者確認**：
 
@@ -777,10 +806,10 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
   - 背景：主控技術決定 D20 寫「沒設定就停用忘記密碼」；本題決定「停用」時連結要不要藏起來。
   - 理由：使用者忘記密碼時第一個找的就是這個連結，看到該找誰比找不到連結好。替代：隱藏。代價：使用者不知道怎麼辦。
   - 選錯的代價：極小。
-- **Q12 Demo 站用「Demo 收件匣」示範重設成功路徑。**
-  - 背景：AGENTS.md 要求 Demo 示範成功路徑；Demo 站不能設 SMTP。主控技術決定 D24 原本是 Demo 停用忘記密碼與雙因素（§16 第 6 點）。
+- **Q12 Demo 站用「Demo 收件匣」示範重設成功路徑（顧問拍板，取代 D24）。**
+  - 背景：AGENTS.md 要求 Demo 示範成功路徑；Demo 站不能設 SMTP。主控技術決定 D24 原本是 Demo 停用忘記密碼與雙因素（§16 第 6 點），領域顧問改定為 Demo 收件匣加 `mfa01`。
   - 例子：訪客替 `mfa01` 申請重設，再以 `admin` 到寄送紀錄按「看信」，點連結設新密碼。
-  - 代價：`Dynamic_MailOutbox` 多一個只在 Demo 用的欄位；訪客看得到示範帳號的重設連結（示範帳號本來就能一鍵登入，`admin` 排除）。
+  - 代價：訪客看得到 `mfa01` 的重設連結（`mfa01` 本來就能一鍵登入；`admin` 與其他示範帳號排除，Q22）。存信件內文的欄位 `PreviewBody` 是技術做法，改列 T28。
   - 替代：照 D24 停用。代價：線上 Demo 看不到這個功能。
   - 選錯的代價：小。
 - **Q13 Demo 的雙因素示範帳號在第二步直接顯示目前的驗證碼與一組可用的復原碼。**
@@ -793,7 +822,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
   - 替代：只有管理員能關。代價：換手機或不想用都要找管理員。
   - 選錯的代價：極小。
 
-**新增的行為類待確認（這一版才出現）**：
+**顧問拍板，待使用者確認（第二版新增）**：
 
 - **Q17 「帳號安全」頁列出記住的裝置，附「全部取消記住」。**
   - 背景：使用者確認要做記住裝置（au1-9），但沒定本人能不能自己取消。
@@ -809,10 +838,33 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
   - 選錯的代價：小，改成多語只動一個設定值的格式。
 - **Q19 第二步帳號層連續錯 10 次暫停 15 分鐘，寄信通知本人並開安全事件。**
   - 背景：審查必修 1 指出原設計可以換 IP 慢慢猜中驗證碼。
-  - 例子：攻擊者有小陳的密碼，一直試驗證碼；第 10 次錯之後小陳的帳號 15 分鐘內第二步一律拒絕，小陳收到「密碼正確但驗證碼錯誤多次」的信，管理員看到安全事件。小陳本人這 15 分鐘內也登不進來（可等 15 分鐘，或請管理員處理）。
+  - 例子：攻擊者有小陳的密碼，一直試驗證碼；第 10 次錯之後小陳的帳號 15 分鐘內第二步一律拒絕，小陳收到「密碼正確但驗證碼錯誤多次」的信，管理員看到安全事件。小陳本人這 15 分鐘內也登不進來：可以等 15 分鐘，或請管理員重設雙因素（重設會一併清掉計數與暫停，小陳立刻能用密碼登入再重新綁定，§8.8）；自己記住的裝置不受暫停影響（§8.5）。Demo 站不套這一層（§8.3）。
   - 推薦：10 次、15 分鐘，寫死列可寫死清單。代價：被攻擊時本人會被擋 15 分鐘。
   - 替代：做成政策。代價：多兩個政策；調太鬆就失去保護。
   - 選錯的代價：小。
+
+**主控裁決待確認（複審建議中會改使用者行為的，照推薦先寫）**：
+
+- **Q20 管理員寄的重設連結不受「忘記密碼」政策開關影響。**
+  - 背景：政策 `auth.passwordResetEnabled` 管的是登入頁的自助申請。若管理員寄的連結也看這項，政策關掉時管理員按「寄重設連結」會靜默變成略過。
+  - 推薦：不看（§6.3）。理由：關掉自助申請的客戶，多半是想只讓管理員控管重設，管理員寄連結正是那條路。代價：政策名稱要寫清楚只管自助。
+  - 替代：也看政策，關掉時管理員對話框只剩暫時密碼。代價：管理員要另外記得改政策。
+  - 選錯的代價：極小。
+- **Q21 系統管理員改另一位系統管理員的 Email 時開安全事件。**
+  - 背景：Email 就是重設密碼的鑰匙；改掉某位管理員的 Email 再替他申請重設，就能接管那個管理員帳號。比照 au1-8（重設另一位管理員的雙因素發安全事件）。
+  - 推薦：開 `security.adminEmailChanged`，全部管理員看得到。代價：管理員之間改 Email 會多一則站內通知。
+  - 替代：只寫稽核。代價：接管的前置動作沒人看到。
+  - 選錯的代價：極小。
+- **Q22 Demo 站的忘記密碼與寄重設連結只開放 `mfa01`。**
+  - 背景：重設會換 stamp，訪客反覆替 `sales01` 申請重設，就能把所有正在用 `sales01` 的訪客登出。
+  - 推薦：只開放 `mfa01`（示範路徑本來就用它）。代價：訪客不能拿其他示範帳號試忘記密碼。
+  - 替代：開放全部示範帳號。代價：常用帳號會被反覆登出。
+  - 選錯的代價：極小。
+- **Q23 第二步暫停的通知去重：同一帳號 24 小時內只寄一封信，安全事件只累加次數、不重複發站內通知。**
+  - 背景：攻擊者手上有密碼時每 15 分鐘就能觸發一次暫停，不去重一天最多 96 封信與 96 則站內通知。
+  - 推薦：24 小時一封。代價：同一天第二波攻擊不會再收到信（安全事件的次數仍會增加，監控頁看得到）。
+  - 替代：每次暫停都寄。代價：本人與管理員被信件淹沒。
+  - 選錯的代價：極小。
 
 ### 20.2 技術類（主控已定，可推翻）
 
@@ -823,7 +875,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 - **T5** 寄送服務是獨立的 hosted service，即時喚醒＋30 秒掃描；領取協定沿用告警佇列；不節流不摘要（§6.2）。
 - **T6** `IAlertMailSender` 改名 `IMailSender`（§6.1）。
 - **T7** TOTP 自寫在 Domain，固定時間比較，`TotpLastStep` 擋重放（§8.1）。
-- **T8** TOTP 金鑰 Data Protection 加密；`KeysDirectory` 沒設（不論資料庫）就不准新綁定（§8.2）。
+- **T8** TOTP 金鑰 Data Protection 加密；`KeyPersistenceStatus.Persisted` 為否時不准新綁定（§8.2）。
 - **T9** 第二步憑證 cookie：獨立 purpose、HttpOnly、SameSite=Strict、Secure 比照 session、Path 限定、隨機編號單次使用；密碼這一步不算成功；三層猜碼上限（§8.3）。
 - **T10** 復原碼 10 組 16 字元、SHA-256（§8.4）。
 - **T11** QR 碼在前端產生，新增 MIT 授權的 npm 套件（候選 `qrcode`），只在綁定對話框動態 import（D27）。
@@ -837,11 +889,16 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 - **T19** 信件連結只用站台網址（`App:PublicUrl`，退回 `Ops:PublicUrl`），不用 Host 標頭（§6.4、D20）。
 - **T20** 申請端 IP 節流寫死、每帳號次數是政策；以正規化輸入計次；資料庫寫不進照回 202（§7.2、§7.3）。
 - **T21** 帳號 Email 不唯一（au1-3）。
-- **T22** Demo：守衛以站為準；只限示範帳號收重設信；`mfa01` 啟動時重新加密；提示碼取下一個時間步（§13）。
+- **T22** Demo：守衛以站為準；只限 `mfa01` 收重設信（Q22）；`mfa01` 啟動時重新加密；提示碼取目前時間步、`mfa01` 不檢查重放（§13、T32）。
 - **T23** 記住的裝置綁 `SecurityStamp`，stamp 一換就全部失效；政策天數以目前值即時套用（§8.5）。
 - **T24** 復原碼組數 10、剩 2 組提醒，寫死列可寫死清單（初稿 Q16 改列技術類）。
 - **T25** 安全事件的收件人沿用 `ops.alertRecipients`，含當事人（§8.10）。
-- **T27** 金鑰不落地時暫停強制、開基礎設施事件（§8.7）；復原碼與其他雜湊值不經 Data Protection，是給 bk1 還原路徑的契約（§19）。
+- **T27**（主控裁決，安全守衛）金鑰落地以程式算出的 `keysDirectory` 為準；正式環境（非 Development＋PostgreSQL）金鑰不落地就拒絕啟動；「暫停強制」只留給非正式環境（§8.7）。復原碼與其他雜湊值不經 Data Protection，是給 bk1 還原路徑的契約（§19）。
+- **T28** Demo 收件匣的信件內文存在 `Dynamic_MailOutbox.PreviewBody`（只在 Demo 寫，正式環境永遠 null；§5.5、§13.2）。初稿列在 Q12，改列技術類。
+- **T29** 第二步的限流結算：密碼那一次 `Release`、第二步自己 `TryBegin`／`Complete`（§8.3，複審 N1）；帳號層計數用條件式遞增（複審建議 1）。
+- **T30** 記住的裝置每帳號上限 20 台、超過刪最舊；不受帳號層暫停影響（§8.5）。
+- **T31** 寬限起點離開強制範圍時清空（§8.7）；救援與管理員重設清掉全部雙因素相關欄位（§8.8、§8.11）。
+- **T32** Demo 站：不套帳號層暫停、`mfa01` 不檢查重放、「全部取消記住」403（§8.3、§13.4、§8.5）。
 - **T26** `auth.twoFactorGroups` 先試用既有 `Recipients` 型別只收 `group:<id>`（Application 驗證）；政策頁的編輯器無法限定只選群組時，新增 `GroupSet` 型別。
 
 ### 20.3 審查建議的處置（同家審查 15 條）
@@ -866,6 +923,30 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | 14 | 復原碼登入、連續失敗寄信 | 採用（§6.4、§8.3、Q5、Q19） |
 | 15 | 用復原碼重新綁定會用掉一組；金鑰解不開時的流程；otpauth URL 編碼 | 採用（§8.2、§8.4、§8.1、F25） |
 
+### 20.4 安全複審的處置（必修 N1–N4、建議 13 條）
+
+| # | 項目 | 處置 |
+|---|---|---|
+| N1 | 第二步前的限流結算 | 採用：密碼那一次 `Release`，第二步自己 `TryBegin`／`Complete`（§8.3、T29、F33） |
+| N2 | 金鑰落地以程式算出的目錄為準 | 採用：`KeyPersistenceStatus`，SQLite 預設 `keys` 目錄算落地（§8.7、§14、F24、F37） |
+| N3 | T27 在正式環境 fail-open | 採 (a)：正式環境拒絕啟動，暫停強制只留非正式環境；主控裁決，列 §22（§8.7、T27、F36） |
+| N4 | M3 跨段；`security.adminPasswordReset` 歸屬 | 採用：`emailChanged` 移到 au1a；`adminPasswordReset` 歸 au1b、au1c 是其餘三種（§8.10、§17） |
+| 1 | 帳號層計數並行 race | 採用，條件式遞增（§8.3、T29） |
+| 2 | 暫停通知去重 | 採用，主控裁決待確認 Q23（F39） |
+| 3 | 記住的裝置繞過帳號層暫停 | 採用，明寫是刻意取捨並設每帳號 20 台（§8.5、T30） |
+| 4 | Demo 忘記密碼只開放 `mfa01` | 採用，主控裁決待確認 Q22（§7.1、§13.2、R18） |
+| 5 | Demo 提示碼的第三位訪客 | 採用，Demo 的 `mfa01` 不檢查重放（§13.4、T32、F27） |
+| 6 | 管理員寄連結與政策開關 | 採用，管理員寄的不看政策、使用時不再查，主控裁決待確認 Q20（§6.3、R20） |
+| 7 | 救援要清的欄位補齊 | 採用（§8.11、T31） |
+| 8 | 寬限起點會過時 | 採用（§8.7、T31、F40） |
+| 9 | §8.9 驗收補案例 | 採用（F34） |
+| 10 | 復原碼雜湊的輸入 | 採用，寫進 bk1 契約（§8.4、§19） |
+| 11 | 管理員改另一位管理員的 Email 開安全事件 | 採用，主控裁決待確認 Q21（§8.10、R22） |
+| 12 | 匿名權杖端點節流 | 採用，每 IP 15 分鐘 30 次（§7.3、§22、R21） |
+| 13 | `render.yaml` 不存在 | 採用，改指 `docs/deploy.md` 與 Render 後台環境變數（§16 第 5 點、§17） |
+
+另依領域顧問分流：Demo 站不套帳號層暫停（§8.3、F35）；管理員重設雙因素一併清計數與暫停（§8.8、F38）；Demo 站「全部取消記住」403（§8.5、§10）；`PreviewBody` 改列技術類 T28；Q17–Q19、Q12（取代 D24）標顧問拍板；Q1、Q10 確認成立。
+
 ## 21. 宗旨檢查（formwright-purpose-check）
 
 1. **機制還是政策**：通過。佇列、權杖、TOTP、記住裝置是平台機制；忘記密碼開關、連結時效、每小時次數、驗證時效、密碼最短長度、強制範圍、寬限、記住天數、保留天數都是政策（§9）。節流、TOTP 參數、復原碼組數、猜碼上限是安全檢查或技術限制，列 §22。
@@ -875,7 +956,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 5. **空系統**：通過。不開任何應用程式時全部照常。
 6. **套件只用定義組成**：不適用。
 7. **ERP 對照**：通過，見 §15。
-8. **權限 fail closed、驗證不只在前端、沒有執行期 DDL**：通過。權杖、憑證、TOTP 金鑰讀不到都當失敗；強制綁定由 middleware 擋；`KeysDirectory` 沒設不准綁；schema 走 EF migration。
+8. **權限 fail closed、驗證不只在前端、沒有執行期 DDL**：通過。權杖、憑證、TOTP 金鑰讀不到都當失敗；強制綁定由 middleware 擋；金鑰不落地不准綁，PostgreSQL 正式環境金鑰不落地拒絕啟動（不 fail-open）；schema 走 EF migration。
 9. **不限產業**：通過。共用組信箱（工廠現場）、外出業務換手機、門市共用電腦都用同一套規則，不假設產業。
 
 ## 22. 可寫死清單
@@ -886,11 +967,15 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | TOTP 金鑰長度 | 20 bytes | 安全檢查 |
 | 綁定中金鑰時效 | 10 分鐘 | 安全檢查 |
 | 第二步憑證時效、同一憑證次數 | 5 分鐘、5 次 | 安全檢查 |
+| 正式環境（非 Development＋PostgreSQL）金鑰不落地拒絕啟動 | — | 安全守衛（主控裁決，T27） |
+| 第二步暫停通知去重 | 同帳號 24 小時一封 | 安全檢查（Q23） |
+| 記住的裝置每帳號上限 | 20 台 | 技術限制（T30） |
 | 帳號層第二步上限、暫停時間 | 10 次、15 分鐘 | 安全檢查（Q19） |
 | 復原碼組數、長度、提醒門檻 | 10 組、16 字元、剩 2 組 | 安全慣例（T24） |
 | 連結權杖、裝置 cookie 長度 | 32 bytes | 安全檢查 |
 | 記住天數上限、寬限天數上限 | 90、90 | 技術上限（政策的上下限） |
 | 重設申請 IP 節流 | 15 分鐘 10 次 | 安全檢查（同 `LoginThrottle`） |
+| 用權杖的匿名端點 IP 節流 | 15 分鐘 30 次 | 安全檢查 |
 | 重寄驗證信、管理員寄重設連結間隔 | 同帳號 60 秒 | 技術限制 |
 | 寄送重試、領取期限、寄送逾時、掃描間隔 | 1／5／15／60 分鐘最多 5 次、2 分鐘、30 秒、30 秒 | 技術限制（沿用 `AlertLimits`） |
 | 密碼最短長度的技術下限 | 8 | 安全下限（政策下限） |
@@ -899,7 +984,7 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 | 信件連結只用站台網址 | — | 安全檢查 |
 | 申請回應不透露帳號狀態 | — | 安全檢查 |
 | 管理員不能用管理員端點重設自己的雙因素 | — | 安全檢查 |
-| Demo 站：只有 `mfa01` 有雙因素、強制不生效、`auth` 政策唯讀、`admin` 不收重設信 | — | Demo 完整性守衛 |
+| Demo 站：只有 `mfa01` 有雙因素、強制不生效、`auth` 政策唯讀、只有 `mfa01` 收重設信、不套帳號層暫停、`mfa01` 不檢查重放、不能取消記住的裝置 | — | Demo 完整性守衛 |
 
 ## 23. 留給實作者
 
@@ -907,5 +992,6 @@ SSO、AD／LDAP 列第二版候選（使用者 2026-11-17 裁決），au1 不做
 - QR 碼套件的版本、授權與打包大小確認（T11）。
 - `mfa01` 的固定金鑰、復原碼與 `docs/demo.md` 新小節。
 - `Recipients` 型別能否限定只選群組（T26）。
+- 正式環境拒絕啟動（T27）上線前，確認所有跑 PostgreSQL 的測試主機與 CI 都設了 `DataProtection:KeysDirectory` 或環境是 Development，否則測試會啟動失敗。
 - au1a、au1c 太大時的拆法見 §17，migration 只能留在 au1a。
 - 手冊各段的實際畫面文字以實作為準回填（§16 第 9 點）。
