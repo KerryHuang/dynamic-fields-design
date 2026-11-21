@@ -19,7 +19,7 @@
 **Architecture:**
 - **沒有 migration**。冪等沿用 `Dynamic_Operation`；迴圈計數與每日名額都走稽核表既有的索引（`TargetKind, TargetId, OccurredUtc`、`TokenId, OccurredUtc`）。
 - **工具**：`Application/Dynamic/McpService/Tools/Write/`，每個工具只依賴 `ISender`（沿用 `McpToolArchitectureTests`），只送既有 request、從白名單參數逐欄組請求，不另寫查詢與權限判斷。
-- **寫入稽核**：新 behavior `McpWriteAuditBehavior` 放在 `McpConfirmationBehavior` 之後、`AuditBehavior` 之前（交易內、冪等之外）。執行器在迴圈檢查之後、緊接 `tool.RunAsync` 之前「上膛」本次的稽核內容；behavior 在最外層交易型請求成功後 `IAuditLog.Add` 並存檔，與業務同一交易；提交後標記「本次呼叫已提交」，執行器就不再寫第二列（判斷 3）。
+- **寫入稽核**：新 behavior `McpWriteAuditBehavior` 放在 `McpConfirmationBehavior` 之後、`AuditBehavior` 之前（交易內、冪等之外）。執行器在迴圈檢查之後、緊接 `tool.RunAsync` 之前「上膛」本次的稽核內容；behavior 只接手最外層的 `IIdempotentRequest`，成功後 `IAuditLog.Add` 並存檔，與業務同一交易；提交後標記「本次呼叫已提交」，執行器就不再寫第二列。其他交易型請求（簽核警示、迴圈事件）一律放行（判斷 3）。
 - **冪等**：執行器在呼叫工具前把 `idempotencyKey` 設進 scoped 的 `IOperationContext.ClientKey`；`IdempotencyBehavior` 的判斷從 `IRecordWriteRequest` 放寬到新 marker `IIdempotentRequest`（`IRecordWriteRequest` 繼承它），任務與留言的 request 加上這個 marker（判斷 5）。
 - **迴圈偵測**：執行器在範圍與速率之後、上膛與工具執行之前，對宣告了「迴圈目標」的工具查稽核表；這個 key 已有冪等紀錄（重送）時不擋，讓它照常回放（判斷 8）。
 
@@ -35,7 +35,7 @@
 
 repo 規範：`AGENTS.md`、`.claude/rules/{backend,frontend,docs}.md`、`CONTRIBUTING.md`、`docs/ai/testing.md`。
 
-**路徑慣例：** 同 mcp1a 計畫。後端相對 `backend/`；`Application/…` 是 `backend/src/DynamicModules.Application/…` 的縮寫，其餘專案同理。符號以 main `53c5c02d` 為準（之後到 `9dad47bb` 只改文件），不寫行號。
+**路徑慣例：** 同 mcp1a 計畫。後端相對 `backend/`；`Application/…` 是 `backend/src/DynamicModules.Application/…` 的縮寫，其餘專案同理。符號以 main `c9cc9f66` 為準（已含 #74／#75 的 `c084787a`），不寫行號。
 
 **修訂：**
 - 2026-11-21 初版（`c8550675`）。
@@ -48,6 +48,12 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,frontend,docs}.md`、`CONTRI
   - MCP 通道沒上膛的最外層寫入請求丟例外（判斷 3）。
   - Task 5 不等 #74／#75；子段從三批改四批。
   - 「會變動的既有測試」補齊（判斷 14）；S2、S5 修正。
+- 2026-11-21 第三輪：收複審必修 N1–N3 與建議 1–7；分支 rebase 到 main `c9cc9f66`。主要變動：
+  - 寫入、高風險、不存在工具的稽核摘要，未列的鍵只記型別與長度；`values`、`details` 不是物件也只記型別（判斷 15）。
+  - `McpWriteAuditBehavior` 只接手 `IIdempotentRequest`，其他交易型請求（簽核警示、迴圈事件）放行，送簽失敗的警示照常寫（判斷 3）。
+  - Task 5 補明細被遮欄位的案例；#74／#75 已合併 main，改成開工前 rebase、系統管理員期望值寫死。
+  - `IIdempotentRequest` 移到 Task 2 建立；`previewOnly` 一律上膛、預覽原因由 `McpToolOutcome.AuditReason` 傳；執行器上膛前只驗 `idempotencyKey` 與迴圈目標；冪等雜湊加上通道（判斷 3、5、8、9）。
+  - S6 收窄成只擋把參數反序列化成 request；迴圈事件寫明 `Category = Config`、`Code = mcp.writeLoop`；檢查訊息 `{value}` 寫進已知限制。
 
 ---
 
@@ -55,7 +61,7 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,frontend,docs}.md`、`CONTRI
 
 1. **mcp1a、mcp1b 在 main**：`grep -n "BusinessWrite" backend/src/DynamicModules.Domain/Mcp/McpScopes.cs` 有結果，`ls frontend/src/presentation/mcp/CreateAiTokenDialog.vue` 存在。
 2. **mcp2a 沒開工**：`grep -rn "McpWriteAuditBehavior\|IIdempotentRequest\|ruleLoopTriggersPerRecord" backend/src shared` 無結果。
-3. **#74／#75（畫面通道遮罩）**：修正輪 HEAD 是 `origin/fix/74-75-screen-mask` 的 `c084787a`（2026-11-21 尚未合併、CI 跑中），內容含 `RollupSourceMasks` 入口的系統管理員短路。D1 已裁決「被遮欄位不能寫」，MCP 通道的遮罩結果不受 #74／#75 影響，**Task 5 不必等它**，以開工當時的 main 為準；#74／#75 合併後 rebase，重跑 `McpAiWriteMaskTests`、`McpAiExclusionTests` 當回歸（見「與 #74／#75 的衝突點」）。
+3. **#74／#75（畫面通道遮罩）已合併 main**（`c084787a`，之後還有 `4c83c989`）：開工前 `git rebase origin/main`，`git branch --contains c084787a` 要列得出目前分支。Task 5 的期望值照合併後的行為寫死（見「與 #74／#75 的衝突點」）。
 4. **沒有別的段同時改 `shared/i18n/*/ui.json` 的 `policies.items.ops.*`、`audit.actions.mcp.*`、`aiTokens.*`、`ops.title.*`**；有就先協調誰先合。
 5. **PostgreSQL 測試環境可用**：`docker info` 成功，或設了 `FORMWRIGHT_TEST_PG`。
 6. **plugin 更新**（AGENTS.md「票」）：`claude plugin marketplace update plugharbor && claude plugin update tickets@plugharbor --scope project`，再 `/reload-plugins`；失敗就照舊版跑，記進回報。
@@ -85,17 +91,17 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,frontend,docs}.md`、`CONTRI
 
 | 批 | 內容 | Task | 手寫行數（估，含測試） | migration |
 |---|---|---|---|---|
-| mcp2a-1 | 範圍與建立對話框、寫入稽核同交易與摘要去值、錯誤對照、冪等鍵 | 1–3 | ≈ 1400（測試約 55%；另有約 40 行四語文案） | 無 |
-| mcp2a-2 | 記錄工具與 REST 對照、寫入端「不提供給 AI」 | 4–5 | ≈ 1070（測試約 65%） | 無 |
-| mcp2a-3 | 任務與留言工具、簽核工具 | 6–7 | ≈ 1070（測試約 60%） | 無 |
+| mcp2a-1 | 範圍與建立對話框、冪等標記、寫入稽核同交易與摘要去值、錯誤對照、冪等鍵 | 1–3 | ≈ 1490（測試約 55%；另有約 40 行四語文案） | 無 |
+| mcp2a-2 | 記錄工具與 REST 對照、寫入端「不提供給 AI」 | 4–5 | ≈ 1120（測試約 65%） | 無 |
+| mcp2a-3 | 任務與留言工具、簽核工具 | 6–7 | ≈ 1110（測試約 60%） | 無 |
 | mcp2a-4 | 迴圈偵測、政策與事件、文件、走查、gate、實機驗收 | 8–9 | ≈ 1010（測試約 50%；另有約 40 行四語文案） | 無 |
 
 - 四批同一分支，每個 Task 各自 commit；mcp2a-4 收尾才跑 gate 並合併，**四批一起上線**（D9）。
 - mcp2a-1 到 mcp2a-3 收尾各跑一次本批的窄範圍 PostgreSQL 雙跑，不跑 gate。
 - 審查建議 8 的「補完必修後超過 1500 就拆」：原 mcp2a-2（Task 4–6）補完約 1610 行，因此把 Task 6 移到 mcp2a-3、Task 8–9 獨立成 mcp2a-4。
 - **交棒條件**：
-  - **mcp2a-1 → mcp2a-2**：Task 1–3 驗收全過（含 PostgreSQL）。交棒說明寫：`IMcpWriteScope` 的形狀與上膛時機；`IIdempotentRequest` 加在哪些 request、`Files` 非空的放行；`McpAuditSummary` 的寫入參數規則；測試怎麼用 `McpTestKit` 建 `business.write` 權杖。
-  - **mcp2a-2 → mcp2a-3**：Task 4–5 驗收全過。交棒說明寫：寫入工具的共用基底（`WriteTool`）、白名單組請求的寫法、`ignoredFields` 的算法；對照測試的造模方式；Task 5 以哪個 main SHA 為準、#74／#75 是否已合併。
+  - **mcp2a-1 → mcp2a-2**：Task 1–3 驗收全過（含 PostgreSQL）。交棒說明寫：`IMcpWriteScope` 的形狀與上膛時機；`McpToolOutcome.AuditReason` 的用法；`IIdempotentRequest` 加在哪些 request、`Files` 非空的放行；`McpAuditSummary` 的寫入參數規則；測試怎麼用 `McpTestKit` 建 `business.write` 權杖。
+  - **mcp2a-2 → mcp2a-3**：Task 4–5 驗收全過。交棒說明寫：寫入工具的共用基底（`WriteTool`）、白名單組請求的寫法、`ignoredFields` 的算法；對照測試的造模方式；分支 rebase 到的 main SHA。
   - **mcp2a-3 → mcp2a-4**：Task 6–7 驗收全過。交棒說明寫：`undoToken` 的兩種形狀怎麼辨識；`submit_approval` 的 `previewOnly` 稽核列。
 - 分界理由：
   - mcp2a-1 是機制，審查重點是稽核與業務同交易、提交後不寫第二列、摘要不存值、冪等鍵不跨使用者、錯誤代碼對照。
@@ -166,12 +172,15 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
    - 長度與上限沿用既有 request 的常數（`TaskEditParser.TitleMax`、`TaskCommentRules.BodyMax`）；schema 的 `maxLength` 由常數插值產生，同一個數字只有一個來源。
 
 3. 〔技術〕**寫入稽核與業務同交易：`McpWriteAuditBehavior`**（設計 §8.1、T14、B12；設計原寫「透過 `IWriteStage`」，但任務與留言不跑 `IWriteStage`，見「與設計的矛盾」第 2 點）。
+   - 新 marker `IIdempotentRequest : ITransactionalRequest`（`Application/Common/`，Task 2 建立；`IRecordWriteRequest` 同時改成繼承它）。本判斷的「寫入請求」一律指 `IIdempotentRequest`；任務與留言的 request 在 Task 3 加上它。
    - 新 scoped 服務 `IMcpWriteScope`（`McpService/Writes/`）：`Arm(long call, McpWriteAudit audit)`、`IsCommitted(long call)`、`IsArmed`。`McpWriteAudit` 帶動作代碼、`TargetLabel`（固定是工具名稱；權杖頁「最近呼叫」讀這一欄，見 `McpTokenItem`）、參數雜湊、摘要（判斷 15）。
-   - **上膛時機**：範圍、速率、參數驗證、迴圈檢查與迴圈事件都做完之後，緊接 `tool.RunAsync` 之前。迴圈事件的請求因此一定在未上膛狀態送出，不會被記成本次的寫入（判斷 8）。
-   - 工具送出的**第一個最外層**交易型請求（`AfterCommitActions.TransactionDepth == 1`）由 behavior 接手：成功時 `audit.Add(Success, TargetKind／TargetId 由 McpWriteTargets 算, TargetLabel)`、`uow.CommitAsync`、`afterCommit.Add` 提交標記；失敗照常回傳（交易已回滾，執行器照 mcp1a 結束路徑以 `WriteNowAsync` 寫失敗列）。
-   - 同一次呼叫的第二個最外層交易型請求 → 丟 `InvalidOperationException`（fail closed；工具一次只能送一個寫入請求）。
+   - **上膛時機**：範圍、速率、執行器自己的參數驗證（只有 `idempotencyKey` 的格式與 `LoopTargetArg` 的值，其他參數由工具自己驗）、迴圈檢查與迴圈事件都做完之後，緊接 `tool.RunAsync` 之前；寫入級別的工具一律上膛，包括 `previewOnly` 的送簽（執行器在 `RunAsync` 之前不認得 `previewOnly`）。執行器的參數驗證失敗就回 `invalid_arguments`、不上膛。迴圈事件的請求一定在未上膛狀態送出，而且它不是 `IIdempotentRequest`，不會被記成本次的寫入（判斷 8）。
+   - 只接手**最外層的 `IIdempotentRequest`**（`AfterCommitActions.TransactionDepth == 1`）：成功時 `audit.Add(Success, TargetKind／TargetId 由 McpWriteTargets 算, TargetLabel)`、`uow.CommitAsync`、`afterCommit.Add` 提交標記；失敗照常回傳（交易已回滾，執行器照 mcp1a 結束路徑以 `WriteNowAsync` 寫失敗列）。
+   - **其他交易型請求一律放行**（複審 N2）：上膛期間出現的最外層非 `IIdempotentRequest` 交易型請求（`ApprovalAlertBehavior` 在送簽失敗後同 scope 另送的 `WriteApprovalAlertRequest`、迴圈事件、`TouchMcpTokenRequest`）不寫列、不算次數、不標已提交。否則送簽碰到執行期流程錯誤時，警示請求會被當成第二個寫入而丟例外，`ApprovalAlertBehavior` 吞掉例外只記 log，系統管理員就收不到警示，和畫面不同。
+   - 同一次呼叫的第二個最外層 `IIdempotentRequest` → 丟 `InvalidOperationException`（fail closed；工具一次只能送一個寫入請求）。「第二個」只算 `IIdempotentRequest`。
+   - 沒有提交（handler 失敗、或 `previewOnly` 根本沒送寫入請求）時，執行器照 mcp1a 結束路徑在事後寫一列；工具可以在 `McpToolOutcome.AuditReason` 帶原因（`previewOnly` 帶 `preview`），執行器把它寫進 `ReasonCode`。現在成功列的 `ReasonCode` 固定是 null，這個欄位是新加的管道。
    - 請求同時是 `IAuditedRequest` 或 `IMcpConfirmedRequest` → 丟例外（一次呼叫只能一列；架構測試另外掃）。
-   - **沒上膛也要擋**（審查建議 1）：MCP 通道上，沒上膛就出現的最外層 `IIdempotentRequest`（含所有 `IRecordWriteRequest`）→ 丟 `InvalidOperationException`。唯讀工具哪天誤送寫入請求也會被擋，不只靠範圍檢查與 S5。`CreateMcpConfirmationRequest`、迴圈事件請求、`TouchMcpTokenRequest` 不是 `IIdempotentRequest`，不受影響；畫面通道一律放行（行為不變）。
+   - **沒上膛也要擋**（審查建議 1）：MCP 通道上，沒上膛就出現的最外層 `IIdempotentRequest`（含所有 `IRecordWriteRequest`）→ 丟 `InvalidOperationException`。唯讀工具哪天誤送寫入請求也會被擋，不只靠範圍檢查與 S5。`CreateMcpConfirmationRequest`、迴圈事件請求、`TouchMcpTokenRequest`、`WriteApprovalAlertRequest` 不是 `IIdempotentRequest`，不受影響；畫面通道一律放行（行為不變）。Task 2 建好 marker 時只有 `IRecordWriteRequest` 繼承它，Task 3 再把任務與留言納入，規則本身不必改。
    - `McpWriteTargets`（純函式，依 request 型別）：`CreateRecordRequest` → `record`／回應的 id；`UpdateRecordRequest` → `record`／`Id`；三種建任務 → `task`／回應的 id；`UpdateTaskRequest`、`AddTaskCommentRequest` → `task`／`Id`、`TaskId`；`SubmitApprovalRequest` → `record`／`RecordId`；`WithdrawApprovalRequest` → `approvalInstance`／`InstanceId`。回應可能是型別物件，也可能是冪等回放的 `JsonElement`，兩種都要讀得到 `id`。
    - 摘要多記 `op`（`IOperationContext.OperationId`，可串到事件事實；記錄歷程沒有 OperationId，見「與設計的矛盾」第 9 點），回放時 `ReasonCode = "replayed"`（判斷 8 依此排除）。
    - 執行器的「已提交」判斷改成 `confirmations.IsCommitted(call) || writes.IsCommitted(call)`，提交後格式化失敗或放不下，沿用 mcp1a 的「已執行、結果省略」（`McpDataOmitted`），不回錯誤、不寫第二列。
@@ -185,12 +194,13 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
 5. 〔技術〕**冪等鍵**（設計 §7.2「`IdempotencyBehavior` 自動接手」）：
    - 七個工具的 `idempotencyKey` 都**必填**，格式 `OperationContext.KeyPattern`（`^[A-Za-z0-9_-]{8,64}$`），不符回 `invalid_arguments`。理由：AI client 逾時重送是常態；選填的話模型多半不帶，重送就重複建記錄與留言。必填讓 annotations 能一律標 `idempotentHint: true`（判斷 10）。
    - 執行器在每次 `InvokeAsync` 開頭把 `ClientKey`、`Replayed` 重設為 null／false，在工具 `RunAsync` 前設 `ClientKey`（stateless 模式下一次 `tools/call` 一個 DI scope）；工具結束後讀 `Replayed` 放進 `meta.replayed`。
-   - `IdempotencyBehavior` 的判斷從 `IRecordWriteRequest` 改成新 marker `IIdempotentRequest : ITransactionalRequest`；`IRecordWriteRequest` 改繼承 `IIdempotentRequest`；`CreateTaskRequest`、`CreateRecordTaskRequest`、`CreateSubtaskRequest`、`UpdateTaskRequest`、`AddTaskCommentRequest` 加上 `IIdempotentRequest`。`RecordEffectsBehavior` 仍只看 `IRecordWriteRequest`，任務照舊不跑 `IWriteStage`。
+   - `IdempotencyBehavior` 的判斷從 `IRecordWriteRequest` 改成 `IIdempotentRequest`（marker 在 Task 2 建立，見判斷 3）；`CreateTaskRequest`、`CreateRecordTaskRequest`、`CreateSubtaskRequest`、`UpdateTaskRequest`、`AddTaskCommentRequest` 加上 `IIdempotentRequest`。`RecordEffectsBehavior` 仍只看 `IRecordWriteRequest`，任務照舊不跑 `IWriteStage`。
    - **附件留言放行**（審查必修 2，二選一取第一種）：`AddTaskCommentRequest.Files` 非空時 `IdempotencyBehavior` 直接放行、不做請求層冪等。`IdempotencyKeyMiddleware` 對所有端點都讀標頭，雜湊用 `JsonSerializer.Serialize(request)`，序列化 `CommentFileUpload` 裡的 `Stream` 會丟例外變成 500。
      - 理由：MCP 不收附件，所以 MCP 的留言永遠有冪等；畫面的附件留言本來就不帶 key、沒有冪等。另一個做法（`[JsonIgnore]` 掉 `Stream`、雜湊只算檔名、型別與大小）會讓「同名同大小、內容不同」的兩次上傳被當成重送而回放，靜默丟掉第二份檔案，比不做冪等更糟；要做對得先讀完串流算內容雜湊，超出本段範圍。
      - 放行條件寫成 request 自己宣告（`IIdempotentRequest` 加預設屬性 `bool IdempotencyApplies => true`，`AddTaskCommentRequest` 覆寫成 `Files.Count == 0`），behavior 不認得具體型別。
      - `IdempotencyApiTests` 補「帶標頭的 multipart 留言照常成功、兩次都寫」。
    - 畫面不受影響：前端只對記錄、簽核、匯入、轉換、沖銷帶 `Idempotency-Key`（`frontend/src/services/api/dynamic-api.ts` 的 `idem(...)`），任務端點不帶；帶了才冪等。
+   - **雜湊加上通道**（複審建議 7）：MCP 通道的請求雜湊在既有輸入後面加 `"\nmcp"`，畫面通道的雜湊算法不變（既有紀錄照常回放）。理由：同一個人在畫面送出的 key 若被 AI 以相同內容重送，回放出來的是畫面通道的結果，含「不提供給 AI」的欄位；加了通道之後改回 `idempotency_key_reused`。`IdempotencyBehavior` 多注入 `IRequestChannel`，一行改動。
    - 儲存沿用 `Dynamic_Operation`（主鍵 `UserId, Key`），保留天數沿用政策 `maintenance.idempotencyRetentionDays`（A26，出廠 7 天），不另設。key 以使用者隔離、不以權杖隔離：同一人的兩把權杖用同一個 key 送同樣內容會回放，送不同內容回 `idempotency_key_reused`。
    - 並行重送：沿用交易開頭的全庫寫入鎖（SQLite `WriteGate`＋`BEGIN IMMEDIATE`；PostgreSQL `WriteGate.ForKey`＋advisory lock），後到者等前者提交後查到紀錄回放。PostgreSQL 與 SQLite 都要測（Task 3）。
    - 回放時 `ServiceResult.Data` 是 `JsonElement`，不是型別物件：**寫入工具不得把 `r.Data` 轉型後才用**，一律把 `Data` 當不透明物件放進 `data`；需要 id 時用 `JsonSerializer.SerializeToElement(r.Data)` 讀。唯一的例外是 `update_task` 要拿掉 `undoToken`，兩種形狀都要辨識（判斷 11）。對照測試驗「第一次的 data 與回放的 data 序列化後相同」（`IdempotencyBehavior.Json` 與 `McpResultFormatter.Json` 若有差異，以回放的 JSON 為準，把工具的輸出也先經同一份選項正規化）。
@@ -211,21 +221,21 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
 
 8. 〔技術〕**寫入迴圈偵測**（C3 使用者裁決；D4、D5）：
    - 對象：**記錄**。工具描述多一個 `LoopTargetArg`（`update_record`、`submit_approval` 都是 `recordId`），其餘工具不偵測（建立沒有既有目標；任務與撤回的目標不是記錄，靠每分鐘速率擋）。
-   - 判斷位置：執行器在範圍、速率、參數驗證之後，**上膛之前**。
+   - 判斷位置：執行器在範圍、速率、執行器自己的參數驗證（`idempotencyKey` 格式、`LoopTargetArg` 是正整數）之後，**上膛之前**。
    - **重送不擋**（審查建議 4）：先問 `McpUsage.HasOperationAsync(userId, idempotencyKey)`（讀 `IOperationRepository.GetAsync`）；已有紀錄代表這是重送，跳過迴圈檢查，讓 `IdempotencyBehavior` 照常回放（或回 `idempotency_key_reused`）。否則重送「第 30 次成功的那筆」會拿到 `write_loop`，模型會以為那次沒寫進去。
    - 計數＝稽核表中同一 `TokenId`、`TargetKind = record`、`TargetId`、動作在「寫入工具動作清單」內、`Result = Success`、`ReasonCode` 是 null（排除回放與預覽）、`OccurredUtc >= now − ops.ruleLoopWindowMinutes` 的列數。達到 `ops.ruleLoopTriggersPerRecord` 就擋。
    - 新 repository 方法 `IAuditLogRepository.CountWritesForTargetSinceAsync(tokenId, targetKind, targetId, sinceUtc, actions)`，等值比較加時間範圍，走既有 `(TargetKind, TargetId, OccurredUtc)` 索引；時間由應用層算 UTC，不用資料庫日期函式。由 `McpService/McpUsage.cs` 呼叫（工具與執行器不碰 repository，S2）。
    - 擋下時：回 `isError`、代碼 `write_loop`、訊息「同一筆記錄在 N 分鐘內已被這把權杖修改 M 次，已暫停這把權杖對它的寫入，請停下來請使用者確認」；稽核恰一列 `Denied`、`ReasonCode = write_loop`、`TargetKind = record`、`TargetId`（審查建議 5，方便稽核頁篩選與事件對照）、`TargetLabel` 是工具名稱。被擋的呼叫不計入迴圈次數（只計成功），但計入每日名額（D8）。
    - **事件**（審查必修 5）：
      - `IncidentRecorder` 只能在交易型請求的 handler 裡用，執行器在交易外。照 `RuleFailureBehavior` 的寫法，用 `IServiceScopeFactory` 開新 scope，送新的交易型請求 `RecordMcpWriteLoopIncidentRequest`（`McpService/WriteLoop/`，不是 `IIdempotentRequest`、不上膛，所以不會被 `McpWriteAuditBehavior` 記成本次的寫入）。寫事件失敗只記 Error log，不影響回給模型的錯誤（同 C3「計數寫在業務交易之外」）。
-     - 來源 `IncidentSource.Config`，指紋＝`mcp.writeLoop`＋權杖 id＋記錄 id，照 `IncidentRecorder` 既有規則去重（同指紋未結→次數＋1；已結→重開並標回歸）。
+     - 訊號寫明 `Source = IncidentSource.Config`、`Category = IncidentCategory.Config`、`Code = mcp.writeLoop`；收件人走哪條政策由 `Category` 決定（`OpsNotifier.NotifyAsync`），所以 `Category` 一定要設。指紋＝`mcp.writeLoop`＋權杖 id＋記錄 id，照 `IncidentRecorder` 既有規則去重（同指紋未結→次數＋1；已結→重開並標回歸）。
      - 標題鍵 `ops.title.mcpWriteLoop`，參數只放代碼與數字（O2-T22）：權杖 id、記錄 id、次數、時間窗分鐘數。權杖名稱與擁有者是使用者輸入的字串，不進標題；管理員從「AI 連線」頁用權杖 id 查。`IncidentTitles` 新增 `WriteLoop(long tokenId, long recordId, int count, int minutes)`。
-     - 嚴重度 Warning；只有新開與重開時通知，同指紋再發生只累加次數；可在事件頁手動結案。收件人照 `ops.configIssueRecipients`（沒有規則修改者時就是系統管理員）。
+     - 嚴重度 Warning；`IncidentRecorder.ShouldNotify` 對 Warning 只在新開、回歸、升級時通知，同指紋再發生只累加次數；可在事件頁手動結案。收件人照 `ops.configIssueRecipients`：`RuleEditor` 是 null，所以 `ruleEditor` 那一項解析成空；整份清單都解析為空時才改送全體系統管理員（出廠值另含全部系統管理員，所以出廠時就是系統管理員）。
    - 恢復：時間窗滑過、成功次數降到門檻以下就自動恢復，不另做「恢復」按鈕（D4；鋸齒效應見已知限制）。
    - 「或來源」：mcp2a 只有 MCP 這一種外部來源，所以只看權杖；整合來源上線時再擴充（已知限制）。
 
 9. 〔技術〕**`submit_approval`：只有 `previewOnly` 才預覽**（審查必修 3；設計 §7.2 原寫「先走預覽再送」）：
-   - `previewOnly: true`：只送 `PreviewRecordApprovalRequest`，回 `data.preview`（含要自選的關卡與候選人 `PickRequirement`），不寫入；沒有交易型請求、不上膛，執行器照唯讀路徑事後寫一列（`Success`、`ReasonCode = preview`，迴圈不計）。
+   - `previewOnly: true`：只送 `PreviewRecordApprovalRequest`（唯讀、不開交易），回 `data.preview`（含要自選的關卡與候選人 `PickRequirement`），不寫入。執行器照判斷 3 已經上膛，但沒有寫入請求所以不會提交；工具回 `AuditReason = preview`，執行器事後寫一列（`Success`、`ReasonCode = preview`，迴圈不計）。
    - 沒帶 `previewOnly`：不先預覽，直接送 `SubmitApprovalRequest`，handler 自己驗待簽、版本與自選人。回 `data = { outcome, instanceId, recordRowVersion }`，不含 `preview`。
    - 理由：預覽看到已有簽核中的實例就回 `Conflict(AlreadyPending)`，直接轉移之後記錄狀態也變了；先預覽的話，第一次成功之後的同 key 重送會被預覽擋下，`IdempotencyBehavior` 根本沒機會回放，模型會以為送簽失敗。
    - 自選關卡缺人時，handler 回 `Invalid["picks.{code}"]`，模型先用 `previewOnly` 看候選人再重送。
@@ -261,12 +271,15 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
     - `picks`：留關卡代號與人數。
     - `patch` 不存在於參數（`update_task` 的欄位是逐個參數），`assigneeUserId` 保留（是 id、不是自由文字）；`dueDate`、`startDate` 只記「有／清除」。
     - `idempotencyKey`、各種 id、`rowVersion`、`status`、`cascade`、`to`、`previewOnly`、`moduleKey`、`hostKey`：保留。
-    - 上膛的 `McpWriteAudit` 與失敗列都用同一個 `McpAuditSummary.Args`（參數雜湊照舊算原始參數）。
+    - **未列的鍵**（複審 N1）：`McpAuditSummary.Args` 多一個模式參數 `strict`。寫入工具、高風險工具、不存在的工具（`unknown_tool`）用 strict：上面沒列到的鍵（模型猜錯的 `fields`、`data`、`record`，或多帶的 `systemKeys`）只記 `{ type, length }`，不留原值。唯讀工具維持現狀，`McpAuditSummaryTests` 既有案例不改。伺服器不驗 `additionalProperties`（schema 只是給 client 的提示，`McpArgs` 不拒收不認得的鍵），所以這條是唯一的保護。
+    - `values`、`details` 不是物件，或 `details` 的列、列的 `values` 不是物件時，只記型別，不留原文。
+    - 上膛的 `McpWriteAudit` 與所有結束路徑的列（含 `unknown_tool`、`scope_denied`、`invalid_arguments`、`write_loop`）都用同一個 `McpAuditSummary.Args`（參數雜湊照舊算原始參數）。
 
 16. 〔技術〕**白名單組請求**（審查必修 6）：工具只從判斷 2 列的參數逐欄組 request，不把參數 `Deserialize` 成 request、不把參數原樣塞進 `Patch`。
     - `CreateRecordRequest`、`UpdateRecordRequest` 頂層的 `SystemKeys` 沒有 `[JsonIgnore]`、不受唯讀限制，工具一律給 null；`DetailRowInput` 只組 `Id`、`Values`、`RowVersion`，`Delete` 固定 false（D3）。
     - `UpdateTaskRequest.Patch` 由工具逐鍵寫入判斷 2 列的鍵，`title`、`description` 不會出現。
-    - S5 另加 grep：`grep -rn "SystemKeys\|Deserialize<" backend/src/DynamicModules.Application/Dynamic/McpService/Tools/Write` 沒有結果。
+    - `values`、明細列 `values` 轉成 `Dictionary<string, JsonElement?>` 的解析放在 `McpArgs`（`Tools/` 底下，不在 S6 的掃描範圍）。
+    - S6 grep：`grep -rnE "SystemKeys|Deserialize<\w*Request" backend/src/DynamicModules.Application/Dynamic/McpService/Tools/Write` 沒有結果（只擋把參數反序列化成 request，不誤擋正常解析）。
 
 ## 與設計的矛盾（規劃時發現；Task 9 回填設計文件）
 
@@ -283,18 +296,19 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
 
 ## 與 #74／#75 的衝突點
 
-#74（一般參照來源的彙總與停用公式帶出群組隱藏欄位）、#75（條件引用隱藏欄位的彙總不會遮）是畫面通道的**讀取**遮罩修補。修正輪 HEAD 是 `origin/fix/74-75-screen-mask` 的 `c084787a`（2026-11-21 尚未合併、CI 跑中）。它改的檔：
+#74（一般參照來源的彙總與停用公式帶出群組隱藏欄位）、#75（條件引用隱藏欄位的彙總不會遮）是畫面通道的**讀取**遮罩修補，**已合併 main**（`c084787a`，之後還有 `4c83c989`）。它改的檔：
 
 | 檔案 | #74／#75 的改動 | mcp2a 的處理 |
 |---|---|---|
 | `Application/Common/Security/PermissionResolver.cs` | `HideDependents` 去掉 `aiMasked` 參數，畫面通道也走原本 MCP 才走的嚴格路徑 | **mcp2a 不改這個檔** |
-| `Application/Common/Security/RollupSourceMasks.cs` | 移除 `inputs.AiMasked` 條件；入口加系統管理員短路 | 不改 |
+| `Application/Common/Security/RollupSourceMasks.cs` | 移除 `inputs.AiMasked` 條件；入口加系統管理員短路（`IsSystemAdmin && !AiMasked`，只對畫面通道生效） | 不改 |
 | `ApplicationTests/Dynamic/Mcp/McpAiExclusionTests.cs` | 畫面通道斷言的理由文字（MCP 斷言沒改） | **不改**；寫入端案例另開 `McpAiWriteMaskTests` |
 | `ApplicationTests/Dynamic/{ReportRollupMaskTests,RollupFormulaMaskTests}.cs` | 新檔 | 不碰 |
-| `DynamicAccessGuard.cs`、`ChannelPermissionRepository.cs` | 目前沒改（使用者原先預告可能會改） | 不改；若 #74／#75 合併時改了，rebase 後重跑回歸 |
+| `DynamicAccessGuard.cs`、`ChannelPermissionRepository.cs` | 沒改 | 不改 |
 
-- MCP 通道的遮罩結果在 #74／#75 前後不變，D1（不能寫）完全沿用權限解析的輸出（`EffectivePermissions.HiddenFieldIds`），所以**沒有程式檔衝突、也沒有期望值衝突**，Task 5 不必等。
-- 唯一要注意的是 `RollupSourceMasks` 的系統管理員短路：`McpAiWriteMaskTests` 若用系統管理員跑「寫入後回應裡被遮欄位的依賴欄位也看不到」，期望值以合併後的 main 為準；Task 5 預設用一般使用者，另加一個系統管理員案例，合併後重跑確認。
+- 開工前 `git rebase origin/main`；本段的改動都在其他檔，衝突只會在文件。
+- MCP 通道的遮罩結果在 #74／#75 前後不變，D1（不能寫）完全沿用權限解析的輸出（`EffectivePermissions.HiddenFieldIds`），所以沒有程式檔衝突。
+- 系統管理員的期望值寫死：短路只對畫面通道生效，**MCP 通道的系統管理員照樣被遮**（被遮欄位與依賴它的公式、彙總都看不到）；畫面通道的系統管理員看得到。
 - S4 鎖住 `Common/Security/` 沒有 diff。
 
 ## Global Constraints
@@ -317,10 +331,12 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
 |---|---|---|
 | 7 個寫入工具、範圍 `business.write`、級別一般寫入 | `McpToolCatalog` | 平台功能清單 |
 | 可建立範圍加 `business.write`；預設勾選只有唯讀範圍 | `McpScopes.Issuable`、`McpScopes.DefaultChecked` | 平台功能清單（預設勾選依使用者 2026-11-21 裁決） |
-| 一次工具呼叫只能送一個最外層寫入請求；寫入稽核與業務同交易；MCP 通道沒上膛的寫入請求丟例外 | `McpWriteAuditBehavior` | 安全、資料完整性 |
+| 一次工具呼叫只能送一個最外層 `IIdempotentRequest`；寫入稽核與業務同交易；MCP 通道沒上膛的 `IIdempotentRequest` 丟例外；其他交易型請求放行 | `McpWriteAuditBehavior` | 安全、資料完整性 |
 | 稽核摘要不存寫入的值（判斷 15） | `McpAuditSummary` | 安全 |
 | 工具只從白名單參數逐欄組請求，`SystemKeys` 一律 null | `Tools/Write/*` | 安全 |
 | 寫入工具的 `idempotencyKey` 必填，格式沿用 `OperationContext.KeyPattern` | `McpArgs` | 資料完整性（技術限制） |
+| MCP 通道的冪等雜湊加通道後綴 | `IdempotencyBehavior` | 安全 |
+| 寫入、高風險、不存在工具的稽核摘要，未列的鍵只記型別與長度 | `McpAuditSummary` | 安全 |
 | 附件留言（`Files` 非空）不做請求層冪等 | `AddTaskCommentRequest.IdempotencyApplies` | 技術限制（`Stream` 不能可靠雜湊） |
 | 被遮欄位寫入時與隱藏欄位同語意（D1） | 既有 `RecordValueProcessor` | 安全 |
 | `ignoredFields` 不分原因、只涵蓋表頭 | `WriteTool` | 安全 |
@@ -341,7 +357,7 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
 |---|---|---|
 | EF migration、DbContext 模型設定 | 不動 | 本段沒有 migration |
 | ★ DI 註冊 | 2、3、8 | `Application/DependencyInjection.cs`：`McpWriteAuditBehavior` 登記在 `McpConfirmationBehavior` 之後、`AuditBehavior` 之前；scoped `IMcpWriteScope`；寫入工具的 `IMcpTool` 登記 |
-| ★ 冪等 | 3 | `Application/Common/IRecordWriteRequest.cs`、新 `Common/IIdempotentRequest.cs`、`Common/Behaviors/IdempotencyBehavior.cs`、`Dynamic/TaskService/TaskRequests.cs`（5 個 request 加 marker、留言覆寫 `IdempotencyApplies`） |
+| ★ 冪等 | 2、3 | Task 2：新 `Common/IIdempotentRequest.cs`、`Application/Common/IRecordWriteRequest.cs`；Task 3：`Common/Behaviors/IdempotencyBehavior.cs`（判斷改 marker、通道後綴、`IdempotencyApplies`）、`Dynamic/TaskService/TaskRequests.cs`（5 個 request 加 marker、留言覆寫 `IdempotencyApplies`） |
 | ★ 政策目錄 | 8 | `Domain/Policies/PolicyCatalog.cs`、`shared/policy-catalog.json` |
 | ★ 介面文字 | 1、2、8 | `shared/i18n/{zh-TW,en-US,th,vi}/ui.json`：`aiTokens.scopes.business.write`、`audit.actions.mcp.*`（7 個）、`policies.items.ops.ruleLoop*`、`ops.title.mcpWriteLoop` |
 | ★ 後端訊息 | 3、8 | `McpService/McpMessages.cs`、基準檔 `ApplicationTests/Common/ServerTextBaseline/mcp.json` |
@@ -389,8 +405,8 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
 ### Task 2: 寫入稽核同交易、摘要去值、錯誤對照、annotations
 
 **Files:**
-- Create: `McpService/Writes/{IMcpWriteScope,McpWriteScope,McpWriteAuditBehavior,McpWriteTargets}.cs`
-- Modify: `Application/DependencyInjection.cs`、`McpService/Tools/McpToolInvoker.cs`（上膛、已提交判斷、`Mapped` 的 `conflict` 與 `idempotency_key_reused`）、`McpService/Tools/IMcpTool.cs`（`McpErrorCodes` 加 `Conflict`、`IdempotencyKeyReused`、`WriteLoop`）、`McpService/McpAuditSummary.cs`（判斷 15）、`Domain/Mcp/McpToolCatalog.cs`（7 個寫入工具的宣告，`LoopTargetArg`）、`Common/Audit/AuditActions.cs`（7 個 `W`）、`shared/i18n/*/ui.json`（`audit.actions.mcp.*`）、`WebAPI/Mcp/McpSdkAdapter.cs`
+- Create: `Application/Common/IIdempotentRequest.cs`（判斷 3；`IdempotencyApplies` 預設屬性在 Task 3 加）、`McpService/Writes/{IMcpWriteScope,McpWriteScope,McpWriteAuditBehavior,McpWriteTargets}.cs`
+- Modify: `Application/Common/IRecordWriteRequest.cs`（改繼承 `IIdempotentRequest`）、`Application/DependencyInjection.cs`、`McpService/Tools/McpToolInvoker.cs`（上膛、執行器自己的參數驗證、已提交判斷、`AuditReason` 寫進 `ReasonCode`、`Mapped` 的 `conflict` 與 `idempotency_key_reused`）、`McpService/Tools/IMcpTool.cs`（`McpErrorCodes` 加 `Conflict`、`IdempotencyKeyReused`、`WriteLoop`；`McpToolOutcome` 加 `AuditReason`）、`McpService/McpAuditSummary.cs`（判斷 15）、`Domain/Mcp/McpToolCatalog.cs`（7 個寫入工具的宣告，`LoopTargetArg`）、`Common/Audit/AuditActions.cs`（7 個 `W`）、`shared/i18n/*/ui.json`（`audit.actions.mcp.*`）、`WebAPI/Mcp/McpSdkAdapter.cs`
 - Test: `ApplicationTests/Dynamic/Mcp/{McpWriteAuditTests,McpWriteTargetsTests,McpToolInvokerTests,McpAuditActionsTests,McpAuditSummaryTests,McpToolArchitectureTests}.cs`、`DomainTests/Mcp/McpToolCatalogTests.cs`、`WebAPITests/Dynamic/Mcp/{McpTransportTests,McpToolsApiTests}.cs`
 
 - [ ] **Step 1: 寫失敗的測試**
@@ -403,10 +419,18 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
     - `NestedTransactional_NotAudited`：handler 內巢狀的交易型請求不另寫列。
     - `UiChannel_NoArm_NoRow`：畫面通道送同一個請求 → 沒有任何稽核列（記錄寫入在畫面不記稽核，行為不變）。
     - `Mcp_UnarmedWrite_Throws`：MCP 通道、沒上膛，直接送 `TouchRecordWriteRequest` → `InvalidOperationException`、記錄沒變；同樣狀態送 `CreateMcpConfirmationRequest` → 照常成功。
+    - `FailedWrite_ThenNonIdempotentTransactional_PassesThrough`（複審 N2）：上膛後工具先送 `TouchRecordWriteRequest` 並回失敗，再送一個一般的交易型測試請求（不是 `IIdempotentRequest`，模擬簽核警示）→ 第二個照常執行、資料寫進去；稽核恰一列 `Invalid`、沒有 `Success` 列；`IsCommitted` 是 false。
+    - `Armed_NonIdempotentFirst_ThenWrite_OneSuccessRow`：上膛後先送一般交易型請求、再送 `TouchRecordWriteRequest` → 只有後者被接手，恰一列 `Success`。
+    - `AuditReason_WrittenWhenNotCommitted`：工具不送寫入請求、回 `AuditReason = preview` → 一列 `Success`、`ReasonCode=preview`。
+    - `ExecutorArgs_Invalid_NotArmed`：`idempotencyKey` 格式不符、或 `LoopTargetArg` 不是正整數 → `invalid_arguments`、工具沒被呼叫、`IsArmed` 是 false。
     - `Committed_ResultTooLarge_NotError_OneRow`、`Committed_CancelledAfterCommit_OneRow`（照 mcp1a 確認碼的同名案例）。
     - `AuditedRequest_Rejected`：上膛後送 `IAuditedRequest` → 丟例外、記錄沒變。
   - `McpWriteTargetsTests`：7 種 request 的 target；回應是型別物件與 `JsonElement` 都讀得到 id。
-  - `McpAuditSummaryTests`（判斷 15，每個參數一個案例）：`values` 只剩排序後的鍵；`details` 只剩模組 key、列數、每列鍵與有無 `id`；`title`／`description`／`body`／`comment` 只剩長度；`picks` 只剩代碼與人數；`dueDate` 只剩有／清除；`idempotencyKey`、id、`rowVersion`、`status` 保留；整份摘要字串不含任何送出的值（用帶特殊字樣的值斷言）。
+  - `McpAuditSummaryTests`（判斷 15，每個參數一個案例）：`values` 只剩排序後的鍵；`details` 只剩模組 key、列數、每列鍵與有無 `id`；`title`／`description`／`body`／`comment` 只剩長度；`picks` 只剩代碼與人數；`dueDate` 只剩有／清除；`idempotencyKey`、id、`rowVersion`、`status` 保留；整份摘要字串不含任何送出的值（用帶特殊字樣的值斷言）。複審 N1 的三個（都用帶特殊字樣的值斷言整份摘要找不到它）：
+    - `Write_UnknownArg_ValueNotStored`：寫入工具多帶 `fields`、`systemKeys` → 只有 `{type, length}`。
+    - `UnknownTool_ValuesNotStored`：呼叫 `create_records`（不存在）帶 `values` → `unknown_tool` 那一列的摘要找不到值。
+    - `Values_NotObject_TypeOnly`：`values` 是字串、`details` 是陣列、明細列是數字 → 只記型別。
+    - 唯讀工具的既有案例不變（未列的鍵照舊）。
   - `McpToolInvokerTests`：`Conflict_Stale`（`code=stale`）、`Conflict_Other`（`code=subtasksOpen` → `conflict`，`fields` 帶 `code` 與 `params.count`，訊息依 `X-Locale`）、`Unprocessable_IdempotencyReused`。
   - `McpAuditActionsTests`：7 個新動作在 `AuditActions`、四語都有標籤。
   - `McpToolCatalogTests`：照判斷 14 改。
@@ -421,8 +445,7 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
 ### Task 3: 冪等鍵
 
 **Files:**
-- Create: `Application/Common/IIdempotentRequest.cs`
-- Modify: `Common/IRecordWriteRequest.cs`、`Common/Behaviors/IdempotencyBehavior.cs`（`IdempotencyApplies`）、`Dynamic/TaskService/TaskRequests.cs`、`McpService/Tools/{McpToolInvoker,McpArgs}.cs`、`McpService/McpMessages.cs`、`ServerTextBaseline/mcp.json`
+- Modify: `Common/IIdempotentRequest.cs`（加預設屬性 `IdempotencyApplies`）、`Common/Behaviors/IdempotencyBehavior.cs`（判斷改 marker、`IdempotencyApplies`、通道後綴）、`Dynamic/TaskService/TaskRequests.cs`、`McpService/Tools/{McpToolInvoker,McpArgs}.cs`、`McpService/McpMessages.cs`、`ServerTextBaseline/mcp.json`
 - Test: `ApplicationTests/Dynamic/Mcp/McpIdempotencyTests.cs`（`Category=Postgres`）、`ApplicationTests/Dynamic/WriteJournalAndIdempotencyTests.cs`、`WebAPITests/IdempotencyApiTests.cs`（新增案例）
 
 - [ ] **Step 1: 寫失敗的測試**
@@ -435,6 +458,8 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
     - `Key_Missing_InvalidArguments`、`Key_BadFormat_InvalidArguments`（`fields.idempotencyKey`）。
     - `Key_IsolatedPerUser`：兩個使用者用同一個 key → 各寫一次。
     - `Key_SharedAcrossTokensOfSameUser`：同一人兩把權杖、同 key 同內容 → 第二把回放。
+    - `Key_UiThenMcp_NotReplayed`：同一人先經畫面通道用 key K 送一個請求，再經 MCP 用 K 送同樣內容 → `idempotency_key_reused`，不回放畫面的結果（雜湊含通道）。
+    - `UiHash_Unchanged`：畫面通道的雜湊與改動前相同（用固定請求比對已知雜湊值），既有紀錄照常回放。
     - `FailedFirst_RetryExecutes`：第一次 handler 回 `Invalid` → 沒有紀錄；同 key 修正後重送 → 執行。
     - `ConcurrentSameKey_OneWrite`【雙跑】：兩個 scope 同時送同 key → 恰一次寫入，另一個回放。
     - `Key_NotLeakingToNextCall`：同一個 DI scope 連續兩次呼叫，第二次沒帶 key（測試專用的選填工具）→ `ClientKey` 是 null。
@@ -484,7 +509,7 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
 
 ### Task 5: 寫入端「不提供給 AI」
 
-**開工條件**：D1 已裁決（不能寫），不必等 #74／#75；以開工當時的 main 為準。#74／#75 合併後 rebase，重跑本 Task 的 Step 4 當回歸。
+**開工條件**：D1 已裁決（不能寫）；#74／#75 已合併 main，開工前確認分支已 rebase 到含 `c084787a` 的 main。
 
 **Files:**
 - Modify: 預期只有 `McpService/Tools/Write/WriteTool.cs`（若 `ignoredFields` 要調整）；**不改**權限解析的四個檔與 `McpAiExclusionTests.cs`
@@ -496,12 +521,14 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
   - `Create_MaskedRequired_NotBlocked`（D2）：被遮欄位必填、沒預設 → 建立成功、該欄位空。
   - `IgnoredFields_NoExistenceLeak`：送被遮欄位的 key 與一個不存在的 key → 兩者在 `ignoredFields` 的呈現完全相同（同一個陣列、沒有原因欄）。
   - `MaskedValue_NotInAudit`：送了被遮欄位的值 → 稽核摘要沒有這個值（判斷 15）。
-  - `Response_HidesMaskedAndDependents`：寫入後的回應 `data` 不含被遮欄位；引用它的公式、彙總一併不出現。
-  - `Response_HidesMaskedAndDependents_SystemAdmin`：同上，用 MCP 通道的系統管理員（`RollupSourceMasks` 的系統管理員短路在 #74／#75 合併後要重跑確認）。
+  - `Update_MaskedDetailField_KeepsOldValue`（複審 N3）：明細子模組的某個欄位標「不提供給 AI」，`update_record` 修改既有明細列時送它的新值 → 資料庫的值不變、歷程沒有這筆變更、`meta.ignoredFields` 不列它（`ignoredFields` 只涵蓋表頭，判斷 7）。
+  - `Create_MaskedDetailField_DefaultOnly`（複審 N3）：`create_record` 新增明細列時送被遮明細欄位的值 → 有預設值就存預設值、沒有就空。
+  - `Response_HidesMaskedAndDependents`：寫入後的回應 `data` 不含被遮欄位（表頭與明細列都不含）；引用它的公式、彙總一併不出現。
+  - `Response_HidesMaskedAndDependents_SystemAdmin`：同上，用 MCP 通道的系統管理員 → 一樣看不到（`RollupSourceMasks` 的系統管理員短路是 `IsSystemAdmin && !AiMasked`，只對畫面通道生效）；同一位管理員經 REST 看得到。
   - `SameUser_Ui_CanWrite`：同一使用者經 REST 寫同一欄位 → 有寫進去（畫面通道不受影響）。
   - `Approval_Submit_MaskedTitleTemplate`：模組標題樣板含被遮欄位，MCP 送簽成功；get_record_approval 的標題快照照 mcp1a Q7 是空字串（送簽工具在 Task 7，這一條在 Task 7 完成後補跑，先標 `Skip` 並寫原因）。
 - [ ] **Step 2: 跑測試確認失敗**：`cd backend && dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~McpAiWriteMaskTests"`。若一開始就全部通過（沿用既有語意本來就成立），在交棒說明寫明，仍保留測試當回歸。
-- [ ] **Step 3: 實作**：只在測試失敗的地方補；需要改權限解析就停下回報（違反「與 #74／#75 的衝突點」的前提）。
+- [ ] **Step 3: 實作**：只在測試失敗的地方補；需要改權限解析就停下回報（違反「與 #74／#75 的衝突點」的前提）。明細走 `DetailWriter` → `guard.AuthorizeDetailAsync`，`ChannelPermissionRepository` 對每個模組都標 `AiMasked`，預期不必改程式。
 - [ ] **Step 4: 跑測試確認通過**：同 Step 2；加跑 `McpAiExclusionTests`、`McpAiExclusionReportTests`、`ChannelPermissionDecorationTests`、`McpParityTests`。PostgreSQL：`FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.WebAPITests --filter "Category=Postgres&FullyQualifiedName~McpAiWriteMaskTests"`。
 - [ ] **Step 5: Commit**（`test(mcp): 寫入端「不提供給 AI」欄位的語意`）
 
@@ -561,6 +588,7 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
     - `Submit_Direct_IdempotentResend`：直接轉移後同 key 重送 → 回放 `outcome=direct`。
     - `Withdraw_NotInitiator_Conflict`、`Withdraw_StageHandled_Conflict`。
     - `Withdraw_StaleInstanceVersion_Conflict`：用舊的實例 rowVersion → `conflict`（不是 `stale`，與工具描述一致）。
+    - `Submit_RuntimeInvalid_AlertWritten_OneInvalidRow`（複審 N2）：流程設定讓引擎在送簽時觸發執行期錯誤（沿用 `ApprovalApiTests` 或 `ApprovalAlert` 既有測試的造法）→ MCP 回錯誤；系統管理員收到簽核警示（與畫面通道同一案例的結果相同）；稽核恰一列 `Invalid`、沒有 `Success` 列；Error log 沒有「第二個寫入請求」的例外。
 - [ ] **Step 2: 跑測試確認失敗**：`cd backend && dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~McpWriteParityTests|FullyQualifiedName~McpWriteToolsApiTests|FullyQualifiedName~McpTransportTests|FullyQualifiedName~McpAiWriteMaskTests"`
 - [ ] **Step 3: 實作**（判斷 9）。
 - [ ] **Step 4: 跑測試確認通過**：同 Step 2；加跑 `ApprovalApiTests`。PostgreSQL：`FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.WebAPITests --filter "Category=Postgres&FullyQualifiedName~McpWrite"`。
@@ -646,7 +674,7 @@ D1、D7 是使用者 2026-11-21 裁決；D2–D6、D9 是**顧問拍板，待使
 | # | 項目 | Task | 驗證 |
 |---|---|---|---|
 | 1 | `business.write` 可建立、寫入範圍預設不勾 | 1 | `McpScopesTests`、`McpTokenApiTests`、`AiTokensPage.vitest.spec.ts` |
-| 2 | 寫入稽核與業務同交易、提交後不寫第二列、稽核寫不進就回滾、沒上膛的寫入丟例外 | 2 | `McpWriteAuditTests` |
+| 2 | 寫入稽核與業務同交易、提交後不寫第二列、稽核寫不進就回滾、沒上膛的寫入丟例外、其他交易型請求放行（簽核警示照常） | 2、7 | `McpWriteAuditTests`、`Submit_RuntimeInvalid_AlertWritten_OneInvalidRow` |
 | 3 | 稽核摘要不存寫入的值 | 2、5 | `McpAuditSummaryTests`、`McpWriteToolsApiTests.CreateRecord_Audit`、`McpAiWriteMaskTests.MaskedValue_NotInAudit` |
 | 4 | 錯誤代碼（`stale`、`conflict`、`idempotency_key_reused`）與 annotations | 2、3 | `McpToolInvokerTests`、`McpTransportTests` |
 | 5 | 重送同一冪等鍵不重複寫（記錄、任務、留言、送簽；並行；跨權杖；回放結果相同；附件留言不壞） | 3、4、7 | `McpIdempotencyTests`、`WriteJournalAndIdempotencyTests`、`IdempotencyApiTests`、`McpWriteToolsApiTests.*Resend*`、`*Replay*` |
@@ -672,8 +700,8 @@ grep -rn "ruleLoop" backend/src --include='*.cs' | grep -v "PolicyCatalog\|McpPo
 git diff --name-only main...HEAD -- backend/src/DynamicModules.Application/Common/Security/   # 無結果
 # S5 寫入工具只送既有 request
 grep -rn "new .*Request(" backend/src/DynamicModules.Application/Dynamic/McpService/Tools/Write | grep -v "CreateRecordRequest\|UpdateRecordRequest\|GetRecordRequest\|GetModuleSchemaRequest\|CreateTaskRequest\|CreateRecordTaskRequest\|CreateSubtaskRequest\|UpdateTaskRequest\|AddTaskCommentRequest\|PreviewRecordApprovalRequest\|SubmitApprovalRequest\|WithdrawApprovalRequest"   # 無結果
-# S6 白名單組請求：不碰 SystemKeys、不整包反序列化
-grep -rn "SystemKeys\|Deserialize<" backend/src/DynamicModules.Application/Dynamic/McpService/Tools/Write   # 無結果
+# S6 白名單組請求：不碰 SystemKeys、不把參數反序列化成 request（values 的解析在 McpArgs，不在掃描範圍）
+grep -rnE "SystemKeys|Deserialize<\w*Request" backend/src/DynamicModules.Application/Dynamic/McpService/Tools/Write   # 無結果
 ```
 
 ## 實機驗收（Claude Code 連本機）
@@ -695,21 +723,22 @@ Codex 的寫入不另做（工具與 Claude Code 共用同一個 endpoint，mcp1
 | 批 | Task | 新檔 | 改檔 | 手寫行數（估，含測試） |
 |---|---|---|---|---|
 | mcp2a-1 | 1 範圍與對話框 | 0 | 9 | ≈ 180（測試約 90；文案約 10） |
-| | 2 寫入稽核、摘要去值、錯誤對照、annotations | 6（含 2 個測試檔） | 12 | ≈ 760（測試約 440） |
-| | 3 冪等鍵 | 2（含 1 個測試檔） | 8 | ≈ 460（測試約 280） |
-| | 小計 | 8 | 29 | ≈ 1400 |
+| | 2 冪等標記、寫入稽核、摘要去值、錯誤對照、annotations | 7（含 2 個測試檔） | 13 | ≈ 830（測試約 500） |
+| | 3 冪等鍵 | 1（測試檔） | 8 | ≈ 480（測試約 300） |
+| | 小計 | 8 | 30 | ≈ 1490 |
 | mcp2a-2 | 4 記錄工具與對照 | 4（含 2 個測試檔） | 2 | ≈ 790（測試約 490） |
-| | 5 寫入端遮罩 | 1（測試檔） | 0–1 | ≈ 280（測試約 260） |
-| | 小計 | 5 | 3 | ≈ 1070 |
+| | 5 寫入端遮罩 | 1（測試檔） | 0–1 | ≈ 330（測試約 310） |
+| | 小計 | 5 | 3 | ≈ 1120 |
 | mcp2a-3 | 6 任務與留言工具 | 1 | 2 | ≈ 560（測試約 340） |
-| | 7 簽核工具 | 1 | 4 | ≈ 510（測試約 320） |
-| | 小計 | 2 | 6 | ≈ 1070 |
+| | 7 簽核工具 | 1 | 4 | ≈ 550（測試約 360） |
+| | 小計 | 2 | 6 | ≈ 1110 |
 | mcp2a-4 | 8 迴圈、政策與事件 | 3（含 2 個測試檔） | 14 | ≈ 790（測試約 400；文案約 30） |
 | | 9 文件與收尾 | 0 | 6 | ≈ 220 |
 | | 小計 | 3 | 20 | ≈ 1010 |
-| 合計 | | 約 18 | 約 58 | ≈ 4550，其中測試約 57% |
+| 合計 | | 約 18 | 約 59 | ≈ 4730，其中測試約 58% |
 
 - 第二輪比初版多約 750 行：摘要去值（+140）、附件留言放行與測試（+60）、白名單與 `undoToken` 測試（+110）、`update_record` 前置讀取與回放（+90）、送簽重送（+90）、迴圈事件請求、標題與假實作（+230）、文件（+50）。
+- 第三輪再多約 180 行：未列鍵與非物件的摘要規則（+50）、behavior 只接手 `IIdempotentRequest` 與 `AuditReason`（+60）、明細遮罩案例（+50）、冪等雜湊通道（+20）。mcp2a-1 約 1490，貼近上限；若 Task 2 實作超過 850 行，把 annotations 與 `McpTransportTests` 移到 Task 3 開頭。
 - 單一 Task 超過 700 行就拆 commit：Task 2、4、8 照各自 Step 5。
 
 ## 已知限制（mcp2a，交付時寫回設計）
@@ -723,7 +752,7 @@ Codex 的寫入不另做（工具與 Claude Code 共用同一個 endpoint，mcp1
 - 迴圈的鋸齒效應：時間窗一滑動就放行一次，迴圈會以「門檻／時間窗」的速度繼續寫，事件只累加次數、不再通知，直到每日名額用完（D4 自動恢復的取捨，手冊寫明）。
 - 迴圈計數在交易外判斷，並行的兩次寫入可能讓次數多一次才擋（門檻型偵測可接受）。
 - 冪等紀錄保留 `maintenance.idempotencyRetentionDays`（出廠 7 天），過了之後同 key 重送會再執行一次；附件留言沒有請求層冪等（MCP 不收附件，不受影響）。
-- 檢查規則若引用被遮欄位，AI 可以藉「改別的欄位後有沒有被擋」試探被遮欄位的值（畫面上看不到隱藏欄位的使用者也有同樣問題）。
+- 檢查規則若引用被遮欄位，AI 可以藉「改別的欄位後有沒有被擋」試探被遮欄位的值；更直接的是，檢查訊息裡的 `{value}`、`{limit}` 會換成彙總值（`CheckEvaluator`），若彙總的正好是被遮欄位，AI 在 `conflict` 訊息裡直接拿到數字。畫面上看不到隱藏欄位的使用者也是同樣語意，本段不擋；主控另開票處理「MCP 通道上彙總欄位被遮時 `{value}` 顯示為『…』」。
 - 被遮的必填欄位在 AI 建立時不檢查（D2）。
 - 歷程不標「經 AI」（D7，票 #81），要到稽核頁查。
 - 留言不收附件；不做 `mark_notifications_read`（D6，票 #82）。
@@ -745,11 +774,11 @@ Codex 的寫入不另做（工具與 Claude Code 共用同一個 endpoint，mcp1
 
 1. **設計覆蓋**：§5.2 → 判斷 6、Task 1；§5.5 第三點 → D1、D2、Task 5；§6.2 → 判斷 10；§6.5 → 判斷 4；§7.2 mcp2a → 判斷 1、2、5、9、D6；§8.1 → 判斷 3、15；§8.2 → 判斷 12；§12 mcp2a 列 → 「整段驗收」；§13.5 建立對話框 → Task 1；C3 → 判斷 8、D4、D5。
 2. **使用者裁決**：寫入範圍預設不勾 → 判斷 6；被擋、失敗、取消計入每日名額 → 判斷 12；畫面通道也補遮罩（#74、#75）→ 「與 #74／#75 的衝突點」；D1 不能寫 → 判斷 7、Task 5；D7 不標 → 票 #81。
-3. **審查第二輪**：必修 1 → 判斷 15；必修 2 → 判斷 5；必修 3 → 判斷 9；必修 4 → 判斷 7；必修 5 → 判斷 3、8；必修 6 → 判斷 16、S6；必修 7 → 判斷 11；必修 8 → 判斷 14；必修 9 → S2；必修 10 → 前置條件 3、Task 5。建議 1 → 判斷 3；2、3 → D4、已知限制、手冊；4 → 判斷 8；5 → 判斷 8；6 → 判斷 7、已知限制；7 → 判斷 2、已知限制；8 → 子段切法；9 → 已知限制；10 → 衝突點表。
-4. **型別一致**：`McpScopes.{Issuable,DefaultChecked}`、`McpInfoResponse.DefaultScopes`、`McpToolDescriptor.LoopTargetArg`、`IMcpWriteScope.{Arm,IsCommitted,IsArmed}`、`McpWriteAudit`、`McpWriteAuditBehavior`、`McpWriteTargets`、`IIdempotentRequest.IdempotencyApplies`、`McpErrorCodes.{Conflict,IdempotencyKeyReused,WriteLoop}`、`IAuditLogRepository.CountWritesForTargetSinceAsync`、`McpUsage.HasOperationAsync`、`RecordMcpWriteLoopIncidentRequest`、`IncidentTitles.WriteLoop`、`PolicyCatalog.{OpsRuleLoopTriggersPerRecord,OpsRuleLoopWindowMinutes}`。
+3. **審查第二輪與複審**：複審 N1 → 判斷 15、Task 2；N2 → 判斷 3、Task 2、Task 7；N3 → Task 5；複審建議 1 → 前置條件 3、衝突點、Task 5；2 → 判斷 3、Task 2 Files；3 → 判斷 3、9；4 → 判斷 16；5 → 已知限制；6 → 判斷 8；7 → 判斷 5、Task 3。第二輪：必修 1 → 判斷 15；必修 2 → 判斷 5；必修 3 → 判斷 9；必修 4 → 判斷 7；必修 5 → 判斷 3、8；必修 6 → 判斷 16、S6；必修 7 → 判斷 11；必修 8 → 判斷 14；必修 9 → S2；必修 10 → 前置條件 3、Task 5。建議 1 → 判斷 3；2、3 → D4、已知限制、手冊；4 → 判斷 8；5 → 判斷 8；6 → 判斷 7、已知限制；7 → 判斷 2、已知限制；8 → 子段切法；9 → 已知限制；10 → 衝突點表。
+4. **型別一致**：`McpScopes.{Issuable,DefaultChecked}`、`McpInfoResponse.DefaultScopes`、`McpToolDescriptor.LoopTargetArg`、`IMcpWriteScope.{Arm,IsCommitted,IsArmed}`、`McpWriteAudit`、`McpWriteAuditBehavior`、`McpWriteTargets`、`IIdempotentRequest.IdempotencyApplies`、`McpToolOutcome.AuditReason`、`McpErrorCodes.{Conflict,IdempotencyKeyReused,WriteLoop}`、`IAuditLogRepository.CountWritesForTargetSinceAsync`、`McpUsage.HasOperationAsync`、`RecordMcpWriteLoopIncidentRequest`、`IncidentTitles.WriteLoop`、`PolicyCatalog.{OpsRuleLoopTriggersPerRecord,OpsRuleLoopWindowMinutes}`。
 5. **前段踩過的坑**：
    - 回放的 `Data` 是 `JsonElement`，工具不轉型；`undoToken` 兩種形狀都要拿掉（判斷 5、11）。
-   - 稽核只能一列：寫入、確認、`IAuditedRequest` 三種互斥；迴圈事件在上膛之前（判斷 3、8）。
+   - 稽核只能一列：寫入、確認、`IAuditedRequest` 三種互斥；迴圈事件在上膛之前；behavior 只接手 `IIdempotentRequest`，簽核警示等交易型請求放行（判斷 3、8）。
    - `WriteNowAsync` 不能在交易內呼叫：失敗列仍由執行器在交易外寫；`IncidentRecorder` 只能在交易內，所以事件另開 scope 送交易型請求。
    - 新測試類別進 PostgreSQL 雙跑集；依可空欄位排序寫明 NULL 位置。
    - 新訊息進 `mcp.json` 基準檔；四語文案同步並跑前端守衛。
