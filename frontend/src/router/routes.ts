@@ -42,6 +42,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'system/locales', component: () => import('src/pages/system/LocalesPage.vue') },
       { path: 'system/ops', component: () => import('src/pages/system/OpsPage.vue') },
       { path: 'system/audit', component: () => import('src/pages/system/AuditPage.vue') },
+      { path: 'system/ai-access', component: () => import('src/pages/system/AiAccessPage.vue') },
       { path: 'system/mail', component: () => import('src/pages/system/MailSettingsPage.vue') },
       { path: 'system/apps', component: () => import('src/pages/system/AppsPage.vue') },
       { path: 'system/demo-data', component: () => import('src/pages/system/DemoDataPage.vue') },

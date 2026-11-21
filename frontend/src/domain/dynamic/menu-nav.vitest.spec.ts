@@ -62,10 +62,10 @@ describe('systemLinks', () => {
     expect(systemLinks(me(false, false))).toEqual([]);
     expect(systemLinks(undefined)).toEqual([]);
   });
-  it('system admins get users, groups, organization, dashboards, appearance, policies, mail, ops, audit, locales; designer readers get designer, conversions and demo data', () => {
+  it('system admins get users, groups, organization, dashboards, appearance, policies, mail, ops, audit, AI access, locales; designer readers get designer, conversions and demo data', () => {
     expect(systemLinks(me(true, false)).map((l) => l.to))
       .toEqual(['/system/users', '/system/groups', '/system/organization', '/system/dashboards', '/system/appearance', '/system/policies', '/system/locales',
-        '/system/mail', '/system/ops', '/system/audit']);
+        '/system/mail', '/system/ops', '/system/audit', '/system/ai-access']);
     expect(systemLinks(me(false, true)).map((l) => l.to)).not.toContain('/system/locales');
     expect(systemLinks(me(false, true)).map((l) => l.to)).not.toContain('/system/ops');
     expect(systemLinks(me(true, false)).find((l) => l.to === '/system/organization'))
@@ -74,7 +74,7 @@ describe('systemLinks', () => {
     expect(systemLinks(me(true, true)).map((l) => l.to)).toContain('/system/apps');
     expect(systemLinks(me(false, true)).map((l) => l.to)).not.toContain('/system/apps');
     expect(systemLinks(me(false, true)).map((l) => l.to)).toEqual(['/system/dynamic-modules', '/system/conversions', '/system/demo-data']);
-    expect(systemLinks(me(true, true))).toHaveLength(14);
+    expect(systemLinks(me(true, true))).toHaveLength(15);
   });
   it('PAX-36 只有權限設定的帳號（GET me 的設計器只有隱含讀取）：有動態模組設計，沒有使用者、群組、應用程式', () => {
     const permOnly = { isSystemAdmin: false, designer: { read: true, add: false, edit: false, delete: false }, permissionAdmin: true } as never;

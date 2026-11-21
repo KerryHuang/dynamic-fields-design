@@ -38,8 +38,9 @@ describe('ops routes', () => {
 });
 
 describe('conversions route', () => {
-  it('/account/ai-tokens 開啟個人權杖頁', () => {
+  it('/account/ai-tokens 與 /system/ai-access 開啟個人權杖頁與管理員 AI 連線頁', () => {
     expect(loaderOf('/account/ai-tokens').source).toContain('AiTokensPage');
+    expect(loaderOf('/system/ai-access').source).toContain('AiAccessPage');
   });
 
   it('/system/conversions opens ConversionsPage', () => {

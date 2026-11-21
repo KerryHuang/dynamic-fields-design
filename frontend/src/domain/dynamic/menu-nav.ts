@@ -57,6 +57,7 @@ export function systemLinks(me: Pick<Me, 'isSystemAdmin' | 'designer'> | undefin
       { to: '/system/mail', label: 'menu.mail', icon: 'mail', testid: 'mail-menu' },
       { to: '/system/ops', label: 'menu.ops', icon: 'monitor_heart', testid: 'ops-menu' },
       { to: '/system/audit', label: 'menu.audit', icon: 'fact_check', testid: 'audit-menu' },
+      { to: '/system/ai-access', label: 'menu.aiAccess', icon: 'smart_toy', testid: 'ai-access-menu' },
     );
   }
   if (me.isSystemAdmin && me.designer.read)
