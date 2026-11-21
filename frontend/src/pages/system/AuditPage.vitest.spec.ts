@@ -80,6 +80,16 @@ describe('AuditPage', () => {
     w.unmount();
   });
 
+  it('網址的 ?channel=mcp 帶入來源管道篩選（管理員 AI 連線頁的連結）；不認得的值忽略', async () => {
+    const { w } = await mountPage('/system/audit?channel=mcp');
+    expect(lists()[0]!.params).toMatchObject({ channel: 'mcp' });
+    expect(q('audit-filters')!.textContent).toContain('MCP');
+    w.unmount();
+    const other = await mountPage('/system/audit?channel=nope');
+    expect(lists()[0]!.params).not.toHaveProperty('channel');
+    other.w.unmount();
+  });
+
   it('起訖日換成 UTC 區間：營運時區起日當天 0 點、迄日當天最後一毫秒', async () => {
     const { w } = await mountPage('/system/audit');
     const dates = w.findAllComponents({ name: 'DateSelect' });

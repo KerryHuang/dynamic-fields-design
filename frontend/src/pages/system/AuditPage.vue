@@ -14,7 +14,7 @@ import AuditDetailPanel from 'src/presentation/ops/AuditDetailPanel.vue';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 
 // 稽核頁（維運設計 §17.3）：篩選列＋清單（Id 遞減 keyset，捲到底自動載入下一頁）；點開是詳細。
-// 桌機詳細與清單並排，其他寬度用對話框（手機全螢幕）。`?id=` 直接開詳細（通知與事件樣本的連結），`?targetKind=&targetId=` 帶入目標篩選。
+// 桌機詳細與清單並排，其他寬度用對話框（手機全螢幕）。`?id=` 直接開詳細（通知與事件樣本的連結），`?targetKind=&targetId=` 帶入目標篩選，`?channel=` 帶入來源管道（管理員 AI 連線頁連來看 MCP 呼叫）。
 const { t, te } = useI18n();
 // 日期篩選依營運時區切日（政策 locale.timeZone）
 const zoneHint = t('audit.filters.zoneHint', { offset: `UTC${businessOffset()}` });
@@ -29,7 +29,7 @@ const CHANNELS = ['ui', 'job', 'mcp', 'opsCenter'];
 const RESULTS = ['success', 'denied', 'invalid', 'failed'];
 
 const form = ref({ from: null as string | null, to: null as string | null, actor: null as string | null, action: null as string | null,
-  channel: null as string | null, result: null as string | null });
+  channel: CHANNELS.includes(String(route.query.channel)) ? String(route.query.channel) : null, result: null as string | null });
 /** 篩選列：手機預設收起，其他寬度展開。 */
 const showFilters = ref(!$q.screen.lt.sm);
 /** 動作選單的值：`group:<分組>` 或動作代碼。 */
