@@ -22,7 +22,7 @@ async function mountAtWidth(width: number, locale: 'zh-TW' | 'en-US' = 'zh-TW', 
   const pinia = createPinia();
   setActivePinia(pinia);
   http.defaults.adapter = async (config) => ({
-    data: config.url === '/me' ? ME : config.url === '/users' ? USERS : config.url === '/notifications' ? { items: [], unreadCount: 3 } : [], status: 200, statusText: 'OK', headers: {}, config,
+    data: config.url === '/me' ? ME : config.url === '/users' ? USERS : config.url === '/notifications' ? { items: [], unreadCount: 3 } : config.url === '/me/mcp' ? { enabled: true, canUse: true } : [], status: 200, statusText: 'OK', headers: {}, config,
   });
   const stub = { template: '<i/>' };
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: stub }, { path: '/reports', component: stub }, { path: '/designer', component: stub, meta: { collapseDrawer: true } }] });
@@ -39,6 +39,23 @@ async function mountAtWidth(width: number, locale: 'zh-TW' | 'en-US' = 'zh-TW', 
 /** 覆蓋式抽屜的遮罩：收合時仍在 DOM 但有 hidden 類別。 */
 const backdrop = () => document.querySelector<HTMLElement>('.q-drawer__backdrop');
 const drawerOpen = () => { const b = backdrop(); return b !== null && !b.classList.contains('hidden'); };
+
+describe('MainLayout 頂列的 AI 存取權杖入口', () => {
+  const original = window.innerWidth;
+  beforeEach(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
+  afterEach(() => { window.innerWidth = original; document.body.innerHTML = ''; });
+
+  it('390px 只剩圖示（帶無障礙標籤），避免頂列擠到橫捲；1366px 顯示文字', async () => {
+    const narrow = await mountAtWidth(390);
+    const link = narrow.w.get('[data-testid="ai-tokens-link"]');
+    expect(link.attributes('aria-label')).toBe(zhTW.aiTokens.entry);
+    expect(link.text()).not.toContain(zhTW.aiTokens.entry);
+    narrow.w.unmount();
+    const wide = await mountAtWidth(1366);
+    expect(wide.w.get('[data-testid="ai-tokens-link"]').text()).toContain(zhTW.aiTokens.entry);
+    wide.w.unmount();
+  });
+});
 
 describe('MainLayout 響應式選單', () => {
   const original = window.innerWidth;

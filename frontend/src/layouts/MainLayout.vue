@@ -21,6 +21,12 @@
         >
           <q-tooltip v-if="$q.screen.lt.sm">{{ t('auth.changePassword') }}</q-tooltip>
         </q-btn>
+        <q-btn
+          v-if="showAiEntry" flat dense no-caps class="q-mr-sm" icon="smart_toy" :label="$q.screen.lt.sm ? undefined : t('aiTokens.entry')"
+          :aria-label="t('aiTokens.entry')" to="/account/ai-tokens" data-testid="ai-tokens-link"
+        >
+          <q-tooltip v-if="$q.screen.lt.sm">{{ t('aiTokens.entry') }}</q-tooltip>
+        </q-btn>
         <span v-if="logoutError" class="q-mr-sm bg-negative text-white q-px-sm rounded-borders" data-testid="logout-error">{{ t('auth.logoutFailed') }}</span>
         <q-btn flat dense no-caps :label="t('auth.logout')" :loading="logoutMutation.isPending.value" data-testid="logout" @click="logout" />
       </q-toolbar>
@@ -92,6 +98,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useLogout } from 'src/application/dynamic/queries/auth-queries';
+import { useMyMcp, useMyMcpTokens } from 'src/application/dynamic/queries/mcp-queries';
 import { useMenu } from 'src/application/dynamic/queries/modules-queries';
 import { useMe, useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import { useBusinessTimeWatch } from 'src/application/dynamic/queries/use-business-time-watch';
@@ -129,6 +136,14 @@ const { data: menu } = useMenu();
 const menuGroups = computed(() => groupMenu(menu.value ?? [], locale.value));
 const { data: me } = useMe();
 const links = computed(() => systemLinks(me.value));
+// 「AI 存取權杖」入口（MCP 設計 §13.5）：能用就顯示；不能用的原因是管理員關閉、不在可用對象、政策有誤時，只有已經有權杖的人才顯示
+// （要能進去看與撤銷）；Demo 站（demoSite、accountBlocked）固定顯示，頁面會說明為什麼不開放。
+const mcp = useMyMcp();
+const mcpReason = computed(() => mcp.data.value?.reason ?? null);
+const needsTokenCheck = computed(() => mcp.data.value?.canUse === false && ['disabled', 'notAllowed', 'policyInvalid'].includes(mcpReason.value ?? ''));
+const { data: ownTokens } = useMyMcpTokens(needsTokenCheck);
+const showAiEntry = computed(() => mcp.data.value?.canUse === true || ['demoSite', 'accountBlocked'].includes(mcpReason.value ?? '')
+  || (needsTokenCheck.value && (ownTokens.value?.length ?? 0) > 0));
 // 首頁的「最近開過」：每次進到某個模組就記一筆
 const route = useRoute();
 watch(

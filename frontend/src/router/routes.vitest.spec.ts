@@ -38,6 +38,10 @@ describe('ops routes', () => {
 });
 
 describe('conversions route', () => {
+  it('/account/ai-tokens 開啟個人權杖頁', () => {
+    expect(loaderOf('/account/ai-tokens').source).toContain('AiTokensPage');
+  });
+
   it('/system/conversions opens ConversionsPage', () => {
     expect(loaderOf('/system/conversions').source).toContain('ConversionsPage');
   });

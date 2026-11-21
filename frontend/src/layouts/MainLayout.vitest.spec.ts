@@ -49,6 +49,7 @@ describe('MainLayout menu', () => {
       else if (config.url === '/me') data = me(true);
       else if (config.url === '/notifications') data = { items: [], unreadCount: 0 };
       else if (config.url === '/policies/effective') data = { values: { 'locale.timeZone': '+08:00' } };
+      else if (config.url === '/me/mcp') data = { enabled: false, canUse: false, reason: 'demoSite' };
       else { seen.push(user); data = [{ key: 'm', name: { 'zh-TW': `menu-${user}` } }]; }
       return { data, status: 200, statusText: 'OK', headers: {}, config };
     };
@@ -549,6 +550,59 @@ describe('MainLayout menu', () => {
     expect(item.text()).not.toContain('我的任務');
     expect(item.attributes('href')).toBe('/tasks');
     expect(w.get('[data-testid="home-menu"]').element.nextElementSibling).toBe(item.element);
+    w.unmount();
+  });
+});
+
+describe('AI access entry', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  });
+  const mountWith = async (info: Record<string, unknown>, tokens: unknown[] = []) => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    useIdentityStore().setSession('admin');
+    const calls: string[] = [];
+    http.defaults.adapter = async (config) => {
+      calls.push(String(config.url));
+      const data = config.url === '/me' ? me(false) : config.url === '/users' ? USERS : config.url === '/me/mcp' ? info : config.url === '/me/mcp/tokens' ? tokens : [];
+      return { data, status: 200, statusText: 'OK', headers: {}, config };
+    };
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const w = mount(MainLayout, {
+      global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    });
+    await flushPromises();
+    return { w, calls };
+  };
+  const link = (w: ReturnType<typeof mount>) => w.find('[data-testid="ai-tokens-link"]');
+
+  it('shows next to change-password when the user can use MCP, and goes to /account/ai-tokens', async () => {
+    const { w } = await mountWith({ enabled: true, canUse: true });
+    expect(link(w).exists()).toBe(true);
+    expect(link(w).attributes('href')).toBe('/account/ai-tokens');
+    w.unmount();
+  });
+
+  it('is hidden when MCP is off and the user has no tokens (and then asks for the token list)', async () => {
+    const { w, calls } = await mountWith({ enabled: false, canUse: false, reason: 'disabled' });
+    expect(link(w).exists()).toBe(false);
+    expect(calls).toContain('/me/mcp/tokens');
+    w.unmount();
+  });
+
+  it.each(['disabled', 'notAllowed', 'policyInvalid'])('stays reachable with reason %s when the user already has tokens', async (reason) => {
+    const { w } = await mountWith({ enabled: false, canUse: false, reason }, [{ id: 1 }]);
+    expect(link(w).exists()).toBe(true);
+    w.unmount();
+  });
+
+  it.each(['demoSite', 'accountBlocked'])('shows on the demo site (reason %s) so the state can be explained', async (reason) => {
+    const { w, calls } = await mountWith({ enabled: true, canUse: false, reason });
+    expect(link(w).exists()).toBe(true);
+    expect(calls).not.toContain('/me/mcp/tokens');
     w.unmount();
   });
 });

@@ -26,6 +26,7 @@ import type {
 } from 'src/domain/dynamic/task-board-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
 import type { ApplyLocalePackResult, LocaleAdminList, LocalePackReportData, LocaleTemplateOptions } from 'src/domain/dynamic/locale-pack-types';
+import type { McpCreateBody, McpInfo, McpToken, McpTokenCall, McpTokenCreated } from 'src/domain/mcp/mcp-types';
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import type {
   AuditAction, AuditDetail, AuditFilter, AuditList, HealthCheckConfig, HealthCheckState, HealthCheckUpdate, HealthResults, IncidentDetail, IncidentFilter,
@@ -244,9 +245,9 @@ export const dynamicApi = {
   deleteTarget: (t: DeleteTargetRef, purged: number) => http.delete(deletePath(t), { params: { purged } }).then(data),
   addBlock: (key: string, label: I18nText) => http.post(`/modules/${key}/blocks`, { label }).then(data),
   updateBlock: (id: number, body: { label: I18nText; collapsed: boolean; columns: number }) => http.put(`/blocks/${id}`, body).then(data),
-  addField: (key: string, body: { blockId: number; type: FieldType; label: I18nText; config: FieldConfig }) =>
+  addField: (key: string, body: { blockId: number; type: FieldType; label: I18nText; config: FieldConfig; excludeFromAi?: boolean }) =>
     http.post<DesignerField>(`/modules/${key}/fields`, body).then(data),
-  updateField: (id: number, body: { type: FieldType; label: I18nText; config: FieldConfig; blockId: number }) =>
+  updateField: (id: number, body: { type: FieldType; label: I18nText; config: FieldConfig; blockId: number; excludeFromAi?: boolean }) =>
     http.put<DesignerField>(`/fields/${id}`, body).then(data),
   setFieldStatus: (id: number, status: 'active' | 'inactive') => http.put(`/fields/${id}/status`, { status }).then(data),
   reorderFields: (blockId: number, fieldIds: number[]) => http.put(`/blocks/${blockId}/field-order`, { fieldIds }).then(data),
@@ -589,6 +590,16 @@ export const dynamicApi = {
   testMailSettings: () => http.post<MailTestResult>('/system/mail-settings/test').then(data),
   getAudit: (f: AuditFilter, cursor?: string) =>
     http.get<AuditList>('/system/ops/audit', { params: { ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)), cursor } }).then(data),
+  /** AI 連線（MCP）權杖（設計 §13.4）：本人 me/mcp/*，管理員 system/mcp/*。 */
+  getMyMcp: () => http.get<McpInfo>('/me/mcp').then(data),
+  getMyMcpTokens: () => http.get<McpToken[]>('/me/mcp/tokens').then(data),
+  createMcpToken: (body: McpCreateBody) => http.post<McpTokenCreated>('/me/mcp/tokens', body).then(data),
+  revokeMyMcpToken: (id: number) => http.post(`/me/mcp/tokens/${id}/revoke`).then(data),
+  getMcpTokenCalls: (id: number) => http.get<McpTokenCall[]>(`/me/mcp/tokens/${id}/calls`).then(data),
+  getAdminMcpTokens: (f: { userId?: string; status?: string }) =>
+    http.get<McpToken[]>('/system/mcp/tokens', { params: { userId: f.userId || undefined, status: f.status || undefined } }).then(data),
+  adminRevokeMcpToken: (id: number) => http.post(`/system/mcp/tokens/${id}/revoke`).then(data),
+  adminRevokeAllMcpTokens: (userId: string) => http.post<{ revoked: number }>(`/system/mcp/users/${encodeURIComponent(userId)}/revoke-all`).then(data),
   getAuditEntry: (id: number) => http.get<AuditDetail>(`/system/ops/audit/${id}`).then(data),
   getAuditActions: () => http.get<AuditAction[]>('/system/ops/audit/actions').then(data),
   /** Policy endpoints; an absent `value`/`override` in a response means "not set" (the server omits nulls). Sending `null` goes back to the layer above. */
