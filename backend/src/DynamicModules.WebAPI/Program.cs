@@ -70,6 +70,9 @@ builder.Services.AddSingleton(new ReportOptions
 builder.Services.AddHttpContextAccessor();
 if (databaseProvider == DatabaseProvider.Postgres) builder.Services.AddPostgresDatabase(builder.Configuration);
 else builder.Services.AddSqliteDatabase(builder.Configuration);
+// 須在 provider 註冊之後：provider 經 AddPersistenceRepositories 註冊 IPermissionRepository，MCP 通道的 AI 遮罩包在它外面（mcp1a 判斷 10）
+builder.Services.AddChannelPermissionMasking();
+builder.Services.AddScoped<IRequestChannel, DynamicModules.WebAPI.Mcp.HttpRequestChannel>();
 builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
 builder.Services.AddScoped<DynamicModules.Application.Common.ICurrentLocale, HeaderCurrentLocale>();
 builder.Services.AddSingleton<IPasswordService, PasswordService>();

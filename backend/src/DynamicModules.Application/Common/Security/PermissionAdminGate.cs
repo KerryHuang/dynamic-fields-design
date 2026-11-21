@@ -11,11 +11,14 @@ public enum PermissionAdminCheck { Allowed, NotPermissionAdmin, McpChannel }
 /// <see cref="Behaviors.PermissionAdminBehavior{TReq,TRes}"/> 與只有某些請求內容才算授權的 handler 都經它，不在 handler 各自讀權限表。
 /// </summary>
 public sealed class PermissionAdminGate(
-    IDynamicAccessGuard guard, ICurrentUser current, IAccountRepository accounts, IAuthorizationChangeProbe changes)
+    IDynamicAccessGuard guard, ICurrentUser current, IAccountRepository accounts, IAuthorizationChangeProbe changes, IRequestChannel channel)
 {
-    /// <summary>只做判斷、不開許可。</summary>
-    public async Task<PermissionAdminCheck> CheckAsync(CancellationToken ct) =>
-        await guard.IsPermissionAdminAsync(ct) ? PermissionAdminCheck.Allowed : PermissionAdminCheck.NotPermissionAdmin;
+    /// <summary>只做判斷、不開許可。MCP 通道一律 <see cref="PermissionAdminCheck.McpChannel"/>，不看身分（mcp1a 計畫判斷 9、PAX-22）。</summary>
+    public async Task<PermissionAdminCheck> CheckAsync(CancellationToken ct)
+    {
+        if (channel.Channel == RequestChannel.Mcp) return PermissionAdminCheck.McpChannel;
+        return await guard.IsPermissionAdminAsync(ct) ? PermissionAdminCheck.Allowed : PermissionAdminCheck.NotPermissionAdmin;
+    }
 
     /// <summary>檢查結果對應的 403；<paramref name="code"/> 給條件式檢查換成自己的機器代碼（例如事件旗標）。</summary>
     public static ServiceResult Denied(PermissionAdminCheck check, string? messageKey = null, string? code = null) => check switch
@@ -33,6 +36,7 @@ public sealed class PermissionAdminGate(
     {
         if (typeof(T) != typeof(ServiceResult))
             throw new InvalidOperationException("PermissionAdminGate.RunAsync 的回傳型別必須是 ServiceResult（fail-closed）");
+        if (channel.Channel == RequestChannel.Mcp) return (T)(object)Denied(PermissionAdminCheck.McpChannel);
         if (systemAdminVerified && await accounts.GetTrackedAsync(current.UserId, ct) is not { IsActive: true, IsSystemAdmin: true })
             return (T)(object)ServiceResult.Forbidden();
         var check = await CheckAsync(ct);

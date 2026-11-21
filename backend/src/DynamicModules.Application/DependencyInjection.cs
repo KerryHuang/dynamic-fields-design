@@ -65,6 +65,8 @@ public static class DependencyInjection
         services.AddScoped<FieldLocks>();
         services.AddScoped<IDynamicAccessGuard, DynamicAccessGuard>();
         services.AddScoped<PermissionAdminGate>();
+        // 預設是畫面通道；WebAPI 之後再註冊 HttpRequestChannel 蓋過它。IPermissionRepository 的通道裝飾不在這裡（判斷 10）
+        services.TryAddScoped<IRequestChannel, DefaultRequestChannel>();
         services.AddScoped<Dynamic.AccountService.SystemPrivileges.SystemPrivilegeHolders>();
         services.AddScoped<Dynamic.SchemaService.Queries.GetModuleSchema.ModuleSchemaBuilder>();
         services.AddScoped<Dynamic.References.ReferenceValidator>();
