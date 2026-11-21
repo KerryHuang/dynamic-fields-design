@@ -94,9 +94,8 @@ public sealed class AuditedWriteForTestHandler : IRequestHandler<AuditedWriteFor
     public Task<ServiceResult> Handle(AuditedWriteForTestRequest request, CancellationToken ct) => Task.FromResult(ServiceResult.Success());
 }
 
-/// <summary>寫入稽核與業務同交易（mcp2a 判斷 3；設計 §8.1、T14、B12）。</summary>
-[Trait("Category", "Postgres")]
-public class McpWriteAuditTests : McpConfirmationTestBase
+/// <summary>寫入工具測試共用（寫入稽核、冪等）：測試寫入工具與請求，權杖有 business.write。</summary>
+public abstract class McpWriteTestBase : McpConfirmationTestBase
 {
     protected readonly WriteKnobs Write = new();
 
@@ -117,13 +116,22 @@ public class McpWriteAuditTests : McpConfirmationTestBase
         Channel.Scopes = [McpScopes.BusinessRead, McpScopes.BusinessWrite];
     }
 
-    private string WriteArgs(string value = "w1", object? recordId = null, string? key = null) =>
-        JsonSerializer.Serialize(key is null
-            ? new Dictionary<string, object> { ["recordId"] = recordId ?? Target, ["value"] = value }
-            : new Dictionary<string, object> { ["recordId"] = recordId ?? Target, ["value"] = value, ["idempotencyKey"] = key });
+    /// <summary>每次一把新的冪等鍵（必填，mcp2a 判斷 5）；<paramref name="key"/> 給了就用它。</summary>
+    protected string WriteArgs(string value = "w1", object? recordId = null, string? key = null) =>
+        JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["recordId"] = recordId ?? Target, ["value"] = value, ["idempotencyKey"] = key ?? NewKey(),
+        });
 
-    private Task<McpFormattedResult> CallWrite(string? args = null) => Call(args ?? WriteArgs(), TestWriteTool.Name);
+    protected static string NewKey() => "k-" + Guid.NewGuid().ToString("N");
 
+    protected Task<McpFormattedResult> CallWrite(string? args = null) => Call(args ?? WriteArgs(), TestWriteTool.Name);
+}
+
+/// <summary>寫入稽核與業務同交易（mcp2a 判斷 3；設計 §8.1、T14、B12）。</summary>
+[Trait("Category", "Postgres")]
+public class McpWriteAuditTests : McpWriteTestBase
+{
     [Fact]
     public async Task Success_OneRow_InTransaction()
     {
@@ -308,8 +316,9 @@ public class McpWriteAuditTests : McpConfirmationTestBase
     [Theory]
     [InlineData("""{"recordId":1,"value":"v","idempotencyKey":"short"}""", "idempotencyKey")]
     [InlineData("""{"recordId":1,"value":"v","idempotencyKey":123}""", "idempotencyKey")]
-    [InlineData("""{"recordId":0,"value":"v"}""", "recordId")]
-    [InlineData("""{"recordId":"12","value":"v"}""", "recordId")]
+    [InlineData("""{"recordId":1,"value":"v"}""", "idempotencyKey")]
+    [InlineData("""{"recordId":0,"value":"v","idempotencyKey":"key-abcdefgh"}""", "recordId")]
+    [InlineData("""{"recordId":"12","value":"v","idempotencyKey":"key-abcdefgh"}""", "recordId")]
     public async Task ExecutorArgs_Invalid_NotArmed(string args, string field)
     {
         var r = await CallWrite(args);

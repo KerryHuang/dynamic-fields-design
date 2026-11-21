@@ -50,6 +50,8 @@ public sealed class McpToolInvoker(
         // 本次呼叫的序號（判斷 18）：只認這次的「確認已提交」，前一次呼叫的提交不會讓這次漏寫稽核
         var call = confirmations.BeginCall();
         writes.Disarm();
+        // 冪等鍵只認這次工具參數的 idempotencyKey（mcp2a 判斷 5）：前一次呼叫的、或 HTTP 標頭帶進來的都清掉
+        (operation.ClientKey, operation.Replayed) = (null, false);
         // 寫入工具的確認或寫入稽核已在交易內寫了這次的那一列（判斷 3、18）
         bool Committed() => confirmations.IsCommitted(call) || writes.IsCommitted(call);
         var started = time.GetTimestamp();
@@ -110,6 +112,8 @@ public sealed class McpToolInvoker(
         finally
         {
             writes.Disarm();
+            // 不留給同一個 scope 的下一次呼叫；/mcp 的回應也不因此帶 Idempotent-Replay 標頭（回放改由 meta.replayed 表達）
+            (operation.ClientKey, operation.Replayed) = (null, false);
             reservation?.Release();
         }
         ct.ThrowIfCancellationRequested();
@@ -144,6 +148,8 @@ public sealed class McpToolInvoker(
                     outcome = McpToolOutcome.InvalidArguments(errors);
                     return (Format(tool.Descriptor.Name, outcome, Text), AuditResult.Invalid, McpErrorCodes.InvalidArguments);
                 }
+                // IdempotencyBehavior 接手（判斷 5）；設在上膛之前，摘要的 op 與事件事實的 OperationId 都是這把 key
+                operation.ClientKey = args.GetProperty(McpArgs.IdempotencyKey).GetString();
                 writes.Arm(call, new McpWriteAudit(tool.Descriptor.AuditCode, name, McpArguments.Hash(args),
                     Summary(args, null, context, started: null, op: operation.OperationId)));
             }
@@ -153,6 +159,8 @@ public sealed class McpToolInvoker(
                 : confirmationCode is null ? await PreviewAsync(tool, toolCall, tokenId)
                 : await tool.ExecuteAsync(toolCall, new McpConfirmationTicket(confirmationCode, tokenId, name, McpArguments.Hash(args),
                     tool.Descriptor.AuditCode, Summary(args, null, context, started: null, strict: true)), ct));
+            if (tool.Descriptor.Risk == McpRisk.Write && !outcome.IsError)
+                outcome = outcome with { Meta = WithReplayed(outcome.Meta, operation.Replayed) };
 
             // 確認或寫入已提交（判斷 18「確認提交之後」、mcp2a 判斷 3）：格式化成功而且放得下照常回，否則回非錯誤的「已執行、結果省略」
             if (Committed()) return (CommittedResult(tool.Descriptor.Name, outcome), AuditResult.Success, null);
@@ -293,7 +301,16 @@ public sealed class McpToolInvoker(
         return fields.Count > 0 ? fields : null;
     }
 
-    /// <summary>寫入工具上膛前的參數驗證：<c>idempotencyKey</c> 的格式、迴圈目標是正整數（其他參數由工具自己驗）。</summary>
+    /// <summary>寫入工具的結果在 meta 加 <c>replayed</c>（這次是不是回放先前成功的結果，判斷 5）。</summary>
+    private static JsonObject WithReplayed(object? meta, bool replayed)
+    {
+        var node = meta is null ? null : JsonSerializer.SerializeToNode(meta, meta.GetType(), McpResultFormatter.Json);
+        var o = node as JsonObject ?? new JsonObject();
+        o["replayed"] = replayed;
+        return o;
+    }
+
+    /// <summary>寫入工具上膛前的參數驗證：<c>idempotencyKey</c> 必填且格式對、迴圈目標是正整數（其他參數由工具自己驗）。</summary>
     private static Dictionary<string, MessageRef> WriteArgErrors(McpToolDescriptor tool, JsonElement args)
     {
         var errors = new Dictionary<string, MessageRef>(StringComparer.Ordinal);
@@ -302,9 +319,10 @@ public sealed class McpToolInvoker(
             errors[McpArgs.ArgumentsKey] = McpMessages.InvalidArgument(McpArgs.ArgumentsKey);
             return errors;
         }
-        if (args.TryGetProperty(McpArgs.IdempotencyKey, out var key) && key.ValueKind != JsonValueKind.Null
-            && (key.ValueKind != JsonValueKind.String || !McpArgs.IsIdempotencyKey(key.GetString())))
-            errors[McpArgs.IdempotencyKey] = McpMessages.InvalidArgument(McpArgs.IdempotencyKey);
+        // 必填（判斷 5）：AI client 逾時重送是常態，選填的話模型多半不帶，重送就重複寫入；沒帶與格式不符同一句
+        if (!args.TryGetProperty(McpArgs.IdempotencyKey, out var key) || key.ValueKind != JsonValueKind.String
+            || !McpArgs.IsIdempotencyKey(key.GetString()))
+            errors[McpArgs.IdempotencyKey] = McpMessages.IdempotencyKeyRequired;
         if (tool.LoopTargetArg is { } target && args.TryGetProperty(target, out var t) && t.ValueKind != JsonValueKind.Null
             && (t.ValueKind != JsonValueKind.Number || !t.TryGetInt64(out var id) || id < 1))
             errors[target] = McpMessages.InvalidArgument(target);

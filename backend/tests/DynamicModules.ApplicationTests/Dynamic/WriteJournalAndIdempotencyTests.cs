@@ -5,6 +5,7 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.DeleteRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
+using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
 using FluentAssertions;
@@ -231,5 +232,82 @@ public class WriteJournalAndIdempotencyTests : DesignerTestBase
         await Create(m, t, "x");
         Db.Context.Set<OperationRecord>().AsNoTracking().Select(o => o.Key).ToList()
             .Should().BeEquivalentTo(["key-NEW-00001", "key-AAAA-0006"]);
+    }
+
+    // ---- 任務與留言的冪等（mcp2a 判斷 5：IIdempotentRequest 把任務與留言納入；帶 key 才冪等） ----
+
+    private Task<ServiceResult> NewTask(string title) => Send(new CreateTaskRequest(new TaskInput(title, null, null, null)));
+
+    private static long IdOf(ServiceResult r) =>
+        JsonSerializer.SerializeToElement(r.Data, r.Data!.GetType(), new JsonSerializerOptions(JsonSerializerDefaults.Web)).GetProperty("id").GetInt64();
+
+    private int Tasks(string title) => Db.Context.Set<TaskItem>().AsNoTracking().Count(t => t.Title == title);
+
+    private int Comments(long taskId) =>
+        Db.Context.Set<TaskComment>().AsNoTracking().Count(c => c.TaskId == taskId && c.Kind == TaskCommentKind.Comment);
+
+    [Fact]
+    public async Task Task_create_with_same_key_replays()
+    {
+        Svc<IOperationContext>().ClientKey = "key-TASK-0001";
+        var first = await NewTask("冪等任務");
+        var second = await NewTask("冪等任務");
+
+        first.IsCreated.Should().BeTrue(first.Message);
+        second.IsCreated.Should().BeTrue("回放保留 201 的語意");
+        Svc<IOperationContext>().Replayed.Should().BeTrue();
+        Tasks("冪等任務").Should().Be(1);
+        ((JsonElement)second.Data!).GetProperty("id").GetInt64().Should().Be(IdOf(first));
+    }
+
+    [Fact]
+    public async Task Task_comment_with_same_key_replays()
+    {
+        var taskId = IdOf(await NewTask("留言任務"));
+        Svc<IOperationContext>().ClientKey = "key-TASK-0002";
+
+        (await Send(new AddTaskCommentRequest(taskId, "第一則", []))).IsSuccess.Should().BeTrue();
+        (await Send(new AddTaskCommentRequest(taskId, "第一則", []))).IsSuccess.Should().BeTrue();
+
+        Svc<IOperationContext>().Replayed.Should().BeTrue();
+        Comments(taskId).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Task_update_same_key_different_patch_is_unprocessable()
+    {
+        var taskId = IdOf(await NewTask("改任務"));
+        Svc<IOperationContext>().ClientKey = "key-TASK-0003";
+
+        (await Send(new UpdateTaskRequest(taskId, J("""{"status":"inProgress"}""")))).IsSuccess.Should().BeTrue();
+        var other = await Send(new UpdateTaskRequest(taskId, J("""{"status":"done"}""")));
+
+        other.IsUnprocessable.Should().BeTrue();
+        Db.Context.Set<TaskItem>().AsNoTracking().Single(t => t.Id == taskId).Status.Should().Be(TaskItemStatus.InProgress);
+    }
+
+    [Fact]
+    public async Task Task_request_without_key_runs_every_time()
+    {
+        (await NewTask("沒帶鍵")).IsCreated.Should().BeTrue();
+        (await NewTask("沒帶鍵")).IsCreated.Should().BeTrue();
+
+        Tasks("沒帶鍵").Should().Be(2);
+        OperationRows().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Task_comment_with_files_bypasses_idempotency()
+    {
+        var taskId = IdOf(await NewTask("附件留言"));
+        Svc<IOperationContext>().ClientKey = "key-TASK-0004";
+        static IReadOnlyList<CommentFileUpload> Files() => [new CommentFileUpload(new MemoryStream([1, 2, 3]), "a.png", "image/png")];
+
+        (await Send(new AddTaskCommentRequest(taskId, "附件", Files()))).IsSuccess.Should().BeTrue();
+        (await Send(new AddTaskCommentRequest(taskId, "附件", Files()))).IsSuccess.Should().BeTrue();
+
+        Comments(taskId).Should().Be(2, "附件留言不做請求層冪等（Stream 不能可靠雜湊）");
+        Svc<IOperationContext>().Replayed.Should().BeFalse();
+        OperationRows().Should().Be(0);
     }
 }

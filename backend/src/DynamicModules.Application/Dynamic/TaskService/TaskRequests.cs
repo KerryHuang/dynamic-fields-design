@@ -1,19 +1,20 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DynamicModules.Application.Common;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.TaskService;
 
 /// <summary>個人任務（不掛記錄）。</summary>
-public sealed record CreateTaskRequest(TaskInput Input) : IRequest<ServiceResult>, ITransactionalRequest;
+public sealed record CreateTaskRequest(TaskInput Input) : IRequest<ServiceResult>, IIdempotentRequest;
 
-public sealed record CreateRecordTaskRequest(long RecordId, TaskInput Input) : IRequest<ServiceResult>, ITransactionalRequest;
+public sealed record CreateRecordTaskRequest(long RecordId, TaskInput Input) : IRequest<ServiceResult>, IIdempotentRequest;
 
 /// <summary>在 ParentId 底下新增子任務（看板設計 §10.7.2）；記錄與模組從父任務複製。</summary>
-public sealed record CreateSubtaskRequest(long ParentId, TaskInput Input) : IRequest<ServiceResult>, ITransactionalRequest;
+public sealed record CreateSubtaskRequest(long ParentId, TaskInput Input) : IRequest<ServiceResult>, IIdempotentRequest;
 
 /// <summary>Patch 是原始 JSON：沒送的欄位不改，送 null 代表清除。</summary>
-public sealed record UpdateTaskRequest(long Id, JsonElement Patch) : IRequest<ServiceResult>, ITransactionalRequest;
+public sealed record UpdateTaskRequest(long Id, JsonElement Patch) : IRequest<ServiceResult>, IIdempotentRequest;
 
 public sealed record DeleteTaskRequest(long Id) : IRequest<ServiceResult>, ITransactionalRequest;
 
@@ -40,7 +41,12 @@ public sealed record GetTaskCommentsRequest(long TaskId) : IRequest<ServiceResul
 
 /// <summary>Files 是空清單時只有文字；有附件時 Body 可以是空的。</summary>
 public sealed record AddTaskCommentRequest(long TaskId, string Body, IReadOnlyList<CommentFileUpload> Files)
-    : IRequest<ServiceResult>, ITransactionalRequest;
+    : IRequest<ServiceResult>, IIdempotentRequest
+{
+    /// <summary>帶附件的留言不做請求層冪等（mcp2a 判斷 5）：<c>Stream</c> 不能可靠雜湊；MCP 不收附件，所以 MCP 的留言永遠有冪等。</summary>
+    [JsonIgnore]
+    public bool IdempotencyApplies => Files.Count == 0;
+}
 
 /// <summary>帶附件的留言在收進主體之前的資格檢查：看不到或不存在 404、凍結 409，其餘成功。</summary>
 public sealed record CheckTaskCommentUploadRequest(long TaskId) : IRequest<ServiceResult>;

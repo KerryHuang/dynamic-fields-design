@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using FluentAssertions;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
@@ -84,5 +85,38 @@ public class IdempotencyApiTests : IClassFixture<TestApp>
         (await _admin.SendAsync(Post(m, t, "x", null))).StatusCode.Should().Be(HttpStatusCode.Created);
         (await _admin.SendAsync(Post(m, t, "x", null))).StatusCode.Should().Be(HttpStatusCode.Created);
         (await CountAsync(m)).Should().Be(2);
+    }
+
+    /// <summary>
+    /// 帶 Idempotency-Key 的附件留言（multipart）照常成功、兩次都寫（mcp2a 判斷 5）：任務留言納入請求層冪等後，
+    /// 附件留言靠 <c>IdempotencyApplies</c> 放行，不會因為序列化 Stream 變成 500。
+    /// </summary>
+    [Fact]
+    public async Task Multipart_comment_with_key_succeeds_twice()
+    {
+        var created = await _admin.PostAsJsonAsync($"{Base}/tasks", new { title = "附件冪等" });
+        created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        var taskId = (await JsonOf(created)).GetProperty("id").GetInt64();
+        var key = "k-" + Guid.NewGuid().ToString("N");
+
+        HttpRequestMessage Comment()
+        {
+            var form = new MultipartFormDataContent { { new StringContent("附件"), "body" } };
+            var file = new ByteArrayContent([1, 2, 3]);
+            file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            form.Add(file, "files", "a.png");
+            var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/tasks/{taskId}/comments") { Content = form };
+            req.Headers.Add("Idempotency-Key", key);
+            return req;
+        }
+
+        foreach (var _ in new[] { 1, 2 })
+        {
+            var res = await _admin.SendAsync(Comment());
+            res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+            res.Headers.Contains("Idempotent-Replay").Should().BeFalse();
+        }
+        var list = await JsonOf(await _admin.GetAsync($"{Base}/tasks/{taskId}/comments"));
+        list.EnumerateArray().Count(c => c.GetProperty("kind").GetString() == "comment").Should().Be(2);
     }
 }

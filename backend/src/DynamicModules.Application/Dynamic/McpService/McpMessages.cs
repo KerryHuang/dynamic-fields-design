@@ -58,6 +58,8 @@ public static class McpMessages
     public static MessageRef ResultTooLarge => MessageRef.Of(MessageText.McpResultTooLarge, McpLimits.MaxResultChars);
     public static MessageRef UnknownTool => MessageRef.Of(MessageText.McpUnknownTool);
     public static MessageRef InvalidArgument(string name) => MessageRef.Of(MessageText.McpInvalidArgument, name);
+    /// <summary>寫入工具的 <c>idempotencyKey</c> 沒帶或格式不符（mcp2a 判斷 5、13）。</summary>
+    public static MessageRef IdempotencyKeyRequired => MessageRef.Of(MessageText.McpIdempotencyKeyRequired);
     public static MessageRef InternalError => MessageRef.Of(MessageText.McpInternalError);
     public static MessageRef Unauthorized => MessageRef.Of(MessageText.McpUnauthorized);
     public static MessageRef TokenInQuery => MessageRef.Of(MessageText.McpTokenInQuery);

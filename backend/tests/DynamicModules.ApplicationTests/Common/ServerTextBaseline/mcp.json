@@ -142,5 +142,11 @@
     "en-US": "AI connections must use HTTPS",
     "th": "การเชื่อมต่อ AI ต้องใช้ HTTPS",
     "vi": "Kết nối AI bắt buộc dùng HTTPS"
+  },
+  "McpIdempotencyKeyRequired": {
+    "zh-TW": "參數 idempotencyKey 必填：8 到 64 個英數字、底線或連字號；重送同一個操作時用同一個值",
+    "en-US": "The argument idempotencyKey is required: 8 to 64 letters, digits, underscores, or hyphens. Reuse the same value when resending the same operation",
+    "th": "ต้องระบุอาร์กิวเมนต์ idempotencyKey: ตัวอักษร ตัวเลข ขีดล่าง หรือขีดกลาง 8 ถึง 64 ตัว และใช้ค่าเดิมเมื่อส่งการดำเนินการเดิมซ้ำ",
+    "vi": "Tham số idempotencyKey là bắt buộc: 8 đến 64 chữ cái, chữ số, dấu gạch dưới hoặc gạch nối; dùng lại cùng giá trị khi gửi lại cùng một thao tác"
   }
 }

@@ -139,7 +139,9 @@ public static class MessageText
         McpRateLimitedMinute = nameof(McpRateLimitedMinute), McpRateLimitedDay = nameof(McpRateLimitedDay), McpConfirmationInvalid = nameof(McpConfirmationInvalid),
         McpAuditUnavailable = nameof(McpAuditUnavailable), McpResultTooLarge = nameof(McpResultTooLarge), McpUnknownTool = nameof(McpUnknownTool),
         McpInvalidArgument = nameof(McpInvalidArgument), McpInternalError = nameof(McpInternalError), McpUnauthorized = nameof(McpUnauthorized),
-        McpTokenInQuery = nameof(McpTokenInQuery), McpOriginDenied = nameof(McpOriginDenied), McpHttpsRequired = nameof(McpHttpsRequired);
+        McpTokenInQuery = nameof(McpTokenInQuery), McpOriginDenied = nameof(McpOriginDenied), McpHttpsRequired = nameof(McpHttpsRequired),
+        // AI 連線一般寫入（mcp2a 計畫判斷 13）
+        McpIdempotencyKeyRequired = nameof(McpIdempotencyKeyRequired);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -614,6 +616,10 @@ public static class MessageText
             "ไม่อนุญาตให้เชื่อมต่อจากต้นทางนี้", "Không cho phép kết nối từ nguồn này"),
         [McpHttpsRequired] = ("AI 連線必須使用 HTTPS", "AI connections must use HTTPS",
             "การเชื่อมต่อ AI ต้องใช้ HTTPS", "Kết nối AI bắt buộc dùng HTTPS"),
+        [McpIdempotencyKeyRequired] = ("參數 idempotencyKey 必填：8 到 64 個英數字、底線或連字號；重送同一個操作時用同一個值",
+            "The argument idempotencyKey is required: 8 to 64 letters, digits, underscores, or hyphens. Reuse the same value when resending the same operation",
+            "ต้องระบุอาร์กิวเมนต์ idempotencyKey: ตัวอักษร ตัวเลข ขีดล่าง หรือขีดกลาง 8 ถึง 64 ตัว และใช้ค่าเดิมเมื่อส่งการดำเนินการเดิมซ้ำ",
+            "Tham số idempotencyKey là bắt buộc: 8 đến 64 chữ cái, chữ số, dấu gạch dưới hoặc gạch nối; dùng lại cùng giá trị khi gửi lại cùng một thao tác"),
     };
 
     /// <summary>給 <see cref="Localization.BuiltinServerText"/> 合併用（鍵不加前綴）。</summary>
