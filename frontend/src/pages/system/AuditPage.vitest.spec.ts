@@ -90,6 +90,16 @@ describe('AuditPage', () => {
     other.w.unmount();
   });
 
+  it('手機寬度帶 ?channel= 進來時篩選區展開，看得到被篩選的條件', async () => {
+    const resize = async (w: number) => { window.innerWidth = w; window.dispatchEvent(new Event('resize')); await new Promise((r) => setTimeout(r, 80)); };
+    await resize(390);
+    const { w } = await mountPage('/system/audit?channel=mcp');
+    expect(q('audit-filters')!.querySelector('.q-expansion-item__content')!.getAttribute('style') ?? '').not.toContain('display: none');
+    expect(q('audit-filters')!.getAttribute('class')).toContain('q-expansion-item--expanded');
+    w.unmount();
+    await resize(1366);
+  });
+
   it('起訖日換成 UTC 區間：營運時區起日當天 0 點、迄日當天最後一毫秒', async () => {
     const { w } = await mountPage('/system/audit');
     const dates = w.findAllComponents({ name: 'DateSelect' });

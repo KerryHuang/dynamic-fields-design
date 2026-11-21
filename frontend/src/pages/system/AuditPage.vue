@@ -30,8 +30,8 @@ const RESULTS = ['success', 'denied', 'invalid', 'failed'];
 
 const form = ref({ from: null as string | null, to: null as string | null, actor: null as string | null, action: null as string | null,
   channel: CHANNELS.includes(String(route.query.channel)) ? String(route.query.channel) : null, result: null as string | null });
-/** 篩選列：手機預設收起，其他寬度展開。 */
-const showFilters = ref(!$q.screen.lt.sm);
+/** 篩選列：手機預設收起（網址帶了來源管道時展開，看得出清單被篩過），其他寬度展開。 */
+const showFilters = ref(!$q.screen.lt.sm || form.value.channel !== null);
 /** 動作選單的值：`group:<分組>` 或動作代碼。 */
 const actionOptions = computed(() => [
   ...GROUPS.value.map((g) => ({ value: `group:${g}`, label: t('audit.groupOption', { group: labelOr(t, te, `audit.groups.${g}`, g) }) })),
