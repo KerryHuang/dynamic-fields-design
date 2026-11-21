@@ -1,14 +1,8 @@
-using System.Data;
-using System.Reflection;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
-using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Data;
-using DynamicModules.Domain.Entities.Dynamic;
-using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Persistence.Postgres;
-using DynamicModules.Persistence.Repositories.Dynamic;
 using DynamicModules.TestSupport;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -42,7 +36,9 @@ public abstract class PgInterleavingTestBase : ApprovalTestBase
         return action();
     });
 
-    private PostgresWriteSettings Settings => Unserialized
+    private PostgresWriteSettings? _settings;
+
+    private PostgresWriteSettings Settings => _settings ??= Unserialized
         ? PostgresWriteSettings.Unserialized()
         : new PostgresWriteSettings(PostgresWriteSettings.DefaultLockTimeoutSeconds);
 
@@ -62,7 +58,10 @@ public abstract class PgInterleavingTestBase : ApprovalTestBase
 
     protected virtual void Extra(IServiceCollection services) { }
 
-    /// <summary>輪詢到有一條連線正在等列鎖或交易鎖為止（有逾時，不靠固定睡眠）。</summary>
+    /// <summary>
+    /// 輪詢到有一條連線正在等列鎖或交易鎖為止（有逾時，不靠固定睡眠）。只適用於 <see cref="Unserialized"/>（無鎖模式）：
+    /// 正式設定的排隊是行程內的 WriteGate，pg_stat_activity 看不到，在那種類別呼叫會等到逾時。
+    /// </summary>
     protected async Task WaitUntilSomeoneBlocksOnALockAsync()
     {
         await using var probe = new NpgsqlConnection(Db.PostgresConnectionString);

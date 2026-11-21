@@ -35,6 +35,8 @@ public class TaskBoardHiddenColumnTests : TaskBoardTestBase
         WireText(b).Should().NotContain("sales01 的未指派").And.NotContain("sales02 的機密未指派");
     }
 
+    // 設計 §6.1 只定「負責人看板只能隱藏 unassigned」，沒定直接取被隱藏欄的頁要回什麼。
+    // 釘的是實作現況：隱藏只影響欄位清單、直接取頁照常回看得到的卡；要守的是不洩漏。日後改成回空頁，只需改 Equal 那一行，不是安全回歸。
     [Fact]
     public async Task HiddenUnassigned_DirectPageRequest_NeverLeaksTasksTheCallerCannotSee()
     {

@@ -1,19 +1,14 @@
 using System.Data;
-using System.Reflection;
 using DynamicModules.Application.Common;
-using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Domain.Approvals;
-using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
-using DynamicModules.Persistence.Postgres;
 using DynamicModules.Persistence.Repositories.Dynamic;
 using DynamicModules.TestSupport;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Npgsql;
 using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTestKit;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
@@ -120,6 +115,9 @@ public class ApprovalPublishVersionRaceTests : PgInterleavingTestBase
 {
     protected override bool Unserialized => false;
 
+    /// <summary>等「沒排隊就會先完成」的那一方多久；只用來讓壞掉時快速失敗，正確與否由最後的結果斷言決定。</summary>
+    private static readonly TimeSpan WaitForUnqueued = TimeSpan.FromSeconds(2);
+
     private Func<Task>? _hook;
     private string _hookMethod = nameof(IApprovalFlowRepository.TryReplaceDraftAsync);
 
@@ -153,20 +151,27 @@ public class ApprovalPublishVersionRaceTests : PgInterleavingTestBase
         };
 
         var publish = By("admin", () => Send(new PublishApprovalFlowRequest("po-g", Input(r, Linear("fin2"), v1))));
-        await Within(inHook.Task);
-        var submit = SubmitBy("buyer1", po.Id, r.Confirmed);
-        await Task.WhenAny(submit, Task.Delay(300));
-        submit.IsCompleted.Should().BeFalse("發布握著全庫寫入鎖，送簽要排隊等它提交");
-        release.SetResult();
-
-        var published = await Within(publish);
-        var submitted = await Within(submit);
+        ServiceResult published, submitted;
+        try
+        {
+            await Within(inHook.Task);
+            var submit = SubmitBy("buyer1", po.Id, r.Confirmed);
+            // 只當快速失敗：排隊的話這段時間內送簽不會完成。證明排隊靠的是下面的結果（實例的任務負責人是 fin2），不是這個計時
+            await Task.WhenAny(submit, Task.Delay(WaitForUnqueued));
+            submit.IsCompleted.Should().BeFalse("發布握著全庫寫入鎖，送簽要排隊等它提交");
+            release.TrySetResult();
+            published = await Within(publish);
+            submitted = await Within(submit);
+        }
+        finally { release.TrySetResult(); }
 
         published.IsSuccess.Should().BeTrue(Dump(published));
         submitted.IsCreated.Should().BeTrue(Dump(submitted));
         Versions().Should().ContainSingle("送簽排在發布之後，發布當時版本沒被用過，原地改寫");
         var inst = Inst(((SubmitApprovalResponse)submitted.Data!).InstanceId!.Value);
         inst.FlowVersionId.Should().Be(v1);
+        TasksOf(inst.Id).Single(t => t.Status == ApprovalTaskStatus.Open).AssigneeUserId.Should().Be("fin2",
+            "結果自己分辨先後：送簽若沒排隊、先於發布完成，會綁到舊內容、開出 fin1 的任務");
         Versions().Single().Definition.Nodes!.Single(n => n.Id == "a").Approvers!.UserIds.Should().Equal(["fin2"], "實例綁到的是新內容，沒有用了舊內容卻被改掉");
     }
 
@@ -187,14 +192,20 @@ public class ApprovalPublishVersionRaceTests : PgInterleavingTestBase
         };
 
         var submit = SubmitBy("buyer1", po.Id, r.Confirmed);
-        await Within(inHook.Task);
-        var publish = By("admin", () => Send(new PublishApprovalFlowRequest("po-g", Input(r, Linear("fin2"), v1))));
-        await Task.WhenAny(publish, Task.Delay(300));
-        publish.IsCompleted.Should().BeFalse("送簽握著全庫寫入鎖，發布要排隊等它提交");
-        release.SetResult();
-
-        var submitted = await Within(submit);
-        var published = await Within(publish);
+        ServiceResult submitted, published;
+        try
+        {
+            await Within(inHook.Task);
+            var publish = By("admin", () => Send(new PublishApprovalFlowRequest("po-g", Input(r, Linear("fin2"), v1))));
+            // 沒有閘門的話發布會在送簽停住時就跑完；等的時間夠長，慢機器上也跑得完，才不會假綠。排隊時這段等滿才放行
+            await Task.WhenAny(publish, Task.Delay(WaitForUnqueued));
+            publish.IsCompleted.Should().BeFalse("送簽握著全庫寫入鎖，發布要排隊等它提交");
+            Flow("po-g").CurrentVersionId.Should().Be(v1, "放行送簽時發布還沒提交");
+            release.TrySetResult();
+            submitted = await Within(submit);
+            published = await Within(publish);
+        }
+        finally { release.TrySetResult(); }
 
         submitted.IsCreated.Should().BeTrue(Dump(submitted));
         published.IsSuccess.Should().BeTrue(Dump(published));

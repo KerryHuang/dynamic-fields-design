@@ -1,19 +1,13 @@
-using System.Data;
 using System.Reflection;
-using DynamicModules.Application.Common;
-using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
-using DynamicModules.Persistence.Postgres;
 using DynamicModules.Persistence.Repositories.Dynamic;
 using DynamicModules.TestSupport;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Npgsql;
 using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTestKit;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
@@ -39,6 +33,7 @@ public class ApprovalClaimInterleavingTests : PgInterleavingTestBase
         public int Reads, Bumps;
 
         /// <summary>讀到 RowVersion 的人在這裡等，直到第二個人也讀到；之後（重試的讀取）不再等。</summary>
+        /// <remarks>假設 GetRowVersionAsync 只在處理權（ClaimAsync 任務層）被呼叫、且測試只用一次；日後前置步驟也讀它，屏障就會少等一個人，要改成每次動作前建新的探針。</remarks>
         public async Task ArriveAsync()
         {
             Interlocked.Increment(ref Reads);
