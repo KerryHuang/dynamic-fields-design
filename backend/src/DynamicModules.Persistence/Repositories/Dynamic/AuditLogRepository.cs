@@ -20,6 +20,7 @@ public class AuditLogRepository(DynamicDbContext db) : IAuditLogRepository
         if (query.Result is { } result) q = q.Where(a => a.Result == result);
         if (query.TargetKind is { } kind) q = q.Where(a => a.TargetKind == kind);
         if (query.TargetId is { } id) q = q.Where(a => a.TargetId == id);
+        if (query.TokenId is { } tokenId) q = q.Where(a => a.TokenId == tokenId);
         return q.OrderByDescending(a => a.Id).Take(take).ToListAsync(ct);
     }
 
@@ -37,4 +38,10 @@ public class AuditLogRepository(DynamicDbContext db) : IAuditLogRepository
 
     public Task<int> CountSinceAsync(string action, DateTime sinceUtc, CancellationToken ct) =>
         db.Set<AuditLogEntry>().CountAsync(a => a.Action == action && a.OccurredUtc >= sinceUtc, ct);
+
+    public async Task<int> CountForTokenSinceAsync(long tokenId, DateTime sinceUtc, IReadOnlyCollection<string> actions, CancellationToken ct)
+    {
+        if (actions.Count == 0) return 0;
+        return await db.Set<AuditLogEntry>().CountAsync(a => a.TokenId == tokenId && a.OccurredUtc >= sinceUtc && actions.Contains(a.Action), ct);
+    }
 }

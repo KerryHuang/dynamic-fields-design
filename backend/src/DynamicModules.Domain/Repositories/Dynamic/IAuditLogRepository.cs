@@ -20,9 +20,11 @@ public interface IAuditLogRepository
     Task<int> PurgeBatchAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);
     /// <summary>某個動作在 sinceUtc（含）之後的列數（<c>security.loginFailures</c>，維運設計 §17.2.4）。</summary>
     Task<int> CountSinceAsync(string action, DateTime sinceUtc, CancellationToken ct);
+    /// <summary>某把 MCP 權杖在 sinceUtc（含）之後、動作在 <paramref name="actions"/> 裡的列數（每日呼叫上限，MCP 設計 §8.2）；清單是空的回 0。</summary>
+    Task<int> CountForTokenSinceAsync(long tokenId, DateTime sinceUtc, IReadOnlyCollection<string> actions, CancellationToken ct);
 }
 
 /// <summary>稽核查詢條件；時間範圍兩端都含（預設迄時是「現在」，剛寫的列要查得到）。動作分組由呼叫端展開成 <see cref="Actions"/>（不用 LIKE 前綴，O2-T18）。</summary>
 public sealed record AuditLogQuery(
     DateTime FromUtc, DateTime ToUtc, long? BeforeId = null, string? ActorUserId = null, IReadOnlyCollection<string>? Actions = null,
-    AuditChannel? Channel = null, AuditResult? Result = null, string? TargetKind = null, string? TargetId = null);
+    AuditChannel? Channel = null, AuditResult? Result = null, string? TargetKind = null, string? TargetId = null, long? TokenId = null);

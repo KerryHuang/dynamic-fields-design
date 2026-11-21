@@ -91,6 +91,7 @@ public class AuthorizationWriteInventoryTests
         new($"{Repo}HealthCheckRepository.cs", "UpdateProjectionAsync"), // 健康檢查狀態投影
         new($"{Repo}HealthCheckRepository.cs", "AdvanceNextDueAsync"), // 健康檢查下次時間
         new($"{Repo}HealthCheckRepository.cs", "PurgeResultsBatchAsync"), // 健康檢查結果（HealthCheckResult）分批清除
+        new($"{Repo}McpConfirmationRepository.cs", "TryConsumeAsync"), // MCP 確認碼（McpConfirmation）條件式標記已用，交易內與業務寫入同一交易
         new($"{Repo}OpsIncidentRepository.cs", "TryBumpAsync"),       // 維運事件（OpsIncident）計數
         new($"{Repo}OpsIncidentRepository.cs", "TryRegressAsync"),    // 維運事件退回開啟
         new($"{Repo}OpsIncidentRepository.cs", "TryResolveAsync"),    // 維運事件解決

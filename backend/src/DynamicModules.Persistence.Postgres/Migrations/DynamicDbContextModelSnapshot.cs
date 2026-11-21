@@ -1595,6 +1595,11 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                         .HasColumnType("text")
                         .UseCollation("C");
 
+                    b.Property<bool>("ExcludeFromAi")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -2252,6 +2257,152 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                     b.HasKey("Kind");
 
                     b.ToTable("Dynamic_MailSettings", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.McpConfirmation", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ArgumentsHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PreviewSummary")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("TargetVersion")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<long>("TokenId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ToolName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("UsedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("VoidedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeHash")
+                        .IsUnique();
+
+                    b.HasIndex("ExpiresUtc");
+
+                    b.HasIndex("TokenId", "CreatedUtc");
+
+                    b.ToTable("Dynamic_McpConfirmation", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.McpToken", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Last4")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("LastUsedIp")
+                        .HasMaxLength(45)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("LastUsedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("RevokeReason")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("RevokedBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("RevokedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Scopes")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Dynamic_McpToken", (string)null);
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Module", b =>

@@ -76,6 +76,8 @@ public static class DependencyInjection
         services.AddScoped<ITaskViewRepository, TaskViewRepository>();
         services.AddScoped<IScheduledJobRepository, ScheduledJobRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IMcpTokenRepository, McpTokenRepository>();
+        services.AddScoped<IMcpConfirmationRepository, McpConfirmationRepository>();
         services.AddScoped<IOpsIncidentRepository, OpsIncidentRepository>();
         services.AddScoped<IRuleHealthRepository, RuleHealthRepository>();
         services.AddScoped<IHealthCheckRepository, HealthCheckRepository>();

@@ -15,6 +15,7 @@ public class FieldConfiguration : IEntityTypeConfiguration<Field>
         b.Property(x => x.Type).HasConversion<string>().HasMaxLength(20);
         b.Property(x => x.Config).HasJsonConversion();
         b.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+        b.Property(x => x.ExcludeFromAi).HasDefaultValue(false);
         b.HasIndex(x => new { x.ModuleId, x.Key }).IsUnique();
         b.ConfigureAudit();
         // 不走 Module 的級聯（避免多重級聯路徑），由 Block 級聯刪除。
