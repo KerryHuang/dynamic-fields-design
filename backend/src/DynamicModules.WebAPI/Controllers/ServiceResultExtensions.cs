@@ -20,6 +20,7 @@ public static class ServiceResultExtensions
         IReadOnlyDictionary<string, string[]> Errors() => lc is not null && messages is not null ? r.ErrorsIn(messages, lc) : r.ErrorsIn(lc?.Locale, lc?.Fallbacks);
         if (r.IsUnauthorized) return c.Unauthorized(Body(r, Message()));
         if (r.IsForbidden) return c.StatusCode(StatusCodes.Status403Forbidden, Body(r, Message()));
+        if (r.IsTooManyRequests) return c.StatusCode(StatusCodes.Status429TooManyRequests, Body(r, Message()));
         if (r.IsUnprocessable) return c.StatusCode(StatusCodes.Status422UnprocessableEntity, Body(r, Message()));
         if (r.IsNotFound) return c.NotFound(Body(r, Message()));
         if (r.IsConflict) return c.Conflict(Body(r, Message()));

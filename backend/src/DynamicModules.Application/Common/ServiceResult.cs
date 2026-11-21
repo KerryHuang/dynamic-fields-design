@@ -17,6 +17,8 @@ public sealed class ServiceResult
     /// <summary>422：請求本身合法，但與先前同一把冪等金鑰的內容不同。</summary>
     public bool IsUnprocessable { get; private init; }
     public bool IsUnauthorized { get; private init; }
+    /// <summary>429：被降速（例如建立 MCP 權杖時重新輸入密碼，與登入同一套限流）。</summary>
+    public bool IsTooManyRequests { get; private init; }
     private MessageRef? MessageSource { get; init; }
     /// <summary>繁中，只給 log 與測試；回給使用者的文字由 WebAPI 依請求語系用 <see cref="MessageIn(IMessageCatalog, LocaleContext)"/> 解析。</summary>
     public string? Message => MessageIn(I18nText.FallbackLocale);
@@ -80,6 +82,10 @@ public sealed class ServiceResult
         new() { IsForbidden = true, MessageSource = message, Code = code };
 
     public static ServiceResult Unauthorized(MessageRef? message) => new() { IsUnauthorized = true, MessageSource = message };
+
+    /// <summary>429 並帶機器代碼。</summary>
+    public static ServiceResult TooManyRequests(MessageRef message, string code) =>
+        new() { IsTooManyRequests = true, MessageSource = message, Code = code };
 
     public static ServiceResult Invalid(IDictionary<string, string[]> errors) =>
         new() { ErrorRefs = errors.ToDictionary(kv => kv.Key, kv => kv.Value.Select(MessageRef.Literal).ToArray()) };
