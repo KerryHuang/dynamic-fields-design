@@ -222,6 +222,17 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.McpService.McpTokenRevoker>();
         // MCP 工具（mcp1a 判斷 19）：每個工具一筆 IMcpTool，執行器依名稱找
         services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.WhoAmITool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.ListModulesTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.DescribeModuleTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.QueryRecordsTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.GetRecordTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.GetRecordHistoryTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.ListReportsTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.RunReportTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.ListMyTasksTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.GetTaskTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.ListApprovalTasksTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.GetRecordApprovalTool>();
         services.AddScoped<Dynamic.McpService.Tools.McpToolInvoker>();
         services.AddScoped<Dynamic.McpService.Confirmations.McpConfirmationScope>();
         services.AddScoped<Dynamic.McpService.Confirmations.IMcpConfirmationScope>(sp =>

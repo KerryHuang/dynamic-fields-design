@@ -35,7 +35,7 @@ public sealed class McpArgs
         return _args.ValueKind == JsonValueKind.Object && _args.TryGetProperty(name, out value) && value.ValueKind != JsonValueKind.Null;
     }
 
-    private void Fail(string name) => _errors.TryAdd(name, McpMessages.InvalidArgument(name));
+    public void Fail(string name) => _errors.TryAdd(name, McpMessages.InvalidArgument(name));
 
     public string? String(string name, bool required = false, int maxLength = 200)
     {
@@ -74,6 +74,36 @@ public sealed class McpArgs
     {
         if (!TryGet(name, out var v)) return null;
         if (v.ValueKind == JsonValueKind.Object) return v.Clone();
+        Fail(name);
+        return null;
+    }
+
+    /// <summary>列舉型參數：沒帶回 <paramref name="fallback"/>；不在 <paramref name="values"/> 裡記錯誤。</summary>
+    public string Choice(string name, IReadOnlyCollection<string> values, string fallback)
+    {
+        var v = String(name);
+        if (v is null) return fallback;
+        if (values.Contains(v)) return v;
+        Fail(name);
+        return fallback;
+    }
+
+    /// <summary>日期參數（yyyy-MM-dd）。</summary>
+    public DateOnly? Date(string name)
+    {
+        var v = String(name, maxLength: 10);
+        if (v is null) return null;
+        if (DateOnly.TryParseExact(v, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var d)) return d;
+        Fail(name);
+        return null;
+    }
+
+    /// <summary>陣列型參數；不是陣列記錯誤。</summary>
+    public IReadOnlyList<JsonElement>? Array(string name)
+    {
+        if (!TryGet(name, out var v)) return null;
+        if (v.ValueKind == JsonValueKind.Array) return v.EnumerateArray().Select(e => e.Clone()).ToList();
         Fail(name);
         return null;
     }

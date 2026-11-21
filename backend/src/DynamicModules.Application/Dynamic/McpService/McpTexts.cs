@@ -31,6 +31,42 @@ public static class McpTexts
     public const string ConfirmedResultOmitted =
         "The action was executed and committed, but its result could not be returned. Do not call it again; use read tools to check the current state.";
 
+    public const string FilterSyntax =
+        "filter is a condition tree. A group is {\"all\":[...]} or {\"any\":[...]} (at most 3 levels, 20 conditions); "
+        + "a leaf is {\"field\":<numeric field id from describe_module>,\"op\":\"<op>\",\"value\":...}. Only fields marked filterable can be used. "
+        + "Ops: eq, ne, gt, gte, lt, lte, between (value [from,to]), in, notIn (value array), contains, startsWith, isEmpty, isNotEmpty (no value), "
+        + "withinLastDays, withinNextDays (value days), beforeToday; the allowed ops depend on the field type. Dates are yyyy-MM-dd. "
+        + "sort uses field keys (at most 3, sortable fields only). Example: {\"all\":[{\"field\":12,\"op\":\"eq\",\"value\":\"open\"},{\"field\":15,\"op\":\"gte\",\"value\":1000}]}";
+
+    public const string ListModulesDescription =
+        "Lists the modules (record types) you can read: key, display name, menu section and whether the module is closed to new records. Takes no arguments.";
+    public const string DescribeModuleDescription =
+        "Returns the schema of one module: its fields (key, type, label, options), details (child tables) and permissions, plus the filter syntax used by query_records.";
+    public const string QueryRecordsDescription =
+        "Searches records of one module with an optional filter tree, sort, keyword and paging. Each record has id, title, values (by field key), references (display names of referenced records) and rowVersion.";
+    public const string GetRecordDescription =
+        "Returns one record by id, including details (child rows) unless includeDetails is false.";
+    public const string GetRecordHistoryDescription = "Returns the change history of one record, newest first, with paging.";
+    public const string ListReportsDescription = "Lists the reports you can run: id, name and main module key. Takes no arguments.";
+    public const string RunReportDescription =
+        "Runs one report. Optional rangeKind/rangeN override the report's date range. Detail rows are truncated to the row limit (meta.truncated); use the export in the web UI for all rows.";
+    public const string ListMyTasksDescription = "Lists tasks for you (assigned to you, created by you, mentioning you, or your subordinates'), with paging.";
+    public const string GetTaskDescription = "Returns one task with its comments; attachments are metadata only (id, name, size).";
+    public const string ListApprovalTasksDescription =
+        "Lists approval items in your approval inbox (todo, done, submitted, all), optionally by module and submitted date range, with paging.";
+    public const string GetRecordApprovalDescription = "Returns the approval status and history of one record.";
+
+    public const string ModuleKeySchema = """{"type":"object","properties":{"moduleKey":{"type":"string","description":"Module key from list_modules"}},"required":["moduleKey"],"additionalProperties":false}""";
+    public const string QueryRecordsSchema = """{"type":"object","properties":{"moduleKey":{"type":"string","description":"Module key from list_modules"},"filter":{"type":"object","description":"Condition tree, see filterSyntax in describe_module"},"sort":{"type":"array","maxItems":3,"items":{"type":"object","properties":{"field":{"type":"string"},"order":{"type":"string","enum":["asc","desc"]}},"required":["field"]}},"keyword":{"type":"string","maxLength":100},"page":{"type":"integer","minimum":1},"pageSize":{"type":"integer","minimum":1,"maximum":200}},"required":["moduleKey"],"additionalProperties":false}""";
+    public const string GetRecordSchema = """{"type":"object","properties":{"recordId":{"type":"integer","minimum":1},"includeDetails":{"type":"boolean","default":true}},"required":["recordId"],"additionalProperties":false}""";
+    public const string RecordHistorySchema = """{"type":"object","properties":{"recordId":{"type":"integer","minimum":1},"page":{"type":"integer","minimum":1},"pageSize":{"type":"integer","minimum":1,"maximum":200}},"required":["recordId"],"additionalProperties":false}""";
+    public const string RunReportSchema = """{"type":"object","properties":{"reportId":{"type":"integer","minimum":1},"rangeKind":{"type":"string","enum":["today","thisWeek","lastWeek","thisMonth","lastMonth","thisYear","lastYear","lastDays","lastWeeks","lastMonths"]},"rangeN":{"type":"integer","minimum":1,"maximum":3650,"description":"N for lastDays/lastWeeks/lastMonths"}},"required":["reportId"],"additionalProperties":false}""";
+    public const string MyTasksSchema = """{"type":"object","properties":{"tab":{"type":"string","enum":["assigned","created","mentioned","subordinates"],"default":"assigned"},"filter":{"type":"string","enum":["open","overdue","today","thisWeek","all"],"default":"open"},"page":{"type":"integer","minimum":1},"pageSize":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}""";
+    public const string TaskSchema = """{"type":"object","properties":{"taskId":{"type":"integer","minimum":1}},"required":["taskId"],"additionalProperties":false}""";
+    public const string ApprovalTasksSchema = """{"type":"object","properties":{"box":{"type":"string","enum":["todo","done","submitted","all"],"default":"todo"},"moduleKey":{"type":"string"},"from":{"type":"string","format":"date"},"to":{"type":"string","format":"date"},"page":{"type":"integer","minimum":1},"pageSize":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}""";
+    public const string RecordIdSchema = """{"type":"object","properties":{"recordId":{"type":"integer","minimum":1}},"required":["recordId"],"additionalProperties":false}""";
+    public const string GetRecordOversizeHint = "Retry with includeDetails=false, then query the detail module with query_records.";
+
     /// <summary>沒有參數的工具的 JSON Schema。</summary>
     public const string NoArgumentsSchema = """{"type":"object","properties":{},"additionalProperties":false}""";
 }
