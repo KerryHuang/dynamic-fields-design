@@ -139,6 +139,7 @@ public class AuthorizationWriteInventoryTests
         "DynamicModules.Persistence/Repositories/Dynamic/ReportQueryRepository.cs", // 以 Dapper 執行報表聚合，只讀
         "DynamicModules.Persistence/SqliteDatabaseHealthProbe.cs",          // PRAGMA quick_check／foreign_key_check
         "DynamicModules.Persistence/SqliteMmapInterceptor.cs",              // PRAGMA mmap_size
+        "DynamicModules.Persistence/DatabaseStartupTuning.cs",              // PRAGMA journal_mode = wal（啟動時，#20）
         "DynamicModules.Persistence.Postgres/PostgresReportSqlSnapshot.cs", // SET TRANSACTION READ ONLY 與 statement_timeout
         "DynamicModules.Persistence.Postgres/PostgresStartupLock.cs",       // pg_advisory_lock／unlock（啟動鎖）
         "DynamicModules.Persistence.Postgres/PostgresWriteLockInterceptor.cs", // pg_advisory_xact_lock（全庫寫入鎖）
