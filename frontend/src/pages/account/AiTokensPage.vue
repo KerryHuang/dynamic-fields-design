@@ -45,7 +45,8 @@ const callText = (c: { action: string; tool?: string | null }) => c.tool || labe
       />
     </div>
     <div class="text-muted q-mb-md">{{ t('aiTokens.intro') }}</div>
-    <q-banner v-if="reason" dense class="bg-info-soft q-mb-md" data-testid="ai-reason">{{ t(`aiTokens.reasons.${reason}`) }}</q-banner>
+    <q-banner v-if="reason" dense class="bg-info-soft q-mb-md" data-testid="ai-reason">{{ labelOr(t, te, `aiTokens.reasons.${reason}`, t('aiTokens.reasons.other')) }}</q-banner>
+    <div v-if="info.isError.value" class="text-negative q-mb-sm" data-testid="ai-info-error">{{ t('aiTokens.infoFailed') }}</div>
     <div v-if="revokeError" class="text-negative q-mb-sm" data-testid="ai-revoke-error">{{ t('aiTokens.revokeFailed') }}</div>
     <div v-if="tokens.isError.value" class="text-negative" data-testid="ai-load-error">{{ t('aiTokens.loadFailed') }}</div>
     <div v-else-if="tokens.data.value && tokens.data.value.length === 0" class="text-muted" data-testid="ai-empty">{{ t('aiTokens.empty') }}</div>

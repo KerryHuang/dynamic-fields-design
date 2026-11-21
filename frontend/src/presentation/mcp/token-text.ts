@@ -7,8 +7,8 @@ type Exists = (key: string) => boolean;
 /** 狀態文字：有效、已過期，或「已撤銷（原因）」；沒登記的原因代碼原樣顯示。 */
 export function tokenStatusText(t: Translate, te: Exists, k: McpToken): string {
   if (k.status !== 'revoked') return t(`aiTokens.status.${k.status}`);
-  const reason = k.revokeReason ? labelOr(t, te, `aiTokens.revokeReasons.${k.revokeReason}`, k.revokeReason) : '';
-  return t('aiTokens.status.revoked', { reason });
+  if (!k.revokeReason) return t('aiTokens.status.revokedNoReason');
+  return t('aiTokens.status.revoked', { reason: labelOr(t, te, `aiTokens.revokeReasons.${k.revokeReason}`, k.revokeReason) });
 }
 
 /** 範圍的白話說明；新版後端多了範圍代碼、前端還沒跟上時顯示代碼。 */

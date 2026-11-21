@@ -18,7 +18,7 @@ const api = vi.mocked(dynamicApi);
 const INFO: McpInfo = {
   enabled: true, canUse: true, reason: null, scopes: ['business.read'], defaultExpiresOn: '2026-12-21', maxExpiresOn: '2027-02-19',
   serverUrl: 'https://fw.example/mcp',
-  examples: { claudeCode: 'claude mcp add --transport http formwright https://fw.example/mcp --header "Authorization: Bearer ${FORMWRIGHT_TOKEN}"', codex: '[mcp_servers.formwright]\nurl = "https://fw.example/mcp"' },
+  examples: { claudeCode: "claude mcp add --transport http formwright https://fw.example/mcp --header 'Authorization: Bearer ${FORMWRIGHT_TOKEN}'", codex: '[mcp_servers.formwright]\nurl = "https://fw.example/mcp"' },
 };
 const TOKEN = (over: Partial<McpToken> = {}): McpToken => ({
   id: 1, userId: 'admin', name: '筆電', last4: 'abcd', scopes: ['business.read'], createdUtc: '2026-11-21T00:00:00Z', expiresUtc: '2026-12-21T16:00:00Z',
@@ -30,7 +30,7 @@ let queryClient: QueryClient;
 const mountPage = async () => {
   setActivePinia(createPinia());
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
-  queryClient = new QueryClient();
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(AiTokensPage))) };
   mounted = mount(Host, {
     attachTo: document.body,
@@ -74,7 +74,7 @@ describe('AiTokensPage', () => {
   it.each([
     ['disabled', '系統管理員已關閉 AI 連線'],
     ['notAllowed', '你不在可使用 AI 連線的對象內'],
-    ['policyInvalid', '政策設定有誤'],
+    ['policyInvalid', '政策設定有誤或無法讀取'],
     ['demoSite', 'Demo 站不開放 AI 連線'],
     ['accountBlocked', '這個帳號不能使用 AI 連線'],
   ] as const)('shows the %s reason, disables create, and still lists existing tokens', async (reason, text) => {
@@ -154,6 +154,66 @@ describe('AiTokensPage', () => {
     await click('ai-close-anyway');
     await gone('ai-secret');
     expect(document.body.textContent).not.toContain('fwp_SECRETSECRET');
+    expect(JSON.stringify(queryClient.getMutationCache().getAll().map((m) => m.state.data))).not.toContain('fwp_');
+  });
+
+  const esc = async () => {
+    // Quasar 的 Esc 要 keydown 再 keyup（都掛在 window）才算一次
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27 }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', keyCode: 27 }));
+    await flushPromises();
+  };
+
+  it('Esc closes the form screen directly (nothing to lose yet)', async () => {
+    await mountPage();
+    await click('ai-create');
+    expect(q('ai-dialog')).not.toBeNull();
+    await esc();
+    await gone('ai-dialog');
+  });
+
+  it('Esc on the one-time screen asks first and keeps the plaintext', async () => {
+    api.createMcpToken.mockResolvedValue(CREATED);
+    await mountPage();
+    await click('ai-create');
+    await fill('ai-name', 'x');
+    await fill('ai-password', 'p');
+    await click('ai-submit');
+    await esc();
+    expect(q('ai-close-confirm')).not.toBeNull();
+    expect(q('ai-secret')!.textContent).toContain('fwp_SECRETSECRET');
+  });
+
+  it('sends null for an empty or half-typed expiry so the server answers with its own message', async () => {
+    api.createMcpToken.mockResolvedValue(CREATED);
+    await mountPage();
+    await click('ai-create');
+    await fill('ai-name', 'x');
+    await fill('ai-password', 'p');
+    await fill('ai-expires', '2026-1');
+    await click('ai-submit');
+    expect(api.createMcpToken.mock.calls[0]![0]).toMatchObject({ expiresOn: null });
+  });
+
+  it('labels the scope checkbox with the plain-language text, the code only as a caption', async () => {
+    await mountPage();
+    await click('ai-create');
+    expect(q('ai-scope-business.read')!.getAttribute('aria-label') ?? q('ai-scope-business.read')!.textContent).toContain('讀取業務資料');
+  });
+
+  it('shows an error when me/mcp cannot be read', async () => {
+    api.getMyMcp.mockRejectedValue({ status: 500 });
+    await mountPage();
+    expect(q('ai-info-error')).not.toBeNull();
+  });
+
+  it('falls back to a generic text for an unknown reason and for a revoked token without a reason', async () => {
+    api.getMyMcp.mockResolvedValue({ ...INFO, canUse: false, reason: 'brandNew' as never });
+    api.getMyMcpTokens.mockResolvedValue([TOKEN({ status: 'revoked' })]);
+    await mountPage();
+    expect(q('ai-reason')!.textContent).not.toContain('aiTokens.');
+    expect(q('ai-token-1')!.textContent).toContain('已撤銷');
+    expect(q('ai-token-1')!.textContent).not.toContain('（）');
   });
 
   it('copies the plaintext', async () => {

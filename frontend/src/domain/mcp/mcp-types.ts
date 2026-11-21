@@ -48,4 +48,4 @@ export interface McpTokenCall {
   reasonCode?: string | null;
 }
 
-export interface McpCreateBody { name: string; scopes: string[]; expiresOn: string; password: string }
+export interface McpCreateBody { name: string; scopes: string[]; expiresOn: string | null; password: string }

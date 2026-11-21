@@ -38,7 +38,9 @@ watch(() => props.modelValue, (open) => {
 
 function submit() {
   error.value = '';
-  create.send({ name: name.value, scopes: [...scopes.value], expiresOn: expiresOn.value ?? '' }, { password: password.value }, {
+  // 空值或日期只打一半（框架會回英文的格式錯誤）一律送 null，讓後端回「到期日須在 X 到 Y 之間」
+  const date = expiresOn.value && /^\d{4}-\d{2}-\d{2}$/.test(expiresOn.value) ? expiresOn.value : null;
+  create.send({ name: name.value, scopes: [...scopes.value], expiresOn: date }, { password: password.value }, {
     onSuccess: (r) => { secret.value = r.token; password.value = ''; },
     onError: (e) => { error.value = joinList(leftoverMessages(e as unknown as ApiError, [])) || t('aiTokens.dialog.createFailed'); },
   });
@@ -62,13 +64,16 @@ function close() {
   create.reset();
   emit('update:modelValue', false);
 }
-/** 已出現明文時，Esc 與點背景都不直接關，改問一次。 */
-const onHide = () => { if (secret.value !== null) confirmClose.value = true; else close(); };
+/** 對話框要求關閉（Esc）：已出現明文時不直接關，改問一次；表單畫面還沒有東西可失去，直接關。點背景不關（no-backdrop-dismiss）。 */
+function onToggle(open: boolean) {
+  if (open) return;
+  if (secret.value !== null) confirmClose.value = true; else close();
+}
 const envExample = computed(() => `export FORMWRIGHT_TOKEN='${secret.value ?? ''}'`);
 </script>
 
 <template>
-  <q-dialog :model-value="modelValue" persistent :maximized="$q.screen.lt.sm" @escape-key="onHide">
+  <q-dialog :model-value="modelValue" no-backdrop-dismiss :maximized="$q.screen.lt.sm" @update:model-value="onToggle">
     <q-card :style="$q.screen.lt.sm ? undefined : 'width: 560px; max-width: 95vw'" data-testid="ai-dialog">
       <template v-if="secret === null">
         <q-card-section class="text-h6">{{ t('aiTokens.dialog.title') }}</q-card-section>
@@ -79,10 +84,10 @@ const envExample = computed(() => `export FORMWRIGHT_TOKEN='${secret.value ?? ''
               <legend class="text-caption">{{ t('aiTokens.dialog.scopes') }}</legend>
               <div v-for="s in info.scopes" :key="s" class="q-mb-xs">
                 <q-checkbox
-                  :model-value="scopes.includes(s)" dense :label="s" :data-testid="`ai-scope-${s}`"
+                  :model-value="scopes.includes(s)" dense :label="scopeText(t, te, s)" :data-testid="`ai-scope-${s}`"
                   @update:model-value="(v) => toggleScope(s, v)"
                 />
-                <div class="text-caption text-muted q-ml-lg" style="overflow-wrap: anywhere">{{ scopeText(t, te, s) }}</div>
+                <div class="text-caption text-muted q-ml-lg" style="overflow-wrap: anywhere">{{ s }}</div>
               </div>
             </fieldset>
             <DateSelect v-model="expiresOn" :label="t('aiTokens.dialog.expiresOn')" :hint="t('aiTokens.dialog.expiresHint', { max: info.maxExpiresOn })" data-testid="ai-expires" />

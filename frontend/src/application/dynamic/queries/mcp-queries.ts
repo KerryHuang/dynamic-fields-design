@@ -22,7 +22,7 @@ export const useMcpCalls = (id: MaybeRefOrGetter<number | null>) =>
 
 export function useCreateMcpToken() {
   const qc = useQueryClient();
-  return useSecretMutation((take: (v: { name: string; scopes: string[]; expiresOn: string }) => { password: string }) =>
+  return useSecretMutation((take: (v: { name: string; scopes: string[]; expiresOn: string | null }) => { password: string }) =>
     useMutation({
       ...SECRET_MUTATION,
       gcTime: 0,
@@ -46,11 +46,14 @@ export const useAdminMcpTokens = (filter: MaybeRefOrGetter<{ userId?: string; st
     enabled: computed(() => toValue(enabled)),
   });
 
+/** 管理員可能撤銷自己的權杖：個人頁與頂列入口的資料一起更新。 */
+const ADMIN_KEYS = ['mcp-admin-tokens', ...MY_KEYS];
+
 export function useAdminRevokeMcpToken() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => dynamicApi.adminRevokeMcpToken(id),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['mcp-admin-tokens'] }),
+    onSettled: () => Promise.all(ADMIN_KEYS.map((k) => qc.invalidateQueries({ queryKey: [k] }))),
   });
 }
 
@@ -58,6 +61,6 @@ export function useAdminRevokeAllMcpTokens() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) => dynamicApi.adminRevokeAllMcpTokens(userId),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['mcp-admin-tokens'] }),
+    onSettled: () => Promise.all(ADMIN_KEYS.map((k) => qc.invalidateQueries({ queryKey: [k] }))),
   });
 }
