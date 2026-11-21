@@ -218,6 +218,9 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.McpService.McpPolicies>();
         services.AddScoped<Dynamic.McpService.Tokens.McpTokenViews>();
         services.AddScoped<Dynamic.McpService.McpTokenRevoker>();
+        // MCP 工具（mcp1a 判斷 19）：每個工具一筆 IMcpTool，執行器依名稱找
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.WhoAmITool>();
+        services.AddScoped<Dynamic.McpService.Tools.McpToolInvoker>();
         services.AddScoped<Dynamic.ApprovalService.ApproverResolver>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalWriteContext>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalGate>();

@@ -21,6 +21,7 @@ using DynamicModules.Persistence.Postgres;
 using DynamicModules.Persistence.Seed;
 using DynamicModules.WebAPI.Attachments;
 using DynamicModules.WebAPI.Demo;
+using DynamicModules.WebAPI.Mcp;
 using DynamicModules.WebAPI.Ops;
 using DynamicModules.WebAPI.Security;
 using DynamicModules.WebAPI.Time;
@@ -73,6 +74,10 @@ else builder.Services.AddSqliteDatabase(builder.Configuration);
 // 須在 provider 註冊之後：provider 經 AddPersistenceRepositories 註冊 IPermissionRepository，MCP 通道的 AI 遮罩包在它外面（mcp1a 判斷 10）
 builder.Services.AddChannelPermissionMasking();
 builder.Services.AddScoped<IRequestChannel, DynamicModules.WebAPI.Mcp.HttpRequestChannel>();
+// AI 連線（MCP，mcp1a 判斷 11）：SDK stateless、閘門與 /mcp 端點在下面的管線
+builder.Services.AddFormwrightMcp();
+if (builder.Configuration.GetValue<bool>("Mcp:AllowHttp"))
+    startupWarnings.Add("Mcp:AllowHttp 已開啟：/mcp 接受非 HTTPS 的連線，權杖會以明文傳輸；只能用在內網或測試環境");
 builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
 builder.Services.AddScoped<DynamicModules.Application.Common.ICurrentLocale, HeaderCurrentLocale>();
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
@@ -206,6 +211,8 @@ if (trustForwardedHeaders) app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseMiddleware<SessionMiddleware>();
+// /mcp 只收 Bearer 權杖：在 SessionMiddleware 之後換成權杖身分，RequestScopeMiddleware 的 userId 才是權杖擁有者
+app.UseFormwrightMcpGate();
 // 在 SessionMiddleware 之後：cookie 失效降成匿名時，log scope 的 userId 才不會是舊帳號
 app.UseMiddleware<RequestScopeMiddleware>();
 app.UseMiddleware<IdempotencyKeyMiddleware>();
@@ -217,6 +224,8 @@ if (app.Environment.IsDevelopment())
 
 app.MapControllers();
 app.MapOpsEndpoints();
+// 在 wwwroot 區塊之前：GET /mcp 回 405，不掉進 SPA 的 fallback（B19）
+app.MapFormwrightMcp();
 
 // 部署時前端建置結果放在 wwwroot（Dockerfile），由同一個站台提供；本機開發沒有 wwwroot，前端走 quasar dev。
 if (Directory.Exists(Path.Combine(app.Environment.ContentRootPath, "wwwroot")))

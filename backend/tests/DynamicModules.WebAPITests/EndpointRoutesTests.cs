@@ -10,6 +10,9 @@ public class EndpointRoutesTests
     /// <summary>不需登入的公開路徑，明確列舉（health、版本）；其餘一律要在 /api/v3/dynamic 底下。</summary>
     private static readonly string[] PublicRoutes = ["/api/health", "/api/health/live", "/api/health/ready", "/api/version"];
 
+    /// <summary>不在 SessionMiddleware 範圍、由別的閘門保護的路徑：/mcp 由 McpGateMiddleware 保護（只收 Bearer 權杖，mcp1a 判斷 11、26）。</summary>
+    private static readonly string[] SeparatelyGuardedRoutes = ["/mcp"];
+
     [Fact]
     public void AllEndpoints_AreUnderDynamicApi_OrHealth()
     {
@@ -22,7 +25,8 @@ public class EndpointRoutesTests
         routes.Should().NotBeEmpty();
         routes.Where(r => !r.StartsWith("/api/v3/dynamic/", StringComparison.OrdinalIgnoreCase)
                           && !r.Equals("/api/v3/dynamic", StringComparison.OrdinalIgnoreCase)
-                          && !PublicRoutes.Contains(r, StringComparer.OrdinalIgnoreCase))
+                          && !PublicRoutes.Contains(r, StringComparer.OrdinalIgnoreCase)
+                          && !SeparatelyGuardedRoutes.Contains(r.TrimEnd('/'), StringComparer.OrdinalIgnoreCase))
             .Should().BeEmpty("所有端點都要在 SessionMiddleware 的保護範圍內");
     }
 }

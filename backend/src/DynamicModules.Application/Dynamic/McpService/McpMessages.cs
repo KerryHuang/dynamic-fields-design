@@ -21,6 +21,9 @@ public static class McpMessages
     public const string CodeUnauthorized = "mcpUnauthorized", CodeTokenInQuery = "mcpTokenInQuery", CodeOriginDenied = "mcpOriginDenied",
         CodeHttpsRequired = "mcpHttpsRequired";
 
+    /// <summary><c>/mcp</c> 認證失敗太多次被 IP 降速（429）；訊息沿用 <see cref="Unauthorized"/>。</summary>
+    public const string CodeAuthThrottled = "mcpAuthThrottled";
+
     /// <summary>建立權杖的欄位錯誤鍵（400 的 <c>errors.*</c>）。</summary>
     public const string NameField = "name", ScopesField = "scopes", ExpiresOnField = "expiresOn", PasswordField = "password";
 
