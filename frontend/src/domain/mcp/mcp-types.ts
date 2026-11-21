@@ -11,7 +11,10 @@ export interface McpInfo {
   enabled: boolean;
   canUse: boolean;
   reason?: McpReason | null;
+  /** 可建立的範圍。 */
   scopes: string[];
+  /** 建立對話框預設勾選的範圍（後端單一來源；寫入範圍預設不勾）。 */
+  defaultScopes: string[];
   /** 營運時區的日期（YYYY-MM-DD）；預設與上限都由伺服器依政策算好。 */
   defaultExpiresOn: string;
   maxExpiresOn: string;

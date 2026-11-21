@@ -16,7 +16,7 @@ vi.mock('src/services/api/dynamic-api', () => ({
 const api = vi.mocked(dynamicApi);
 
 const INFO: McpInfo = {
-  enabled: true, canUse: true, reason: null, scopes: ['business.read'], defaultExpiresOn: '2026-12-21', maxExpiresOn: '2027-02-19',
+  enabled: true, canUse: true, reason: null, scopes: ['business.read', 'business.write'], defaultScopes: ['business.read'], defaultExpiresOn: '2026-12-21', maxExpiresOn: '2027-02-19',
   serverUrl: 'https://fw.example/mcp',
   examples: { claudeCode: "claude mcp add --transport http formwright https://fw.example/mcp --header 'Authorization: Bearer ${FORMWRIGHT_TOKEN}'", codex: '[mcp_servers.formwright]\nurl = "https://fw.example/mcp"' },
 };
@@ -193,6 +193,20 @@ describe('AiTokensPage', () => {
     await fill('ai-expires', '2026-1');
     await click('ai-submit');
     expect(api.createMcpToken.mock.calls[0]![0]).toMatchObject({ expiresOn: null });
+  });
+
+  it('checks only the API default scopes when the dialog opens; write must be ticked explicitly', async () => {
+    api.createMcpToken.mockResolvedValue(CREATED);
+    await mountPage();
+    await click('ai-create');
+    expect(q('ai-scope-business.read')!.getAttribute('aria-checked')).toBe('true');
+    expect(q('ai-scope-business.write')!.getAttribute('aria-checked')).toBe('false');
+    expect(q('ai-scope-business.write')!.textContent).toContain('新增與修改業務資料');
+    await click('ai-scope-business.write');
+    await fill('ai-name', '可寫');
+    await fill('ai-password', 'pw-123456');
+    await click('ai-submit');
+    expect(api.createMcpToken.mock.calls[0]![0]).toMatchObject({ scopes: ['business.read', 'business.write'] });
   });
 
   it('labels the scope checkbox with the plain-language text, the code only as a caption', async () => {

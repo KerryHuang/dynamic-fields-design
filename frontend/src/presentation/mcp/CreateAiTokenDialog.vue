@@ -33,7 +33,7 @@ watch(() => props.modelValue, (open) => {
   secret.value = null;
   copyState.value = 'idle';
   expiresOn.value = props.info.defaultExpiresOn;
-  scopes.value = [...props.info.scopes];
+  scopes.value = [...props.info.defaultScopes];
 }, { immediate: true });
 
 function submit() {

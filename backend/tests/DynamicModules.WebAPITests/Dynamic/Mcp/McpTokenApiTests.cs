@@ -86,7 +86,8 @@ public class McpTokenApiTests : IDisposable
 
         var info = await JsonOf(await admin.GetAsync($"{Base}/me/mcp"));
         info.GetProperty("canUse").GetBoolean().Should().BeTrue();
-        info.GetProperty("scopes").EnumerateArray().Select(s => s.GetString()).Should().Equal("business.read");
+        info.GetProperty("scopes").EnumerateArray().Select(s => s.GetString()).Should().Equal("business.read", "business.write");
+        info.GetProperty("defaultScopes").EnumerateArray().Select(s => s.GetString()).Should().Equal("business.read");
 
         var wrong = await Create(admin, password: "nope-nope");
         wrong.StatusCode.Should().Be(HttpStatusCode.BadRequest);

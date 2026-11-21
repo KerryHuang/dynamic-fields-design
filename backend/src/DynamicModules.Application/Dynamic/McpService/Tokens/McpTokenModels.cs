@@ -16,10 +16,10 @@ public sealed record McpClientExamples(string ClaudeCode, string Codex);
 
 /// <summary>
 /// 本人的 AI 連線資訊：<c>Reason</c> 是 <c>disabled</c>／<c>notAllowed</c>／<c>policyInvalid</c>／<c>demoSite</c>／<c>accountBlocked</c>，能用時是 null；
-/// 兩個日期是營運時區的日期。
+/// 兩個日期是營運時區的日期。<c>Scopes</c> 是可建立的範圍，<c>DefaultScopes</c> 是建立對話框預設勾選的範圍。
 /// </summary>
 public sealed record McpInfoResponse(
-    bool Enabled, bool CanUse, string? Reason, IReadOnlyList<string> Scopes, DateOnly DefaultExpiresOn, DateOnly MaxExpiresOn, string ServerUrl,
+    bool Enabled, bool CanUse, string? Reason, IReadOnlyList<string> Scopes, IReadOnlyList<string> DefaultScopes, DateOnly DefaultExpiresOn, DateOnly MaxExpiresOn, string ServerUrl,
     McpClientExamples Examples);
 
 /// <summary>一把權杖最近的工具呼叫：<c>Tool</c> 是協定上的工具名稱（稽核的 TargetLabel），<c>Result</c> 是 camelCase 的稽核結果。</summary>

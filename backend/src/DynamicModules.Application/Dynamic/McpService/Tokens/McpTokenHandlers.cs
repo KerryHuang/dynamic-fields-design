@@ -89,7 +89,7 @@ public sealed class GetMyMcpInfoHandler(
         var examples = new McpClientExamples(
             $"claude mcp add --transport http formwright {url} --header 'Authorization: Bearer ${{FORMWRIGHT_TOKEN}}'",
             $"[mcp_servers.formwright]\nurl = \"{url}\"\nbearer_token_env_var = \"FORMWRIGHT_TOKEN\"");
-        return ServiceResult.Success(new McpInfoResponse(snap.Enabled && !snap.AccessInvalid, reason is null, ReasonOf(reason), McpScopes.Issuable,
+        return ServiceResult.Success(new McpInfoResponse(snap.Enabled && !snap.AccessInvalid, reason is null, ReasonOf(reason), McpScopes.Issuable, McpScopes.DefaultChecked,
             views.Today.AddDays(snap.TokenDefaultLifetimeDays), views.Today.AddDays(snap.TokenMaxLifetimeDays), url, examples));
     }
 

@@ -186,6 +186,25 @@ public class McpTokenHandlerTests : McpTokenTestBase
     }
 
     [Fact]
+    public async Task CreateToken_BusinessWrite_Allowed()
+    {
+        await Enable();
+        var r = await Create(scopes: [McpScopes.BusinessRead, McpScopes.BusinessWrite]);
+        r.IsCreated.Should().BeTrue();
+        ((McpTokenCreated)r.Data!).Item.Scopes.Should().Equal(McpScopes.BusinessRead, McpScopes.BusinessWrite);
+        Err(await Create(scopes: [McpScopes.DesignRead]), McpMessages.ScopesField).Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task Info_DefaultScopes_ReadOnly()
+    {
+        await Enable();
+        var info = (McpInfoResponse)(await Send(new GetMyMcpInfoRequest("http://h"))).Data!;
+        info.Scopes.Should().Equal(McpScopes.BusinessRead, McpScopes.BusinessWrite);
+        info.DefaultScopes.Should().Equal(McpScopes.BusinessRead);
+    }
+
+    [Fact]
     public async Task Create_NameLength()
     {
         await Enable();
@@ -373,7 +392,7 @@ public class McpTokenHandlerTests : McpTokenTestBase
         await Enable();
         var on = Info(await Send(new GetMyMcpInfoRequest("http://127.0.0.1:5180/")));
         (on.Enabled, on.CanUse, on.Reason).Should().Be((true, true, (string?)null));
-        on.Scopes.Should().Equal(McpScopes.BusinessRead);
+        on.Scopes.Should().Equal(McpScopes.BusinessRead, McpScopes.BusinessWrite);
         (on.DefaultExpiresOn, on.MaxExpiresOn).Should().Be((Today.AddDays(30), Today.AddDays(90)));
         on.ServerUrl.Should().Be("http://127.0.0.1:5180/mcp");
         on.Examples.ClaudeCode.Should().Be(

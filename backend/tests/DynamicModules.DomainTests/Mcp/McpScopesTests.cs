@@ -11,7 +11,14 @@ public class McpScopesTests
         McpScopes.All.Should().Equal("business.read", "business.write", "design.read", "design.write", "ops.read", "ops.act");
 
     [Fact]
-    public void Issuable_OnlyBusinessRead() => McpScopes.Issuable.Should().Equal("business.read");
+    public void Issuable_BusinessReadAndWrite() => McpScopes.Issuable.Should().Equal("business.read", "business.write");
+
+    [Fact]
+    public void DefaultChecked_ReadOnly_SubsetOfIssuable()
+    {
+        McpScopes.DefaultChecked.Should().Equal("business.read");
+        McpScopes.Issuable.Should().Contain(McpScopes.DefaultChecked);
+    }
 
     [Theory]
     [InlineData("business.read,unknown")]
