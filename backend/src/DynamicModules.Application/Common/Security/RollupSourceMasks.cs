@@ -41,7 +41,8 @@ public sealed class RollupSourceMasks(IPermissionRepository permissions, IModule
             if (!sources.TryGetValue(cfg.SourceFieldId, out var source))
                 sources[cfg.SourceFieldId] = source = await modules.GetByFieldIdAsync(cfg.SourceFieldId, ct);
             var sourceField = source?.Blocks.SelectMany(b => b.Fields).FirstOrDefault(x => x.Id == cfg.SourceFieldId);
-            if (source is null || sourceField is null)
+            // 來源參照欄位停用：彙總設定已失效（重新啟用前要重驗），同來源找不到，隱藏
+            if (source is null || sourceField is not { Status: FieldStatus.Active })
             {
                 conditionRefs[f.Id] = null;
                 continue;

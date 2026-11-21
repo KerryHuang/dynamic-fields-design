@@ -9,6 +9,7 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetPagedRecords;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
+using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecordHistory;
 using DynamicModules.ApplicationTests.Dynamic.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -229,6 +230,56 @@ public class RollupFormulaMaskTests : ApprovalTestBase
         (await Get("admin", po)).Values[$"f_{_bonusX}"]!.Value.GetDecimal().Should().Be(7, "對照：停用的公式存過的值仍讀得到");
         (await Perms("buyer1")).HiddenFieldIds.Should().Contain(_bonusX);
         (await Get("buyer1", po)).Values.Keys.Should().NotContain($"f_{_bonusX}");
+    }
+
+    /// <summary>
+    /// 公式與彙總本來不記歷程（RecordHistoryWriter 略過計算欄位）；這裡直接寫兩列，鎖住歷程查詢套用同一個遮罩
+    /// （舊資料或日後改寫入規則時不外洩）。
+    /// </summary>
+    [Fact]
+    public async Task History_DisabledFormulaAndRefRollup_HiddenForReader()
+    {
+        await Rig();
+        var po = await PoWithExtra();
+        await DisableBonusFormula();
+        foreach (var field in new[] { _bonusX, _refSum })
+            Db.Context.Add(new RecordHistory
+            {
+                RecordId = po, FieldId = field, Operation = RecordHistoryOperation.Update, OldValue = "1", NewValue = "1234",
+                ChangedUserId = "admin", ChangedTime = new DateTime(2026, 11, 1, 9, 0, 0, DateTimeKind.Unspecified),
+            });
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        async Task<List<string?>> Keys(string user)
+        {
+            As(user);
+            var res = await Send(new GetRecordHistoryRequest(po, 1, 100, null));
+            res.IsSuccess.Should().BeTrue(Dump(res));
+            return ((PagedResponse<RecordHistoryResponse>)res.Data!).Items.Select(i => i.FieldKey).ToList();
+        }
+        (await Keys("admin")).Should().Contain([$"f_{_bonusX}", $"f_{_refSum}"], "對照：管理員讀得到這兩列");
+        (await Keys("buyer1")).Should().NotContain([$"f_{_bonusX}", $"f_{_refSum}"]);
+    }
+
+    // ───────── 來源參照欄位停用 ─────────
+
+    /// <summary>
+    /// 彙總的來源參照欄位停用後（直接改資料庫；正式路徑要先停用彙總才能停用它），彙總設定已失效、重新啟用前要重驗，
+    /// 讀者端一律隱藏（fail closed）；管理員照常。用「追加費用合計」：加總對象（金額）讀者看得到，只因來源失效而隱藏。
+    /// </summary>
+    [Fact]
+    public async Task SourceRefInactive_RollupHiddenForReader_VisibleForAdmin()
+    {
+        await Rig();
+        (await Perms("buyer1")).HiddenFieldIds.Should().NotContain(_r.ExtraSum, "對照：來源有效時讀者看得到");
+        var field = await Db.Context.Set<Field>().SingleAsync(f => f.Id == _r.ExtraRef);
+        field.Status = FieldStatus.Inactive;
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        (await Perms("buyer1")).HiddenFieldIds.Should().Contain(_r.ExtraSum);
+        (await Perms("admin")).HiddenFieldIds.Should().BeEmpty();
     }
 
     // ───────── 簽核臨時讀取權 ─────────
