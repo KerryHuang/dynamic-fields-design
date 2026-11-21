@@ -3,6 +3,7 @@ import { useQuasar, type QSelect } from 'quasar';
 import { computed, nextTick, reactive, ref, toRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useDesignerMutation, useModuleDetail, useModules, useRollupSources } from 'src/application/dynamic/queries/modules-queries';
+import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useEntities } from 'src/application/dynamic/queries/relation-queries';
 import { completeMap } from 'src/domain/dynamic/fill';
 import type { MapRow } from 'src/domain/dynamic/conversion';
@@ -66,6 +67,9 @@ const form = reactive({
   fillMode: 'default' as NonNullable<FieldConfig['fill']>['mode'],
   fillRows: [] as MapRow[],
 });
+// 變更「不提供給 AI 工具」一定要權限設定的權限（後端必擋），沒有就先停用，不讓整筆存檔被 403
+const me = useMe();
+const canSetAiFlag = computed(() => me.data.value?.permissionAdmin === true);
 const error = ref<ApiError | null>(null);
 // 開啟時的標籤（獨立副本）：必填語系增加後，只改其他設定的既有欄位不要求補語系
 const originalLabel = ref<I18nText | undefined>();
@@ -376,8 +380,9 @@ const saving = computed(() => create.isPending.value || update.isPending.value);
         </div>
 
         <div data-testid="exclude-ai">
-          <q-checkbox v-model="form.excludeFromAi" data-testid="exclude-ai-checkbox" :label="t('designer.excludeFromAi')" />
+          <q-checkbox v-model="form.excludeFromAi" data-testid="exclude-ai-checkbox" :disable="!canSetAiFlag" :label="t('designer.excludeFromAi')" />
           <div class="text-caption text-muted">{{ t('designer.excludeFromAiHint') }}</div>
+          <div v-if="!canSetAiFlag" class="text-caption text-muted">{{ t('designer.excludeFromAiNeedPermission') }}</div>
         </div>
 
         <div v-if="isFormula" class="q-gutter-sm">

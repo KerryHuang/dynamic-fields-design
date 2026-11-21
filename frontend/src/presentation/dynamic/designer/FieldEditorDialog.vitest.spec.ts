@@ -91,6 +91,26 @@ describe('FieldEditorDialog', () => {
   describe('不提供給 AI 工具（excludeFromAi）', () => {
     const save = () => [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('儲存'))!.click();
     const box = () => toggle('exclude-ai-checkbox');
+    const asMe = (permissionAdmin: boolean) => vi.spyOn(dynamicApi, 'getMe').mockResolvedValue({ permissionAdmin } as never);
+    beforeEach(() => { asMe(true); });
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('is disabled with an explanation without the permission-settings permission', async () => {
+      asMe(false);
+      const w = mountDialog({ field: field('text') });
+      await flushPromises();
+      expect(box().getAttribute('aria-disabled')).toBe('true');
+      expect(document.body.textContent).toContain('需要有權限設定的權限才能變更這個勾選');
+      w.unmount();
+    });
+
+    it('is enabled with the permission', async () => {
+      const w = mountDialog({ field: field('text') });
+      await flushPromises();
+      expect(box().getAttribute('aria-disabled')).not.toBe('true');
+      expect(document.body.textContent).not.toContain('需要有權限設定的權限才能變更這個勾選');
+      w.unmount();
+    });
 
     it('shows the checkbox with its explanation', async () => {
       const w = mountDialog({ field: field('text') });
