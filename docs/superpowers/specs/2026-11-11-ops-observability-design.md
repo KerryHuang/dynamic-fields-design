@@ -1063,7 +1063,7 @@ O2 做六件事：
 | 不做 | 留給 |
 |---|---|
 | 事件推送到維運中心、外部探測、匿名回報、新版本通知；雲端版由維運中心代寄 Email（U1） | O3 |
-| 規則的迴圈偵測、`ops.ruleLoopTriggersPerRecord`（C3） | mcp2a（已實作，另加 `ops.ruleLoopWindowMinutes`；事件代碼 `mcp.writeLoop`，客戶設定類、警告，見 [MCP 設計](2026-11-11-mcp-server-design.md) §7.3） |
+| 規則的迴圈偵測、`ops.ruleLoopTriggersPerRecord`（C3） | mcp2a（已實作，另加 `ops.ruleLoopWindowMinutes`；事件代碼 `mcp.writeLoop`，安全類（來源客戶設定）、警告，見 [MCP 設計](2026-11-11-mcp-server-design.md) §7.3） |
 | PostgreSQL 的連線與鎖（`pg_stat_activity`、`pg_locks`）、慢查詢（`pg_stat_statements`）、`amcheck`；SQLite 的每週 `integrity_check`、EF 慢查詢攔截器（§8 表內其餘項目） | O4（mcpO1 的唯讀工具要讀這些統計時一起做；O2-U13） |
 | 維運唯讀與處置的 MCP 工具、維運服務帳號（只預留稽核的行為者種類） | O4（mcpO1）、O6（mcpO2） |
 | MCP 呼叫的稽核寫入點（O2 只建表與介面） | mcp1a |
