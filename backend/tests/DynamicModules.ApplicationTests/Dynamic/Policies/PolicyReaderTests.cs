@@ -63,6 +63,19 @@ public class PolicyReaderTests : DesignerTestBase
         (await Reader.ResolveAsync(Def, a, default)).Should().Be(new PolicyResolution("20", null, null, "20"));
     }
 
+    /// <summary>mcp1a 判斷 6：有存值但無法使用時標 SystemUnusable（存取類政策據此拒絕）；沒存值、合法值都不標。</summary>
+    [Fact]
+    public async Task SystemUnusable_OnlyWhenStoredButUnusable()
+    {
+        (await Reader.ResolveAsync(Def, null, default)).SystemUnusable.Should().BeFalse();
+        await SetSystem(Def.Code, "5");
+        (await Reader.ResolveAsync(Def, null, default)).SystemUnusable.Should().BeFalse();
+        await SetSystem(Def.Code, "abc");
+        var r = await Reader.ResolveAsync(Def, null, default);
+        r.SystemUnusable.Should().BeTrue();
+        r.Effective.Should().Be("20");
+    }
+
     [Fact]
     public async Task SystemValue_OverridesFactory()
     {

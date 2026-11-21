@@ -20,7 +20,7 @@ public static class AuditActions
 
     public static readonly IReadOnlyList<string> Groups = [Auth, User, Group, Permission, Policy, Org, Design, App, Ops, Mcp, Locale];
 
-    private const AuditRiskLevel W = AuditRiskLevel.Write, H = AuditRiskLevel.HighRisk;
+    private const AuditRiskLevel R = AuditRiskLevel.Read, W = AuditRiskLevel.Write, H = AuditRiskLevel.HighRisk;
 
     public static IReadOnlyList<Entry> All { get; } =
     [
@@ -123,6 +123,24 @@ public static class AuditActions
         new("ops.channel.test", Ops, W),
         new("mailSettings.update", Ops, W),
         new("mailSettings.test", Ops, W),
+        // AI 連線（MCP 設計 §8.1；mcp1a 判斷 17）：被政策擋下的連線、權杖管理是一般寫入；工具呼叫與不存在的工具是唯讀
+        new("mcp.access", Mcp, W),
+        new("mcp.token.create", Mcp, W),
+        new("mcp.token.revoke", Mcp, W),
+        new("mcp.token.revokeAll", Mcp, W),
+        new("mcp.whoami", Mcp, R),
+        new("mcp.listModules", Mcp, R),
+        new("mcp.describeModule", Mcp, R),
+        new("mcp.queryRecords", Mcp, R),
+        new("mcp.getRecord", Mcp, R),
+        new("mcp.getRecordHistory", Mcp, R),
+        new("mcp.listReports", Mcp, R),
+        new("mcp.runReport", Mcp, R),
+        new("mcp.listMyTasks", Mcp, R),
+        new("mcp.getTask", Mcp, R),
+        new("mcp.listApprovalTasks", Mcp, R),
+        new("mcp.getRecordApproval", Mcp, R),
+        new("mcp.unknownTool", Mcp, R),
         // 語系與語系包（語系包設計 §11；i4d1 計畫判斷 17）：一般寫入，高風險只留權限類
         new("locale.install", Locale, W),
         new("locale.pack.import", Locale, W),

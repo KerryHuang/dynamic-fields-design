@@ -5,8 +5,11 @@ using Microsoft.Extensions.Logging;
 
 namespace DynamicModules.Application.Dynamic.PolicyService;
 
-/// <summary>一個政策在各層的值（都是標準字串）：出廠、全系統、模組覆寫（沒設或無法使用為 null）與生效值。</summary>
-public sealed record PolicyResolution(string Factory, string? System, string? Override, string Effective);
+/// <summary>
+/// 一個政策在各層的值（都是標準字串）：出廠、全系統、模組覆寫（沒設或無法使用為 null）與生效值。
+/// <see cref="SystemUnusable"/>：全系統層有存值、但無法使用（已退回上一層）；存取類政策據此拒絕，不靠退回值（mcp1a 判斷 6）。
+/// </summary>
+public sealed record PolicyResolution(string Factory, string? System, string? Override, string Effective, bool SystemUnusable = false);
 
 /// <summary>
 /// 政策的唯一讀值入口（設計 docs/superpowers/specs/2026-11-11-policy-settings-design.md §3.1、§6）。
@@ -38,7 +41,8 @@ public sealed class PolicyReader(
     {
         var factory = env.FactoryOf(def);
         _system ??= await settings.ListByPrefixAsync(SystemPrefix, ct);
-        var system = Usable(def, _system.GetValueOrDefault(def.SettingKey), "全系統");
+        var stored = _system.GetValueOrDefault(def.SettingKey);
+        var system = Usable(def, stored, "全系統");
 
         string? overrideValue = null;
         if (def.Scope == PolicyScope.Module && moduleId is { } id)
@@ -51,7 +55,7 @@ public sealed class PolicyReader(
             overrideValue = Usable(def, rows.GetValueOrDefault(def.Code), "模組覆寫");
         }
 
-        return new PolicyResolution(factory, system, overrideValue, overrideValue ?? system ?? factory);
+        return new PolicyResolution(factory, system, overrideValue, overrideValue ?? system ?? factory, stored is not null && system is null);
     }
 
     public async Task<int> IntAsync(PolicyDefinition def, long? moduleId, CancellationToken ct)

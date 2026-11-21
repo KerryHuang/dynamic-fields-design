@@ -1,0 +1,146 @@
+{
+  "McpDisabled": {
+    "zh-TW": "AI 連線（MCP）尚未啟用，請洽系統管理員",
+    "en-US": "AI connections (MCP) are not enabled. Please contact your system administrator",
+    "th": "ยังไม่ได้เปิดใช้การเชื่อมต่อ AI (MCP) โปรดติดต่อผู้ดูแลระบบ",
+    "vi": "Kết nối AI (MCP) chưa được bật, vui lòng liên hệ quản trị viên hệ thống"
+  },
+  "McpNotAllowed": {
+    "zh-TW": "你不在可使用 AI 連線的對象內，請洽系統管理員",
+    "en-US": "You are not among the users allowed to use AI connections. Please contact your system administrator",
+    "th": "คุณไม่ได้อยู่ในกลุ่มผู้ที่ใช้การเชื่อมต่อ AI ได้ โปรดติดต่อผู้ดูแลระบบ",
+    "vi": "Bạn không thuộc đối tượng được dùng kết nối AI, vui lòng liên hệ quản trị viên hệ thống"
+  },
+  "McpDemoSite": {
+    "zh-TW": "示範站不開放 AI 連線",
+    "en-US": "AI connections are not available on the demo site",
+    "th": "เว็บไซต์สาธิตไม่เปิดให้ใช้การเชื่อมต่อ AI",
+    "vi": "Trang demo không mở kết nối AI"
+  },
+  "McpAccountBlocked": {
+    "zh-TW": "這個帳號不能使用 AI 連線（示範帳號、已停用或須先變更密碼）",
+    "en-US": "This account cannot use AI connections (demo account, deactivated, or must change its password first)",
+    "th": "บัญชีนี้ใช้การเชื่อมต่อ AI ไม่ได้ (บัญชีสาธิต ถูกปิดใช้งาน หรือต้องเปลี่ยนรหัสผ่านก่อน)",
+    "vi": "Tài khoản này không thể dùng kết nối AI (tài khoản demo, đã bị vô hiệu hóa hoặc phải đổi mật khẩu trước)"
+  },
+  "McpPolicyInvalid": {
+    "zh-TW": "AI 連線的政策設定無法讀取，請系統管理員重新設定",
+    "en-US": "The AI connection policy settings cannot be read. Please ask your system administrator to set them again",
+    "th": "อ่านการตั้งค่านโยบายการเชื่อมต่อ AI ไม่ได้ โปรดให้ผู้ดูแลระบบตั้งค่าใหม่",
+    "vi": "Không đọc được cài đặt chính sách kết nối AI, vui lòng nhờ quản trị viên hệ thống thiết lập lại"
+  },
+  "McpTokenNameInvalid": {
+    "zh-TW": "權杖名稱必填，最多 {0} 字",
+    "en-US": "The token name is required and can be at most {0} characters",
+    "th": "ต้องระบุชื่อโทเค็น ยาวไม่เกิน {0} ตัวอักษร",
+    "vi": "Tên token là bắt buộc, tối đa {0} ký tự"
+  },
+  "McpTokenScopeInvalid": {
+    "zh-TW": "請至少選一個可用的權杖範圍",
+    "en-US": "Select at least one available token scope",
+    "th": "โปรดเลือกขอบเขตโทเค็นที่ใช้ได้อย่างน้อยหนึ่งรายการ",
+    "vi": "Vui lòng chọn ít nhất một phạm vi token khả dụng"
+  },
+  "McpTokenExpiryInvalid": {
+    "zh-TW": "到期日要在 {0} 到 {1} 之間",
+    "en-US": "The expiry date must be between {0} and {1}",
+    "th": "วันหมดอายุต้องอยู่ระหว่าง {0} ถึง {1}",
+    "vi": "Ngày hết hạn phải nằm trong khoảng {0} đến {1}"
+  },
+  "McpTokenLimitReached": {
+    "zh-TW": "每人最多同時有 {0} 把有效的權杖，請先撤銷不用的權杖",
+    "en-US": "Each user can have at most {0} active tokens. Revoke tokens you no longer use first",
+    "th": "แต่ละคนมีโทเค็นที่ใช้งานได้พร้อมกันไม่เกิน {0} รายการ โปรดเพิกถอนโทเค็นที่ไม่ใช้ก่อน",
+    "vi": "Mỗi người chỉ có tối đa {0} token còn hiệu lực cùng lúc, vui lòng thu hồi token không dùng trước"
+  },
+  "McpTokenNotFound": {
+    "zh-TW": "找不到這把權杖",
+    "en-US": "Token not found",
+    "th": "ไม่พบโทเค็นนี้",
+    "vi": "Không tìm thấy token này"
+  },
+  "McpPasswordWrong": {
+    "zh-TW": "密碼錯誤",
+    "en-US": "The password is incorrect",
+    "th": "รหัสผ่านไม่ถูกต้อง",
+    "vi": "Mật khẩu không đúng"
+  },
+  "McpScopeDenied": {
+    "zh-TW": "這把權杖的範圍不包含這個工具",
+    "en-US": "This token's scopes do not include this tool",
+    "th": "ขอบเขตของโทเค็นนี้ไม่รวมเครื่องมือนี้",
+    "vi": "Phạm vi của token này không bao gồm công cụ này"
+  },
+  "McpRateLimitedMinute": {
+    "zh-TW": "每把權杖每分鐘最多呼叫 {0} 次，請稍後再試",
+    "en-US": "Each token can make at most {0} calls per minute. Please try again later",
+    "th": "แต่ละโทเค็นเรียกใช้ได้ไม่เกิน {0} ครั้งต่อนาที โปรดลองใหม่ภายหลัง",
+    "vi": "Mỗi token chỉ được gọi tối đa {0} lần mỗi phút, vui lòng thử lại sau"
+  },
+  "McpRateLimitedDay": {
+    "zh-TW": "每把權杖每天最多呼叫 {0} 次，今天的額度已用完",
+    "en-US": "Each token can make at most {0} calls per day, and today's quota is used up",
+    "th": "แต่ละโทเค็นเรียกใช้ได้ไม่เกิน {0} ครั้งต่อวัน และโควตาของวันนี้หมดแล้ว",
+    "vi": "Mỗi token chỉ được gọi tối đa {0} lần mỗi ngày, hạn mức hôm nay đã hết"
+  },
+  "McpConfirmationInvalid": {
+    "zh-TW": "確認碼無效或已過期，請重新預覽",
+    "en-US": "The confirmation code is invalid or has expired. Please preview again",
+    "th": "รหัสยืนยันไม่ถูกต้องหรือหมดอายุแล้ว โปรดแสดงตัวอย่างใหม่",
+    "vi": "Mã xác nhận không hợp lệ hoặc đã hết hạn, vui lòng xem trước lại"
+  },
+  "McpAuditUnavailable": {
+    "zh-TW": "稽核紀錄暫時無法寫入，這次不回傳資料，請稍後再試",
+    "en-US": "The audit log cannot be written right now, so no data is returned. Please try again later",
+    "th": "ยังบันทึกการตรวจสอบไม่ได้ในขณะนี้ จึงไม่ส่งข้อมูลกลับ โปรดลองใหม่ภายหลัง",
+    "vi": "Hiện không ghi được nhật ký kiểm tra nên không trả về dữ liệu, vui lòng thử lại sau"
+  },
+  "McpResultTooLarge": {
+    "zh-TW": "結果超過 {0} 字元的上限，請縮小範圍或減少筆數",
+    "en-US": "The result exceeds the limit of {0} characters. Narrow the range or request fewer rows",
+    "th": "ผลลัพธ์เกินขีดจำกัด {0} อักขระ โปรดจำกัดขอบเขตหรือลดจำนวนแถว",
+    "vi": "Kết quả vượt quá giới hạn {0} ký tự, vui lòng thu hẹp phạm vi hoặc giảm số dòng"
+  },
+  "McpUnknownTool": {
+    "zh-TW": "沒有這個工具",
+    "en-US": "There is no such tool",
+    "th": "ไม่มีเครื่องมือนี้",
+    "vi": "Không có công cụ này"
+  },
+  "McpInvalidArgument": {
+    "zh-TW": "參數 {0} 不正確",
+    "en-US": "The argument {0} is invalid",
+    "th": "อาร์กิวเมนต์ {0} ไม่ถูกต้อง",
+    "vi": "Tham số {0} không hợp lệ"
+  },
+  "McpInternalError": {
+    "zh-TW": "處理時發生錯誤，請稍後再試",
+    "en-US": "An error occurred while processing. Please try again later",
+    "th": "เกิดข้อผิดพลาดระหว่างประมวลผล โปรดลองใหม่ภายหลัง",
+    "vi": "Đã xảy ra lỗi khi xử lý, vui lòng thử lại sau"
+  },
+  "McpUnauthorized": {
+    "zh-TW": "權杖無效、已過期或已撤銷",
+    "en-US": "The token is invalid, expired, or revoked",
+    "th": "โทเค็นไม่ถูกต้อง หมดอายุ หรือถูกเพิกถอนแล้ว",
+    "vi": "Token không hợp lệ, đã hết hạn hoặc đã bị thu hồi"
+  },
+  "McpTokenInQuery": {
+    "zh-TW": "權杖不能放在網址參數，請改用 Authorization 標頭",
+    "en-US": "Tokens cannot be sent in URL parameters. Use the Authorization header instead",
+    "th": "ห้ามส่งโทเค็นในพารามิเตอร์ของ URL โปรดใช้ส่วนหัว Authorization แทน",
+    "vi": "Không được đặt token trong tham số URL, vui lòng dùng tiêu đề Authorization"
+  },
+  "McpOriginDenied": {
+    "zh-TW": "不允許從這個來源連線",
+    "en-US": "Connections from this origin are not allowed",
+    "th": "ไม่อนุญาตให้เชื่อมต่อจากต้นทางนี้",
+    "vi": "Không cho phép kết nối từ nguồn này"
+  },
+  "McpHttpsRequired": {
+    "zh-TW": "AI 連線必須使用 HTTPS",
+    "en-US": "AI connections must use HTTPS",
+    "th": "การเชื่อมต่อ AI ต้องใช้ HTTPS",
+    "vi": "Kết nối AI bắt buộc dùng HTTPS"
+  }
+}

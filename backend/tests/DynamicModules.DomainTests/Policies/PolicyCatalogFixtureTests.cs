@@ -163,6 +163,38 @@ public class PolicyCatalogFixtureTests
         PolicyCatalog.WeekStartOf("monday").Should().Be(DayOfWeek.Monday);
     }
 
+    /// <summary>mcp1a：MCP 設計 §13.6 的 9 項（出廠值與技術上下限，使用者 2026-11-12 確認）；全部全系統、分類 mcp。</summary>
+    [Fact]
+    public void McpPolicies_FactoryAndRange()
+    {
+        var expected = new (PolicyDefinition Def, PolicyKind Kind, string Factory, int Min, int Max)[]
+        {
+            (PolicyCatalog.McpEnabled, PolicyKind.Boolean, "false", 0, 0),
+            (PolicyCatalog.McpAllowedGroups, PolicyKind.Recipients, "", 0, 50),
+            (PolicyCatalog.McpTokenMaxLifetimeDays, PolicyKind.Integer, "90", 1, 365),
+            (PolicyCatalog.McpTokenDefaultLifetimeDays, PolicyKind.Integer, "30", 1, 365),
+            (PolicyCatalog.McpTokenMaxPerUser, PolicyKind.Integer, "10", 1, 50),
+            (PolicyCatalog.McpCallsPerMinute, PolicyKind.Integer, "60", 1, 600),
+            (PolicyCatalog.McpCallsPerDay, PolicyKind.Integer, "5000", 100, 100000),
+            (PolicyCatalog.McpMaxRows, PolicyKind.Integer, "50", 1, 200),
+            (PolicyCatalog.McpConfirmTtlSeconds, PolicyKind.Integer, "300", 60, 1800),
+        };
+        foreach (var (def, kind, factory, min, max) in expected)
+        {
+            (def.Kind, def.Factory, def.Min, def.Max, def.Scope, def.Category).Should().Be((kind, factory, min, max, PolicyScope.System, "mcp"), def.Code);
+            PolicyCatalog.All.Should().Contain(def);
+        }
+        PolicyCatalog.All.Count(d => d.Category == "mcp").Should().Be(9);
+        PolicyCatalog.McpConfirmTtlSeconds.Unit.Should().Be("seconds");
+        PolicyCatalog.McpTokenMaxLifetimeDays.Unit.Should().Be("days");
+        PolicyCatalog.McpCallsPerDay.Unit.Should().Be("count");
+        // 允許對象：空字串合法（全部使用者）；三種項目都能選
+        PolicyCatalog.McpAllowedGroups.Normalize("").Should().Be("");
+        PolicyCatalog.McpAllowedGroups.Normalize("admins,group:1,user:x1").Should().Be("admins,group:1,user:x1");
+        PolicyCatalog.McpAllowedGroups.Normalize("ruleEditor").Should().BeNull();
+        PolicyCatalog.McpAllowedGroups.Normalize("everyone").Should().BeNull();
+    }
+
     [Fact]
     public void Catalog_MatchesSharedFixture()
     {

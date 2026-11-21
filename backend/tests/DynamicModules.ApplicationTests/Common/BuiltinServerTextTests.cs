@@ -17,8 +17,8 @@ public class BuiltinServerTextTests
 {
     public static readonly string[] Locales = ["zh-TW", "en-US", "th", "vi"];
 
-    /// <summary>明列的基準檔；Task 4、7 各加一個，語系包 i4d1 Task 5 加 locale-pack.json（新鍵，建立後同樣不准改）。</summary>
-    private static readonly string[] BaselineFiles = ["message-report.json", "task-report.json", "alert.json", "locale-pack.json", "locale-template.json"];
+    /// <summary>明列的基準檔；Task 4、7 各加一個，語系包 i4d1 Task 5 加 locale-pack.json，mcp1a 加 mcp.json（新鍵，建立後同樣不准改）。</summary>
+    private static readonly string[] BaselineFiles = ["message-report.json", "task-report.json", "alert.json", "locale-pack.json", "locale-template.json", "mcp.json"];
 
     /// <summary>repo 根目錄（往上找到有 shared/locale-chain-cases.json 的那層）。</summary>
     public static string RepoRoot()

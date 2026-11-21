@@ -412,6 +412,44 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition CheckMaxBackfillRecords =
         new("check.maxBackfillRecords", "check", PolicyKind.Integer, PolicyScope.System, "200000", 1000, 1000000, Unit: "count");
 
+    // mcp1a：AI 連線（MCP 設計 §13.6；出廠值與技術上下限使用者 2026-11-12 確認）。全部只限全系統。
+
+    /// <summary>MCP 總開關：關閉時不能建立權杖、<c>/mcp</c> 一律拒絕；列出與撤銷照常可用（§13.5）。</summary>
+    public static readonly PolicyDefinition McpEnabled =
+        new("mcp.enabled", "mcp", PolicyKind.Boolean, PolicyScope.System, "false");
+
+    /// <summary>可建立與使用權杖的對象（群組、個別使用者或全部系統管理員）；合法的空值＝全部使用者，有項目但展開為空＝沒有人。</summary>
+    public static readonly PolicyDefinition McpAllowedGroups =
+        new("mcp.allowedGroups", "mcp", PolicyKind.Recipients, PolicyScope.System, "", 0, 50);
+
+    /// <summary>權杖最長效期（天）。</summary>
+    public static readonly PolicyDefinition McpTokenMaxLifetimeDays =
+        new("mcp.tokenMaxLifetimeDays", "mcp", PolicyKind.Integer, PolicyScope.System, "90", 1, 365, Unit: "days");
+
+    /// <summary>建立時預設效期（天）；大於最長效期時取用時以最長效期為準（T15，不擋存檔）。</summary>
+    public static readonly PolicyDefinition McpTokenDefaultLifetimeDays =
+        new("mcp.tokenDefaultLifetimeDays", "mcp", PolicyKind.Integer, PolicyScope.System, "30", 1, 365, Unit: "days");
+
+    /// <summary>每人同時有效（未撤銷、未過期）的權杖數；調低不溯及既有權杖。</summary>
+    public static readonly PolicyDefinition McpTokenMaxPerUser =
+        new("mcp.tokenMaxPerUser", "mcp", PolicyKind.Integer, PolicyScope.System, "10", 1, 50, Unit: "count");
+
+    /// <summary>每把權杖每分鐘的工具呼叫上限。</summary>
+    public static readonly PolicyDefinition McpCallsPerMinute =
+        new("mcp.callsPerMinute", "mcp", PolicyKind.Integer, PolicyScope.System, "60", 1, 600, Unit: "count");
+
+    /// <summary>每把權杖每日（營運時區）的工具呼叫上限。</summary>
+    public static readonly PolicyDefinition McpCallsPerDay =
+        new("mcp.callsPerDay", "mcp", PolicyKind.Integer, PolicyScope.System, "5000", 100, 100000, Unit: "count");
+
+    /// <summary>單次工具結果的筆數上限；上限 200 對齊 <c>PagedRequest.MaxPagesSize</c>。</summary>
+    public static readonly PolicyDefinition McpMaxRows =
+        new("mcp.maxRows", "mcp", PolicyKind.Integer, PolicyScope.System, "50", 1, 200, Unit: "count");
+
+    /// <summary>高風險工具確認碼的有效時間（秒）。</summary>
+    public static readonly PolicyDefinition McpConfirmTtlSeconds =
+        new("mcp.confirmTtlSeconds", "mcp", PolicyKind.Integer, PolicyScope.System, "300", 60, 1800, Unit: "seconds");
+
     public static DayOfWeek WeekStartOf(string choice) => Enum.Parse<DayOfWeek>(choice, ignoreCase: true);
 
     /// <summary><c>+05:45</c> → 5 小時 45 分、<c>-03:30</c> → 負 3 小時 30 分；只收 <see cref="UtcOffsets"/> 的標準寫法。</summary>
@@ -454,7 +492,9 @@ public static class PolicyCatalog
          ImportMaxRows, ImportMaxFileBytes, EventMaxEventsPerModule, EventMaxEffects, EventMaxDepth, EventMaxWritesPerRequest,
          EventMaxEachRows, RecordMaxDetailRows, ReportDrillLimit, ReportDetailLimit, ReportMaxRangeDays, DashboardMaxCards,
          MaintenanceIdempotencyRetentionDays, MaintenanceOrphanSweepGraceMinutes, CheckScanMaxViolations, CheckScanMaxGroups,
-         CheckMaxGroupsPerWrite, CheckMaxBackfillRecords];
+         CheckMaxGroupsPerWrite, CheckMaxBackfillRecords,
+         McpEnabled, McpAllowedGroups, McpTokenMaxLifetimeDays, McpTokenDefaultLifetimeDays, McpTokenMaxPerUser,
+         McpCallsPerMinute, McpCallsPerDay, McpMaxRows, McpConfirmTtlSeconds];
 
     public static PolicyDefinition? Find(string code) =>
         All.FirstOrDefault(d => string.Equals(d.Code, code, StringComparison.Ordinal));
