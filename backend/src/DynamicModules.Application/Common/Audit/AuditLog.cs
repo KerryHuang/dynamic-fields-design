@@ -111,6 +111,11 @@ public sealed class AuditLog(
         if (e.SignIn is { } signIn)
         {
             if (e.ActorOverride is not null) throw new InvalidOperationException("登入稽核的行為者只能由 SignInAudit 給");
+            // 標記會跟著 record 的 with 複製：寫入時再驗形狀，借到登入列也改不成別的動作或目標
+            var shapeOk = signIn.UserId is { } id
+                ? e is { Action: "login.succeeded", Result: AuditResult.Success, TargetKind: AuditTargets.User } && e.TargetId == id
+                : e is { Action: "login.failed", Result: AuditResult.Denied };
+            if (!shapeOk) throw new InvalidOperationException("登入稽核標記只能用在 login.succeeded（目標＝行為者）與 login.failed");
             return signIn.UserId is { } signedIn ? (signedIn, AuditActorKind.User) : (null, AuditActorKind.System);
         }
 

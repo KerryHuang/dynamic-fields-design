@@ -348,6 +348,38 @@ public class AuditApiTests
             (null, AuditActorKind.System, AuditChannel.Ui, "login.failed", AuditResult.Denied, null, null, null, "unknownAccount", method));
     }
 
+    /// <summary>以反射呼叫 internal 的 SignInAudit（測試組件編譯不到它）。</summary>
+    private static AuditEntry SignInEntry(string method, params object?[] args) =>
+        (AuditEntry)typeof(AuditOrigin).Assembly.GetType("DynamicModules.Application.Common.Audit.SignInAudit", throwOnError: true)!
+            .GetMethod(method, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!.Invoke(null, args)!;
+
+    [Fact]
+    public async Task SignInMarker_CopiedByWith_CannotChangeActionOrTarget_NorCombineWithActorOverride()
+    {
+        // 審查建議：record 的 with 會連 internal 的登入標記一起複製；AuditLog 寫入時驗形狀，借到登入列也改不成別的列
+        using var app = new TestApp();
+        await using var scope = app.Services.CreateAsyncScope();
+        var log = scope.ServiceProvider.GetRequiredService<IAuditLog>();
+        var ok = SignInEntry("Succeeded", "audit01", "audit01 名稱", null);
+        var failed = SignInEntry("Failed", "audit01", "wrongPassword", null);
+
+        foreach (var forged in new[]
+                 {
+                     ok with { Action = "permission.update" },
+                     ok with { TargetId = "admin" },
+                     ok with { TargetKind = "module" },
+                     ok with { Result = AuditResult.Denied },
+                     failed with { Action = "login.succeeded", Result = AuditResult.Success },
+                     failed with { Action = "permission.update" },
+                 })
+            log.Invoking(l => l.Add(forged)).Should().Throw<InvalidOperationException>().WithMessage("登入稽核標記只能用在*");
+        foreach (var both in new[] { ok with { ActorOverride = new ActorOverride("admin") }, failed with { ActorOverride = new ActorOverride("admin") } })
+            log.Invoking(l => l.Add(both)).Should().Throw<InvalidOperationException>().WithMessage("登入稽核的行為者只能由 SignInAudit 給");
+
+        // 對照：原樣的兩種登入列照常組得出（只加進追蹤、不存檔）
+        (log.Add(ok).ActorUserId, log.Add(failed).ActorUserId).Should().Be(("audit01", (string?)null));
+    }
+
     // ---- 匯入缺名稱：驗證先於補稽核目標（審查 P2：曾因 Name 為 null 變 500） ----
 
     [Fact]

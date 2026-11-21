@@ -7,7 +7,8 @@ namespace DynamicModules.Application.Common.Audit;
 /// 帶著這個標記的列，<see cref="IAuditLog"/> 不從 <c>ICurrentUser</c> 取行為者（請求帶的舊 cookie 可能是別的帳號或已失效）。
 /// 防冒用：型別是 internal，其他組件編譯不到（Application 不開 InternalsVisibleTo）；組件內的引用者由
 /// <c>AuditArchitectureTests</c> 限定為 <c>LoginHandler</c>、<c>DemoLoginHandler</c>；只組得出
-/// <c>login.succeeded</c>（行為者＝目標）與 <c>login.failed</c>（行為者 null）兩種列，借到了也寫不出別的動作。
+/// <c>login.succeeded</c>（行為者＝目標）與 <c>login.failed</c>（行為者 null）兩種列；標記會跟著 record 的 <c>with</c> 複製，
+/// 所以 <see cref="AuditLog"/> 寫入時再驗一次形狀，借到登入列改了動作或目標也寫不進去。
 /// </summary>
 internal static class SignInAudit
 {

@@ -1102,7 +1102,7 @@ O2 做六件事：
   - 選填：目標（種類、id、顯示名快照）、原因代碼、摘要（結構化物件，由 `AuditSummary` 組成）、參數雜湊、回傳筆數、確認 id 與確認結果（`preview`、`confirmed`、`expired`、`mismatch`）。後四項 O2 不用，mcp1 填。
   - 行為者覆寫 `ActorOverride(userId, kind)`：一般呼叫只有環境裡**沒有身分**時才能給；環境已有身分還給覆寫就丟 `InvalidOperationException`，避免冒用。登入不走覆寫，改用登入稽核列（見下一條）。
   - **登入的稽核身分情境**：登入端點本身不清除既有身分。`SessionMiddleware` 對 `auth/login`、`auth/demo-login` 直接放行、不比對資料庫，`ctx.User` 仍是 cookie 驗證中介層從請求 cookie 解出的身分（可能是另一個帳號、或已停用、已重設密碼而失效的舊 cookie），`ClaimsCurrentUser` 照樣讀得到它；新 cookie 要等 handler 回來、`AuthController.SignInOnSuccess` 才寫。所以「登入時環境是匿名」不成立。做法（2026-11-21 起，取代原本的 `AuditOrigin.BeginSignIn()` 範圍與它的呼叫堆疊檢查）：登入 handler 用 internal 的 `SignInAudit.Succeeded(userId, displayName, summary)`／`SignInAudit.Failed(userId?, reasonCode, summary)` 組稽核列，行為者由呼叫端明確傳入（成功是剛驗證通過的帳號，失敗是 null），列上帶 internal 的 `SignInActor` 標記。帶標記的列 `IAuditLog` **不從 `ICurrentUser` 取行為者**；標記與 `ActorOverride` 同時出現就丟例外；沒有標記的列守衛不變。請求帶的舊 cookie 不進稽核的行為者欄，也不另記（舊 cookie 可能是失效的，記成行為者會誤導）。
-  - 行為者由呼叫端傳入，不等於任何程式都能冒用：`SignInAudit`、`SignInActor`、`AuditEntry.SignIn` 都是 internal，Application 不開 `InternalsVisibleTo`，其他組件編譯不到；組件內的引用者由架構測試限定為兩個登入 handler（標記本身只有 `SignInAudit` 建立）；而且只組得出 `login.succeeded`（行為者＝目標）與 `login.failed`（行為者 null），借到了也寫不出其他動作。其他寫入點守衛照舊。
+  - 行為者由呼叫端傳入，不等於任何程式都能冒用：`SignInAudit`、`SignInActor`、`AuditEntry.SignIn` 都是 internal，Application 不開 `InternalsVisibleTo`，其他組件編譯不到；組件內的引用者由架構測試限定為兩個登入 handler（標記本身只有 `SignInAudit` 建立）；而且只組得出 `login.succeeded`（行為者＝目標）與 `login.failed`（行為者 null）；標記會跟著 record 的 `with` 複製，所以 `AuditLog` 寫入時再驗形狀（成功列：動作、結果、目標種類 `user`、目標 id＝行為者；失敗列：動作、結果），不符就丟例外，借到登入列改了動作或目標也寫不進去。其他寫入點守衛照舊。
   - 行為者、行為者種類、來源管道、權杖 id、request id、來源 IP 其餘一律由 `IAuditLog` 從環境補，呼叫端不填。
 - 環境來源：
   - 行為者：`ICurrentUser`（`ActingScope` 內是被代為執行的使用者）；排程工作與沒有身分的寫入記行為者種類「系統」、行為者 null（B3）。
@@ -1976,7 +1976,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | A01 | 空資料庫 | 套 migration | 九張表存在；`MigrationConsistencyTests` 兩個 provider 都沒有待產生的變更 | —（一致性測試不需 PostgreSQL 伺服器，照 pg0 §5.3 隨 SQLite 跑；PostgreSQL 的建表由樣板資料庫套 migration 驗證） |
 | A02 | 管理員 | 改某模組權限 | 同一交易寫一列 `permission.update`、風險高、摘要只含變動的格子；讓稽核寫入丟例外時，權限沒有被改 | ✓ |
 | A03 | 已有帳號 `sales01` | 用錯密碼登入；用不存在的帳號登入 | 各一列 `login.failed`：前者目標是 `sales01`、原因 `wrongPassword`；後者目標空、原因 `unknownAccount`、摘要不含輸入字串 | ✓ |
-| A04 | 讓稽核寫入失敗 | 正確密碼登入 | 登入成功，Error log 一則；稽核正常時另驗：成功列的行為者與目標都是剛登入的帳號（`ActorOverride`） | — |
+| A04 | 讓稽核寫入失敗 | 正確密碼登入 | 登入成功，Error log 一則；稽核正常時另驗：成功列的行為者與目標都是剛登入的帳號（`SignInAudit`） | — |
 | A05 | 反射掃描 Application 組件 | 列出所有交易型、且是管理員或設計器寫入的請求 | 全部實作 `IAuditedRequest`，或在白名單且有理由 | — |
 | A06 | 改政策、重設密碼 | 讀稽核摘要 | 政策有舊值與新值；重設密碼的摘要沒有密碼；摘要裡任何 `fwp_`、`fwc_` 開頭的值都是 `***` | — |
 | A07 | 400 列稽核、時間分散 | 依動作分組、行為者、時間區間分頁查詢 | 結果與篩選一致、keyset 不重不漏；非管理員 403；Demo 登入開啟時回應沒有 `clientIp` | ✓ |
@@ -2284,7 +2284,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | O2-T22 | 事件與站內通知的標題存代碼＋白名單參數（事件 `TitleKey`＋`TitleParamsJson`；通知 `DataJson`，`TitleSnapshot` 只當退路），畫面與鈴鐺依語系組字；告警信寫入佇列時組成文字快照（語系改列行為類 O2-U14） | 一個契約；信件寄出時事件可能已變或被清，快照才穩定 | §17.2.2、§17.2.5、§17.2.6 |
 | O2-T23 | 監控頁的記憶體狀態只代表本實例 | 雲端版單一實例；多實例時另議 | §17.9 |
 | O2-T24 | 來源管道、權杖 id、行為者種類用 AsyncLocal 的 `AuditOrigin`，比照 `ActingScope` | 不必每個 handler 傳參數；mcp1 只在 `/mcp` 開一個範圍 | §17.2.1 |
-| O2-T25 | 稽核寫入分 `Add`（同交易）、`WriteNowAsync`（交易外、失敗丟例外）、`TryWriteNowAsync`（交易外、失敗只記 log）；`AuditEntry` 含參數雜湊、回傳筆數、確認 id 與結果；`ActorOverride` 只在沒有身分時可用 | 三種失敗語意各有呼叫者（業務、MCP fail closed、登入），一個吞錯的方法滿足不了 MCP；登入時請求可能帶著別的帳號或已失效的 cookie，所以登入另開 `AuditOrigin.BeginSignIn` 範圍、只限兩個登入 handler；交易守衛在建 scope 前檢查；代價是多兩個方法、一個範圍與一個守衛 | §17.2.1、MCP §8.1 |
+| O2-T25 | 稽核寫入分 `Add`（同交易）、`WriteNowAsync`（交易外、失敗丟例外）、`TryWriteNowAsync`（交易外、失敗只記 log）；`AuditEntry` 含參數雜湊、回傳筆數、確認 id 與結果；`ActorOverride` 只在沒有身分時可用 | 三種失敗語意各有呼叫者（業務、MCP fail closed、登入），一個吞錯的方法滿足不了 MCP；登入時請求可能帶著別的帳號或已失效的 cookie，所以登入改用 internal 的 `SignInAudit` 明確傳入行為者、只限兩個登入 handler（2026-11-21 取代原本的 `AuditOrigin.BeginSignIn` 範圍，見 §17.2.1）；交易守衛在建 scope 前檢查；代價是多兩個方法、一個登入專用的列標記與兩個守衛 | §17.2.1、MCP §8.1 |
 | O2-T26 | 看門狗型檢查依實例彙總：在線實例最糟者為整體狀態，三個間隔沒回報的實例退出彙總；彙總交易先更新檢查列取得列鎖 | 各實例磁碟與連線不同，健康實例的 `ok` 不能結掉別台的故障；不另開表，從結果表讀；代價是每次結果多一次小查詢 | §17.2.4、§17.7 |
 | O2-T27 | 外送內容（站內通知、信、O3 推送）只用標題代碼＋白名單參數，正規化訊息另經 `SensitiveTextMask`、只在監控頁 | 正規化不等於遮蔽，未加引號的姓名、業務文字會留下；代價是標題比較制式 | §17.2.2 |
 | O2-T28 | SMTP 不限目的位址（信任邊界是系統管理員）、憑證必驗、STARTTLS 不退回明文、無加密時不准帳密 | 內網 SMTP 要能用；限制位址擋不住已是最高權限的管理員；代價是自簽憑證的客戶要裝 CA | §17.2.6 |
