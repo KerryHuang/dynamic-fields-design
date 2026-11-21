@@ -175,6 +175,72 @@ public class McpTransportTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// 兩把不同使用者的權杖並行呼叫，工具內用屏障等兩邊都進來才往下（請求確定重疊）；屏障 await 前後各記一次身分，
+    /// 兩邊都只看到自己的使用者、權杖 id 與稽核來源（scoped 身分與 AsyncLocal 不串線）。
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentClients_IdentityIsolated_AcrossAwait()
+    {
+        var barrier = new BarrierState(2);
+        Use(NewApp(services: s =>
+        {
+            s.AddSingleton(barrier);
+            s.AddScoped<IMcpTool, BarrierProbeTool>();
+        }));
+        EnableMcp(_app);
+        var (rawA, idA) = IssueToken(_app);
+        var (rawB, idB) = IssueToken(_app, OtherUserId);
+        await using var a = await ConnectAsync(_app, rawA);
+        await using var b = await ConnectAsync(_app, rawB);
+
+        var results = await Task.WhenAll(a.CallToolAsync(BarrierProbeTool.Name).AsTask(), b.CallToolAsync(BarrierProbeTool.Name).AsTask());
+
+        barrier.Overlapped.Should().BeTrue("兩個請求同時在工具內");
+        foreach (var (r, user, token) in new[] { (results[0], UserId, idA), (results[1], OtherUserId, idB) })
+        {
+            r.IsError.Should().NotBe(true, TextOf(r));
+            var data = Structured(r).GetProperty("data");
+            foreach (var phase in new[] { "before", "after" })
+            {
+                var seen = data.GetProperty(phase);
+                (seen.GetProperty("userId").GetString(), seen.GetProperty("tokenId").GetInt64(), seen.GetProperty("auditTokenId").GetInt64())
+                    .Should().Be((user, token, token), phase);
+            }
+        }
+    }
+
+    public sealed class BarrierState(int parties)
+    {
+        private int _arrived;
+        private readonly TaskCompletionSource _all = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool Overlapped => _all.Task.IsCompletedSuccessfully;
+
+        public Task ArriveAndWaitAsync(CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref _arrived) == parties) _all.TrySetResult();
+            return _all.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        }
+    }
+
+    /// <summary>測試專用工具（不需範圍）：屏障前後記下 scoped 身分與稽核來源。</summary>
+    public sealed class BarrierProbeTool(BarrierState barrier, ICurrentUser user, IRequestChannel channel) : IMcpTool
+    {
+        public const string Name = "probe_barrier";
+        public McpToolDescriptor Descriptor { get; } = new(Name, "mcp.whoami", null, McpRisk.Read);
+        public string InputSchemaJson => McpTexts.NoArgumentsSchema;
+        public string Description => "test probe";
+
+        public async Task<McpToolOutcome> RunAsync(McpToolCall call, CancellationToken ct)
+        {
+            object Seen() => new { userId = user.UserId, tokenId = channel.TokenId, auditTokenId = AuditOrigin.TokenId };
+            var before = Seen();
+            await barrier.ArriveAndWaitAsync(ct);
+            await Task.Yield();
+            return McpToolOutcome.Ok(new { before, after = Seen() });
+        }
+    }
+
     private void Use(TestApp app)
     {
         _app.Dispose();
