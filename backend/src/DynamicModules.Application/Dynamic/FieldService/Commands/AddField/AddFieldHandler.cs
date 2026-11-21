@@ -17,7 +17,7 @@ public class AddFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
     ReferenceProviderRegistry providers, RollupRecalc rollups, Rollups.FrozenRecordsLoader loader,
     Dynamic.LedgerService.ImmutableDataGuard immutable, Dynamic.ApprovalService.PendingApprovalGuard pending, Dynamic.ApprovalService.ApprovalClosureRecheck closureRecheck, Common.Security.FieldLocks locks,
-    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner, Common.RequestLocale requestLocale)
+    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner, Common.RequestLocale requestLocale, PermissionAdminGate gate)
     : IRequestHandler<AddFieldRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(AddFieldRequest request, CancellationToken ct)
@@ -26,6 +26,9 @@ public class AddFieldHandler(
         if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
         var block = module.Blocks.FirstOrDefault(b => b.Id == request.BlockId);
         if (block is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.BlockNotFound));
+        // 「不提供給 AI」標 true 要權限設定（mcp1a 計畫判斷 4）：先檢查，不讓設計檢查的錯誤洩漏給沒權限的人；寫入在下面的 gate 許可內
+        if (request.ExcludeFromAi && await gate.CheckAsync(ct) is var aiCheck && aiCheck != PermissionAdminCheck.Allowed)
+            return PermissionAdminGate.Denied(aiCheck);
         if (request.Designer && await masterDesigner.RejectAddFieldAsync(module, block.Id, request.Type, request.Config, ct) is { } rejected) return rejected;
 
         // 新增公式或彙總欄位會替既有記錄算值並寫回；Closed 的資料唯讀
@@ -92,8 +95,23 @@ public class AddFieldHandler(
             .Select(f => f.Sequence).DefaultIfEmpty(0).Max() + 1;
         field.Status = FieldStatus.Active;
         field.StampCreated(user.UserId, now);
-        block.Fields.Add(field);
-        await uow.CommitAsync(ct);
+        field.ExcludeFromAi = request.ExcludeFromAi;
+        if (request.ExcludeFromAi)
+        {
+            // 被拒時欄位不掛上區塊，不在共用的 DbContext 留下待存的變更
+            var added = await gate.RunAsync(async () =>
+            {
+                block.Fields.Add(field);
+                await uow.CommitAsync(ct);
+                return ServiceResult.Success();
+            }, ct);
+            if (!added.IsSuccess) return added;
+        }
+        else
+        {
+            block.Fields.Add(field);
+            await uow.CommitAsync(ct);
+        }
 
         // Field.Key = f_<Id> 需先有 Id；(ModuleId, Key) 唯一，所以先以空 Key 插入再回填。
         field.Key = $"f_{field.Id}";

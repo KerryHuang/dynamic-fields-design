@@ -25,7 +25,7 @@ public class ModulesController(IMediator mediator) : ControllerBase
         bool? TasksEnabled = null);
     public record AddBlockBody(I18nText Label);
     public record UpdateBlockBody(I18nText Label, bool Collapsed, int? Columns);
-    public record AddFieldBody(long BlockId, FieldType Type, I18nText Label, FieldConfig Config);
+    public record AddFieldBody(long BlockId, FieldType Type, I18nText Label, FieldConfig Config, bool? ExcludeFromAi = null);
 
     [HttpGet("modules")]
     public async Task<IActionResult> List() =>
@@ -66,6 +66,6 @@ public class ModulesController(IMediator mediator) : ControllerBase
 
     [HttpPost("modules/{key}/fields")]
     public async Task<IActionResult> AddField(string key, AddFieldBody body) =>
-        (await mediator.Send(new AddFieldRequest(key, body.BlockId, body.Type, body.Label, body.Config, Designer: true)))
+        (await mediator.Send(new AddFieldRequest(key, body.BlockId, body.Type, body.Label, body.Config, Designer: true, ExcludeFromAi: body.ExcludeFromAi ?? false)))
         .ToActionResult(this);
 }

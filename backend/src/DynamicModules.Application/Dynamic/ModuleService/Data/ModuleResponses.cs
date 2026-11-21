@@ -18,7 +18,7 @@ public record BlockResponse(long Id, I18nText Label, int Sequence, bool Collapse
 
 public record FieldResponse(
     long Id, string Key, FieldType Type, I18nText Label, FieldConfig Config, long BlockId,
-    int Sequence, string Status, List<OptionResponse> Options, int? PreservedRecordCount = null);
+    int Sequence, string Status, List<OptionResponse> Options, int? PreservedRecordCount = null, bool ExcludeFromAi = false);
 
 /// <summary>Value 是寫進記錄 JSON 的字串 opt_&lt;id&gt;。</summary>
 public record OptionResponse(long Id, string Value, I18nText Label, string? Color, int Sequence, bool Active);
@@ -41,7 +41,7 @@ public static class ModuleMapper
 
     public static FieldResponse ToResponse(this Field f) =>
         new(f.Id, f.Key, f.Type, f.LabelI18n, f.Config, f.BlockId, f.Sequence, f.Status.ToString(),
-            f.Options.OrderBy(o => o.Sequence).ThenBy(o => o.Id).Select(ToResponse).ToList());
+            f.Options.OrderBy(o => o.Sequence).ThenBy(o => o.Id).Select(ToResponse).ToList(), ExcludeFromAi: f.ExcludeFromAi);
 
     public static OptionResponse ToResponse(this FieldOption o) =>
         new(o.Id, $"opt_{o.Id}", o.LabelI18n, o.Color, o.Sequence, o.Active);

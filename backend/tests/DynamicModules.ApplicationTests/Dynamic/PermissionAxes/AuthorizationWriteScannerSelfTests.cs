@@ -55,6 +55,7 @@ public class AuthorizationWriteScannerSelfTests
     {
         { "UserGroupMapping 的 ExecuteDeleteAsync", 1, "追到守衛型別 Set<UserGroupMapping>" },
         { "經 Set<Module> 的導覽屬性改 VisibilityRestricted", 1, "守衛欄 VisibilityRestricted" },
+        { "Set<Field> 批次改 ExcludeFromAi", 1, "守衛欄 ExcludeFromAi" },
         { "DELETE FROM public.\"Dynamic_FieldPermission\"", 1, "守衛表名 Dynamic_FieldPermission" },
         { "WITH x AS (…) DELETE FROM \"Dynamic_FieldGrant\"", 1, "守衛表名 dynamic_fieldgrant" },
         { "兩個陳述式串在一起", 1, "守衛表名 Dynamic_UserGroupMapping" },
@@ -90,6 +91,16 @@ public class AuthorizationWriteScannerSelfTests
                 {
                     public Task<int> PurgeMembersAsync(long groupId, CancellationToken ct) =>
                         db.Set<UserGroupMapping>().Where(m => m.GroupId == groupId).ExecuteDeleteAsync(ct);
+                }
+                """"),
+        ],
+        "Set<Field> 批次改 ExcludeFromAi" =>
+        [
+            Cs(SampleRepo, """"
+                public class SampleRepository(DynamicDbContext db)
+                {
+                    public Task<int> HideAsync(long moduleId, CancellationToken ct) =>
+                        db.Set<Field>().Where(f => f.ModuleId == moduleId).ExecuteUpdateAsync(s => s.SetProperty(f => f.ExcludeFromAi, false), ct);
                 }
                 """"),
         ],

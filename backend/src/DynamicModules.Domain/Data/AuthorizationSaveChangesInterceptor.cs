@@ -52,7 +52,7 @@ public sealed class AuthorizationSaveChangesInterceptor : SaveChangesInterceptor
 
     private static IEnumerable<EntityEntry> GuardedEntries(DbContext context) =>
         context.ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted
-                                                   && (IsGuardTable(e) || RelaxesFieldVisibility(e)));
+                                                   && (IsGuardTable(e) || RelaxesFieldVisibility(e) || TouchesAiExclusion(e)));
 
     private static bool IsGuardTable(EntityEntry e) => e.Metadata.GetTableName() is { } t && AuthorizationTables.Guarded.Contains(t);
 
@@ -64,6 +64,17 @@ public sealed class AuthorizationSaveChangesInterceptor : SaveChangesInterceptor
         e is { State: EntityState.Modified, Entity: Field field }
         && !field.VisibilityRestricted
         && e.Property(nameof(Field.VisibilityRestricted)).IsModified;
+
+    /// <summary>
+    /// 「不提供給 AI」守衛欄（mcp1a 計畫判斷 3）：修改時屬性被標為已修改就算，不論新值（標上與收回都改變 AI 看得到的範圍）；
+    /// 新增時值為 true 才算。走列層規則：Authorized 放行、Derived 與 Cleanup 拒。
+    /// </summary>
+    private static bool TouchesAiExclusion(EntityEntry e) => e switch
+    {
+        { State: EntityState.Modified, Entity: Field } => e.Property(nameof(Field.ExcludeFromAi)).IsModified,
+        { State: EntityState.Added, Entity: Field { ExcludeFromAi: true } } => true,
+        _ => false,
+    };
 
     private static string? Reject(AuthorizationPermit? permit, EntityEntry e)
     {

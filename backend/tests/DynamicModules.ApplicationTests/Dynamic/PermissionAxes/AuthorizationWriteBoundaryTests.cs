@@ -146,4 +146,70 @@ public sealed class AuthorizationWriteBoundaryTests : AuthorizationBoundaryTestB
         Db.Context.ChangeTracker.Clear();
         (await VisibilityRestrictedAsync(Other)).Should().BeTrue();
     }
+
+    // ── 「不提供給 AI」守衛欄（mcp1a 計畫判斷 3）：Modified 且被標已修改（不論新值）、Added 且為 true ──
+
+    private Task<bool> ExcludeFromAiAsync(long fieldId) =>
+        Db.Context.Set<Field>().AsNoTracking().Where(f => f.Id == fieldId).Select(f => f.ExcludeFromAi).SingleAsync();
+
+    [Fact]
+    public async Task ExcludeFromAi_TrackedWrite_WithoutPermit_Throws()
+    {
+        var field = await Db.Context.Set<Field>().SingleAsync(f => f.Id == Target);
+        field.ExcludeFromAi = true;
+        var on = () => Db.Context.SaveChangesAsync();
+        await on.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Dynamic_Field*沒有寫入許可*");
+        Db.Context.ChangeTracker.Clear();
+        (await ExcludeFromAiAsync(Target)).Should().BeFalse();
+
+        // 測試許可內改成 true，再在沒有許可時改回 false：收回也要許可（不論新值）
+        var tracked = await Db.Context.Set<Field>().SingleAsync(f => f.Id == Target);
+        tracked.ExcludeFromAi = true;
+        await Db.Context.SaveForTestsAsync();
+        tracked.ExcludeFromAi = false;
+        var off = () => Db.Context.SaveChangesAsync();
+        await off.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Dynamic_Field*沒有寫入許可*");
+        Db.Context.ChangeTracker.Clear();
+        (await ExcludeFromAiAsync(Target)).Should().BeTrue();
+
+        // 衍生與清除許可一律拒
+        foreach (var permit in new[] { AuthorizationPermit.Derived(Target, 1, [GroupX]), AuthorizationPermit.Cleanup([], [], [Target], []) })
+        {
+            var again = await Db.Context.Set<Field>().SingleAsync(f => f.Id == Target);
+            again.ExcludeFromAi = false;
+            var act = () => AuthorizationWriteScope.RunAsync(permit, () => false, () => Db.Context.SaveChangesAsync());
+            await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Dynamic_Field*");
+            Db.Context.ChangeTracker.Clear();
+        }
+        (await ExcludeFromAiAsync(Target)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ExcludeFromAi_AddedTrue_WithoutPermit_Throws()
+    {
+        var template = await Db.Context.Set<Field>().AsNoTracking().SingleAsync(f => f.Id == Other);
+        Db.Context.Add(new Field
+        {
+            ModuleId = template.ModuleId, BlockId = template.BlockId, Type = FieldType.Text, LabelI18n = template.LabelI18n, Key = "f_ai_probe",
+            Status = FieldStatus.Active, ExcludeFromAi = true, Sequence = 99,
+        });
+        var act = () => Db.Context.SaveChangesAsync();
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Dynamic_Field*Added*沒有寫入許可*");
+        Db.Context.ChangeTracker.Clear();
+        (await Db.Context.Set<Field>().AsNoTracking().AnyAsync(f => f.Key == "f_ai_probe")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExcludeFromAi_AddedFalse_Allowed()
+    {
+        var template = await Db.Context.Set<Field>().AsNoTracking().SingleAsync(f => f.Id == Other);
+        Db.Context.Add(new Field
+        {
+            ModuleId = template.ModuleId, BlockId = template.BlockId, Type = FieldType.Text, LabelI18n = template.LabelI18n, Key = "f_ai_plain",
+            Status = FieldStatus.Active, Sequence = 99,
+        });
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        (await Db.Context.Set<Field>().AsNoTracking().AnyAsync(f => f.Key == "f_ai_plain")).Should().BeTrue();
+    }
 }

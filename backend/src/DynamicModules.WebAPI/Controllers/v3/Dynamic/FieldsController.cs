@@ -14,7 +14,7 @@ namespace DynamicModules.WebAPI.Controllers.v3.Dynamic;
 [Route("api/v3/dynamic")]
 public class FieldsController(IMediator mediator) : ControllerBase
 {
-    public record UpdateFieldBody(FieldType Type, I18nText Label, FieldConfig Config, long BlockId);
+    public record UpdateFieldBody(FieldType Type, I18nText Label, FieldConfig Config, long BlockId, bool? ExcludeFromAi = null);
     public record SetStatusBody(FieldStatus Status);
     public record ReorderBody(List<long> FieldIds);
     public record AddOptionBody(I18nText Label, string? Color);
@@ -22,7 +22,7 @@ public class FieldsController(IMediator mediator) : ControllerBase
 
     [HttpPut("fields/{id:long}")]
     public async Task<IActionResult> Update(long id, UpdateFieldBody body) =>
-        (await mediator.Send(new UpdateFieldRequest(id, body.Type, body.Label, body.Config, body.BlockId, Designer: true)))
+        (await mediator.Send(new UpdateFieldRequest(id, body.Type, body.Label, body.Config, body.BlockId, Designer: true, ExcludeFromAi: body.ExcludeFromAi)))
         .ToActionResult(this);
 
     [HttpPut("fields/{id:long}/status")]

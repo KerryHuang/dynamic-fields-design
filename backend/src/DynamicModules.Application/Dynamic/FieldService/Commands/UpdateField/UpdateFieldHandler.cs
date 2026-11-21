@@ -20,7 +20,8 @@ public class UpdateFieldHandler(
     Dynamic.ApprovalService.PendingApprovalGuard pending, Dynamic.ApprovalService.ApprovalClosureRecheck closureRecheck,
     Dynamic.CheckService.CheckFieldGuard checkGuard, Common.Security.FieldLocks locks,
     Dynamic.EventService.EventValidator eventValidator, Dynamic.EventService.EventHiddenGuard hiddenGuard,
-    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner, RequiredTextGuard requiredText, Common.RequestLocale requestLocale)
+    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner, RequiredTextGuard requiredText, Common.RequestLocale requestLocale,
+    Common.Security.PermissionAdminGate gate)
     : IRequestHandler<UpdateFieldRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateFieldRequest request, CancellationToken ct)
@@ -29,6 +30,10 @@ public class UpdateFieldHandler(
         if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.FieldNotFound));
         var oldBlock = module.Blocks.Single(b => b.Fields.Any(f => f.Id == request.FieldId));
         var field = oldBlock.Fields.Single(f => f.Id == request.FieldId);
+        // 「不提供給 AI」和現值不同才要權限設定（null＝不改、相同值不經 gate；mcp1a 計畫判斷 4）；寫入在最後存檔的 gate 許可內
+        var aiFlag = request.ExcludeFromAi is { } flag && flag != field.ExcludeFromAi ? flag : (bool?)null;
+        if (aiFlag is not null && await gate.CheckAsync(ct) is var aiCheck && aiCheck != Common.Security.PermissionAdminCheck.Allowed)
+            return Common.Security.PermissionAdminGate.Denied(aiCheck);
 
         if (request.Type != field.Type) return FieldRules.Invalid("Type", "欄位型別建立後不能更改");
         if (requiredText.Check(request.Label, field.LabelI18n, "名稱") is { } labelError) return FieldRules.Invalid("Label", labelError);
@@ -177,7 +182,17 @@ public class UpdateFieldHandler(
         }
         field.StampModified(user.UserId, now);
         module.TouchVersion(user.UserId, now);
-        await uow.CommitAsync(ct);
+        if (aiFlag is { } newFlag)
+        {
+            var saved = await gate.RunAsync(async () =>
+            {
+                field.ExcludeFromAi = newFlag;
+                await uow.CommitAsync(ct);
+                return ServiceResult.Success();
+            }, ct);
+            if (!saved.IsSuccess) return saved;
+        }
+        else await uow.CommitAsync(ct);
         return ServiceResult.Success(field.ToResponse() with { PreservedRecordCount = preserved });
     }
 

@@ -20,7 +20,7 @@ namespace DynamicModules.WebAPITests.Dynamic.PermissionAxes;
 /// </summary>
 public sealed class PermissionAxesTemplateTests : IAsyncLifetime
 {
-    private const string TPerm = $$"""
+    internal const string TPerm = $$"""
         { "formatVersion": 1, "key": "t-perm", "name": { "zh-TW": "權限範本" },
           "modules": [ { "code": "p", "key": "pax-tp", "name": { "zh-TW": "範本模組" }, "kind": "standalone", "titleField": "title",
             "blocks": [ { "code": "main", "label": { "zh-TW": "主要" }, "fields": [
@@ -32,7 +32,7 @@ public sealed class PermissionAxesTemplateTests : IAsyncLifetime
         """;
 
     /// <summary>TemplateInstantiator.PermissionsSkippedWarning（internal）的原文。</summary>
-    private const string SkippedWarning = "你沒有「權限設定」權限，已略過範本的權限建議；請洽權限設定者到權限分頁授權";
+    internal const string SkippedWarning = "你沒有「權限設定」權限，已略過範本的權限建議；請洽權限設定者到權限分頁授權";
 
     private sealed class App : TestApp
     {
