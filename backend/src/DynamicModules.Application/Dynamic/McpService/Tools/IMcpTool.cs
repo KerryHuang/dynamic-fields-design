@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.McpService.Confirmations;
 using DynamicModules.Domain.Mcp;
 
 namespace DynamicModules.Application.Dynamic.McpService.Tools;
@@ -15,7 +16,24 @@ public interface IMcpTool
     string InputSchemaJson { get; }
     /// <summary>固定英文描述。</summary>
     string Description { get; }
+    /// <summary>唯讀與寫入工具執行。</summary>
     Task<McpToolOutcome> RunAsync(McpToolCall call, CancellationToken ct);
+
+    /// <summary>高風險工具的預演（參數沒有 <c>confirmationCode</c>）：回給使用者看的摘要與目標現在的版本，不寫任何東西。</summary>
+    Task<McpPreview> PreviewAsync(McpToolCall call, CancellationToken ct) => throw new NotSupportedException();
+
+    /// <summary>高風險工具的執行：組出實作 <see cref="IMcpConfirmedRequest"/> 的請求、帶上 <paramref name="ticket"/> 送出。</summary>
+    Task<McpToolOutcome> ExecuteAsync(McpToolCall call, McpConfirmationTicket ticket, CancellationToken ct) => throw new NotSupportedException();
+}
+
+/// <summary>
+/// 高風險工具的預演結果：<see cref="Summary"/> 給使用者看（進 <c>data.preview</c>，存一份截短的進確認列），
+/// <see cref="TargetVersion"/> 是目標現在的版本（執行時 handler 以它比對）。讀不到目標時用 <see cref="Failed"/>。
+/// </summary>
+public sealed record McpPreview(object? Summary, string TargetVersion, string? TargetKind = null, string? TargetId = null,
+    McpToolOutcome? Failure = null)
+{
+    public static McpPreview Failed(McpToolOutcome failure) => new(null, "", Failure: failure);
 }
 
 /// <summary>一次工具呼叫的輸入：參數（沒帶是空物件）、當次讀到的政策快照、請求語系。</summary>

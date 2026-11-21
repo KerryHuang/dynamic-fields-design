@@ -24,6 +24,8 @@ public static class DependencyInjection
             cfg.AddOpenBehavior(typeof(RuleFailureBehavior<,>));
             cfg.AddOpenBehavior(typeof(ApprovalAlertBehavior<,>));
             cfg.AddOpenBehavior(typeof(TransactionBehavior<,>));
+            // 在交易之內、稽核之外：確認碼的已用標記、業務寫入與確認稽核同一交易（mcp1a 計畫判斷 18）
+            cfg.AddOpenBehavior(typeof(Dynamic.McpService.Confirmations.McpConfirmationBehavior<,>));
             // 在交易之內、冪等之外：稽核和業務寫入同交易（維運設計 §17.2.1）
             cfg.AddOpenBehavior(typeof(AuditBehavior<,>));
             // 在交易之內：寫入鎖已持有，冪等查詢與寫入、事件與驗證才在同一把鎖之下（設計 §2）
@@ -221,6 +223,9 @@ public static class DependencyInjection
         // MCP 工具（mcp1a 判斷 19）：每個工具一筆 IMcpTool，執行器依名稱找
         services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.WhoAmITool>();
         services.AddScoped<Dynamic.McpService.Tools.McpToolInvoker>();
+        services.AddScoped<Dynamic.McpService.Confirmations.McpConfirmationScope>();
+        services.AddScoped<Dynamic.McpService.Confirmations.IMcpConfirmationScope>(sp =>
+            sp.GetRequiredService<Dynamic.McpService.Confirmations.McpConfirmationScope>());
         services.AddScoped<Dynamic.McpService.McpUsage>();
         // 速率與名額保留跨請求共用（單一實例記憶體，判斷 13）
         services.AddSingleton<Dynamic.McpService.Tools.McpRateGate>();

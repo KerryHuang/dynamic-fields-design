@@ -14,6 +14,9 @@ public sealed class AfterCommitActions(ILogger<AfterCommitActions> logger)
 
     public void Add(string label, Action action) => _actions.Add((label, action));
 
+    /// <summary>目前的交易層數（最外層交易內是 1）：MCP 確認請求以它判斷巢狀（mcp1a 計畫判斷 18），不另造計數器。</summary>
+    internal int TransactionDepth => _depth;
+
     /// <summary>進入一層交易；最外層開始時，先丟掉交易外登記的動作（它們不屬於任何交易）。</summary>
     internal void Enter()
     {

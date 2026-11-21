@@ -23,6 +23,14 @@ public static class McpTexts
     public const string WhoAmIDescription =
         "Returns the user this token belongs to, the token's name, scopes and expiry, the call limits, and the server version. Takes no arguments.";
 
+    /// <summary>高風險工具預演結果的 <c>meta.instruction</c>（計畫判斷 18）。</summary>
+    public const string ConfirmationInstruction =
+        "Show this preview to the user. Only after the user agrees, call the same tool again with identical arguments plus confirmationCode.";
+
+    /// <summary>確認已提交、但結果回不了時的 <c>meta.instruction</c>（計畫判斷 18「確認提交之後」）：不回錯誤，免得模型重試。</summary>
+    public const string ConfirmedResultOmitted =
+        "The action was executed and committed, but its result could not be returned. Do not call it again; use read tools to check the current state.";
+
     /// <summary>沒有參數的工具的 JSON Schema。</summary>
     public const string NoArgumentsSchema = """{"type":"object","properties":{},"additionalProperties":false}""";
 }

@@ -8,6 +8,7 @@ using DynamicModules.Persistence.Postgres;
 using DynamicModules.TestSupport;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Persistence;
@@ -34,7 +35,9 @@ public sealed class TestDb : IAsyncDisposable
     /// <param name="migrate">false 時不套 migration，由測試自己依序套用（驗證既有資料升級；只在 SQLite 有意義，§5.3）。</param>
     /// <param name="restore">給了就用它把資料整份複製進這個庫，取代 migration 範本（例如已產生 Demo 資料的快照；只支援 SQLite）。</param>
     /// <param name="postgresSource">PostgreSQL 模式的對應：從這個資料庫（連線字串）整份複製，取代 migration 樣板。</param>
-    public static async Task<TestDb> CreateAsync(bool migrate = true, Action<SqliteConnection>? restore = null, string? postgresSource = null)
+    /// <param name="interceptors">測試另外疊加的攔截器（例如模擬某張表寫不進去）。</param>
+    public static async Task<TestDb> CreateAsync(bool migrate = true, Action<SqliteConnection>? restore = null, string? postgresSource = null,
+        IReadOnlyList<IInterceptor>? interceptors = null)
     {
         var db = new TestDb();
         if (TestDatabase.IsPostgres)
@@ -45,7 +48,7 @@ public sealed class TestDb : IAsyncDisposable
                 : await PostgresTestServer.CreateDatabaseAsync(migrated: migrate);
             db.Context = new DynamicDbContext((DbContextOptions<DynamicDbContext>)PostgresDatabase.Configure(
                     new DbContextOptionsBuilder<DynamicDbContext>(), db._postgres, PostgresSettings)
-                .AddInterceptors(db.Counter, WriteGuardInterceptor.Instance)
+                .AddInterceptors([db.Counter, WriteGuardInterceptor.Instance, .. interceptors ?? []])
                 .Options);
             return db;
         }
@@ -58,7 +61,7 @@ public sealed class TestDb : IAsyncDisposable
         else if (migrate) MigratedDatabaseTemplate.RestoreInto(db._sqlite);
         db.Context = new DynamicDbContext(new DbContextOptionsBuilder<DynamicDbContext>()
             .UseSqlite(db._sqlite, b => b.MigrationsAssembly("DynamicModules.Persistence"))
-            .AddInterceptors(db.Counter, WriteGuardInterceptor.Instance)
+            .AddInterceptors([db.Counter, WriteGuardInterceptor.Instance, .. interceptors ?? []])
             .Options);
         if (migrate) await db.Context.Database.MigrateAsync();
         return db;

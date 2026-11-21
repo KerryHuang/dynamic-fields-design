@@ -53,12 +53,15 @@ public abstract class DesignerTestBase : IAsyncLifetime
     /// </summary>
     protected virtual bool FieldsFilterable => false;
 
+    /// <summary>子類別另外疊加的 DbContext 攔截器（例如模擬稽核表寫不進去）。</summary>
+    protected virtual IReadOnlyList<Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor> ExtraInterceptors => [];
+
     /// <summary>子類別追加或覆寫服務（例如註冊測試用的假外掛）。</summary>
     protected virtual void ConfigureServices(IServiceCollection services) { }
 
     public virtual async Task InitializeAsync()
     {
-        Db = await TestDb.CreateAsync();
+        Db = await TestDb.CreateAsync(interceptors: ExtraInterceptors);
         await SeedData.EnsureSeededAsync(Db.Context);
         await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(Db.Context));
         var services = new ServiceCollection();

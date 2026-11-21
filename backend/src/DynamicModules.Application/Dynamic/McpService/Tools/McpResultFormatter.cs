@@ -78,6 +78,20 @@ public static class McpResultFormatter
         return Error(McpErrorCodes.ResultTooLarge, tooLargeMessage, extra: outcome.OversizeHint is { } hint ? new { hint } : null);
     }
 
+    /// <summary>
+    /// 確認已提交、但結果回不了（判斷 18）：非錯誤的固定結果，沒有 <c>data</c>；
+    /// <c>meta = { tool, confirmation: { status: "executed", id }, dataOmitted, instruction }</c>。
+    /// </summary>
+    public static McpFormattedResult Executed(string tool, long? confirmationId, string dataOmitted, string instruction)
+    {
+        var meta = new JsonObject
+        {
+            ["tool"] = tool, ["confirmation"] = new JsonObject { ["status"] = "executed", ["id"] = confirmationId },
+            ["dataOmitted"] = dataOmitted, ["instruction"] = instruction,
+        };
+        return Build(false, new JsonObject { ["contentTrust"] = McpTexts.ContentTrust, ["meta"] = meta }, null);
+    }
+
     /// <summary>錯誤結果；訊息已依請求語系解析。</summary>
     public static McpFormattedResult Error(string code, string message, IReadOnlyDictionary<string, string>? fields = null,
         int? retryAfterSeconds = null, object? extra = null)
