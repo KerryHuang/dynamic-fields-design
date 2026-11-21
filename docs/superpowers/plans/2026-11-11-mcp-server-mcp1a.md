@@ -369,6 +369,10 @@ repo 規範：`AGENTS.md`、`.claude/rules/{backend,docs}.md`、`CONTRIBUTING.md
     - **匯出與報表**：記錄匯出（`ExportRecordsHandler`）經 guard 與 `CanSee`；報表（`ReportRunner`）經 guard、`AuthorizeDetailAsync` 與 `CanSee`。沒找到直接繞過的路徑，但本段補回歸測試鎖住（Task 5），報表的 SQL 與記憶體兩種引擎都跑。
     - **寫入端**：`AiMasked` 也會流進寫入端的 `Resolve` 呼叫（`RecordEffects`、`RollupRecalc` 等）。mcp1a 的 MCP 通道只有唯讀工具，`McpToolCatalog` 全為 `Read` 有測試鎖住；寫入端在 AI 遮罩下的語意留給 mcp2a 審，交付說明寫明。
     - 這比設計 §5.5「公式、標題照常回傳」嚴（Q3）。
+    - **第五輪審查補正（主控裁決）**：
+      - 彙總來源依每個彙總實際的來源模組（`SourceFieldId` 所屬模組）算，由 `RollupSourceMasks` 統一給 guard 與 `ApprovalHiddenFields`（含簽核臨時讀取權）；MCP 通道涵蓋一般參照來源（用來源模組自己的權限），畫面通道仍只看明細來源。
+      - 彙總條件改用正式 `ConditionParser` 對來源模組解析（第 3 點原本就這樣寫，實作時用了結構掃描）；解析失敗（含運算子不存在、欄位不在來源模組等語意錯誤）、來源模組找不到，一律隱藏。
+      - MCP 通道的公式閉包涵蓋停用但值仍讀得到的公式（連同啟用的公式反覆掃到不再新增）。
 
 11. 〔技術〕**`/mcp` 的請求管線**（WebAPI，`Mcp/`）：
     - **`McpGateMiddleware`**：`app.UseWhen(ctx => ctx.Request.Path.StartsWithSegments("/mcp"), b => b.UseMiddleware<McpGateMiddleware>())`。位置在 `SessionMiddleware` 之後、`RequestScopeMiddleware` 之前，讓 log scope 的 userId 是權杖擁有者。依序：

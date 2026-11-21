@@ -177,6 +177,25 @@ public class McpAiExclusionTests : ApprovalTestBase
         (await Perms(RequestChannel.Ui, "admin")).HiddenFieldIds.Should().NotContain(_countQty);
     }
 
+    /// <summary>第五輪審查必修 9：結構讀得懂、但正式 ConditionParser 會拒絕的條件（運算子不存在、欄位不在來源模組）→ MCP 通道隱藏。</summary>
+    [Theory]
+    [InlineData("op")]
+    [InlineData("field")]
+    public async Task Rollup_ConditionSemanticError_Hidden(string broken)
+    {
+        await Rig();
+        var field = await Db.Context.Set<Field>().SingleAsync(f => f.Id == _countQty);
+        var condition = broken == "op"
+            ? $$"""{"field":{{_r.LineQty}},"op":"bogus","value":0}"""
+            : $$"""{"field":{{_salary}},"op":"gt","value":0}""";
+        field.Config = field.Config with { Rollup = field.Config.Rollup! with { Condition = J(condition) } };
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        (await Perms(RequestChannel.Mcp, "admin")).HiddenFieldIds.Should().Contain(_countQty);
+        (await Perms(RequestChannel.Ui, "admin")).HiddenFieldIds.Should().NotContain(_countQty);
+    }
+
     [Fact]
     public async Task Guard_Mcp_TitleTemplate()
     {
@@ -320,6 +339,127 @@ public class McpAiExclusionTests : ApprovalTestBase
         Data(await Ui("buyer1", new GetRecordApprovalRequest(po))).Should().Contain(key);
         Data(await Mcp("buyer1", new GetRecordApprovalRequest(po))).Should().NotContain(key);
         Data(await Mcp("admin", new GetRecordApprovalRequest(po))).Should().NotContain(key);
+    }
+
+    // ───────── 一般參照來源的彙總（第五輪審查必修 7）─────────
+
+    private long _secret, _refSum, _refCount, _refSumX;
+
+    /// <summary>附加費用（一般參照指回採購單）加「機密」欄位並標不提供給 AI；採購單以它加總、以它為條件計數，另有引用加總的公式。</summary>
+    private async Task RigRegularSource()
+    {
+        await Rig();
+        _secret = (await MustAdd(_r.Extra, FieldType.Decimal, new FieldConfig { IsFilterable = true, Scale = 0 }, "機密")).Id;
+        _refSum = (await MustAdd(_r.Module, FieldType.Rollup,
+            new FieldConfig { Rollup = new RollupConfig(_r.ExtraRef, RollupFunction.Sum, _secret, null) }, "機密合計")).Id;
+        _refCount = (await MustAdd(_r.Module, FieldType.Rollup, new FieldConfig
+        {
+            Rollup = new RollupConfig(_r.ExtraRef, RollupFunction.Count, null, J($$"""{"field":{{_secret}},"op":"gt","value":0}"""))
+        }, "機密筆數")).Id;
+        _refSumX = (await MustAdd(_r.Module, FieldType.Formula,
+            new FieldConfig { Formula = $"{{{_refSum}}} * 1", ResultType = "number", Scale = 0 }, "機密合計公式")).Id;
+        await Exclude(_secret);
+    }
+
+    [Theory]
+    [InlineData("admin")]
+    [InlineData("buyer1")]
+    public async Task Rollup_RegularRefSource_SumOfExcluded_Hidden(string user)
+    {
+        await RigRegularSource();
+        (await Perms(RequestChannel.Mcp, user)).HiddenFieldIds.Should().Contain(_refSum);
+        (await Perms(RequestChannel.Ui, user)).HiddenFieldIds.Should().NotContain(_refSum, "畫面通道不改");
+    }
+
+    [Theory]
+    [InlineData("admin")]
+    [InlineData("buyer1")]
+    public async Task Rollup_RegularRefSource_CountWithConditionOnExcluded_Hidden(string user)
+    {
+        await RigRegularSource();
+        (await Perms(RequestChannel.Mcp, user)).HiddenFieldIds.Should().Contain(_refCount);
+        (await Perms(RequestChannel.Ui, user)).HiddenFieldIds.Should().NotContain(_refCount);
+    }
+
+    [Theory]
+    [InlineData("admin")]
+    [InlineData("buyer1")]
+    public async Task Rollup_RegularRefSource_FormulaOfRollup_Hidden(string user)
+    {
+        await RigRegularSource();
+        (await Perms(RequestChannel.Mcp, user)).HiddenFieldIds.Should().Contain(_refSumX);
+        (await Perms(RequestChannel.Ui, user)).HiddenFieldIds.Should().NotContain(_refSumX);
+    }
+
+    [Fact]
+    public async Task ApprovalGrant_RegularRefSource_Hidden()
+    {
+        await RigRegularSource();
+        As("buyer1");
+        var po = await NewPo(_r, qty: 2, price: 300, extra: V((_salary, 50000)));
+        var created = await Send(new CreateRecordRequest(_r.Extra, new Dictionary<string, JsonElement?>
+        {
+            [$"f_{TitleId(_r.Extra)}"] = JsonSerializer.SerializeToElement("運費"), [$"f_{_r.ExtraRef}"] = JsonSerializer.SerializeToElement(po.Id),
+            [$"f_{_secret}"] = JsonSerializer.SerializeToElement(1234),
+        }));
+        created.IsCreated.Should().BeTrue(Dump(created));
+        await MustSubmit(po.Id, _r.Confirmed);
+
+        var keys = new[] { $"f_{_refSum}", $"f_{_refCount}", $"f_{_refSumX}" };
+        var ui = (DynamicRecordResponse)(await Ui("fin1", new GetRecordRequest(po.Id))).Data!;
+        ui.ApprovalGrant.Should().BeTrue("fin1 只靠簽核的臨時讀取權讀這筆");
+        ui.Values[$"f_{_refSum}"]!.Value.GetDecimal().Should().Be(1234, "對照：來源只有一筆時 SUM 等於原值");
+        var mcp = (DynamicRecordResponse)(await Mcp("fin1", new GetRecordRequest(po.Id))).Data!;
+        mcp.ApprovalGrant.Should().BeTrue();
+        mcp.Values.Keys.Should().NotContain(keys);
+    }
+
+    // ───────── 停用的公式（第五輪審查必修 8）─────────
+
+    /// <summary>公式「薪資 × 1」先存值再停用（直接改資料庫，測試許可）。</summary>
+    private async Task<long> DisableSalaryFormula()
+    {
+        var field = await Db.Context.Set<Field>().SingleAsync(f => f.Id == _salaryX);
+        field.Status = FieldStatus.Inactive;
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+        return _salaryX;
+    }
+
+    [Fact]
+    public async Task DisabledFormula_Record_Hidden()
+    {
+        await Rig();
+        As("buyer1");
+        var po = await NewPo(_r, extra: V((_salary, 50000)));
+        var formula = await DisableSalaryFormula();
+
+        var ui = (DynamicRecordResponse)(await Ui("buyer1", new GetRecordRequest(po.Id))).Data!;
+        ui.Values[$"f_{formula}"]!.Value.GetDecimal().Should().Be(50000, "對照：停用的公式存過的值仍讀得到");
+        ((DynamicRecordResponse)(await Mcp("buyer1", new GetRecordRequest(po.Id))).Data!).Values.Keys.Should().NotContain($"f_{formula}");
+        ((DynamicRecordResponse)(await Mcp("admin", new GetRecordRequest(po.Id))).Data!).Values.Keys.Should().NotContain($"f_{formula}");
+    }
+
+    /// <summary>公式本來不記歷程（RecordHistoryWriter 略過計算欄位）；這裡直接寫一列，鎖住歷程查詢套用同一個遮罩（舊資料或日後改寫入規則時不外洩）。</summary>
+    [Fact]
+    public async Task DisabledFormula_History_Hidden()
+    {
+        await Rig();
+        As("buyer1");
+        var po = await NewPo(_r, extra: V((_salary, 50000)));
+        var formula = await DisableSalaryFormula();
+        Db.Context.Add(new RecordHistory
+        {
+            RecordId = po.Id, FieldId = formula, Operation = RecordHistoryOperation.Update, OldValue = "40000", NewValue = "50000",
+            ChangedUserId = "buyer1", ChangedTime = new DateTime(2026, 11, 1, 9, 0, 0, DateTimeKind.Unspecified),
+        });
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        static List<string?> Keys(ServiceResult r) => ((PagedResponse<RecordHistoryResponse>)r.Data!).Items.Select(i => i.FieldKey).ToList();
+        Keys(await Ui("buyer1", new GetRecordHistoryRequest(po.Id, 1, 100, null))).Should().Contain($"f_{formula}", "對照：畫面通道讀得到這一列");
+        Keys(await Mcp("buyer1", new GetRecordHistoryRequest(po.Id, 1, 100, null))).Should().NotContain($"f_{formula}");
+        Keys(await Mcp("admin", new GetRecordHistoryRequest(po.Id, 1, 100, null))).Should().NotContain($"f_{formula}");
     }
 
     [Fact]

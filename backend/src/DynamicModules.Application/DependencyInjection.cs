@@ -64,6 +64,7 @@ public static class DependencyInjection
         services.TryAddSingleton(Dynamic.PolicyService.PolicyEnvironmentDefaults.Empty);
         services.AddScoped<FieldLocks>();
         services.AddScoped<IDynamicAccessGuard, DynamicAccessGuard>();
+        services.AddScoped<RollupSourceMasks>();
         services.AddScoped<PermissionAdminGate>();
         // 預設是畫面通道；WebAPI 之後再註冊 HttpRequestChannel 蓋過它。IPermissionRepository 的通道裝飾不在這裡（判斷 10）
         services.TryAddScoped<IRequestChannel, DefaultRequestChannel>();
