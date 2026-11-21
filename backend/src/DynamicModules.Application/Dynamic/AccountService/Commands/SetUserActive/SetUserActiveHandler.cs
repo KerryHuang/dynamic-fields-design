@@ -1,6 +1,8 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
+using DynamicModules.Application.Dynamic.McpService;
+using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -8,7 +10,8 @@ using Microsoft.Extensions.Logging;
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.SetUserActive;
 
 public class SetUserActiveHandler(
-    ICurrentUser current, IAccountRepository accounts, IUnitOfWork uow, AuditContext audit, ILogger<SetUserActiveHandler> logger)
+    ICurrentUser current, IAccountRepository accounts, McpTokenRevoker mcpTokens, IUnitOfWork uow, AuditContext audit,
+    ILogger<SetUserActiveHandler> logger)
     : IRequestHandler<SetUserActiveRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SetUserActiveRequest request, CancellationToken ct)
@@ -16,6 +19,7 @@ public class SetUserActiveHandler(
         var user = await accounts.GetTrackedAsync(request.UserId, ct);
         if (user is null) return ServiceResult.NotFound("使用者不存在");
 
+        int? revokedMcpTokens = null;
         if (!request.IsActive && user.IsActive)
         {
             if (user.IsSystemAdmin && await accounts.CountActiveAdminsAsync(ct) <= 1)
@@ -23,6 +27,8 @@ public class SetUserActiveHandler(
             if (user.UserId == current.UserId) return Invalid("不能停用自己");
             // 換 stamp 讓既有 session 在下一個請求失效（SessionMiddleware 另外也擋 !IsActive）
             user.SecurityStamp = Guid.NewGuid().ToString("N");
+            // 同一交易撤銷全部 AI 連線權杖；重新啟用不恢復（設計 §13.2）
+            revokedMcpTokens = await mcpTokens.RevokeAllAsync(user.UserId, McpRevokeReason.UserDeactivated, current.UserId, ct);
         }
 
         var wasActive = user.IsActive;
@@ -30,6 +36,7 @@ public class SetUserActiveHandler(
         await uow.CommitAsync(ct);
         audit.Target(label: user.DisplayName);
         audit.Describe(new { IsActive = wasActive }, new { request.IsActive });
+        if (revokedMcpTokens is { } revoked) audit.Detail("revokedMcpTokens", revoked);
         logger.LogInformation("管理員 {Admin} 將帳號 {UserId} 設為{State}", current.UserId, user.UserId, request.IsActive ? "啟用" : "停用");
         return ServiceResult.Success();
     }
