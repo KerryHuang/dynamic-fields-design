@@ -104,6 +104,32 @@ public class SharedMasterMergeTests : IDisposable
         OptionNames(_rig, "bp").Should().Contain("partner.agent");
     }
 
+    /// <summary>
+    /// mcp1a 計畫 Q4：更新已開啟的主檔套件（重匯合併）不碰既有欄位的「不提供給 AI」旗標。API 設成 true 的欄位
+    /// （含這次被加選項的欄位）保持 true；這次補進來的新欄位是 false。
+    /// </summary>
+    [Fact]
+    public async Task PackageUpdate_KeepsExistingExcludeFromAiTrue_NewFieldsFalse()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        var phone = _rig.FieldId("bp", "partner.phone");
+        var role = _rig.FieldId("bp", "partner.role");
+        await _rig.ExcludeFromAiAsync(Partner, phone);
+        await _rig.ExcludeFromAiAsync(Partner, role);
+
+        var (exported, _) = await _rig.ExportAsync("bp");
+        var bp = Node(exported.GetRawText());
+        MainFields(bp).Add(Field("grade", "enum", "等級", null, ("gold", "金牌")));
+        AddOption(FieldNode(bp, "role"), "agent", "代理商");
+        await _rig.ImportMergeOkAsync(bp.ToJsonString());
+
+        OptionNames(_rig, "bp").Should().Contain("partner.agent", "合併真的動到了 role");
+        DbField(_rig, "bp", "partner.phone").ExcludeFromAi.Should().BeTrue();
+        DbField(_rig, "bp", "partner.role").ExcludeFromAi.Should().BeTrue();
+        DbField(_rig, "bp", "partner.grade").ExcludeFromAi.Should().BeFalse("套件補進來的新欄位一律 false");
+    }
+
     [Fact]
     public async Task ReimportingAMasterAlreadyOpen_OnlyAddsByPersistentCode_AvoidsContributorCodes_AndNeverDeletesOrOverwrites()
     {

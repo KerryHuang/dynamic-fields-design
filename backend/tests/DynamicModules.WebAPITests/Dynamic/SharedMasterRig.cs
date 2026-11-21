@@ -157,6 +157,20 @@ internal sealed class SharedMasterRig : IDisposable
         return (await JsonOf(res), warnings);
     }
 
+    /// <summary>欄位 API 把「不提供給 AI」設成 true（要權限設定，系統管理員有；mcp1a 計畫判斷 4）。</summary>
+    public async Task ExcludeFromAiAsync(string moduleKey, long fieldId)
+    {
+        var m = await JsonOf(await Admin.GetAsync($"{Base}/modules/{moduleKey}"));
+        var f = m.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Single(x => x.GetProperty("id").GetInt64() == fieldId);
+        var res = await Admin.PutAsJsonAsync($"{Base}/fields/{fieldId}", new
+        {
+            type = f.GetProperty("type").GetString(), label = f.GetProperty("label"), config = f.GetProperty("config"),
+            blockId = f.GetProperty("blockId").GetInt64(), excludeFromAi = true,
+        });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync() + LastError());
+    }
+
     /// <summary>設計器（Designer）在主檔模組的某個區塊新增欄位；回傳欄位 Id。</summary>
     public async Task<long> AddDesignerFieldAsync(string moduleKey, long blockId, string type, string label, object? config = null)
     {
