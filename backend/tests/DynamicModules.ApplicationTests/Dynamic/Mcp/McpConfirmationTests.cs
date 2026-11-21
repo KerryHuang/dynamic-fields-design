@@ -36,6 +36,13 @@ public sealed class HighRiskKnobs
     public bool SkipConsume { get; set; }
     /// <summary>handler：消耗與寫入之後再送的請求（巢狀）。</summary>
     public Func<ISender, Task>? Inner { get; set; }
+    /// <summary>取出並清掉 <see cref="Inner"/>（只跑一次，免得內層請求的 handler 又遞迴送自己）。</summary>
+    public Func<ISender, Task>? TakeInner()
+    {
+        var inner = Inner;
+        Inner = null;
+        return inner;
+    }
     public bool ThrowAfterConsume { get; set; }
 }
 
@@ -104,7 +111,7 @@ public sealed class TouchRecordForTestHandler(DynamicDbContext db, IMcpConfirmat
         record.ValuesJson = JsonSerializer.Serialize(new { touched = request.Value });
         record.RowVersion = Guid.NewGuid().ToString();
         await db.SaveChangesAsync(ct);
-        if (knobs.Inner is { } inner) await inner(sender);
+        if (knobs.TakeInner() is { } inner) await inner(sender);
         if (knobs.ThrowAfterConsume) throw new InvalidOperationException("after consume");
         return ServiceResult.Success();
     }
@@ -120,7 +127,7 @@ public sealed class OuterForTestHandler(DynamicDbContext db, HighRiskKnobs knobs
         var record = await db.Set<Record>().FirstAsync(r => r.Id == request.RecordId, ct);
         record.ValuesJson = """{"outer":true}""";
         await db.SaveChangesAsync(ct);
-        if (knobs.Inner is { } inner) await inner(sender);
+        if (knobs.TakeInner() is { } inner) await inner(sender);
         return ServiceResult.Success();
     }
 }
