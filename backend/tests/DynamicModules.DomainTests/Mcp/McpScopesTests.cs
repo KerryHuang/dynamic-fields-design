@@ -20,6 +20,15 @@ public class McpScopesTests
         McpScopes.Issuable.Should().Contain(McpScopes.DefaultChecked);
     }
 
+    [Fact]
+    public void Requires_OnlyBusinessWriteNeedsBusinessRead()
+    {
+        McpScopes.Requires.Should().HaveCount(1).And.ContainKey("business.write").WhoseValue.Should().Be("business.read");
+        McpScopes.MissingRequired(["business.write"]).Should().Equal("business.read");
+        McpScopes.MissingRequired(["business.read", "business.write"]).Should().BeEmpty();
+        McpScopes.MissingRequired(["business.read"]).Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData("business.read,unknown")]
     [InlineData("")]

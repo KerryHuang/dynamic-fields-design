@@ -141,7 +141,8 @@ public static class MessageText
         McpInvalidArgument = nameof(McpInvalidArgument), McpInternalError = nameof(McpInternalError), McpUnauthorized = nameof(McpUnauthorized),
         McpTokenInQuery = nameof(McpTokenInQuery), McpOriginDenied = nameof(McpOriginDenied), McpHttpsRequired = nameof(McpHttpsRequired),
         // AI 連線一般寫入（mcp2a 計畫判斷 13）
-        McpIdempotencyKeyRequired = nameof(McpIdempotencyKeyRequired), McpWriteLoop = nameof(McpWriteLoop);
+        McpIdempotencyKeyRequired = nameof(McpIdempotencyKeyRequired), McpWriteLoop = nameof(McpWriteLoop),
+        McpTokenScopeMissingRequired = nameof(McpTokenScopeMissingRequired);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -624,6 +625,8 @@ public static class MessageText
             "This token has modified the same record {0} times within {1} minutes, so its writes to this record are paused. Stop and ask the user to confirm",
             "โทเค็นนี้แก้ไขระเบียนเดียวกัน {0} ครั้งภายใน {1} นาทีแล้ว จึงหยุดการเขียนระเบียนนี้ของโทเค็นไว้ชั่วคราว โปรดหยุดและให้ผู้ใช้ยืนยัน",
             "Token này đã sửa cùng một bản ghi {0} lần trong {1} phút nên việc ghi vào bản ghi này đã bị tạm dừng. Hãy dừng lại và nhờ người dùng xác nhận"),
+        [McpTokenScopeMissingRequired] = ("勾選寫入範圍時，也要勾選同一類的讀取範圍", "When you select a write scope, also select the read scope of the same kind",
+            "เมื่อเลือกขอบเขตการเขียน ต้องเลือกขอบเขตการอ่านประเภทเดียวกันด้วย", "Khi chọn phạm vi ghi, hãy chọn cả phạm vi đọc cùng loại"),
     };
 
     /// <summary>給 <see cref="Localization.BuiltinServerText"/> 合併用（鍵不加前綴）。</summary>

@@ -40,6 +40,7 @@ public static class McpMessages
 
     public static MessageRef TokenNameInvalid => MessageRef.Of(MessageText.McpTokenNameInvalid, McpLimits.TokenNameMax);
     public static MessageRef TokenScopeInvalid => MessageRef.Of(MessageText.McpTokenScopeInvalid);
+    public static MessageRef TokenScopeMissingRequired => MessageRef.Of(MessageText.McpTokenScopeMissingRequired);
 
     public static MessageRef TokenExpiryInvalid(DateOnly earliest, DateOnly latest) => MessageRef.Of(MessageText.McpTokenExpiryInvalid,
         earliest.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), latest.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));

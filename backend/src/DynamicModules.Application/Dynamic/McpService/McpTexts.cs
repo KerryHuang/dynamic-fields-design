@@ -105,8 +105,8 @@ public static class McpTexts
         + "with parentTaskId it is a subtask of that task (give at most one of the two). To comment on a record, create a task on it and then "
         + "use add_task_comment. Dates are yyyy-MM-dd. Requires idempotencyKey: reuse the same key only when resending the same call.";
     public const string UpdateTaskDescription =
-        "Changes a task's status, assignee, due date or start date: only the arguments you send change; null clears assigneeUserId, dueDate "
-        + "or startDate. Title and description cannot be changed here. Marking a parent task done or cancelled while subtasks are open "
+        "Changes a task's status, assignee, due date or start date: only the arguments you send change, and you must send at least one of them; "
+        + "null clears assigneeUserId, dueDate or startDate. Title and description cannot be changed here. Marking a parent task done or cancelled while subtasks are open "
         + "returns error code conflict with fields.code subtasksOpen; resend with cascade (complete or cancel) and a new idempotencyKey. "
         + "If you can no longer see the task after the change, data is {taskId, hiddenAfterWrite: true}. "
         + "Requires idempotencyKey: reuse the same key only when resending the same call.";

@@ -68,7 +68,7 @@ public sealed class DescribeModuleTool(ISender sender)
     public override async Task<McpToolOutcome> RunAsync(McpToolCall call, CancellationToken ct)
     {
         var a = McpArgs.Of(call.Arguments);
-        var key = a.String("moduleKey", required: true, maxLength: 100);
+        var key = a.String("moduleKey", required: true, maxLength: Domain.Entities.Dynamic.Module.KeyMaxLength);
         if (a.HasErrors) return a.Invalid();
         var r = await Sender.Send(new GetModuleSchemaRequest(key!), ct);
         return r.IsSuccess
@@ -83,7 +83,7 @@ public sealed class QueryRecordsTool(ISender sender)
     public override async Task<McpToolOutcome> RunAsync(McpToolCall call, CancellationToken ct)
     {
         var a = McpArgs.Of(call.Arguments);
-        var key = a.String("moduleKey", required: true, maxLength: 100);
+        var key = a.String("moduleKey", required: true, maxLength: Domain.Entities.Dynamic.Module.KeyMaxLength);
         var filter = a.Object("filter");
         var keyword = a.String("keyword");
         var page = a.Int("page", 1, int.MaxValue) ?? 1;
@@ -245,7 +245,7 @@ public sealed class ListApprovalTasksTool(ISender sender)
     {
         var a = McpArgs.Of(call.Arguments);
         var box = a.Choice("box", ApprovalInboxBoxes.Values, ApprovalInboxBoxes.Todo);
-        var module = a.String("moduleKey", maxLength: 100);
+        var module = a.String("moduleKey", maxLength: Domain.Entities.Dynamic.Module.KeyMaxLength);
         var from = a.Date("from");
         var to = a.Date("to");
         var page = a.Int("page", 1, int.MaxValue) ?? 1;

@@ -131,4 +131,21 @@ public class McpAuditSummaryTests
     {
         JsonDocument.Parse(Of("""{"module":"orders","pageSize":20}""")).RootElement.GetProperty("pageSize").GetInt32().Should().Be(20);
     }
+
+    /// <summary>鍵名是 AI 給的字串（可能把值塞進鍵名），頂層、values、明細模組與 other、picks 的鍵都截到 ClientMax（mcp2a 審查建議 3）。</summary>
+    [Fact]
+    public void Strict_KeyNames_CutToClientMax()
+    {
+        var longKey = "K" + new string('9', 150);
+        var s = Strict($$$"""{"{{{longKey}}}":1,"values":{"{{{longKey}}}":1},"details":{"{{{longKey}}}":[{"values":{},"{{{longKey}}}":1}]},"picks":{"{{{longKey}}}":["u"]}}""");
+
+        s.Should().NotContain(longKey);
+        var cut = longKey[..McpAuditSummary.ClientMax];
+        var root = JsonDocument.Parse(s).RootElement;
+        root.TryGetProperty(cut, out _).Should().BeTrue(s);
+        root.GetProperty("values")[0].GetString().Should().Be(cut);
+        var row = root.GetProperty("details").GetProperty(cut)[0];
+        row.GetProperty("other")[0].GetString().Should().Be(cut);
+        root.GetProperty("picks").GetProperty(cut).GetInt32().Should().Be(1);
+    }
 }

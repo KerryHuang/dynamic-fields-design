@@ -18,6 +18,23 @@ public static class McpScopes
     /// <summary>建立對話框預設勾選的範圍：只有唯讀（寫入範圍預設不勾，使用者 2026-11-21 裁決）；前端從 <c>me/mcp</c> 取，不自己判斷。</summary>
     public static IReadOnlyList<string> DefaultChecked { get; } = [BusinessRead];
 
+    /// <summary>
+    /// 範圍相依（安全與權限檢查，寫死）：鍵要連同值一起勾。寫入工具的回應會帶出資料，只寫不讀的權杖等於能讀（mcp2a 審查必修 1；
+    /// 顧問拍板，待使用者確認，2026-11-22）。只宣告已能建立的範圍，其他範圍有工具時再加。
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Requires { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        [BusinessWrite] = BusinessRead,
+    };
+
+    /// <summary>缺少的相依範圍（依 <see cref="All"/> 排序、去重）；空清單表示相依都滿足。</summary>
+    public static IReadOnlyList<string> MissingRequired(IEnumerable<string> scopes)
+    {
+        var set = scopes.ToHashSet(StringComparer.Ordinal);
+        var missing = set.Where(Requires.ContainsKey).Select(s => Requires[s]).Where(r => !set.Contains(r)).ToHashSet(StringComparer.Ordinal);
+        return All.Where(missing.Contains).ToList();
+    }
+
     /// <summary>解析逗號串接的範圍：去重、依 <see cref="All"/> 排序；空字串、空項目或未知代碼（區分大小寫）回 false。</summary>
     public static bool TryParse(string csv, out IReadOnlyList<string> scopes)
     {

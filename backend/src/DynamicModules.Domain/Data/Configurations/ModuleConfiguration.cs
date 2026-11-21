@@ -10,7 +10,7 @@ public class ModuleConfiguration : IEntityTypeConfiguration<Module>
     {
         b.ToTable("Dynamic_Module");
         b.HasKey(x => x.Id);
-        b.Property(x => x.Key).HasMaxLength(40).IsRequired();
+        b.Property(x => x.Key).HasMaxLength(Module.KeyMaxLength).IsRequired();
         b.Property(x => x.ProgramCode).HasMaxLength(8).IsRequired();
         b.Property(x => x.NameI18n).HasJsonConversion();
         b.Property(x => x.Icon).HasMaxLength(100);

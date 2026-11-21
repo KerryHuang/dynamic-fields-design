@@ -253,4 +253,19 @@ describe('AiTokensPage', () => {
     expect(q('ai-create-error')!.textContent).toContain('密碼不正確');
     expect(q('ai-secret')).toBeNull();
   });
+  it('hints under the write scope that it needs read, and shows the server 400 when only write is sent', async () => {
+    api.createMcpToken.mockRejectedValue({ status: 400, errors: { scopes: ['勾選寫入範圍時，也要勾選同一類的讀取範圍'] } });
+    await mountPage();
+    await click('ai-create');
+    expect(q('ai-scope-hint-business.write')!.textContent).toContain('同時勾選');
+    expect(q('ai-scope-hint-business.read')).toBeNull();
+    await click('ai-scope-business.read');
+    await click('ai-scope-business.write');
+    await fill('ai-name', '只寫');
+    await fill('ai-password', 'pw-123456');
+    await click('ai-submit');
+    expect(api.createMcpToken.mock.calls[0]![0]).toMatchObject({ scopes: ['business.write'] });
+    expect(q('ai-create-error')!.textContent).toContain('也要勾選同一類的讀取範圍');
+    expect(q('ai-secret')).toBeNull();
+  });
 });

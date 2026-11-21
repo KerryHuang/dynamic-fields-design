@@ -46,7 +46,8 @@ public sealed class CreateTaskTool(ISender sender)
 
 /// <summary>
 /// <c>update_task</c>（mcp2a 計畫判斷 2、11、16）：送畫面同一條 <see cref="UpdateTaskRequest"/>。<c>Patch</c> 由工具逐鍵組出，
-/// 只放狀態、負責人、到期日、開始日、連動方式；標題與描述不開放、多帶的參數不轉送。帶了才放進 Patch，帶 null 是清除（同 REST）。
+/// 只放狀態、負責人、到期日、開始日、連動方式；標題與描述不開放、多帶的參數不轉送。帶了才放進 Patch，帶 null 是清除（同 REST）；
+/// 四個可改欄位一個都沒帶回 <c>invalid_arguments</c>。
 /// 主管派給自己看不到的人時，結果改寫成 <c>{ taskId, hiddenAfterWrite: true }</c>，不給 <c>undoToken</c>（含冪等回放；寫死清單：安全）。
 /// </summary>
 public sealed class UpdateTaskTool(ISender sender)
@@ -71,11 +72,14 @@ public sealed class UpdateTaskTool(ISender sender)
             if (TaskEditParser.TryParseCascade(cascade, out _)) patch["cascade"] = cascade;
             else a.Fail("cascade");
         }
+        // 沒帶任何可改的欄位（cascade 只是修飾，不算）→ 參數錯誤，不送 handler：空修改會回整筆任務，等於讀取（mcp2a 審查必修 1 附帶）
+        if (!a.HasErrors && !patch.Any(p => p.Key != "cascade"))
+            foreach (var name in Editable) a.Fail(name);
         if (a.HasErrors) return a.Invalid();
 
         var r = await Sender.Send(new UpdateTaskRequest(id!.Value, JsonSerializer.SerializeToElement(patch)), ct);
         var target = id.Value.ToString(CultureInfo.InvariantCulture);
-        if (r.IsSuccess && HiddenAfterWrite(r.Data) is { } hidden)
+        if (r.IsSuccess && HiddenAfterWrite(r.Data, id.Value) is { } hidden)
             return McpToolOutcome.Ok(new { taskId = hidden, hiddenAfterWrite = true }) with
             {
                 TargetKind = McpWriteTargets.Task, TargetId = target, ResultCount = 1,
@@ -83,17 +87,19 @@ public sealed class UpdateTaskTool(ISender sender)
         return Done(r, null, McpWriteTargets.Task, target);
     }
 
+    private static readonly string[] Editable = ["status", "assigneeUserId", "dueDate", "startDate"];
+
     /// <summary>
-    /// 寫入後看不到的結果（判斷 11）回任務 id，否則 null。第一次是型別物件 <see cref="TaskHiddenAfterWrite"/>；冪等回放是
+    /// 寫入後看不到的結果（判斷 11）回任務 id（形狀裡沒有數字 id 時回請求的 <paramref name="requested"/>），否則 null。第一次是型別物件 <see cref="TaskHiddenAfterWrite"/>；冪等回放是
     /// <see cref="JsonElement"/> <c>{ id, visible: false, undoToken }</c>：兩種形狀都要辨識，回放也不能原樣交出（會帶出 undoToken）。
     /// 任務詳細沒有 <c>visible</c>、<c>undoToken</c> 這兩個鍵，帶了任一個就當成看不到的結果。
     /// </summary>
-    private static long? HiddenAfterWrite(object? data) => data switch
+    private static long? HiddenAfterWrite(object? data, long requested) => data switch
     {
         TaskHiddenAfterWrite h => h.Id,
         JsonElement { ValueKind: JsonValueKind.Object } e when e.TryGetProperty("undoToken", out _)
             || (e.TryGetProperty("visible", out var visible) && visible.ValueKind == JsonValueKind.False)
-            => e.TryGetProperty("id", out var tid) && tid.TryGetInt64(out var n) ? n : 0,
+            => e.TryGetProperty("id", out var tid) && tid.ValueKind == JsonValueKind.Number && tid.TryGetInt64(out var n) ? n : requested,
         _ => null,
     };
 }

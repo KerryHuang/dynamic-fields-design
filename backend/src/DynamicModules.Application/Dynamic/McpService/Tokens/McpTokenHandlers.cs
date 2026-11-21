@@ -105,7 +105,7 @@ public sealed class ListMyMcpTokensHandler(ICurrentUser current, IMcpTokenReposi
 }
 
 /// <summary>
-/// 建立權杖（判斷 7 的檢查順序）：帳號 → 站台 → 政策 → 密碼（登入降速，判斷 16）→ 名稱 → 範圍 → 到期日 → 每人上限。
+/// 建立權杖（判斷 7 的檢查順序）：帳號 → 站台 → 政策 → 密碼（登入降速，判斷 16）→ 名稱 → 範圍（含相依：寫入要連同讀取）→ 到期日 → 每人上限。
 /// 明文只在回應出現一次；資料庫存 SHA-256 與末四碼；稽核摘要只記名稱、範圍、到期日與權杖 id。
 /// </summary>
 public sealed class CreateMcpTokenHandler(
@@ -130,6 +130,8 @@ public sealed class CreateMcpTokenHandler(
         if (request.Scopes is not { Count: > 0 } || request.Scopes.Any(s => s is null)
             || !McpScopes.TryParse(string.Join(',', request.Scopes), out var scopes) || scopes.Any(s => !McpScopes.Issuable.Contains(s)))
             return ServiceResult.Invalid(McpMessages.ScopesField, McpMessages.TokenScopeInvalid);
+        if (McpScopes.MissingRequired(scopes).Count > 0)
+            return ServiceResult.Invalid(McpMessages.ScopesField, McpMessages.TokenScopeMissingRequired);
 
         var earliest = views.Today.AddDays(1);
         var latest = views.Today.AddDays(snap.TokenMaxLifetimeDays);

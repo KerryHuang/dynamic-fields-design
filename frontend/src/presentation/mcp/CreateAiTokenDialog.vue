@@ -10,6 +10,7 @@ import { joinList } from 'src/i18n/translate';
 import { scopeText } from './token-text';
 
 // 建立權杖（MCP 設計 §13.5）：表單 → 「只顯示一次」畫面。預設到期日與上限都是 API 算好的（政策），前端不留常數；
+// 範圍相依（寫入要連同讀取）由後端判斷、回 400；前端不預先擋，只在有提示文案的範圍下方顯示提示（aiTokens.scopeHints.<範圍>）。
 // 明文只存在這個元件的 ref，關閉就清掉；密碼用 secret mutation 綁當次提交，不進 mutation 快取。
 const props = defineProps<{ modelValue: boolean; info: McpInfo }>();
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>();
@@ -88,6 +89,10 @@ const envExample = computed(() => `export FORMWRIGHT_TOKEN='${secret.value ?? ''
                   @update:model-value="(v) => toggleScope(s, v)"
                 />
                 <div class="text-caption text-muted q-ml-lg" style="overflow-wrap: anywhere">{{ s }}</div>
+                <div
+                  v-if="te(`aiTokens.scopeHints.${s}`)" class="text-caption q-ml-lg" style="overflow-wrap: anywhere"
+                  :data-testid="`ai-scope-hint-${s}`"
+                >{{ t(`aiTokens.scopeHints.${s}`) }}</div>
               </div>
             </fieldset>
             <DateSelect v-model="expiresOn" :label="t('aiTokens.dialog.expiresOn')" :hint="t('aiTokens.dialog.expiresHint', { max: info.maxExpiresOn })" data-testid="ai-expires" />

@@ -154,5 +154,11 @@
     "en-US": "This token has modified the same record {0} times within {1} minutes, so its writes to this record are paused. Stop and ask the user to confirm",
     "th": "โทเค็นนี้แก้ไขระเบียนเดียวกัน {0} ครั้งภายใน {1} นาทีแล้ว จึงหยุดการเขียนระเบียนนี้ของโทเค็นไว้ชั่วคราว โปรดหยุดและให้ผู้ใช้ยืนยัน",
     "vi": "Token này đã sửa cùng một bản ghi {0} lần trong {1} phút nên việc ghi vào bản ghi này đã bị tạm dừng. Hãy dừng lại và nhờ người dùng xác nhận"
+  },
+  "McpTokenScopeMissingRequired": {
+    "zh-TW": "勾選寫入範圍時，也要勾選同一類的讀取範圍",
+    "en-US": "When you select a write scope, also select the read scope of the same kind",
+    "th": "เมื่อเลือกขอบเขตการเขียน ต้องเลือกขอบเขตการอ่านประเภทเดียวกันด้วย",
+    "vi": "Khi chọn phạm vi ghi, hãy chọn cả phạm vi đọc cùng loại"
   }
 }

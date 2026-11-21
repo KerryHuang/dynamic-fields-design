@@ -4,6 +4,9 @@ namespace DynamicModules.Domain.Entities.Dynamic;
 
 public class Module : AuditableEntity
 {
+    /// <summary>模組代碼的長度上限（技術限制：資料庫欄寬，資料表設定與 MCP 工具參數共用）。</summary>
+    public const int KeyMaxLength = 40;
+
     public long Id { get; set; }
     public string Key { get; set; } = "";
     public string ProgramCode { get; set; } = "";

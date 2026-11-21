@@ -438,6 +438,27 @@ public class McpWriteToolsApiTests : IAsyncLifetime
         (task.Title, task.Description, task.Status).Should().Be(("原標題", "原描述", TaskItemStatus.InProgress));
     }
 
+    /// <summary>
+    /// 沒帶任何可改的參數（只有 taskId，或只有 cascade）→ invalid_arguments，不送 handler、不回任務內容（mcp2a 審查必修 1 附帶，主控裁決）。
+    /// </summary>
+    [Fact]
+    public async Task UpdateTask_NoChanges_InvalidArguments()
+    {
+        var id = await RestTask(_admin, new { title = "空修改不回內容", description = "不該被讀出" });
+        var ops = Query(_app, db => db.Set<OperationRecord>().Count());
+
+        foreach (var args in new object[] { new { taskId = id, idempotencyKey = NewIdem() }, new { taskId = id, cascade = "complete", idempotencyKey = NewIdem() } })
+        {
+            var r = await Call("update_task", args);
+
+            Code(r).Should().Be(McpErrorCodes.InvalidArguments, r.GetRawText());
+            r.TryGetProperty("data", out _).Should().BeFalse();
+            r.GetRawText().Should().NotContain("不該被讀出");
+            r.GetProperty("error").GetProperty("fields").TryGetProperty("status", out _).Should().BeTrue(r.GetRawText());
+        }
+        Query(_app, db => db.Set<OperationRecord>().Count()).Should().Be(ops, "參數錯誤不經 handler，不留冪等紀錄");
+    }
+
     private async Task<(long TaskId, McpClient Ops)> SupervisorRig()
     {
         using (var scope = _app.Services.CreateScope())
@@ -600,6 +621,37 @@ public class McpWriteToolsApiTests : IAsyncLifetime
         Query(_app, db => db.Set<Record>().Single(x => x.Id == id).RowVersion).Should().Be(rv, "預覽不寫入");
         var row = SubmitAudit().Should().ContainSingle().Subject;
         (row.Result, row.ReasonCode, row.TargetKind, row.TargetId).Should().Be((AuditResult.Success, "preview", "record", id.ToString()));
+    }
+
+    /// <summary>previewOnly 對資料範圍外（使用者看不到）的記錄 → not_found，不回流程關卡與候選人（mcp2a 審查必修 1 附帶，顧問備忘）。</summary>
+    [Fact]
+    public async Task Submit_PreviewOnly_OutOfDataScope_NotFound()
+    {
+        var r = await Approval(pick: true);
+        var (id, _) = await NewRecord(_admin, r, title: "總部單據");
+        var groups = await JsonOf(await _admin.GetAsync($"{Base}/groups"));
+        var sales = groups.EnumerateArray().Single(g => g.GetProperty("key").GetString() == "sales").GetProperty("id").GetInt64();
+        (await _admin.PutAsJsonAsync($"{Base}/modules/{r.Module}/permissions", new
+        {
+            groups = new[]
+            {
+                new
+                {
+                    groupId = sales, scope = "own",
+                    privileges = new { read = true, add = true, edit = true, delete = false, printExport = false, pricing = true, approve = false },
+                },
+            },
+            users = Array.Empty<object>(), fields = Array.Empty<object>(), options = Array.Empty<object>(),
+        })).EnsureSuccessStatusCode();
+        EnsureUser(_app, "sales01", u => (u.IsDemoAccount, u.MustChangePassword) = (false, false));
+        await using var salesMcp = await ConnectAsync(_app, IssueToken(_app, "sales01", WriteScopes).Raw);
+        (await _app.AsUser("sales01").GetAsync($"{Base}/records/{id}")).StatusCode.Should().Be(HttpStatusCode.NotFound, "前提：畫面也看不到");
+
+        var res = await Call("submit_approval", new { recordId = id, to = r.Done, previewOnly = true, idempotencyKey = NewIdem() }, salesMcp);
+
+        Code(res).Should().Be(McpErrorCodes.NotFound, res.GetRawText());
+        res.TryGetProperty("data", out _).Should().BeFalse();
+        res.GetRawText().Should().NotContain(StageCode).And.NotContain("總部單據");
     }
 
     [Fact]

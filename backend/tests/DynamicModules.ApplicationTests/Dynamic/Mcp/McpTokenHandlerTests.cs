@@ -195,6 +195,17 @@ public class McpTokenHandlerTests : McpTokenTestBase
         Err(await Create(scopes: [McpScopes.DesignRead]), McpMessages.ScopesField).Should().NotBeNullOrEmpty();
     }
 
+    /// <summary>寫入範圍必須連同讀取（顧問拍板，待使用者確認，2026-11-22）：只勾寫入回 400，不自動補讀取、不建權杖。</summary>
+    [Fact]
+    public async Task CreateToken_WriteWithoutRead_Invalid()
+    {
+        await Enable();
+        var r = await Create(scopes: [McpScopes.BusinessWrite]);
+        r.IsInvalid.Should().BeTrue();
+        Err(r, McpMessages.ScopesField).Should().Be("勾選寫入範圍時，也要勾選同一類的讀取範圍");
+        Db.Context.Set<McpToken>().Should().BeEmpty();
+    }
+
     [Fact]
     public async Task Info_DefaultScopes_ReadOnly()
     {

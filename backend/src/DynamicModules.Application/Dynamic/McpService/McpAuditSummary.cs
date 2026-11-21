@@ -14,6 +14,7 @@ namespace DynamicModules.Application.Dynamic.McpService;
 /// <c>dueDate</c>／<c>startDate</c> 只記有或清除；id、版本、代碼類參數（<see cref="Kept"/>）只有純量且不超過 <see cref="KeptMax"/> 字才存原值；
 /// 其餘的鍵、型別不對的值一律只記型別與長度。
 /// </para>
+/// <para>所有鍵名（頂層參數、<c>values</c>、明細模組與 <c>other</c>、<c>picks</c>、條件樹）都截到 <see cref="ClientMax"/> 字：鍵名是 AI 給的，可能夾帶值。</para>
 /// </summary>
 public static class McpAuditSummary
 {
@@ -38,7 +39,8 @@ public static class McpAuditSummary
         foreach (var p in args.EnumerateObject())
         {
             if (p.Name == McpArguments.ConfirmationCodeKey) continue;
-            o[p.Name] = p.Name switch
+            // 鍵名是 AI 給的字串（可能夾帶值），一律截到 ClientMax（mcp2a 審查建議 3）
+            o[Cut(p.Name)!] = p.Name switch
             {
                 "filter" => Filter(p.Value),
                 "keyword" => new JsonObject { ["length"] = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString()!.Length : 0 },
@@ -59,7 +61,7 @@ public static class McpAuditSummary
             };
         }
         if (o.ToJsonString().Length <= McpLimits.AuditArgsMax) return o;
-        var keys = new JsonObject { ["truncated"] = true, ["keys"] = new JsonArray([.. o.Select(kv => (JsonNode?)Cut(kv.Key, ClientMax))]) };
+        var keys = new JsonObject { ["truncated"] = true, ["keys"] = new JsonArray([.. o.Select(kv => (JsonNode?)kv.Key)]) };
         return keys.ToJsonString().Length <= McpLimits.AuditArgsMax ? keys : new JsonObject { ["truncated"] = true };
     }
 
@@ -86,7 +88,7 @@ public static class McpAuditSummary
 
     /// <summary>物件只留排序後的鍵；不是物件只記型別。</summary>
     private static JsonNode Keys(JsonElement v) => v.ValueKind == JsonValueKind.Object
-        ? new JsonArray([.. v.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal).Select(n => (JsonNode?)n)])
+        ? new JsonArray([.. v.EnumerateObject().Select(p => Cut(p.Name)!).Order(StringComparer.Ordinal).Select(n => (JsonNode?)n)])
         : TypeOnly(v);
 
     /// <summary>明細：模組 key → 每列 <c>{ id: 有無, keys: values 的鍵 }</c>；不是物件、不是陣列、列不是物件都只記型別。</summary>
@@ -95,7 +97,7 @@ public static class McpAuditSummary
         if (v.ValueKind != JsonValueKind.Object) return TypeOnly(v);
         var o = new JsonObject();
         foreach (var m in v.EnumerateObject())
-            o[m.Name] = m.Value.ValueKind != JsonValueKind.Array ? TypeOnly(m.Value)
+            o[Cut(m.Name)!] = m.Value.ValueKind != JsonValueKind.Array ? TypeOnly(m.Value)
                 : new JsonArray([.. m.Value.EnumerateArray().Select(Row)]);
         return o;
 
@@ -105,7 +107,7 @@ public static class McpAuditSummary
             var r = new JsonObject { ["id"] = row.TryGetProperty("id", out var id) && id.ValueKind != JsonValueKind.Null };
             if (row.TryGetProperty("values", out var values)) r["keys"] = Keys(values);
             var other = row.EnumerateObject().Select(p => p.Name).Where(n => n is not ("id" or "values" or "rowVersion"))
-                .Order(StringComparer.Ordinal).ToList();
+                .Select(n => Cut(n)!).Order(StringComparer.Ordinal).ToList();
             if (other.Count > 0) r["other"] = new JsonArray([.. other.Select(n => (JsonNode?)n)]);
             return r;
         }
@@ -117,7 +119,7 @@ public static class McpAuditSummary
         if (v.ValueKind != JsonValueKind.Object) return TypeOnly(v);
         var o = new JsonObject();
         foreach (var p in v.EnumerateObject())
-            o[p.Name] = p.Value.ValueKind == JsonValueKind.Array ? p.Value.GetArrayLength() : TypeOnly(p.Value);
+            o[Cut(p.Name)!] = p.Value.ValueKind == JsonValueKind.Array ? p.Value.GetArrayLength() : TypeOnly(p.Value);
         return o;
     }
 
@@ -126,7 +128,7 @@ public static class McpAuditSummary
         if (node.ValueKind != JsonValueKind.Object) return Elided;
         var o = new JsonObject();
         foreach (var p in node.EnumerateObject())
-            o[p.Name] = p.Name switch
+            o[Cut(p.Name)!] = p.Name switch
             {
                 "all" or "any" when p.Value.ValueKind == JsonValueKind.Array => new JsonArray([.. p.Value.EnumerateArray().Select(Filter)]),
                 "field" or "op" or "fieldRef" => JsonNode.Parse(p.Value.GetRawText()),

@@ -18,7 +18,7 @@ public sealed class CreateRecordTool(ISender sender)
     public override async Task<McpToolOutcome> RunAsync(McpToolCall call, CancellationToken ct)
     {
         var a = McpArgs.Of(call.Arguments);
-        var moduleKey = a.String("moduleKey", required: true, maxLength: 100);
+        var moduleKey = a.String("moduleKey", required: true, maxLength: Domain.Entities.Dynamic.Module.KeyMaxLength);
         var values = a.Values("values");
         var details = a.Details("details", allowId: false);
         var hostKey = a.String("hostKey");
