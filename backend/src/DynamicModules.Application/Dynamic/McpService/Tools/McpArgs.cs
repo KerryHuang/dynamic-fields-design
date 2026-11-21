@@ -116,6 +116,62 @@ public sealed class McpArgs
     }
 
     /// <summary>
+    /// 欄位值物件（mcp2a 判斷 16）：鍵是欄位 key、值原樣（JSON null 是清除），交給既有寫入請求解析。沒帶回空物件；不是物件記錯誤。
+    /// </summary>
+    public Dictionary<string, JsonElement?> Values(string name) =>
+        Object(name) is { } o ? ToValues(o) : new Dictionary<string, JsonElement?>(StringComparer.Ordinal);
+
+    private static Dictionary<string, JsonElement?> ToValues(JsonElement o) =>
+        o.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.ValueKind == JsonValueKind.Null ? (JsonElement?)null : p.Value.Clone(),
+            StringComparer.Ordinal);
+
+    /// <summary>明細列參數的一列（mcp2a 判斷 2、16）：沒有 <see cref="Id"/> 是新增。</summary>
+    public sealed record DetailRow(long? Id, string? RowVersion, Dictionary<string, JsonElement?> Values);
+
+    /// <summary>明細列的刪除旗標（REST 的 <c>_delete</c>）：MCP 不收（mcp2a D3），帶了就是參數錯誤。</summary>
+    public const string DetailDeleteKey = "_delete";
+
+    /// <summary>
+    /// 明細參數 <c>{ 明細模組 key: [ { id?, rowVersion?, values } ] }</c>（mcp2a 判斷 2、16）：每列只讀 <c>id</c>、<c>rowVersion</c>、<c>values</c>，
+    /// 其他鍵不採用；帶 <see cref="DetailDeleteKey"/> 記錯誤（D3）。<paramref name="allowId"/> 是 false（新增記錄）時帶 <c>id</c> 也記錯誤。
+    /// 沒帶回 null。錯誤鍵是 <c>details.&lt;明細&gt;[i].&lt;參數&gt;</c>。
+    /// </summary>
+    public Dictionary<string, List<DetailRow>>? Details(string name, bool allowId)
+    {
+        if (Object(name) is not { } o) return null;
+        var result = new Dictionary<string, List<DetailRow>>(StringComparer.Ordinal);
+        foreach (var module in o.EnumerateObject())
+        {
+            var at = $"{name}.{module.Name}";
+            if (module.Value.ValueKind != JsonValueKind.Array) { Fail(at); continue; }
+            var rows = new List<DetailRow>();
+            var i = 0;
+            foreach (var row in module.Value.EnumerateArray())
+            {
+                var rowAt = $"{at}[{i++}]";
+                if (row.ValueKind != JsonValueKind.Object) { Fail(rowAt); continue; }
+                if (row.TryGetProperty(DetailDeleteKey, out _)) { Fail($"{rowAt}.{DetailDeleteKey}"); continue; }
+                long? id = null;
+                if (row.TryGetProperty("id", out var idEl) && idEl.ValueKind != JsonValueKind.Null)
+                {
+                    if (!allowId || idEl.ValueKind != JsonValueKind.Number || !idEl.TryGetInt64(out var n) || n < 1) { Fail($"{rowAt}.id"); continue; }
+                    id = n;
+                }
+                string? rowVersion = null;
+                if (row.TryGetProperty("rowVersion", out var rv) && rv.ValueKind != JsonValueKind.Null)
+                {
+                    if (rv.ValueKind != JsonValueKind.String || rv.GetString() is not { Length: > 0 and <= 200 } s) { Fail($"{rowAt}.rowVersion"); continue; }
+                    rowVersion = s;
+                }
+                if (!row.TryGetProperty("values", out var values) || values.ValueKind != JsonValueKind.Object) { Fail($"{rowAt}.values"); continue; }
+                rows.Add(new DetailRow(id, rowVersion, ToValues(values)));
+            }
+            result[module.Name] = rows;
+        }
+        return result;
+    }
+
+    /// <summary>
     /// 分頁大小（判斷 14、20）：明確傳入時要在 1–<paramref name="toolMax"/> 之間，否則記錯誤；沒帶就是 <paramref name="maxRows"/>。
     /// 送出值一律 <c>min(值, maxRows)</c>（政策 <c>mcp.maxRows</c>）。
     /// </summary>

@@ -67,6 +67,38 @@ public static class McpTexts
     public const string RecordIdSchema = """{"type":"object","properties":{"recordId":{"type":"integer","minimum":1}},"required":["recordId"],"additionalProperties":false}""";
     public const string GetRecordOversizeHint = "Retry with includeDetails=false, then query the detail module with query_records.";
 
+    public const string CreateRecordDescription =
+        "Creates one record in a module, optionally with detail (child) rows. values uses field keys from describe_module, in the same formats get_record returns. "
+        + "Fields you cannot write (read-only, computed, unknown keys) are ignored and listed in meta.ignoredFields; check data, which is the saved record. "
+        + "Extension modules need hostKey. Requires idempotencyKey: reuse the same key only when resending the same call.";
+    public const string UpdateRecordDescription =
+        "Updates one record: only the fields in values change. rowVersion must be the record's current rowVersion from get_record or query_records; "
+        + "on error code stale, read the record again and retry. Detail rows: a row with id and rowVersion updates that row, a row without id is added; "
+        + "rows cannot be deleted here. Send all detail changes in the same update_record call. "
+        + "Fields you cannot write are ignored and listed in meta.ignoredFields. Requires idempotencyKey: reuse the same key only when resending the same call.";
+
+    /// <summary>寫入工具共用的 <c>idempotencyKey</c> 參數（格式沿用 <see cref="Common.OperationContext.KeyPattern"/>）。</summary>
+    private const string IdempotencyKeyProperty =
+        "\"idempotencyKey\":{\"type\":\"string\",\"pattern\":\"" + Common.OperationContext.KeyPattern
+        + "\",\"description\":\"A new random key per write (see pattern); resend the same key only to retry the same call\"}";
+
+    private const string ValuesProperty =
+        "\"values\":{\"type\":\"object\",\"description\":\"Field values by field key from describe_module; null clears a field\"}";
+
+    public const string CreateRecordSchema =
+        "{\"type\":\"object\",\"properties\":{\"moduleKey\":{\"type\":\"string\",\"description\":\"Module key from list_modules\"},"
+        + ValuesProperty + ","
+        + "\"details\":{\"type\":\"object\",\"description\":\"Detail rows by detail module key from describe_module\",\"additionalProperties\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"values\":{\"type\":\"object\"}},\"required\":[\"values\"],\"additionalProperties\":false}}},"
+        + "\"hostKey\":{\"type\":\"string\",\"description\":\"Extension modules only: key of the existing entry this record extends\"},"
+        + IdempotencyKeyProperty + "},\"required\":[\"moduleKey\",\"idempotencyKey\"],\"additionalProperties\":false}";
+
+    public const string UpdateRecordSchema =
+        "{\"type\":\"object\",\"properties\":{\"recordId\":{\"type\":\"integer\",\"minimum\":1},"
+        + "\"rowVersion\":{\"type\":\"string\",\"description\":\"Current rowVersion from get_record or query_records\"},"
+        + ValuesProperty + ","
+        + "\"details\":{\"type\":\"object\",\"description\":\"Detail rows by detail module key: with id and rowVersion to update, without id to add\",\"additionalProperties\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"minimum\":1},\"rowVersion\":{\"type\":\"string\"},\"values\":{\"type\":\"object\"}},\"required\":[\"values\"],\"additionalProperties\":false}}},"
+        + IdempotencyKeyProperty + "},\"required\":[\"recordId\",\"rowVersion\",\"idempotencyKey\"],\"additionalProperties\":false}";
+
     /// <summary>沒有參數的工具的 JSON Schema。</summary>
     public const string NoArgumentsSchema = """{"type":"object","properties":{},"additionalProperties":false}""";
 }

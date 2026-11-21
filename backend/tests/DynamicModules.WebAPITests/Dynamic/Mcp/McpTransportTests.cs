@@ -51,14 +51,17 @@ public class McpTransportTests : IDisposable
         client.ServerInfo!.Name.Should().Be("formwright");
     }
 
-    /// <summary>business.read 列出全部已登記的正式工具（Task 9 補齊 12 個後由 McpToolsApiTests 驗數量），每個都在正式目錄、唯讀。</summary>
+    /// <summary>business.read 列出已登記的唯讀正式工具（Task 9 補齊 12 個後由 McpToolsApiTests 驗數量），每個都在正式目錄、唯讀。</summary>
     [Fact]
     public async Task ListTools_BusinessRead_ListsRegisteredReadOnlyTools()
     {
         await using var client = await ConnectAsync(_app, IssueToken(_app).Raw);
         var tools = await client.ListToolsAsync();
 
-        var registered = _app.Services.CreateScope().ServiceProvider.GetServices<IMcpTool>().Select(t => t.Descriptor.Name).Order(StringComparer.Ordinal);
+        // 寫入工具（business.write）不在 business.read 權杖的列表（mcp2a 判斷 14）
+        var registered = _app.Services.CreateScope().ServiceProvider.GetServices<IMcpTool>()
+            .Where(t => t.Descriptor.Scope is null || t.Descriptor.Scope == McpScopes.BusinessRead)
+            .Select(t => t.Descriptor.Name).Order(StringComparer.Ordinal);
         tools.Select(t => t.Name).Should().Equal(registered).And.Contain("whoami");
         tools.Select(t => t.Name).Should().OnlyContain(n => McpToolCatalog.Find(n) != null);
         foreach (var tool in tools)
