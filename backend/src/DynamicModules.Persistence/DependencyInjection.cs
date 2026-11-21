@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddScoped<Application.Dynamic.OpsService.IDatabaseInfo, EfDatabaseInfo>();
         services.AddSingleton<IDatabaseStartupLock, NoDatabaseStartupLock>();
+        services.AddSingleton<IDatabaseStartupTuning, SqliteStartupTuning>();
         return services.AddPersistenceRepositories();
     }
 

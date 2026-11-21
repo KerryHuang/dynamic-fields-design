@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddScoped<Application.Dynamic.OpsService.IDatabaseInfo, EfDatabaseInfo>();
         services.AddSingleton<IDatabaseStartupLock>(new PostgresStartupLock(connectionString));
+        services.AddSingleton<IDatabaseStartupTuning, NoDatabaseStartupTuning>();
         return services.AddPersistenceRepositories();
     }
 }

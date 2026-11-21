@@ -69,19 +69,6 @@ public class TestApp : WebApplicationFactory<Program>
         _keepAlive.Open();
         // 從已 migrate 的範本整份複製（host 啟動時的 MigrateAsync 只剩檢查歷程）；接別人的庫時對方已經有資料，不覆蓋
         if (sharedConnectionString is null) MigratedDatabaseTemplate.RestoreInto(_keepAlive);
-        if (fileDatabase) UseWal(_keepAlive);
-    }
-
-    /// <summary>
-    /// 檔案模式的資料庫要先切成 WAL。正式站的新資料庫由 EF Migrate 建立，Migrate 在「檔案不存在」時才會設 WAL；
-    /// 這裡保持開啟的連線已經先把空檔建出來，Migrate 就不設，資料庫停在預設的 rollback journal，
-    /// 長交易（Demo 產生）快取溢出時會握著獨佔鎖直到提交，其他連線的讀取等不到鎖而噴 database is locked。
-    /// </summary>
-    private static void UseWal(SqliteConnection connection)
-    {
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = "PRAGMA journal_mode = wal";
-        cmd.ExecuteNonQuery();
     }
 
     /// <summary>附件的本機儲存根目錄（每個 TestApp 一個，Dispose 時刪除），測試可直接檢查磁碟上有什麼。</summary>

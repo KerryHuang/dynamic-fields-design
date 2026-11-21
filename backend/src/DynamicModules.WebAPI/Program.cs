@@ -249,6 +249,8 @@ static async Task InitializeDatabaseAsync(WebApplication app, string? databaseDi
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
     await db.Database.MigrateAsync();
+    // provider 專屬調校（SQLite 切 WAL，#20）；放在其他初始化步驟之前
+    await app.Services.GetRequiredService<IDatabaseStartupTuning>().ApplyAsync(db, CancellationToken.None);
     // 內建語系同步成 Dynamic_Locale 的 builtin 列；完成後才載入語系快照與政策快照（語系包設計 §4.1）
     await BuiltinLocaleSync.EnsureAsync(db, app.Services.GetRequiredService<TimeProvider>(), CancellationToken.None);
     await app.Services.GetRequiredService<LocaleRegistry>().EnsureFreshAsync(CancellationToken.None);
