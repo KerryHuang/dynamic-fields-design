@@ -10,6 +10,15 @@ public sealed class ManualClock(DateTimeOffset start) : TimeProvider
     private readonly List<ManualTimer> _timers = [];
     private DateTimeOffset _now = start;
 
+    /// <summary>目前掛在這個時鐘上的計時器數；背景服務在背景建計時器時，測試用它等到計時器存在才快轉。</summary>
+    public int TimerCount
+    {
+        get
+        {
+            lock (_sync) return _timers.Count;
+        }
+    }
+
     public override DateTimeOffset GetUtcNow()
     {
         lock (_sync) return _now;

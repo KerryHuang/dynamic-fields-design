@@ -308,7 +308,8 @@ public class SchedulerTests : IDisposable
 
         await service.StartAsync(CancellationToken.None);
 
-        service.ExecuteTask!.IsCompleted.Should().BeTrue();
+        // .NET 10 的 BackgroundService 整段 ExecuteAsync 都在背景跑，StartAsync 回來時不一定已結束：等它自己結束，不是被取消
+        await Within(service.ExecuteTask!);
         job.Runs.Should().Be(0);
         await service.StopAsync(CancellationToken.None);
     }
