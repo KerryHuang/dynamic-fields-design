@@ -232,7 +232,7 @@ public class GetApprovalTasksHandler(
         if (request.Status is { } status && !ApprovalInstanceStatuses.Values.Contains(status))
             return ServiceResult.Invalid("status", ApprovalMessages.StatusInvalid);
         var page = Math.Max(request.CurrentPage, 1);
-        var size = Math.Clamp(request.PagesSize, 1, 100);
+        var size = Math.Clamp(request.PagesSize, 1, GetApprovalTasksRequest.MaxPagesSize);
         var me = user.UserId;
         var moduleCache = new Dictionary<long, Module?>();
         async Task<Module?> ModuleOf(long id)

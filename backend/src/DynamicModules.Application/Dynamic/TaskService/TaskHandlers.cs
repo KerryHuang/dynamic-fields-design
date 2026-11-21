@@ -263,7 +263,7 @@ public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermis
         if (!Filters.TryGetValue(request.Filter, out var filter)) errors["filter"] = ["篩選不正確"];
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
         var page = Math.Max(request.CurrentPage, 1);
-        var size = Math.Clamp(request.PagesSize, 1, 100);
+        var size = Math.Clamp(request.PagesSize, 1, GetMyTasksRequest.MaxPagesSize);
         var today = time.Today;
         var weekStart = PolicyCatalog.WeekStartOf(await policies.ChoiceAsync(PolicyCatalog.CalendarWeekStart, null, ct));
         // 政策關閉或沒有部屬時名單是空的，分頁回空清單（不回 400）

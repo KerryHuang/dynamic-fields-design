@@ -18,7 +18,11 @@ public sealed record UpdateTaskRequest(long Id, JsonElement Patch) : IRequest<Se
 public sealed record DeleteTaskRequest(long Id) : IRequest<ServiceResult>, ITransactionalRequest;
 
 /// <summary>Tab：assigned、created、mentioned、subordinates；Filter：open、overdue、today、thisWeek、all。</summary>
-public sealed record GetMyTasksRequest(string Tab, string Filter, int CurrentPage, int PagesSize) : IRequest<ServiceResult>;
+public sealed record GetMyTasksRequest(string Tab, string Filter, int CurrentPage, int PagesSize) : IRequest<ServiceResult>
+{
+    /// <summary>每頁上限（handler 夾值；MCP 工具據此驗 pageSize）。</summary>
+    public const int MaxPagesSize = 100;
+}
 
 public sealed record GetTaskSummaryRequest : IRequest<ServiceResult>;
 

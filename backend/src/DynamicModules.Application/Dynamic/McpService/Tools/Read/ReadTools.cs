@@ -200,7 +200,6 @@ public sealed class ListMyTasksTool(ISender sender)
 {
     private static readonly string[] Tabs = ["assigned", "created", "mentioned", "subordinates"];
     private static readonly string[] Filters = ["open", "overdue", "today", "thisWeek", "all"];
-    private const int MaxPageSize = 100;
 
     public override async Task<McpToolOutcome> RunAsync(McpToolCall call, CancellationToken ct)
     {
@@ -209,7 +208,7 @@ public sealed class ListMyTasksTool(ISender sender)
         var filter = a.Choice("filter", Filters, "open");
         var page = a.Int("page", 1, int.MaxValue) ?? 1;
         // 沒帶 pageSize 時送 maxRows（可能大於 100），交給 handler 夾值，不報錯（判斷 20）
-        var size = a.PageSize(MaxPageSize, call.Limits.MaxRows);
+        var size = a.PageSize(GetMyTasksRequest.MaxPagesSize, call.Limits.MaxRows);
         if (a.HasErrors) return a.Invalid();
         var r = await Sender.Send(new GetMyTasksRequest(tab, filter, page, size), ct);
         return r.IsSuccess ? Paged((PagedResponse<TaskSummaryResponse>)r.Data!, x => x) : Fail(r);
@@ -242,8 +241,6 @@ public sealed class GetTaskTool(ISender sender)
 public sealed class ListApprovalTasksTool(ISender sender)
     : ReadTool(sender, "list_approval_tasks", McpTexts.ApprovalTasksSchema, McpTexts.ListApprovalTasksDescription)
 {
-    private const int MaxPageSize = 100;
-
     public override async Task<McpToolOutcome> RunAsync(McpToolCall call, CancellationToken ct)
     {
         var a = McpArgs.Of(call.Arguments);
@@ -252,7 +249,7 @@ public sealed class ListApprovalTasksTool(ISender sender)
         var from = a.Date("from");
         var to = a.Date("to");
         var page = a.Int("page", 1, int.MaxValue) ?? 1;
-        var size = a.PageSize(MaxPageSize, call.Limits.MaxRows);
+        var size = a.PageSize(GetApprovalTasksRequest.MaxPagesSize, call.Limits.MaxRows);
         if (a.HasErrors) return a.Invalid();
         var r = await Sender.Send(new GetApprovalTasksRequest(box, module, from, to, page, size), ct);
         return r.IsSuccess ? Paged((PagedResponse<ApprovalInboxItem>)r.Data!, x => x, x => x.RecordId) : Fail(r);
