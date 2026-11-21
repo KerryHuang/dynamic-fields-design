@@ -10,9 +10,12 @@ if [ -z "$LIST" ] || [ ! -f "$LIST" ]; then
   exit 2
 fi
 P=$(grep -v '^\s*#' "$LIST" | grep -v '^\s*$' | sed 's/^regex://' | paste -sd'|' -)
-P="$P|/Users/[a-z]+/|/home/[a-z]+/|192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+"
-d=$(git diff "$BASE"..HEAD | grep -Eic "$P")
-l=$(git log "$BASE"..HEAD --format=%B | grep -Eic "$P")
-n=$(git diff --name-only "$BASE"..HEAD | grep -Eic "$P")
+P="$P|192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+"
+# 個人家目錄另用區分大小寫比對：API 路由如 /users/admin/ 不算（macOS 家目錄一定是大寫 /Users/）
+H='/Users/[a-z]+/|/home/[a-z]+/'
+count() { { "$@" | grep -Ei "$P"; "$@" | grep -E "$H"; } | sort -u | grep -c .; }
+d=$(count git diff "$BASE"..HEAD)
+l=$(count git log "$BASE"..HEAD --format=%B)
+n=$(count git diff --name-only "$BASE"..HEAD)
 echo "diff=$d log=$l names=$n"
 [ "$d" -eq 0 ] && [ "$l" -eq 0 ] && [ "$n" -eq 0 ]
