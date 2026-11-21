@@ -8,6 +8,8 @@
 <meta property="og:type" content="website">
 <meta property="og:locale" content="zh_TW">
 <meta property="og:site_name" content="Formwright 表匠">
+<meta property="og:url" content="https://kerryhuang.github.io/formwright/">
+<link rel="canonical" href="https://kerryhuang.github.io/formwright/">
 <meta property="og:title" content="Formwright 表匠｜公司的系統，自己拼">
 <meta property="og:description" content="像疊積木一樣拼出客戶管理、進銷存、生產管理。流程哪天變了，打開來改就好。不寫程式、不等外包，免註冊試玩 Demo。">
 <meta name="twitter:card" content="summary">
@@ -620,6 +622,7 @@
 <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 12px">
 <a href="demo.html" style="text-decoration: none; background: #2F80ED; color: #FFFFFF; padding: 16px 30px; border-radius: 999px; font-weight: 900; font-size: 18px; box-shadow: 4px 4px 0 #1E2A44">免註冊開玩 Demo</a>
 <a href="mailto:kerry.huang.2024@gmail.com?subject=Formwright%20%E8%A1%A8%E5%8C%A0%20%E8%A9%A2%E5%83%B9" style="text-decoration: none; border: 2px solid #1E2A44; padding: 14px 28px; border-radius: 999px; font-weight: 700; font-size: 18px">跟我們聊聊</a>
+<button type="button" class="fw-share-btn" data-share><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>分享給朋友</button>
 </div>
 </section>
 
@@ -633,6 +636,21 @@
 </div>
 </div>
 </footer>
+
+<button type="button" class="fw-share-btn fw-share-fab" data-share aria-label="分享表匠給朋友"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>
+
+<dialog id="share-dialog" aria-labelledby="share-h">
+<h2 id="share-h">分享給朋友</h2>
+<p id="share-preview"></p>
+<div class="fw-share-row">
+<a id="share-line" href="#" target="_blank" rel="noopener">傳到 LINE</a>
+<a id="share-fb" href="#" target="_blank" rel="noopener">Facebook</a>
+<button type="button" id="share-copy">複製文字</button>
+</div>
+<p id="share-status" role="status" aria-live="polite"></p>
+<button type="button" id="share-close">關閉</button>
+</dialog>
+<script src="assets/share.js" defer></script>
 
 </div>
 </body>
