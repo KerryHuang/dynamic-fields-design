@@ -3,7 +3,7 @@ import { defineConfig } from '#q-app';
 
 export default defineConfig(() => ({
   boot: ['pinia', 'theme', 'i18n', 'error-reporter', 'tanstack-query', 'axios'],
-  css: ['themes/tokens.css', 'themes/workbench.css', 'themes/airy.css', 'themes/enterprise.css', 'themes/industrial.css', 'themes/glass.css', 'themes/bento.css', 'themes/command.css', 'themes/botanical.css', 'themes/quasar-bridge.css', 'themes/print.css'],
+  css: ['themes/tokens.css', 'themes/workbench.css', 'themes/airy.css', 'themes/enterprise.css', 'themes/industrial.css', 'themes/glass.css', 'themes/bento.css', 'themes/command.css', 'themes/botanical.css', 'themes/quasar-bridge.css', 'themes/print.css', 'themes/brand.css'],
   extras: ['material-icons'],
   build: {
     target: { browser: ['es2022'], node: 'node20' },

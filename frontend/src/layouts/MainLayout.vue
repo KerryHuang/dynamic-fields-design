@@ -7,7 +7,9 @@
           v-if="$q.screen.lt.md || collapseDrawer" flat dense round icon="menu" class="q-mr-xs" :aria-label="t('menu.toggle')"
           :aria-expanded="drawerOpen" data-testid="menu-toggle" @click="drawerOpen = !drawerOpen"
         />
-        <q-toolbar-title><router-link to="/" class="brand-link" data-testid="brand">Formwright</router-link></q-toolbar-title>
+        <q-toolbar-title><router-link to="/" class="brand-link" data-testid="brand" aria-label="Formwright" title="Formwright">
+            <BrandMark /><span class="brand-name">Formwright</span>
+          </router-link></q-toolbar-title>
         <span class="q-mr-sm gt-xs" data-testid="current-user">{{ me?.displayName }}</span>
         <q-btn
           flat dense no-caps class="q-mr-sm" icon="palette" :label="$q.screen.gt.xs ? t('theme.title') : undefined" :aria-label="t('theme.title')"
@@ -108,6 +110,7 @@ import { groupMenu, systemLinks } from 'src/domain/dynamic/menu-nav';
 import LocaleSwitcher from 'src/presentation/locale/LocaleSwitcher.vue';
 import NotificationBell from 'src/presentation/notifications/NotificationBell.vue';
 import AppBreadcrumb from 'src/presentation/theme/AppBreadcrumb.vue';
+import BrandMark from 'src/presentation/brand/BrandMark.vue';
 import ThemeDialog from 'src/presentation/theme/ThemeDialog.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { useThemeStore } from 'src/stores/use-theme-store';
@@ -169,5 +172,14 @@ function logout() {
 .brand-link {
   color: inherit;
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+/* #76：頂列按鈕變多後 820 以下放不下品牌字，只留 mark（連結仍有 aria-label 與 title） */
+@media (max-width: 1023px) {
+  .brand-name {
+    display: none;
+  }
 }
 </style>

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthOptions, useDemoLogin, useLogin } from 'src/application/dynamic/queries/auth-queries';
 import type { AuthUser } from 'src/domain/dynamic/types';
+import BrandMark from 'src/presentation/brand/BrandMark.vue';
 import LocaleSwitcher from 'src/presentation/locale/LocaleSwitcher.vue';
 import { safeRedirect } from 'src/router/auth-guard';
 import type { ApiError } from 'src/services/api/http';
@@ -44,6 +45,7 @@ const pickDemo = (id: string) => {
   <div class="row justify-center q-pa-md">
     <q-card style="width: 360px; max-width: 100%">
       <q-card-section class="row items-center no-wrap">
+        <BrandMark class="q-mr-sm" style="font-size: 28px" />
         <div class="text-h6 col">{{ t('auth.loginTitle') }}</div>
         <LocaleSwitcher />
       </q-card-section>

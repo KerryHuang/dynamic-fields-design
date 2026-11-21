@@ -1,0 +1,4 @@
+/* 品牌色：不隨主題變，只給 BrandMark 的第四塊（代表加進來的模組）使用。 */
+:root {
+  --t-brand-accent: #2f80ed;
+}
