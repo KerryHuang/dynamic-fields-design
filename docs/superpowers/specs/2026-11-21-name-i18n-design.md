@@ -106,16 +106,15 @@ i3 把它們改成多語，讓：
 
 ### 5.2 migration（T2）
 
-一個 migration `NameI18n`，用 `scripts/db/add-migration.sh NameI18n` 一次產兩份。EF 產生的是「加 `NameI18n` 欄（非空、預設 `''`）→ 刪 `Name` 欄」，在兩步之間插入資料搬移 SQL，前例是 `SharedMailSettings`（migration 裡唯一的手寫 SQL 是資料搬移，交付說明列出）。
+一個 migration `NameI18n`，用 `scripts/db/add-migration.sh NameI18n` 一次產兩份。EF 產生的是「加 `NameI18n` 欄（非空、預設 `''`）→ 刪 `Name` 欄」；三張表（`Dynamic_Report`、`Dynamic_Dashboard`、`Dynamic_TaskView`）的 `AddColumn<string>(name: "NameI18n", ...)` 要**手改 `defaultValue: ""` 為 `defaultValue: "{}"`**（兩份 migration 都改）：`JsonConversions.HasJsonConversion` 讀值是 `JsonSerializer.Deserialize<T>(v) ?? new T()`，空字串會丟 `JsonException`（不是回空物件），PostgreSQL 的 Down 用 `"NameI18n"::json` 轉空字串也會報 `invalid input syntax for type json`。在兩步之間插入資料搬移 SQL，前例是 `SharedMailSettings`（migration 裡唯一的手寫 SQL 是資料搬移，交付說明列出）。
 
 | 項目 | SQLite | PostgreSQL |
 |---|---|---|
-| 舊值轉 JSON | `json_object('zh-TW', trim("Name"))` | `json_build_object('zh-TW', btrim("Name"))::text` |
-| 舊值空白 | `'{}'` | `'{}'` |
+| 舊值轉 JSON | `CASE WHEN "Name" IS NULL OR trim("Name") = '' THEN '{}' ELSE json_object('zh-TW', trim("Name")) END` | `CASE WHEN "Name" IS NULL OR btrim("Name") = '' THEN '{}' ELSE json_build_object('zh-TW', btrim("Name"))::text END` |
 | Down：還原字串 | `coalesce(json_extract("NameI18n", '$."zh-TW"'), '')` | `coalesce("NameI18n"::json ->> 'zh-TW', '')` |
 
 - **舊值一律放繁中**，不猜原本是哪種語言（分流技術決定 25）。現在沒有正式客戶，Demo 每天重建、預設語系是繁中，結果和「放系統預設語系」相同；放繁中的好處是 migration 不必讀政策表。代價留給未來：預設語系是越南文的系統升級時，舊的越南文名稱會出現在「名稱（zh-TW）」那一格，顯示不受影響（退回鏈最後會走到繁中）。
-- **空白**：`trim` 後空字串存 `{}`。顯示和現在一樣是空白；下次改名時照必填檢查。正常流程寫不出空白名稱（`CheckName` 擋），這是防資料修補留下的列。
+- **空白與 `NULL`**：`trim` 後空字串、或 `NULL`（歷史資料、測試庫可能有；SQL 的 `NULL = ''` 是 UNKNOWN，不加 `IS NULL` 會掉進 ELSE 產出 `{"zh-TW": null}`，反序列化出 null 值、後續 `Resolve()` 等會 NullReferenceException）都存 `{}`。顯示和現在一樣是空白；下次改名時照必填檢查。正常流程寫不出空白名稱（`CheckName` 擋），這是防資料修補留下的列。
 - 用資料庫的 JSON 函式組字串，名稱裡的引號、反斜線、換行由資料庫跳脫，不手串字串。兩種資料庫的 SQL 不同句，各自寫在自己的 migration 裡。
 - JSON 存法和程式寫入的不同（資料庫函式存原字、程式存 `\uXXXX`；`json_build_object` 冒號旁有空白）。讀取一律反序列化，不影響；EF 的變更偵測以反序列化後重新序列化的結果比對，讀出未改的列不會被當成變更。
 - Down 只還原繁中，其他語系的譯名會遺失（降版本來就不保證無損，交付說明寫明）。
@@ -136,12 +135,12 @@ i3 把它們改成多語，讓：
 
 ### 6.1 輸入：字串或物件都收（T5）
 
-把 `SectionTextJsonConverter` 搬到 `Domain/ValueObjects/`（`DashboardLayout` 在 Domain 要用），改名 `I18nTextOrStringJsonConverter`，行為不變：讀字串＝只有繁中、讀物件照收、其他型別丟 `JsonException`。用在：
+新增 `Domain/ValueObjects/I18nTextOrStringJsonConverter`（`DashboardLayout` 在 Domain 要用）：讀字串＝只有繁中、讀物件照收、其他型別丟 `JsonException`；**`Write` 一律輸出 JSON 物件**，不做「只有繁中寫字串」。現有 `SectionTextJsonConverter.Write` 在只有繁中時寫字串（已對照程式碼確認），若搬來通用，只有繁中名稱的 API 回應會退化成字串、破壞 §6.2 的回物件保證，卡片標題也會永遠以字串存進 `LayoutJson`、破壞 §5.3「寫出一律是物件」。因此：`SectionTextJsonConverter` 留在 `TemplateService/Data/`，只供套件與範本匯出（`section`、`reports[].name` 的「只有繁中寫字串」相容性）使用，Read 委派給通用轉換器；API DTO 與 `DashboardCard.Title` 一律用通用的。通用轉換器用在：
 
 - 報表 `SaveBody.Name`、儀表板 `CreateBody.Name`／`SaveBody.Name`、指派版的建立與修改、任務檢視 `CreateBody.Name`／`UpdateBody.Name`。
 - `DashboardCard.Title`（§5.3）。
 - 模組 `CreateModuleBody.Section`／`UpdateModuleBody.Section`（m1 審查建議 3）。
-- 範本與套件的 `section`（原用法）、套件 `reports[].name`（§8）。
+- 範本與套件的 `section`、套件 `reports[].name`（§8）：讀用通用轉換器，匯出用 `SectionTextJsonConverter`（只有繁中寫字串）。
 
 字串一律當繁中，與 migration 同一規則。用途是部署當下還開著舊版畫面的使用者：舊畫面送字串照樣存得進去，不會在 model binding 就 400。必填語系不是繁中的系統，送字串會被必填檢查擋下，訊息照常。
 
@@ -184,12 +183,12 @@ i3 把它們改成多語，讓：
 
 ### 7.2 卡片標題（選填）
 
-- 沒有值、或全部語系都是空字串：當沒有標題，顯示報表名稱。
+- 沒有值、或全部語系都是空字串：當沒有標題，顯示報表名稱。存檔前（`DashboardRules.CheckLayout` 或正規化步驟）把這種卡片的 `Title` 重設為 `null`，`LayoutJson` 不殘留 `{}` 或 `{"zh-TW":""}`；有值的物件也去掉空字串語系。
 - 有值時：語系鍵格式、每語 ≤ 100、拒收 `null`；**不檢查必填語系**（T7）。前例是任務規則的說明（選填多語文字不檢查必填語系）；理由是卡片標題缺的語系最後會退回到有值的那一格，不會空白。
 
 ### 7.3 任務檢視另存副本
 
-每個有值的語系各自加上該語系的「（副本）」後綴（Q3）；後綴從 `IMessageCatalog` 依語系取，超過 100 字時照現在的規則截短原名、保留後綴。報表的「複製」照舊不加後綴（`CopyReportHandler`）。
+每個有值的語系各自加上該語系的「（副本）」後綴（Q3）；後綴從 `IMessageCatalog` 依語系取，超過 100 字時照現在的規則截短原名、保留後綴。語系沒有「（副本）」後綴文案（自訂語系如 `ja`、或該語系的 `IMessageCatalog` 查無此鍵）時，後綴退回系統預設語系的後綴，再退回繁中的「（副本）」，不丟例外。報表的「複製」照舊不加後綴（`CopyReportHandler`）。
 
 ## 8. 套件格式 9（與 i4f 合併，T8）
 
@@ -244,6 +243,7 @@ i3 把它們改成多語，讓：
 2. **API 收字串 `section`**：§6.1。
 3. **API 拒收 `null` 值、去掉空字串語系**：`ValidModuleSection` 加 `null` 檢查；`Module.SetSection` 存檔前丟掉空字串的語系。
 4. **建立、修改模組時，分區有其他語系卻缺繁中：回 400「選單分區有其他語系時必須有繁體中文」**（Q4）。現在 `SetSection` 把它當成不分區、默默丟掉。分區的分組鍵是繁中（`Module.Section`），這條是因為分組鍵寫死在繁中，不是必填語系政策。
+5. **範本與套件的語系鍵規則一致**：範本格式 1 與套件格式 2–8 一樣只收四語鍵；範本格式 2 與套件格式 9 一樣放寬為語系代碼格式（`TemplateValidator` 現在只用 `HasZhTw`、不擋語系鍵，補上這兩條）。`section` 與其他 `i18n` 文字同一規則。
 
 不做 m1 審查建議 5（`Module.Section` 可公開寫入）與 6（選單排序的 `localeCompare` 沒指定語系），兩者都不屬於 i3 的名稱多語，維持既有行為。
 
@@ -400,7 +400,7 @@ i3 把它們改成多語，讓：
 
 | 段 | 內容 | migration | 共用檔 | 依賴 |
 |---|---|---|---|---|
-| i3a | 報表、儀表板、卡片標題、任務檢視名稱多語，前後端一起：實體與 migration `NameI18n`、共用轉換器搬到 Domain、DTO、驗證、MCP、稽核、匯出、刪除影響清單、前端六個輸入處與全部顯示、Demo 示範報表與儀表板與看板四語（§11.3）、手冊 | 有（SQLite＋PostgreSQL 各一） | `Report.cs`、`Dashboard.cs`、`TaskView.cs`、`DashboardLayout.cs`、兩份 model snapshot、`DemoReports.cs`、`DemoDashboards.cs` | i4a（已上線） |
+| i3a | 報表、儀表板、卡片標題、任務檢視名稱多語，前後端一起：實體與 migration `NameI18n`、共用轉換器搬到 Domain、DTO、驗證、MCP、稽核、匯出、刪除影響清單、前端六個輸入處與全部顯示、Demo 示範報表與儀表板與看板四語（§11.3）、手冊 | 有（SQLite＋PostgreSQL 各一） | `Report.cs`、`Dashboard.cs`、`TaskView.cs`、`DashboardLayout.cs`、`I18nTextOrStringJsonConverter.cs`（Domain 新增）、`ReportsController.cs`、`DashboardsController.cs`、`TaskViewsController.cs`、前端 `report-types.ts`、`dashboard-types.ts`、`task-board-types.ts`、兩份 model snapshot、`DemoReports.cs`、`DemoDashboards.cs` | i4a（已上線） |
 | i3b | Demo 群組與部門四語、系統程式名稱四語與既有列補譯、選單分區的 API 收字串、拒收 `null`、缺繁中報錯（§9 第 2–4 點） | 無 | `DemoPeople.cs`、`SeedData.cs`、`ModulesController.cs`、`ModuleRules.cs`、`Module.cs` | i3a（共用轉換器） |
 | i3c（＝i4f） | 套件格式 9：`reports[].name` 多語、語系鍵改代碼格式、`section` 驗證（§9 第 1 點）、欄位 `excludeFromAi` 與範本格式 2（§8.1：讀寫、套用的權限檢查與只加不減、預覽計數、匯出）、舊版不放寬的拒收案例、內建三套件升格式與報表名稱四語、`app.schema.json`、手冊與套件設計、MCP 設計 §5.5 回填 | 無 | `AppPackageData.cs`、`AppPackageValidator*.cs`、`TemplatePackage.cs`、`TemplateValidator.cs`、`TemplateInstantiator.cs`、`TemplateExporter.cs`、`AppExporter.cs`、`app.schema.json`、`backend/apps/*.app.json` | i3a；不和 mg1 並行 |
 
@@ -436,6 +436,8 @@ i3 把它們改成多語，讓：
 | V8 | 必填只有越南文 | 舊畫面送字串名稱 | 400「看板名稱必須有越南文」 |
 | V9 | — | 卡片標題 `{"en-US":"Orders"}`（沒有繁中） | 存檔成功（選填不檢查必填語系） |
 | V10 | 看板名稱 `{"zh-TW":"本週出貨","en-US":"This week"}` | 另存副本 | `{"zh-TW":"本週出貨（副本）","en-US":"This week (copy)"}` |
+| V11 | 看板名稱 `{"zh-TW":"本週出貨","ja":"今週の出荷"}`，`ja` 沒有副本文案 | 另存副本 | `ja` 後綴退回預設語系（再退回繁中）的「（副本）」，不報錯 |
+| V12 | — | 卡片標題 `{"zh-TW":"","en-US":""}` 存版面 | `LayoutJson` 的 `title` 是 `null`（或省略） |
 
 ### 18.3 顯示
 
