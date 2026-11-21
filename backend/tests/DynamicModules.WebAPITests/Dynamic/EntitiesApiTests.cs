@@ -18,7 +18,7 @@ public class EntitiesApiTests : IClassFixture<TestApp>
 
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         var items = (await JsonOf(res)).EnumerateArray().ToList();
-        // 產品不再有內建模擬實體（design.mold s2d-0、sales.customer s2d-1g 都已移除）；test.entity 與 test.host 是測試主機註冊的
+        // 產品不再有內建模擬實體（設備模擬實體 s2d-0、sales.customer s2d-1g 都已移除）；test.entity 與 test.host 是測試主機註冊的
         items.Select(i => i.GetProperty("key").GetString()).Should().BeEquivalentTo(TestEntityProvider.Key, "test.host");
         items.Single(i => i.GetProperty("key").GetString() == TestEntityProvider.Key).GetProperty("name").GetProperty("zh-TW")
             .GetString().Should().Be("測試實體");

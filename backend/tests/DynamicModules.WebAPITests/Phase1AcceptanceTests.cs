@@ -6,7 +6,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests;
 
-/// <summary>第 1 階段驗收情境：模具維修申請，從建模組到刪除記錄。</summary>
+/// <summary>第 1 階段驗收情境：設備維修申請，從建模組到刪除記錄。</summary>
 public class Phase1AcceptanceTests : IClassFixture<TestApp>
 {
     private readonly HttpClient _admin;
@@ -44,7 +44,7 @@ public class Phase1AcceptanceTests : IClassFixture<TestApp>
         const string module = "repair-request";
 
         // 1. 建立模組，代碼 DYN00001
-        var created = await _admin.PostAsJsonAsync($"{Base}/modules", new { key = module, name = Zh("模具維修申請") });
+        var created = await _admin.PostAsJsonAsync($"{Base}/modules", new { key = module, name = Zh("設備維修申請") });
         created.StatusCode.Should().Be(HttpStatusCode.Created);
         (await JsonOf(created)).GetProperty("programCode").GetString().Should().Be("DYN00001");
         _app.GrantBusinessGroups(module); // 新模組沒有授權，業務才能操作記錄
@@ -57,7 +57,7 @@ public class Phase1AcceptanceTests : IClassFixture<TestApp>
         // 3. 加欄位
         var applyDate = await AddField(blockId, module, "date", "申請日", new { required = true });
         var category = await AddField(blockId, module, "enum", "故障類別");
-        await AddOption(category.Id, "模具損壞");
+        await AddOption(category.Id, "設備損壞");
         await AddOption(category.Id, "機台異常");
         var outsourced = await AddOption(category.Id, "外包");
         await AddField(blockId, module, "multienum", "檢查項目");
@@ -83,7 +83,7 @@ public class Phase1AcceptanceTests : IClassFixture<TestApp>
         {
             values = new Dictionary<string, object>
             {
-                [title] = "沖壓模維修",
+                [title] = "主軸維修",
                 [applyDate.Key] = "2026-11-03",
                 [category.Key] = $"opt_{outsourced}",
                 [cost.Key] = 12000,
@@ -103,7 +103,7 @@ public class Phase1AcceptanceTests : IClassFixture<TestApp>
         {
             values = new Dictionary<string, object>
             {
-                [title] = "沖壓模維修",
+                [title] = "主軸維修",
                 [applyDate.Key] = "2026-11-03",
                 [category.Key] = $"opt_{outsourced}",
                 [note.Key] = "模面磨損",
@@ -124,7 +124,7 @@ public class Phase1AcceptanceTests : IClassFixture<TestApp>
         {
             values = new Dictionary<string, object>
             {
-                [title] = "沖壓模維修",
+                [title] = "主軸維修",
                 [applyDate.Key] = "2026-11-03",
                 [category.Key] = $"opt_{outsourced}",
                 [note.Key] = "改說明",
@@ -151,6 +151,6 @@ public class Phase1AcceptanceTests : IClassFixture<TestApp>
         (await _sales.DeleteAsync($"{Base}/records/{id}?rowVersion={rv3}")).StatusCode.Should().Be(HttpStatusCode.OK);
         var paged = await JsonOf(await _sales.GetAsync($"{Base}/modules/{module}/records/paged?currentPage=1&pagesSize=10"));
         paged.GetProperty("totalCount").GetInt32().Should().Be(0);
-        paged.ToString().Should().NotContain("沖壓模維修");
+        paged.ToString().Should().NotContain("主軸維修");
     }
 }

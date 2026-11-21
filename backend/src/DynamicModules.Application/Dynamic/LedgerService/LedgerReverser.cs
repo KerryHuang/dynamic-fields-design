@@ -135,7 +135,7 @@ public class LedgerReverser(
                     if (!src.TryGetValue(f.Key, out var v) || v is not { ValueKind: not JsonValueKind.Null }) continue;
                     vals[f.Key] = negate.Contains(f.Id) ? Negated(v.Value) : v;
                 }
-                // 這些值是照原分錄鏡射出來的，使用者看得到才會走到這裡；欄位對他唯讀也要照寫，不然預設值會蓋掉沖銷值
+                // 這些值是照原分錄鏡像過來的，使用者看得到才會走到這裡；欄位對他唯讀也要照寫，不然預設值會蓋掉沖銷值
                 list.Add(new DetailRowInput(null, vals, null, SystemKeys: vals.Keys.ToHashSet()));
             }
             if (list.Count > 0) result[child.Key] = list;

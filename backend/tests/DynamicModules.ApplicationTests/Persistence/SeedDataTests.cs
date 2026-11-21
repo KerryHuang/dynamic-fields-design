@@ -41,12 +41,12 @@ public class SeedDataTests
     }
 
     [Fact]
-    public async Task Model_HasNoMockMoldTable()
+    public async Task Model_HasNoMockEntityTables()
     {
-        // s2d-0：模具歸 MES 自己的模組，核心不再有模擬實體 design.mold 與它的表
+        // s2d-0：設備歸 MES 自己的模組，核心不再有模擬實體與它的表
         await using var db = await TestDb.CreateAsync();
 
-        db.Context.Model.GetEntityTypes().Select(t => t.GetTableName()).Should().NotContain("Mock_Mold");
+        db.Context.Model.GetEntityTypes().Select(t => t.GetTableName()).Should().NotContain(n => n != null && n.StartsWith("Mock_"));
     }
 
     [Fact]

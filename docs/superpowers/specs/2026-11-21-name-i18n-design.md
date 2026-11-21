@@ -78,7 +78,7 @@ i3 把它們改成多語，讓：
 - 名稱輸入處：`reports/designer/StepPreview.vue:15`（報表）、`pages/dashboards/DashboardPage.vue:78`（新增自己的儀表板）、`dashboards/DashboardView.vue:110`（頁首就地改名）、`pages/system/DashboardsAdminPage.vue:147`（指派版）、`dashboards/CardOptionsDialog.vue:70`（卡片標題）、`tasks/board/BoardPicker.vue:169`（看板、甘特另存）。
 - 型別：`domain/dynamic/report-types.ts` `ReportItem.name`、`dashboard-types.ts` `DashboardCard.title` 與清單項目、`task-board-types.ts` `TaskViewSummary.name` 都是 `string`。
 
-套件：`CurrentFormatVersion = 8`；內建 `crm-sales`、`inventory` 是 8、`mes-mold` 是 6、`partner`、`contact` 是 7；報表名稱只有繁中（crm-sales 2 份、inventory 5 份、mes-mold 6 份）；`dashboards` 都是空的；`app.schema.json` 的 `$defs/i18n` 用 `propertyNames enum` 限四語。
+套件：`CurrentFormatVersion = 8`；內建 `crm-sales`、`inventory` 是 8、`mes` 是 6、`partner`、`contact` 是 7；報表名稱只有繁中（crm-sales 2 份、inventory 5 份、mes 6 份）；`dashboards` 都是空的；`app.schema.json` 的 `$defs/i18n` 用 `propertyNames enum` 限四語。
 
 ## 4. 已定決定（本設計照用，不再問）
 
@@ -208,7 +208,7 @@ i3 把它們改成多語，讓：
 
 4. **欄位的「不提供給 AI」旗標 `excludeFromAi`**：見 §8.1。
 
-**內建套件**：`crm-sales`、`inventory`、`mes-mold` 升到格式 9、升 `manifest.version`（次版號），報表名稱補四語（th、vi 沿用 `x-translation` 機翻標記）。`partner`、`contact` 沒有報表，不動。內建套件沒有需要標「不提供給 AI」的欄位（沒有身分證字號、薪資、銀行帳號這類欄位），不加旗標。
+**內建套件**：`crm-sales`、`inventory`、`mes` 升到格式 9、升 `manifest.version`（次版號），報表名稱補四語（th、vi 沿用 `x-translation` 機翻標記）。`partner`、`contact` 沒有報表，不動。內建套件沒有需要標「不提供給 AI」的欄位（沒有身分證字號、薪資、銀行帳號這類欄位），不加旗標。
 
 **順序**：這段要等 §5、§6 的報表名稱多語合併（套件開啟走 `CreateReportRequest`，要能收多語名稱）。
 
@@ -391,7 +391,7 @@ i3 把它們改成多語，讓：
 6. **列表檢視的「另存新檢視」是單一輸入框**（`ViewMenu.vue:35`，名稱寫進每個必填語系與目前語系），i3 的名稱輸入是多語輸入框（Q1）。兩種寫法並存；Q1 照推薦定案後，若要統一，另開 backlog 票改列表檢視，不併進 i3。
 7. **分流技術決定 27「報表清單排序依顯示語系；搜尋比對所有語系的值」**：現在沒有排序與搜尋功能，i3 不新增，這條作廢。之後加搜尋時照這條做（名稱 JSON 不能在資料庫端比對，要在記憶體比，或另存正規化的搜尋欄）。
 8. **手冊**：第 1273 行「語系鍵不是繁中／English／ไทย／Tiếng Việt 會被拒絕」改成格式 9 的規則；第 956–989 行儀表板段、第 1058 行看板段補多語名稱與卡片標題的退回例子；報表段補名稱多語。
-9. **mg1（生產管理通用化）也要改 `mes-mold.app.json`**：「動 `backend/apps/*.app.json` 的兩項工作不並行」（`.claude/rules/app-packages.md`），i3c 與 mg1 排開。
+9. **mg1（生產管理通用化）也要改 `mes.app.json`**：「動 `backend/apps/*.app.json` 的兩項工作不並行」（`.claude/rules/app-packages.md`），i3c 與 mg1 排開。
 10. **MCP 設計 §5.5 末條「旗標不進套件與範本；匯出再匯入另一套系統會失去旗標」、第 848 行「套件與範本不帶（Q4）」、§17 第 4 點**：使用者 2026-11-21 裁決改成帶旗標（§8.1）；`AddFieldRequest` 的參數註解「套件、範本、內部合併一律 false」同步改。MCP 設計 §17 第 4 點原排的「簽核 8、s2e 9、10」格式順序已過時：格式 8 已是簽核，9 是本段，fg6、s2e 之後再排。權限軸 §7.3 對套件與範本旗標的契約不變，本設計照做。
 
 ## 17. 切段

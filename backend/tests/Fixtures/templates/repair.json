@@ -1,11 +1,11 @@
 {
   "formatVersion": 1,
   "key": "repair",
-  "name": { "zh-TW": "故障報修", "en-US": "Repair request" },
-  "description": { "zh-TW": "模具故障提報、處理與結案驗收，含停機時數", "en-US": "Report, handle and close mold breakdowns, with downtime hours" },
+  "name": { "zh-TW": "設備報修", "en-US": "Equipment repair request" },
+  "description": { "zh-TW": "設備故障提報、處理與結案驗收，含停機時數", "en-US": "Report, handle and close equipment breakdowns, with downtime hours" },
   "modules": [
     {
-      "code": "repair", "key": "repair", "name": { "zh-TW": "故障報修", "en-US": "Repair request" },
+      "code": "repair", "key": "repair", "name": { "zh-TW": "設備報修", "en-US": "Equipment repair request" },
       "icon": "build", "section": "設備",
       "kind": "standalone", "hostEntityKey": null,
       "titleField": "no",
@@ -14,7 +14,7 @@
           "fields": [
             { "code": "no", "type": "autonumber", "label": { "zh-TW": "報修單號", "en-US": "Request no." },
               "config": { "format": "REP-{yyyyMM}-{0000}", "showInList": true, "isSortable": true } },
-            { "code": "mold", "type": "reference", "label": { "zh-TW": "模具", "en-US": "Mold" },
+            { "code": "equipment", "type": "reference", "label": { "zh-TW": "設備", "en-US": "Equipment" },
               "config": { "refTarget": { "kind": "entity", "key": "test.entity" },
                           "required": true, "showInList": true, "isFilterable": true } },
             { "code": "requester", "type": "user", "label": { "zh-TW": "申請人", "en-US": "Requester" },
@@ -26,10 +26,10 @@
               "config": { "showInList": true, "isFilterable": true } },
             { "code": "category", "type": "enum", "label": { "zh-TW": "故障類別", "en-US": "Fault category" },
               "options": [
-                { "code": "leak", "label": { "zh-TW": "漏水", "en-US": "Leak" }, "color": null },
-                { "code": "crack", "label": { "zh-TW": "裂模", "en-US": "Crack" }, "color": null },
+                { "code": "leak", "label": { "zh-TW": "洩漏", "en-US": "Leak" }, "color": null },
+                { "code": "crack", "label": { "zh-TW": "破裂", "en-US": "Crack" }, "color": null },
                 { "code": "wear", "label": { "zh-TW": "磨耗", "en-US": "Wear" }, "color": null },
-                { "code": "stuck", "label": { "zh-TW": "卡模", "en-US": "Stuck" }, "color": null },
+                { "code": "stuck", "label": { "zh-TW": "卡料", "en-US": "Jam" }, "color": null },
                 { "code": "other", "label": { "zh-TW": "其他", "en-US": "Other" }, "color": null }
               ],
               "config": { "isFilterable": true } },
@@ -74,11 +74,11 @@
       ],
       "views": [
         { "name": { "zh-TW": "未結案報修", "en-US": "Open requests" },
-          "columns": ["no", "mold", "reportDate", "category", "status", "handler"],
+          "columns": ["no", "equipment", "reportDate", "category", "status", "handler"],
           "filter": { "field": "status", "op": "in", "value": ["opt_pending", "opt_working", "opt_verify"] },
           "sort": [ { "field": "reportDate", "order": "asc" } ], "isDefault": true },
         { "name": { "zh-TW": "近 30 天結案", "en-US": "Closed in the last 30 days" },
-          "columns": ["no", "mold", "reportDate", "category", "status", "handler", "finishDate"],
+          "columns": ["no", "equipment", "reportDate", "category", "status", "handler", "finishDate"],
           "filter": { "all": [
             { "field": "status", "op": "eq", "value": "opt_closed" },
             { "field": "finishDate", "op": "withinLastDays", "value": 30 }

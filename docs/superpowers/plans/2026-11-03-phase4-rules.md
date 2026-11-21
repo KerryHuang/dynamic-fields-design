@@ -862,13 +862,13 @@ poc/frontend/src/
   - `README.md`：加驗收連結。
   - spec §15：如有新的待確認事項。
 
-- [ ] **Step 1：寫驗收測試 `Phase4_Scenario`**。照 spec §13.2 Demo 情境二裡第 4 階段能做的部分，以 admin 透過 API 建立「模具維修申請」：
+- [ ] **Step 1：寫驗收測試 `Phase4_Scenario`**。照 spec §13.2 Demo 情境二裡第 4 階段能做的部分，以 admin 透過 API 建立「設備維修申請」：
   1. 建立模組與欄位：
      - 申請單號：`autonumber`，`REP-{yyyyMM}-{0000}`，設為標題欄位。
      - 申請日：`date`。
      - 需求日：`date`。
-     - 故障類別：`enum`，選項模具損壞、機台異常、外包。
-     - 故障細項：`enum`，選項：模具損壞 2 個、機台異常 2 個、外包 1 個。
+     - 故障類別：`enum`，選項設備損壞、機台異常、外包。
+     - 故障細項：`enum`，選項：設備損壞 2 個、機台異常 2 個、外包 1 個。
      - 外包廠商：`text`，`Config.Required = true`。
      - 預估費用：`currency`。
      - 距需求日天數：`formula`，`DATEDIFF({需求日}, {申請日})`，number。

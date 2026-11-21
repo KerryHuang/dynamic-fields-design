@@ -14,7 +14,7 @@
 | CRM 訂單交期 | 表頭、明細都沒有交期欄位 | `crm-sales.app.json` 模組 `order` |
 | 訂單明細的履約量 | CRM、MES 訂單明細都沒有已完工量、已出貨量 | 兩份套件的 `order-line`、`line` |
 | 參照明細列 | 參照欄位不能指向明細模組；挑選端點對明細模組回 404；刪明細列時直接軟刪，不檢查是否被參照 | `FieldRules.IsValidRefTargetAsync`、`GetLightRecordsHandler`、`DetailWriter.ApplyAsync` |
-| 工令追溯 | 工令 `order` 只參照 MES 訂單表頭，沒有明細列；也分不出「備庫」與「漏填」 | `mes-mold.app.json` 模組 `workorder` |
+| 工令追溯 | 工令 `order` 只參照 MES 訂單表頭，沒有明細列；也分不出「備庫」與「漏填」 | `mes.app.json` 模組 `workorder` |
 | MES 出貨單追溯 | 只有 `workOrder`，沒有來源訂單列 | 模組 `shipment` |
 | 數量型別 | 工令 `qty`、報工 `goodQty`／`defectQty`、MES 出貨 `qty`／`doneQty` 是整數；`remainingQty`、`totalQty`、`finalGood` 是 `scale: 0`；彙總未設位數（預設 2 位，`RollupCalculator`） | MES 套件；`Domain/Rollups/RollupCalculator.cs` |
 | 轉換已轉量 | 取消的目標單據仍計入已轉量 | `ConversionService/ConversionLedger.cs`（只排除已刪除） |
@@ -26,7 +26,7 @@
 | 沖銷查事實 | `reverse` 依觸發記錄自己的 Id 查事實；入口守衛也是 | `EffectApplier.ReverseAsync`、`Integrations/IntegrationGuardStage.cs` |
 | 事實鎖 | 有事實的記錄除狀態外整筆鎖，明細一律不能改 | `EventService/EventFactLock.cs` |
 | 整合 | 只能加欄位到擁有者、不收轉換、沒有成對、不能收選單、沒有移除入口 | s2c §3.1、§5.7；`GetMenuHandler` 只看 Read |
-| `stockOut` | MES 出貨單過帳扣進銷存庫存（整合欄位 `stockItem`、`stockWarehouse`，檢查 `mes-stock-item-required`） | `mes-mold.app.json` `integrations[0]` |
+| `stockOut` | MES 出貨單過帳扣進銷存庫存（整合欄位 `stockItem`、`stockWarehouse`，檢查 `mes-stock-item-required`） | `mes.app.json` `integrations[0]` |
 | 依賴 `stockOut` 的程式 | 約 22 個整合層機制測試、Demo | `tests/.../MesInventoryIntegrationTests.cs`、`DemoService/DemoStructure.cs`、`Scenarios/MesProductionScenario.cs` |
 | CRM Demo 訂單路徑 | 轉單後直接 `confirmed → shipped`，沒有確認步驟 | `DemoService/Scenarios/CrmScenario.cs`（`OrderPath`） |
 
@@ -385,7 +385,7 @@ s2e-a 把 `CurrentFormatVersion` 提高到 **7**，s2e-b 再提高到 **8**（s2
 
 **成對整合（缺口 1）。** 兩份套件各宣告一個同 `code`、`"pair": true` 的整合，`with` 只能有一項，就是對方。規則：
 
-- 一半可以引用另一半新增的欄位（夥伴符號，例如 CRM 這一半寫 `mes-mold/workorder.crmLine`）；不能引用其他整合的欄位（s2c 的限制不變）。
+- 一半可以引用另一半新增的欄位（夥伴符號，例如 CRM 這一半寫 `mes/workorder.crmLine`）；不能引用其他整合的欄位（s2c 的限制不變）。
 - **一個單位：** 兩半的狀態一起推導（兩個擁有者都 Open、兩半都 enabled 才 `Active`）；安裝時兩半的欄位先建、再建兩半的事件、檢查、轉換、履約來源，全在同一個 savepoint；任一半完整性失敗，兩半都 `Blocked`。另一半不存在（例如對方是舊版套件開啟的）時是 `Waiting`，原因 `pairMissing`。
 - 目錄層對帳：內建套件的每個成對整合，對方套件必須有同代號的另一半，否則拒絕啟動。
 
@@ -401,12 +401,12 @@ s2e-a 把 `CurrentFormatVersion` 提高到 **7**，s2e-b 再提高到 **8**（s2
 **`each` 提供目前列與篩選（缺口 4），加經參照讀值：**
 
 ```json
-{ "code": "wo", "kind": "create", "target": "mes-mold/workorder", "each": "order-line",
+{ "code": "wo", "kind": "create", "target": "mes/workorder", "each": "order-line",
   "eachWhere": { "via": "order-line.item", "field": "item/item.supplyType", "op": "eq", "value": "make" },
   "set": [
-    { "to": "mes-mold/workorder.crmLine", "from": { "side": "line", "field": "$row" } },
-    { "to": "mes-mold/workorder.sourceKind", "const": "order" },
-    { "to": "mes-mold/workorder.item",    "from": { "side": "line", "field": "order-line.item" } } ] }
+    { "to": "mes/workorder.crmLine", "from": { "side": "line", "field": "$row" } },
+    { "to": "mes/workorder.sourceKind", "const": "order" },
+    { "to": "mes/workorder.item",    "from": { "side": "line", "field": "order-line.item" } } ] }
 ```
 
 - `$row` 是目前列的記錄 Id，只能寫到指向該明細模組的 `lineTrace` 欄位或唯讀整數欄位。
@@ -487,7 +487,7 @@ s2e-a 把 `CurrentFormatVersion` 提高到 **7**，s2e-b 再提高到 **8**（s2
 - [s2e-b] 整合：P1、P2 的 CRM 半。
 - [s2e-b] 訂單狀態機：`confirmed → shipped` 改為自動轉移（每一列 `deliveredQty` ≥ `qty`，§4.9），移除原本的手動轉移；`shipped → completed` 仍由人執行；新增短交結案 `confirmed → completed`（manager，§4.9）。
 
-**MES（`mes-mold.app.json`）：**
+**MES（`mes.app.json`）：**
 
 - [s2e-a] 訂單明細 `line` 加 `producedQty`、`deliveredQty`（小數 3 位、唯讀、`manual: none`，上下限同 CRM）；來源是自己的工令：`trace: workorder.salesLine`，`sum` 分別為 `completedQty`、`shippedQty`（`always`）。
 - [s2e-a] 工令加 `sourceKind`（訂單／備庫，必填，預設訂單）與追溯槽 `salesSource`；`salesLine` 改為 `lineTrace` 指向 `line`，加入槽（`match: { order: order, item: item }`、`derive: true`、`derivedOnly: [order]`：`sourceKind = stock` 或 CRM 來源時 `order` 必須為空，送值回 400），`refGuard` 限表頭狀態 confirmed、shipping，`pickerFields: ["qty", "price"]`。`salesLine` 不設 `fill`；`order`、`item` 不設唯讀，有成員時由槽鎖住（§4.3），`itemNo`、`itemName` 照 s2d 由 `item` 的預設帶值產生。既有 `order` 保留，由列推得（報表沿用）。
@@ -632,7 +632,7 @@ s2e-a 把 `CurrentFormatVersion` 提高到 **7**，s2e-b 再提高到 **8**（s2
 | 有下游時取消訂單 | 要先處理出貨與製造單 | 有後續單據時不能刪項目 | 追溯守衛擋下並列出下游 |
 | 超交容許 | 可設 | 可設容差 | 不做（上限＝訂購量） |
 
-相同的是單據擁有者（銷售擁有訂單、製造擁有工單、庫存擁有出貨）與明細層級的追溯；簡化的是不經 MRP、不自動產生出貨單、不做預留與超交容許。理由：目標客戶是 50 人以下的模具廠，訂單通常一列一模、少量；自動產生出貨單會讓「確認」帶出使用者沒開的單據，由轉換開立又自然支援分批出貨（資料模型 §5.2）。
+相同的是單據擁有者（銷售擁有訂單、製造擁有工單、庫存擁有出貨）與明細層級的追溯；簡化的是不經 MRP、不自動產生出貨單、不做預留與超交容許。理由：目標客戶是 50 人以下的工廠，訂單通常一列一品項、少量；自動產生出貨單會讓「確認」帶出使用者沒開的單據，由轉換開立又自然支援分批出貨（資料模型 §5.2）。
 
 ### 8.2 開關組合行為
 
@@ -869,7 +869,7 @@ T-S8 在 s2e-a 已驗；s2e-b 合併前在三者全開下再跑一次。
 3. **基準量存在核心旁表，有適用 `Active` 來源時鎖住、沒有時開放；只有 `manual: baseline` 的欄位有基準量（第一輪修訂）。** 理由：同一欄位兼容人工與自動，換手時不需要搬資料；逐欄宣告讓 `producedQty` 不會被人工填入、再被計入沖銷下限。代價：使用者看到的是總量，改的是基準量，介面要說明；若改成另設「人工出貨量」套件欄位，報表要自己加總兩欄。
 4. **來源適用範圍分 `always`、`traced`，工令用 `traced`。** 理由：MES 關閉期間確認的訂單沒有工令，依品項判斷會卡死。代價：自製品若從庫存直接出貨（沒工令），在沒開進銷存時可以人工記，可能與後來補建的工令重複，由 max 擋住超交。
 5. **上下限比較寫入後的值；max 在履約增加或上限降低時檢查，min 在履約減少時檢查（第一輪修訂）。** 理由：先出庫存、後完工是合法的；改訂購量到低於已交貨量也要擋。代價：已經違規的資料不會被事後揪出（同檢查的既有限制）；下限另見第 30 項。
-6. **出貨上限＝訂購量，不做超交容許。** 理由：簡單、與模具廠一單一模的實務相符。代價：多交一點點也要先改訂單量。
+6. **出貨上限＝訂購量，不做超交容許。** 理由：簡單、與工廠一單一品項的實務相符。代價：多交一點點也要先改訂單量。
 7. **轉換剩餘量扣基準量與其他來源（`fulfills`），在 s2e 先做共用計數的出貨部分。** 理由：T-S10 要求剩餘量 0，單靠轉換已轉量做不到。代價：資料模型原本說缺口 8 留給 s3c；這裡提前做了一個子集，s3c 要在同一機制上加開票政策上限（資料模型 §8 已依此修訂）。
 8. （移到 §10.1 第 1 項：使用者已裁決追溯守衛全面生效。）
 9. **成對整合用同代號、`pair: true`、`with` 只有對方。** 理由：最少的新格式，沿用 s2c 的狀態機與 savepoint。代價：一對應用程式只能有一個成對整合；需要第二個時要擴充格式。
@@ -962,7 +962,7 @@ T-S8 在 s2e-a 已驗；s2e-b 合併前在三者全開下再跑一次。
 - **Demo 變大：** 單開 MES 的 Demo 為了讓每張預定出貨、結案的訂單都有出貨事實，多出二十多張輕量工令與出貨單（第 64 項）。
 - **訂單確認後不能改明細**（事實鎖）：要改量只能取消工令、取消訂單、重開新單。使用者接受為第一版限制（§10.1 第 4 項）；ERP 的變更單已排入路線圖的後續單元 s2f「訂單變更單」（已確認訂單改量並連動下游）。
 - **C＋I 關閉進銷存後**，已過帳的進銷存出貨單唯讀、不能取消；要沖銷得重開進銷存。
-- **重算量：** 履約重算是同步的，一次寫入影響的訂單列數與下游筆數成正比；以模具廠的量（一列個位數下游）不成問題，大量匯入出貨單時要量測。目標應用程式重開時的整批重算與列數成正比，同樣要量測。
+- **重算量：** 履約重算是同步的，一次寫入影響的訂單列數與下游筆數成正比；以工廠的量（一列個位數下游）不成問題，大量匯入出貨單時要量測。目標應用程式重開時的整批重算與列數成正比，同樣要量測。
 - **刪除比以前嚴：** 已取消的下游也會擋刪上游；明細列被追溯後不能刪。
 - **舊資料庫不升級**：已開啟的應用程式保有舊整合與舊位數，要重建才會套用 s2e。
 

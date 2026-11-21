@@ -16,7 +16,7 @@
 
 `Phase4_Scenario`（`backend/tests/DynamicModules.WebAPITests/Phase4AcceptanceTests.cs`）固定時鐘為 2026-11-03，以 API 走完下列情境，每步皆斷言：
 
-1. `admin` 建模組 `repair-rules`：申請單號（`autonumber`，`REP-{yyyyMM}-{0000}`，設為標題欄位）、申請人（原標題文字欄位）、申請日與需求日（`date`）、故障類別（`enum`：模具損壞、機台異常、外包）、故障細項（`enum`：模具損壞 2 個、機台異常 2 個、外包 1 個）、外包廠商（`text`，`Config.Required`）、預估費用（`currency`）、距需求日天數（`formula`，`DATEDIFF({需求日}, {申請日})`）、狀態（`enum`：草稿、已結案）
+1. `admin` 建模組 `repair-rules`：申請單號（`autonumber`，`REP-{yyyyMM}-{0000}`，設為標題欄位）、申請人（原標題文字欄位）、申請日與需求日（`date`）、故障類別（`enum`：設備損壞、機台異常、外包）、故障細項（`enum`：設備損壞 2 個、機台異常 2 個、外包 1 個）、外包廠商（`text`，`Config.Required`）、預估費用（`currency`）、距需求日天數（`formula`，`DATEDIFF({需求日}, {申請日})`）、狀態（`enum`：草稿、已結案）
 2. `PUT /modules/repair-rules/rules` 送 6 條規則：Visibility（故障類別＝外包 → 外包廠商）、Validation（需求日為空，或需求日 ≥ 申請日 → 需求日，訊息「需求日不得早於申請日」）、3 條 OptionFilter（每個故障類別各限制故障細項）、ReadOnly（狀態＝已結案 → `*`），然後啟用模組
 3. 故障類別＝機台異常、不填外包廠商，回 201：申請單號為 `REP-202611-0001`，`title` 相同，距需求日天數為 9
 4. 故障類別＝外包、不填外包廠商，回 400，錯誤鍵為外包廠商
@@ -27,7 +27,7 @@
 
 ## 實機走查
 
-2026-11-03 以 `./start.command` 啟動，在 Chrome 走模組 `p4walk`（P4 模具維修申請）。基本欄位（申請人、申請日、需求日、故障類別與細項、外包廠商、預估費用、狀態）和 `floor` 群組權限用 API 預先建好；公式、自動編號、標題欄位與 7 條規則都在設計器畫面上操作。
+2026-11-03 以 `./start.command` 啟動，在 Chrome 走模組 `p4walk`（P4 設備維修申請）。基本欄位（申請人、申請日、需求日、故障類別與細項、外包廠商、預估費用、狀態）和 `floor` 群組權限用 API 預先建好；公式、自動編號、標題欄位與 7 條規則都在設計器畫面上操作。
 
 | # | 項目 | 結果 | 截圖 |
 |---|---|---|---|

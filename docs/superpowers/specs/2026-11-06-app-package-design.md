@@ -650,7 +650,7 @@
 封裝格式 v2 是範本格式 v1 的**超集**，不是取代：
 
 - `modules[]` 的元素完全是 `TemplateModule`；v2 多出的是 `manifest`、`groups`、`fieldAccess`、`optionScopes`、`reports`、保留 section，以及 `refTarget.app`。
-- 範本仍然是「模組藍本」：`GET /templates`、`POST /templates/{key}/instantiate`（建成**草稿**、沒有應用程式記帳、沒有關閉概念）、`GET /modules/{key}/export-template`、`POST /templates/import` 全部不變。四個內建範本（`order`、`repair`、`mold-care`、`quality`）與 Demo 產生器（`DemoStructure` 直接 `InstantiateTemplateRequest`）都不受影響。
+- 範本仍然是「模組藍本」：`GET /templates`、`POST /templates/{key}/instantiate`（建成**草稿**、沒有應用程式記帳、沒有關閉概念）、`GET /modules/{key}/export-template`、`POST /templates/import` 全部不變。四個內建範本（`order`、`repair`、`equipment-care`、`quality`）與 Demo 產生器（`DemoStructure` 直接 `InstantiateTemplateRequest`）都不受影響。
 - 應用程式是「帶生命週期的一組模組」：開啟即啟用、有狀態、有相依。兩者並存，路由分開（`/templates` 與 `/apps`）。
 
 ### 8.2 能重用的程式
@@ -828,7 +828,7 @@
 ## 13. 待使用者裁決
 
 1. **客戶怎麼拿到套件的新版？** 路線已定「新版不自動合併」，本設計因此沒有任何更新入口，同一個 `id` 開了就不能再開（決策 2、3）。結果是：客戶已開啟舊版後，沒有任何官方途徑拿到新版內容，除非發行者換新的 `id`（這時兩份各自獨立，資料要客戶自己用匯出與匯入搬）。請確認這是預期的，還是要在階段 1 或之後加「另開新版為新的應用程式」之類的輔助。我傾向維持現狀：階段 1 只有一個內建的 CRM，這個問題不急，但越晚決定、客戶資料越多。
-2. **內建的四個範本（訂單、報修、模具保養、品質異常）是否在階段 1 升級成內建應用程式？** 格式已支援（§8.3），而且 `quality` 對 `order` 的依賴剛好是現成的跨應用程式案例；不升級則只有 CRM 一個內建應用程式可以驗證跨應用程式行為（測試專用的小套件仍然可以）。這是產品範圍，不影響格式。
+2. **內建的四個範本（訂單、報修、設備保養、品質異常）是否在階段 1 升級成內建應用程式？** 格式已支援（§8.3），而且 `quality` 對 `order` 的依賴剛好是現成的跨應用程式案例；不升級則只有 CRM 一個內建應用程式可以驗證跨應用程式行為（測試專用的小套件仍然可以）。這是產品範圍，不影響格式。
 3. **關閉被依賴的應用程式時，自建（非應用程式）模組的參照只警告不擋（決策 6）。** 若要改成也擋，需要決定客戶怎麼才能關閉它（先刪掉自建模組的欄位？），請確認。
 
 ## 14. 讀程式碼時發現的問題

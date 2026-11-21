@@ -29,7 +29,7 @@ public class InventoryApprovalTests : IDisposable
     {
         var rig = await OpenAsync(_admin);
         var supplier = await rig.SupplierAsync("鑫盛五金");
-        var item = await rig.ItemAsync("導柱", price: 1000);
+        var item = await rig.ItemAsync("傳動軸", price: 1000);
         if (withOrganization) await CreateOrganizationAsync();
         return (rig, supplier, item);
     }

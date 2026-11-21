@@ -85,7 +85,7 @@ public class AppsApiTests : IDisposable
         (await JsonOf(await _admin.GetAsync(Apps))).GetArrayLength().Should().Be(0);
         // 出貨的內建套件（CRM、進銷存）只是「可開啟」，沒開之前不產生任何模組或選單
         var packages = await JsonOf(await _admin.GetAsync($"{Apps}/packages"));
-        packages.EnumerateArray().Select(p => p.GetProperty("id").GetString()).Should().Equal("crm-sales", "inventory", "mes-mold");
+        packages.EnumerateArray().Select(p => p.GetProperty("id").GetString()).Should().Equal("crm-sales", "inventory", "mes");
         (await JsonOf(await _admin.GetAsync($"{Base}/menu"))).GetArrayLength().Should().Be(0);
         (await _admin.GetAsync($"{Base}/reports/catalog")).StatusCode.Should().Be(HttpStatusCode.OK);
         (await _admin.GetAsync($"{Base}/modules")).StatusCode.Should().Be(HttpStatusCode.OK);
@@ -343,7 +343,7 @@ public class AppsApiTests : IDisposable
           "format": "formwright-app", "formatVersion": 2,
           "manifest": { "id": "{{id}}", "version": "1.0.0", "name": { "zh-TW": "擴充" },
             "requires": { "apps": [], "entities": ["{{requiredEntity}}"] } },
-          "modules": [ { "code": "extra", "key": "{{moduleKey}}", "name": { "zh-TW": "模具附加" }, "kind": "extension",
+          "modules": [ { "code": "extra", "key": "{{moduleKey}}", "name": { "zh-TW": "設備附加" }, "kind": "extension",
             "hostEntityKey": "{{requiredEntity}}", "titleField": null,
             "blocks": [ { "code": "main", "label": { "zh-TW": "附加" }, "collapsed": false, "columns": 2, "fields": [
               { "code": "note", "type": "text", "label": { "zh-TW": "備註" }, "config": {} } ] } ] } ]

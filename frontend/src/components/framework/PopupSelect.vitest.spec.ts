@@ -71,12 +71,12 @@ describe('PopupSelect', () => {
   });
 
   it('select emits string when valueKind is string', async () => {
-    light.mockResolvedValue({ items: [{ key: 'M-0001', title: 'M-0001 外殼上蓋模' }], total: 1 });
+    light.mockResolvedValue({ items: [{ key: 'EQ-0001', title: 'EQ-0001 CNC 車床 A' }], total: 1 });
     const w = mountSelect({ valueKind: 'string' });
     await openDialog(w);
     items()[0]!.click();
     await flushPromises();
-    expect(w.emitted('update:modelValue')).toEqual([['M-0001']]);
+    expect(w.emitted('update:modelValue')).toEqual([['EQ-0001']]);
     w.unmount();
   });
 

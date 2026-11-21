@@ -348,13 +348,13 @@ public sealed partial class TemplateExportTests : IDisposable
     {
         // 擴充模組沒有標題欄位（標題取自既有資料），匯出的 titleField 是 null
         var create = await _admin.PostAsJsonAsync($"{Base}/modules",
-            new { key = "mold-ext", name = Zh("模具擴充"), kind = "extension", hostEntityKey = "test.entity" });
+            new { key = "equipment-ext", name = Zh("設備擴充"), kind = "extension", hostEntityKey = "test.entity" });
         create.StatusCode.Should().Be(HttpStatusCode.Created, await create.Content.ReadAsStringAsync());
-        var blockId = (await JsonOf(await _admin.GetAsync($"{Base}/modules/mold-ext"))).GetProperty("blocks")[0].GetProperty("id").GetInt64();
-        await AddField("mold-ext", blockId, "integer", "保養週期", new { });
-        await AddField("mold-ext", blockId, "date", "上次保養日", new { });
+        var blockId = (await JsonOf(await _admin.GetAsync($"{Base}/modules/equipment-ext"))).GetProperty("blocks")[0].GetProperty("id").GetInt64();
+        await AddField("equipment-ext", blockId, "integer", "保養週期", new { });
+        await AddField("equipment-ext", blockId, "date", "上次保養日", new { });
 
-        var (first, json) = await ExportPackage("mold-ext");
+        var (first, json) = await ExportPackage("equipment-ext");
         var ext = first.Modules.Should().ContainSingle().Subject;
         ext.Kind.Should().Be(Domain.Entities.Dynamic.ModuleKind.Extension);
         ext.HostEntityKey.Should().Be("test.entity");
@@ -369,7 +369,7 @@ public sealed partial class TemplateExportTests : IDisposable
             new { modules = Array.Empty<object>(), excludeFields = Array.Empty<string>() });
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
 
-        var exported = await admin2.GetAsync($"{Base}/modules/mold-ext/export-template");
+        var exported = await admin2.GetAsync($"{Base}/modules/equipment-ext/export-template");
         var exportedJson = await exported.Content.ReadAsStringAsync();
         exported.StatusCode.Should().Be(HttpStatusCode.OK, exportedJson);
         var second = TemplateJson.Parse(exportedJson).Package!;

@@ -122,10 +122,10 @@ public class DemoGenerationNewYearsTests
         var december = orders.Where(o => DemoDb.Date(DemoDb.Text(o, orderDate)).Month == 12).ToList();
         december.Should().NotBeEmpty().And.OnlyContain(o => o.Title.StartsWith("SO-202612-"));
 
-        var mold = await DemoDb.FieldKey(db, "mes-mold-care", "模具");
-        var careDate = await DemoDb.FieldKey(db, "mes-mold-care", "保養日期");
-        var next = await DemoDb.FieldKey(db, "mes-mold-care", "下次保養日");
-        (await DemoDb.Records(db, "mes-mold-care")).GroupBy(c => JsonDocument.Parse(c.ValuesJson).RootElement.GetProperty(mold).GetInt64())
+        var machine = await DemoDb.FieldKey(db, "mes-equipment-care", "設備");
+        var careDate = await DemoDb.FieldKey(db, "mes-equipment-care", "保養日期");
+        var next = await DemoDb.FieldKey(db, "mes-equipment-care", "下次保養日");
+        (await DemoDb.Records(db, "mes-equipment-care")).GroupBy(c => JsonDocument.Parse(c.ValuesJson).RootElement.GetProperty(machine).GetInt64())
             .Select(g => DemoDb.Date(DemoDb.Text(g.MaxBy(c => DemoDb.Date(DemoDb.Text(c, careDate)))!, next)))
             .Count(d => d >= today && d <= today.AddDays(6)).Should().BeGreaterThanOrEqualTo(2);
     }

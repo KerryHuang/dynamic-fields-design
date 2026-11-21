@@ -12,9 +12,9 @@ public class TitleTemplateTests
 {
     private static I18nText Zh(string s) => new([KeyValuePair.Create("zh-TW", s), KeyValuePair.Create("en-US", s + "-en")]);
 
-    private static Module Mold(string? template) => new()
+    private static Module Equip(string? template) => new()
     {
-        Id = 1, Key = "mold", TitleFieldId = 11, TitleTemplate = template,
+        Id = 1, Key = "equipment", TitleFieldId = 11, TitleTemplate = template,
         Blocks =
         [
             new Block
@@ -27,7 +27,7 @@ public class TitleTemplateTests
                     new Field
                     {
                         Id = 13, Key = "f_13", Type = FieldType.Enum, LabelI18n = Zh("類別"),
-                        Options = [new FieldOption { Id = 99, LabelI18n = Zh("塑膠模") }]
+                        Options = [new FieldOption { Id = 99, LabelI18n = Zh("加工機") }]
                     },
                 ]
             }
@@ -103,33 +103,33 @@ public class TitleTemplateTests
     [Fact]
     public void Render_TextAutonumberDateAndOptionLabel()
     {
-        var m = Mold("{10} {11}／{12}／{13}");
-        TitleTemplate.Render(m, Values(("f_10", "M-0001"), ("f_11", "外殼上蓋模"), ("f_12", "2026-11-01"), ("f_13", "opt_99")))
-            .Should().Be("M-0001 外殼上蓋模／2026-11-01／塑膠模");
+        var m = Equip("{10} {11}／{12}／{13}");
+        TitleTemplate.Render(m, Values(("f_10", "EQ-0001"), ("f_11", "CNC 車床 A"), ("f_12", "2026-11-01"), ("f_13", "opt_99")))
+            .Should().Be("EQ-0001 CNC 車床 A／2026-11-01／加工機");
     }
 
     [Fact]
     public void Render_MissingValuesAreEmpty_AndTheResultIsTrimmed()
     {
-        var m = Mold("{10} {11}");
-        TitleTemplate.Render(m, Values(("f_11", "外殼上蓋模"))).Should().Be("外殼上蓋模");
-        TitleTemplate.Render(m, Values(("f_10", null), ("f_11", "外殼上蓋模"))).Should().Be("外殼上蓋模");
+        var m = Equip("{10} {11}");
+        TitleTemplate.Render(m, Values(("f_11", "CNC 車床 A"))).Should().Be("CNC 車床 A");
+        TitleTemplate.Render(m, Values(("f_10", null), ("f_11", "CNC 車床 A"))).Should().Be("CNC 車床 A");
         TitleTemplate.Render(m, Values()).Should().Be("");
     }
 
     [Fact]
     public void Render_UnknownTokenOrOption_IsEmpty()
     {
-        TitleTemplate.Render(Mold("{10}-{404}"), Values(("f_10", "M-1"))).Should().Be("M-1-");
-        TitleTemplate.Render(Mold("{13}"), Values(("f_13", "opt_1"))).Should().Be("");
+        TitleTemplate.Render(Equip("{10}-{404}"), Values(("f_10", "EQ-1"))).Should().Be("EQ-1-");
+        TitleTemplate.Render(Equip("{13}"), Values(("f_13", "opt_1"))).Should().Be("");
     }
 
     [Fact]
     public void Module_TitleFieldIds_IsTheTitleFieldPlusTemplateFields()
     {
-        Mold(null).TitleFieldIds().Should().Equal(11);
-        Mold("{10} {11}").TitleFieldIds().Should().BeEquivalentTo([10L, 11L]);
-        Mold("{10} {12}").TitleFieldIds().Should().BeEquivalentTo([10L, 11L, 12L]);
+        Equip(null).TitleFieldIds().Should().Equal(11);
+        Equip("{10} {11}").TitleFieldIds().Should().BeEquivalentTo([10L, 11L]);
+        Equip("{10} {12}").TitleFieldIds().Should().BeEquivalentTo([10L, 11L, 12L]);
     }
 
     [Fact]

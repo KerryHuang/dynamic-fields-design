@@ -12,7 +12,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
-/// <summary>MES 模具廠的出貨扣進銷存庫存（apps/mes-mold.app.json 的 stockOut 整合）：兩個應用程式各自獨立，兩個都開時才連動。</summary>
+/// <summary>MES 生產製造的出貨扣進銷存庫存（apps/mes.app.json 的 stockOut 整合）：兩個應用程式各自獨立，兩個都開時才連動。</summary>
 public class MesInventoryIntegrationTests : IDisposable
 {
     private const string Apps = Base + "/apps";
@@ -28,7 +28,7 @@ public class MesInventoryIntegrationTests : IDisposable
 
     // ---- 開啟與讀取 ----
 
-    private async Task OpenMes(string package = "mes-mold", string[]? groups = null) => _mes = await OpenMesOn(_admin, package, groups);
+    private async Task OpenMes(string package = "mes", string[]? groups = null) => _mes = await OpenMesOn(_admin, package, groups);
 
     private static async Task<JsonElement> OpenMesOn(HttpClient admin, string package, string[]? groups = null)
     {
@@ -106,7 +106,7 @@ public class MesInventoryIntegrationTests : IDisposable
     {
         var (w, _) = await Layout("workorder");
         var draft = await _admin.PostAsJsonAsync($"{Base}/modules/{MesKey("workorder")}/records",
-            new { values = new Dictionary<string, object?> { [w["品名"]] = "導柱", [w["工令數量"]] = qty, [w["末道工序序號"]] = 1 } });
+            new { values = new Dictionary<string, object?> { [w["品名"]] = "傳動軸", [w["工令數量"]] = qty, [w["末道工序序號"]] = 1 } });
         draft.StatusCode.Should().Be(HttpStatusCode.Created, await draft.Content.ReadAsStringAsync());
         var id = Id(await JsonOf(draft));
         await Move(id, "workorder", "已發放");
@@ -138,7 +138,7 @@ public class MesInventoryIntegrationTests : IDisposable
 
     private async Task<(long Item, long Warehouse)> Stocked(decimal qty)
     {
-        var item = await _inv!.ItemAsync("導柱成品");
+        var item = await _inv!.ItemAsync("傳動軸成品");
         var warehouse = await _inv.WarehouseAsync("WH-F", "成品倉");
         await _inv.OpeningAsync(warehouse, item, qty);
         return (item, warehouse);
@@ -172,7 +172,7 @@ public class MesInventoryIntegrationTests : IDisposable
         await OpenInventory();
         using var scope = _app.Services.CreateScope();
         (await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AppIntegration>().CountAsync()).Should().Be(0);
-        var item = await _inv!.ItemAsync("導柱成品");
+        var item = await _inv!.ItemAsync("傳動軸成品");
         item.Should().BeGreaterThan(0);
     }
 
@@ -270,10 +270,10 @@ public class MesInventoryIntegrationTests : IDisposable
     {
         await OpenMes();
         await OpenInventory();
-        await Close("mes-mold");
+        await Close("mes");
         (await StatusOfIntegration()).Should().Be(IntegrationStatus.Suspended);
         (await _inv!.ItemAsync("另一個品項")).Should().BeGreaterThan(0);
-        await Reopen("mes-mold");
+        await Reopen("mes");
         (await StatusOfIntegration()).Should().Be(IntegrationStatus.Active);
     }
 
@@ -285,9 +285,9 @@ public class MesInventoryIntegrationTests : IDisposable
         await OpenMes();
         await OpenInventory();
         await Close("inventory");
-        await Close("mes-mold");
-        if (mesFirst) { await Reopen("mes-mold"); (await StatusOfIntegration()).Should().Be(IntegrationStatus.Suspended); await Reopen("inventory"); }
-        else { await Reopen("inventory"); (await StatusOfIntegration()).Should().Be(IntegrationStatus.Suspended); await Reopen("mes-mold"); }
+        await Close("mes");
+        if (mesFirst) { await Reopen("mes"); (await StatusOfIntegration()).Should().Be(IntegrationStatus.Suspended); await Reopen("inventory"); }
+        else { await Reopen("inventory"); (await StatusOfIntegration()).Should().Be(IntegrationStatus.Suspended); await Reopen("mes"); }
         var integration = await Integration();
         integration.Status.Should().Be(IntegrationStatus.Active, integration.Reason);
     }
@@ -401,7 +401,7 @@ public class MesInventoryIntegrationTests : IDisposable
     {
         await OpenMes(); await OpenInventory();
         var (shipment, stock) = await ShippedAndDeducted();
-        var off = await _admin.PutAsJsonAsync($"{Apps}/mes-mold/integrations/stockOut", new { enabled = false });
+        var off = await _admin.PutAsJsonAsync($"{Apps}/mes/integrations/stockOut", new { enabled = false });
         off.StatusCode.Should().Be(HttpStatusCode.OK, await Body(off));
         (await StatusOfIntegration()).Should().Be(IntegrationStatus.Disabled);
 
@@ -410,7 +410,7 @@ public class MesInventoryIntegrationTests : IDisposable
         (await _inv!.BalanceAsync(stock.Item, stock.Warehouse)).Should().Be(60);
         (await TryMove(shipment, "shipment", "已取消")).StatusCode.Should().Be(HttpStatusCode.Conflict);   // 反向：已連動過，擋
 
-        var on = await _admin.PutAsJsonAsync($"{Apps}/mes-mold/integrations/stockOut", new { enabled = true });
+        var on = await _admin.PutAsJsonAsync($"{Apps}/mes/integrations/stockOut", new { enabled = true });
         on.StatusCode.Should().Be(HttpStatusCode.OK, await Body(on));
         (await StatusOfIntegration()).Should().Be(IntegrationStatus.Active);
         await Move(shipment, "shipment", "已取消");
@@ -452,14 +452,14 @@ public class MesInventoryIntegrationTests : IDisposable
     {
         await OpenMes(); await OpenInventory();
         for (var i = 0; i < 2; i++)
-            (await _admin.PostAsync($"{Apps}/mes-mold/integrations/stockOut/retry", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await _admin.PostAsync($"{Apps}/mes/integrations/stockOut/retry", null)).StatusCode.Should().Be(HttpStatusCode.OK);
         var integration = await Integration();
         integration.Status.Should().Be(IntegrationStatus.Active, integration.Reason);
         var events = await JsonOf(await _admin.GetAsync($"{Base}/events"));
         events.EnumerateArray().Count(e => e.GetProperty("key").GetString()!.StartsWith("mes-stock-out")).Should().Be(2);
 
         (await _admin.DeleteAsync($"{Base}/events/mes-stock-out-cancel")).StatusCode.Should().Be(HttpStatusCode.OK);
-        var rebuilt = await _admin.PostAsync($"{Apps}/mes-mold/integrations/stockOut/retry", null);
+        var rebuilt = await _admin.PostAsync($"{Apps}/mes/integrations/stockOut/retry", null);
         rebuilt.StatusCode.Should().Be(HttpStatusCode.OK, await Body(rebuilt));
         (await StatusOfIntegration()).Should().Be(IntegrationStatus.Active);
     }
@@ -480,7 +480,7 @@ public class MesInventoryIntegrationTests : IDisposable
         input["definition"]!["trigger"] = System.Text.Json.Nodes.JsonNode.Parse("""{ "on": "create" }""");
         (await _admin.PutAsJsonAsync($"{Base}/events/mes-stock-out", input)).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var retry = await _admin.PostAsync($"{Apps}/mes-mold/integrations/stockOut/retry", null);
+        var retry = await _admin.PostAsync($"{Apps}/mes/integrations/stockOut/retry", null);
         retry.StatusCode.Should().Be(HttpStatusCode.OK);
         var blocked = await Integration();
         blocked.Status.Should().Be(IntegrationStatus.Blocked);
@@ -488,7 +488,7 @@ public class MesInventoryIntegrationTests : IDisposable
 
         input["definition"] = originalDefinition;
         (await _admin.PutAsJsonAsync($"{Base}/events/mes-stock-out", input)).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await _admin.PostAsync($"{Apps}/mes-mold/integrations/stockOut/retry", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await _admin.PostAsync($"{Apps}/mes/integrations/stockOut/retry", null)).StatusCode.Should().Be(HttpStatusCode.OK);
         var recovered = await Integration();
         recovered.Status.Should().Be(IntegrationStatus.Active, recovered.Reason);
     }
@@ -526,7 +526,7 @@ public class MesInventoryIntegrationTests : IDisposable
         integration.Status.Should().Be(IntegrationStatus.Blocked, integration.Reason);
         (await StockItemCheckActive()).Should().BeFalse();
 
-        (await _admin.PostAsync($"{Apps}/mes-mold/integrations/stockOut/retry", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await _admin.PostAsync($"{Apps}/mes/integrations/stockOut/retry", null)).StatusCode.Should().Be(HttpStatusCode.OK);
         (await StatusOfIntegration()).Should().Be(IntegrationStatus.Active);
         (await StockItemCheckActive()).Should().BeTrue();
     }
@@ -554,7 +554,7 @@ public class MesInventoryIntegrationTests : IDisposable
         await Close("inventory");
 
         // 夥伴關著時 retry：暫停並記下宣告為啟用的全部項目，夥伴重開就恢復，不必再 retry 一次
-        (await _admin.PostAsync($"{Apps}/mes-mold/integrations/stockOut/retry", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await _admin.PostAsync($"{Apps}/mes/integrations/stockOut/retry", null)).StatusCode.Should().Be(HttpStatusCode.OK);
         (await StatusOfIntegration()).Should().Be(IntegrationStatus.Suspended);
         await Reopen("inventory");
         var integration = await Integration();
@@ -567,8 +567,8 @@ public class MesInventoryIntegrationTests : IDisposable
     {
         await OpenMes(); await OpenInventory();
         var user = _app.AsUser("sales01");
-        (await user.PostAsync($"{Apps}/mes-mold/integrations/stockOut/retry", null)).StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.Unauthorized);
-        (await user.PutAsJsonAsync($"{Apps}/mes-mold/integrations/stockOut", new { enabled = false }))
+        (await user.PostAsync($"{Apps}/mes/integrations/stockOut/retry", null)).StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.Unauthorized);
+        (await user.PutAsJsonAsync($"{Apps}/mes/integrations/stockOut", new { enabled = false }))
             .StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.Unauthorized);
     }
 
@@ -579,9 +579,9 @@ public class MesInventoryIntegrationTests : IDisposable
     {
         using var source = new TestApp(seedDemoPeople: false, fileDatabase: true);
         var admin = source.AsUser();
-        await OpenMesOn(admin, "mes-mold");
+        await OpenMesOn(admin, "mes");
         await InventoryRig.OpenAsync(admin, assignMembers: false);
-        var res = await admin.GetAsync($"{Apps}/mes-mold/export");
+        var res = await admin.GetAsync($"{Apps}/mes/export");
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         return JsonNode.Parse(await res.Content.ReadAsStringAsync())!;
     }

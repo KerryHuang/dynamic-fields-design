@@ -1,11 +1,11 @@
 {
   "formatVersion": 1,
-  "key": "mold-care",
-  "name": { "zh-TW": "模具保養＋客戶擴充", "en-US": "Mold care and customer extension" },
-  "description": { "zh-TW": "擴充既有的模具與客戶資料，加上保養紀錄與更換零件", "en-US": "Extends existing molds and customers, with care records and replaced parts" },
+  "key": "equipment-care",
+  "name": { "zh-TW": "設備保養＋客戶擴充", "en-US": "Equipment care and customer extension" },
+  "description": { "zh-TW": "擴充既有的設備與客戶資料，加上保養紀錄與更換零件", "en-US": "Extends existing equipment and customers, with care records and replaced parts" },
   "modules": [
     {
-      "code": "mold", "key": "mold-info", "name": { "zh-TW": "模具資料", "en-US": "Mold information" },
+      "code": "equipment", "key": "equipment-info", "name": { "zh-TW": "設備資料", "en-US": "Equipment information" },
       "icon": "precision_manufacturing", "section": "設備",
       "kind": "extension", "hostEntityKey": "test.entity",
       "titleField": null,
@@ -16,7 +16,7 @@
               "config": { "showInList": true, "isFilterable": true } },
             { "code": "cycleDays", "type": "integer", "label": { "zh-TW": "保養週期（天）", "en-US": "Care cycle (days)" },
               "config": { "required": true } },
-            { "code": "shotCount", "type": "integer", "label": { "zh-TW": "累計射出數", "en-US": "Total shots" },
+            { "code": "runHours", "type": "integer", "label": { "zh-TW": "累計運轉時數", "en-US": "Total run hours" },
               "config": { "showInList": true, "isFilterable": true } }
           ] }
       ],
@@ -66,7 +66,7 @@
       ]
     },
     {
-      "code": "care", "key": "mold-care", "name": { "zh-TW": "模具保養紀錄", "en-US": "Mold care records" },
+      "code": "care", "key": "equipment-care", "name": { "zh-TW": "設備保養紀錄", "en-US": "Equipment care records" },
       "icon": "handyman", "section": "設備",
       "kind": "standalone", "hostEntityKey": null,
       "titleField": "no",
@@ -75,7 +75,7 @@
           "fields": [
             { "code": "no", "type": "autonumber", "label": { "zh-TW": "保養單號", "en-US": "Care no." },
               "config": { "format": "MC-{yyyyMM}-{0000}", "showInList": true, "isSortable": true } },
-            { "code": "mold", "type": "reference", "label": { "zh-TW": "模具", "en-US": "Mold" },
+            { "code": "equipment", "type": "reference", "label": { "zh-TW": "設備", "en-US": "Equipment" },
               "config": { "refTarget": { "kind": "entity", "key": "test.entity" },
                           "required": true, "showInList": true, "isFilterable": true } },
             { "code": "categories", "type": "multienum", "label": { "zh-TW": "保養類別", "en-US": "Care categories" },
@@ -84,7 +84,7 @@
                 { "code": "parts", "label": { "zh-TW": "更換零件", "en-US": "Part replacement" }, "color": null },
                 { "code": "calibrate", "label": { "zh-TW": "校正", "en-US": "Calibration" }, "color": null },
                 { "code": "lubricate", "label": { "zh-TW": "潤滑", "en-US": "Lubrication" }, "color": null },
-                { "code": "polish", "label": { "zh-TW": "拋光", "en-US": "Polishing" }, "color": null }
+                { "code": "inspect", "label": { "zh-TW": "點檢", "en-US": "Inspection" }, "color": null }
               ],
               "config": { "showInList": true, "isFilterable": true } },
             { "code": "technician", "type": "user", "label": { "zh-TW": "保養人員", "en-US": "Technician" },
@@ -104,7 +104,7 @@
       "rules": [],
       "views": [
         { "name": { "zh-TW": "全部保養紀錄", "en-US": "All care records" },
-          "columns": ["no", "mold", "careDate", "categories", "technician", "nextDate", "cost"], "filter": null,
+          "columns": ["no", "equipment", "careDate", "categories", "technician", "nextDate", "cost"], "filter": null,
           "sort": [ { "field": "careDate", "order": "desc" } ], "isDefault": true }
       ],
       "permissions": [
@@ -117,7 +117,7 @@
       ]
     },
     {
-      "code": "part", "key": "mold-care-part", "name": { "zh-TW": "更換零件", "en-US": "Replaced parts" },
+      "code": "part", "key": "equipment-care-part", "name": { "zh-TW": "更換零件", "en-US": "Replaced parts" },
       "icon": null, "section": null,
       "kind": "standalone", "hostEntityKey": null,
       "titleField": "partName",

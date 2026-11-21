@@ -9,7 +9,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
-/// <summary>MES 模具廠以 Demo 的群組與帳號開啟（planner01、floor01、sales01、manager01…）：報價 → 訂單 → 工令的權限、轉換與列印。</summary>
+/// <summary>MES 生產製造以 Demo 的群組與帳號開啟（planner01、floor01、sales01、manager01…）：報價 → 訂單 → 工令的權限、轉換與列印。</summary>
 public class MesFlowTests : IDisposable
 {
     private const string Apps = Base + "/apps";
@@ -34,7 +34,7 @@ public class MesFlowTests : IDisposable
             ["floor"] = new { mode = "map", groupId = ids["floor"] }, ["maint"] = new { mode = "map", groupId = ids["maint"] },
             ["qa"] = new { mode = "map", groupId = ids["qa"] }, ["planner"] = new { mode = "map", groupId = ids["planner"] }
         };
-        var res = await _admin.PostAsJsonAsync($"{Apps}/packages/mes-mold/open", new { groupMap = map });
+        var res = await _admin.PostAsJsonAsync($"{Apps}/packages/mes/open", new { groupMap = map });
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
         _opened = await JsonOf(res);
         _customer = await PartnerAsync(_admin, "宏達科技");
@@ -84,7 +84,7 @@ public class MesFlowTests : IDisposable
         return await JsonOf(res);
     }
 
-    /// <summary>已核准的報價單：單一品項「導柱」數量 10、單價 100，客戶是往來對象「宏達科技」。</summary>
+    /// <summary>已核准的報價單：單一品項「傳動軸」數量 10、單價 100，客戶是往來對象「宏達科技」。</summary>
     private async Task<(JsonElement Quote, long LineId)> ApprovedQuote(HttpClient sales, HttpClient manager)
     {
         var (q, _) = await Layout("quote");
@@ -92,7 +92,7 @@ public class MesFlowTests : IDisposable
         var created = await Create(sales, "quote", new() { [q["客戶"]] = _customer, [q["負責業務"]] = "sales01" },
             new Dictionary<string, object[]>
             {
-                [Key("quote-line")] = [new { values = new Dictionary<string, object?> { [l["品號"]] = "GP-01", [l["品名"]] = "導柱", [l["數量"]] = 10, [l["單位"]] = "pcs", [l["單價"]] = 100 } }]
+                [Key("quote-line")] = [new { values = new Dictionary<string, object?> { [l["品號"]] = "SH-01", [l["品名"]] = "傳動軸", [l["數量"]] = 10, [l["單位"]] = "pcs", [l["單價"]] = 100 } }]
             });
         var pending = await Move(sales, created, "quote", "待核准");
         (await TryMove(sales, pending, "quote", "已核准")).StatusCode.Should().BeOneOf(HttpStatusCode.BadRequest, HttpStatusCode.Forbidden);
@@ -150,9 +150,9 @@ public class MesFlowTests : IDisposable
         var (o, _) = await Layout("order"); var (w, _) = await Layout("workorder");
         var order = await Create(manager, "order", new() { [o["客戶"]] = _customer, [o["交期"]] = "2026-12-20" });
 
-        var wo = await Create(planner, "workorder", new() { [w["品名"]] = "導柱", [w["工令數量"]] = 5, [w["訂單"]] = Id(order) });
+        var wo = await Create(planner, "workorder", new() { [w["品名"]] = "傳動軸", [w["工令數量"]] = 5, [w["訂單"]] = Id(order) });
         wo.GetProperty("values").GetProperty(w["交期"]).GetString().Should().Be("2026-12-20");
-        var custom = await Create(planner, "workorder", new() { [w["品名"]] = "頂針", [w["工令數量"]] = 5, [w["訂單"]] = Id(order), [w["交期"]] = "2026-12-25" });
+        var custom = await Create(planner, "workorder", new() { [w["品名"]] = "定位銷", [w["工令數量"]] = 5, [w["訂單"]] = Id(order), [w["交期"]] = "2026-12-25" });
         custom.GetProperty("values").GetProperty(w["交期"]).GetString().Should().Be("2026-12-25");
     }
 
@@ -165,7 +165,7 @@ public class MesFlowTests : IDisposable
 
         (await TryCreate(floor, "workorder", new() { [w["品名"]] = "x", [w["工令數量"]] = 1 })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await TryCreate(sales, "workorder", new() { [w["品名"]] = "x", [w["工令數量"]] = 1 })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        var draft = await Create(planner, "workorder", new() { [w["品名"]] = "導柱", [w["工令數量"]] = 50, [w["末道工序序號"]] = 2 });
+        var draft = await Create(planner, "workorder", new() { [w["品名"]] = "傳動軸", [w["工令數量"]] = 50, [w["末道工序序號"]] = 2 });
         (await TryMove(floor, draft, "workorder", "已發放")).StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.BadRequest);
         var released = await Move(planner, draft, "workorder", "已發放");
 
@@ -204,19 +204,19 @@ public class MesFlowTests : IDisposable
         await OpenMes();
         var planner = _app.AsUser("planner01");
         var (w, _) = await Layout("workorder"); var (p, po) = await Layout("wo-op");
-        var wo = await Create(planner, "workorder", new() { [w["品名"]] = "<script>alert(1)</script>導柱", [w["工令數量"]] = 5 },
+        var wo = await Create(planner, "workorder", new() { [w["品名"]] = "<script>alert(1)</script>傳動軸", [w["工令數量"]] = 5 },
             new Dictionary<string, object[]>
             {
                 [Key("wo-op")] =
                 [
-                    new { values = new Dictionary<string, object?> { [p["工序"]] = po["工序/放電"], [p["工作站"]] = "EDM-3", [p["預計工時"]] = 6.5 } },
-                    new { values = new Dictionary<string, object?> { [p["工序"]] = po["工序/拋光"], [p["工作站"]] = "PL-1" } }
+                    new { values = new Dictionary<string, object?> { [p["工序"]] = po["工序/表面處理"], [p["工作站"]] = "SUR-3", [p["預計工時"]] = 6.5 } },
+                    new { values = new Dictionary<string, object?> { [p["工序"]] = po["工序/組裝"], [p["工作站"]] = "ASM-1" } }
                 ]
             });
         var res = await planner.GetAsync($"{Base}/records/{Id(wo)}/print/mes-wo-sheet?locale=zh-TW");
         res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
         var html = await res.Content.ReadAsStringAsync();
-        html.Should().Contain("放電").And.Contain("EDM-3").And.Contain("拋光").And.Contain("PL-1").And.Contain("6.5");
+        html.Should().Contain("表面處理").And.Contain("SUR-3").And.Contain("組裝").And.Contain("ASM-1").And.Contain("6.5");
         html.Should().NotContain("<script>alert(1)</script>").And.Contain("&lt;script&gt;");
         (await _app.AsUser("sales01").GetAsync($"{Base}/records/{Id(wo)}/print/mes-wo-sheet?locale=zh-TW")).StatusCode
             .Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.NotFound, HttpStatusCode.BadRequest);
@@ -233,8 +233,8 @@ public class MesFlowTests : IDisposable
             var draft = await Create(planner, "workorder", new() { [w["品名"]] = name, [w["工令數量"]] = 5, [w["交期"]] = due, [w["末道工序序號"]] = 1 });
             return release ? await Move(planner, draft, "workorder", "已發放") : draft;
         }
-        await Wo("逾期導柱", "2026-01-05", release: true);
-        await Wo("未到期頂針", "2099-01-05", release: true);
+        await Wo("逾期傳動軸", "2026-01-05", release: true);
+        await Wo("未到期定位銷", "2099-01-05", release: true);
         await Wo("逾期但還是草稿", "2026-01-06", release: false);
 
         var list = await JsonOf(await planner.GetAsync($"{Base}/reports"));
@@ -242,7 +242,7 @@ public class MesFlowTests : IDisposable
         var run = await planner.PostAsJsonAsync($"{Base}/reports/{report.GetProperty("id").GetInt64()}/run", new { range = (object?)null });
         run.StatusCode.Should().Be(HttpStatusCode.OK, await run.Content.ReadAsStringAsync());
         var body = await run.Content.ReadAsStringAsync();
-        body.Should().Contain("逾期導柱").And.NotContain("未到期頂針").And.NotContain("逾期但還是草稿");
+        body.Should().Contain("逾期傳動軸").And.NotContain("未到期定位銷").And.NotContain("逾期但還是草稿");
     }
 
     [Fact]
@@ -251,7 +251,7 @@ public class MesFlowTests : IDisposable
         await OpenMes();
         var planner = _app.AsUser("planner01");
         var (w, _) = await Layout("workorder"); var (r, ro) = await Layout("report"); var (s, _) = await Layout("shipment");
-        var draft = await Create(planner, "workorder", new() { [w["品名"]] = "導柱", [w["工令數量"]] = 10, [w["末道工序序號"]] = 1 });
+        var draft = await Create(planner, "workorder", new() { [w["品名"]] = "傳動軸", [w["工令數量"]] = 10, [w["末道工序序號"]] = 1 });
         var wo = await Move(planner, draft, "workorder", "已發放");
         await Create(planner, "report", new() { [r["工令"]] = Id(wo), [r["工序序號"]] = 1, [r["工序"]] = ro["工序/備料"], [r["良品數"]] = 10 });
         await Move(planner, wo, "workorder", "完工");
@@ -261,42 +261,42 @@ public class MesFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task MesAlone_MoldIsItsOwnModule_RepairAndCarePickMoldRecords()
+    public async Task MesAlone_EquipmentIsItsOwnModule_RepairAndCarePickEquipmentRecords()
     {
-        // s2d-0：模具歸 MES 自己的模組 mes-mold，報修與保養的模具參照指向它
+        // s2d-0：設備歸 MES 自己的模組 mes-equipment，報修與保養的設備參照指向它
         await OpenMes();
-        Key("mold").Should().Be("mes-mold");
+        Key("equipment").Should().Be("mes-equipment");
         var maint = _app.AsUser("maint01"); var floor = _app.AsUser("floor01");
-        var (m, _) = await Layout("mold");
-        var mold = await Create(maint, "mold", new() { [m["模具編號"]] = "MD-01", [m["名稱"]] = "測試上蓋模", [m["保養週期（天）"]] = 30 });
-        (await TryCreate(maint, "mold", new() { [m["名稱"]] = "缺編號", [m["保養週期（天）"]] = 30 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var (m, _) = await Layout("equipment");
+        var equip = await Create(maint, "equipment", new() { [m["設備編號"]] = "EQ-01", [m["名稱"]] = "測試車床", [m["保養週期（天）"]] = 30 });
+        (await TryCreate(maint, "equipment", new() { [m["名稱"]] = "缺編號", [m["保養週期（天）"]] = 30 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         foreach (var (module, user) in new[] { ("repair", floor), ("care", maint) })
         {
             var schema = await JsonOf(await user.GetAsync($"{Base}/modules/{Key(module)}/schema"));
             var reference = schema.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
-                .Single(f => f.GetProperty("label").GetProperty("zh-TW").GetString() == "模具").GetProperty("reference");
+                .Single(f => f.GetProperty("label").GetProperty("zh-TW").GetString() == "設備").GetProperty("reference");
             reference.GetProperty("kind").GetString().Should().Be("module");
-            reference.GetProperty("key").GetString().Should().Be("mes-mold");
+            reference.GetProperty("key").GetString().Should().Be("mes-equipment");
             // 標題樣板 {no} {name}：用編號或名稱都找得到
-            foreach (var keyword in new[] { "上蓋", "MD-01" })
+            foreach (var keyword in new[] { "車床", "EQ-01" })
             {
                 var light = await JsonOf(await user.GetAsync($"{Base}{reference.GetProperty("lightUrl").GetString()}?keyword={keyword}"));
-                light.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("key").GetString()).Should().Equal(Id(mold).ToString());
-                light.GetProperty("items")[0].GetProperty("title").GetString().Should().Be("MD-01 測試上蓋模");
+                light.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("key").GetString()).Should().Equal(Id(equip).ToString());
+                light.GetProperty("items")[0].GetProperty("title").GetString().Should().Be("EQ-01 測試車床");
             }
         }
 
         var (r, _) = await Layout("repair");
-        var repair = await Create(floor, "repair", new() { [r["模具"]] = Id(mold), [r["申請人"]] = "floor01", [r["故障說明"]] = "冷卻水路漏水" });
-        var info = (await JsonOf(await floor.GetAsync($"{Base}/records/{Id(repair)}"))).GetProperty("references").GetProperty(r["模具"]);
-        info.GetProperty("title").GetString().Should().Be("MD-01 測試上蓋模");
+        var repair = await Create(floor, "repair", new() { [r["設備"]] = Id(equip), [r["申請人"]] = "floor01", [r["故障說明"]] = "油壓管漏油" });
+        var info = (await JsonOf(await floor.GetAsync($"{Base}/records/{Id(repair)}"))).GetProperty("references").GetProperty(r["設備"]);
+        info.GetProperty("title").GetString().Should().Be("EQ-01 測試車床");
         var (c, _) = await Layout("care");
-        await Create(maint, "care", new() { [c["模具"]] = Id(mold), [c["保養日期"]] = "2026-11-01", [c["保養週期（天）"]] = 30 });
+        await Create(maint, "care", new() { [c["設備"]] = Id(equip), [c["保養日期"]] = "2026-11-01", [c["保養週期（天）"]] = 30 });
 
-        // 被報修參照的模具不能刪（參照預設 restrict）
-        var current = await JsonOf(await _admin.GetAsync($"{Base}/records/{Id(mold)}"));
-        (await _admin.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"{Base}/records/{Id(mold)}?rowVersion={Uri.EscapeDataString(current.GetProperty("rowVersion").GetString()!)}")))
+        // 被報修參照的設備不能刪（參照預設 restrict）
+        var current = await JsonOf(await _admin.GetAsync($"{Base}/records/{Id(equip)}"));
+        (await _admin.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"{Base}/records/{Id(equip)}?rowVersion={Uri.EscapeDataString(current.GetProperty("rowVersion").GetString()!)}")))
             .StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
@@ -310,7 +310,7 @@ public class MesFlowTests : IDisposable
         });
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
 
-        var opened = await _admin.PostAsJsonAsync($"{Apps}/packages/mes-mold/open", new { groupMap = new Dictionary<string, object>() });
+        var opened = await _admin.PostAsJsonAsync($"{Apps}/packages/mes/open", new { groupMap = new Dictionary<string, object>() });
         opened.StatusCode.Should().Be(HttpStatusCode.Created, await opened.Content.ReadAsStringAsync());
         (await _admin.GetAsync($"{Base}/modules/mes-customer-info")).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }

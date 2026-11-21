@@ -7,7 +7,7 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 
 /// <summary>
-/// 「MES 模具廠」的報價到訂單：8 張報價單（今天前 12–70 天），業務建立並送審、業務主管核准或退回；
+/// 「MES 生產製造」的報價到訂單：8 張報價單（今天前 12–70 天），業務建立並送審、業務主管核准或退回；
 /// 已核准的報價單依 <c>mes-quote-to-order</c> 轉成訂單（一張全轉、一張分兩次轉完、一張只轉一部分），轉出的訂單由業務確認。
 /// 全部走一般的建立、更新、轉換指令，權限、狀態機、帶值與逐項追蹤已轉數量照常生效。客戶用共用主檔情境建立的 MES 八家客戶。
 /// </summary>
@@ -24,7 +24,7 @@ public sealed class MesQuoteScenario : IDemoScenario
 
     private static readonly (string No, string Name, int Price)[] Items =
     [
-        ("GP-01", "導柱", 180), ("GB-02", "導套", 150), ("EP-03", "頂針", 60), ("MB-04", "模板", 2400), ("CR-05", "模仁", 5200), ("SL-06", "滑塊", 860)
+        ("SH-01", "傳動軸", 180), ("BS-02", "軸承座", 150), ("PN-03", "定位銷", 60), ("BP-04", "底板", 2400), ("HS-05", "鋁合金外殼", 5200), ("GR-06", "齒輪", 860)
     ];
 
     /// <param name="DaysAgo">建立日距今天數。</param>

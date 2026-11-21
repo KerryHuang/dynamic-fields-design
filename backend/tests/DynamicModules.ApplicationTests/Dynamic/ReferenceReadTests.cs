@@ -285,9 +285,9 @@ public class ReferenceReadTests : IAsyncLifetime
         {
             item.References[refs[0].Key].Should().Be(new ReferenceInfo(m1.Id.ToString(), "客戶一", "ok"));
             item.References[refs[1].Key].Should().Be(new ReferenceInfo(m2.Id.ToString(), "客戶二", "ok"));
-            var mold = item.References[refs[2].Key];
-            mold.State.Should().Be("ok");
-            mold.Title.Should().StartWith(item.Values[refs[2].Key]!.Value.GetString());
+            var equip = item.References[refs[2].Key];
+            equip.State.Should().Be("ok");
+            equip.Title.Should().StartWith(item.Values[refs[2].Key]!.Value.GetString());
         }
     }
 }

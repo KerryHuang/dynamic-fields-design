@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 設計者能加「參照」欄位指向另一個動態模組或既有實體（模具、客戶），被參照的記錄明細頁自動出現反向關聯分頁；刪除被參照的記錄時依欄位設定擋下、清空或連帶刪除；既有實體可以用擴充模組加自訂欄位。
+**Goal:** 設計者能加「參照」欄位指向另一個動態模組或既有實體（設備、客戶），被參照的記錄明細頁自動出現反向關聯分頁；刪除被參照的記錄時依欄位設定擋下、清空或連帶刪除；既有實體可以用擴充模組加自訂欄位。
 
 **Architecture:**
 - 新欄位型別 `reference`。值是目標的鍵：動態模組存 `Record.Id`（JSON number），既有實體存主鍵字串。一律寫進 `RecordIndex.RefKey`（字串），反向關聯、篩選、刪除檢查都查這個索引。
-- 既有實體走 `IReferenceProvider` 登錄表（Application 介面、Persistence 實作）：提供輕量查詢與批次取標題。POC 用兩張 mock 表 `Mock_Mold`、`Mock_Customer` 代替外部系統的真實表。
+- 既有實體走 `IReferenceProvider` 登錄表（Application 介面、Persistence 實作）：提供輕量查詢與批次取標題。POC 用兩張 mock 表 `Mock_Equipment`、`Mock_Customer` 代替外部系統的真實表。
 - 讀取時批次解析參照，回應多一個 `references`，帶標題與狀態（正常、已失效、無權限檢視）。寫入時只在值有變動時檢查目標存在且在權限範圍內。
 - 刪除走 `ReferenceDeletePlanner`：先在記憶體算出整棵連帶刪除樹，再一次套用；任何一處碰到 Restrict 就整筆不刪。
 - 擴充模組是 `Module.Kind = Extension` 加 `HostEntityKey`，每筆記錄用 `Record.HostKey` 對到一筆既有資料，`(ModuleId, HostKey)` 唯一。
@@ -33,7 +33,7 @@
 - **輕量查詢**：動態模組的 `records/light`、既有實體的 `entities/{key}/light`。
 - **反向關聯分頁**：被參照記錄的明細頁，每個指向它的參照欄位一個分頁，可在分頁直接新增並自動帶入參照。
 - **刪除行為**：`restrict`（預設）、`setNull`、`cascade`。
-- **既有實體 mock**：模具（`design.mold`）、客戶（`sales.customer`）。
+- **既有實體 mock**：設備（`design.equipment`）、客戶（`sales.customer`）。
 - **擴充模組**：替既有實體加自訂欄位，用 host 鍵讀寫。
 
 **不做（留給後續階段）：**
@@ -46,7 +46,7 @@
 ## 已定決策（我的判斷，spec 沒說死的部分）
 
 1. **欄位設定**：
-   - `FieldConfig.RefTarget`：`{ kind: "module" | "entity", key }`。`module` 的 key 是 `Module.Key`，`entity` 的 key 是登錄的實體鍵（如 `design.mold`）。
+   - `FieldConfig.RefTarget`：`{ kind: "module" | "entity", key }`。`module` 的 key 是 `Module.Key`，`entity` 的 key 是登錄的實體鍵（如 `design.equipment`）。
    - `FieldConfig.OnDelete`：`restrict`（預設，null 視同 restrict）、`setNull`、`cascade`。只能用在 `kind = module`；既有實體的刪除不經過動態模組，沒有刪除行為可言。
    - `RefTarget` 建立後不能改，和型別一樣。`OnDelete` 可以改。
    - 目標模組必須存在、`Kind = Standalone`。允許指向自己的模組（例如「上層設備」）。目標模組不必已啟用。
@@ -104,13 +104,13 @@
    - 停用的參照欄位不擋刪除、不出現在反向關聯。
    - 整個刪除在一個交易內。
 9. **既有實體 mock**：
-   - `Mock_Mold`：`MoldNo` nvarchar(20) PK、`Name` nvarchar(100)、`DeleteFlag` bool。
+   - `Mock_Equipment`：`EquipmentNo` nvarchar(20) PK、`Name` nvarchar(100)、`DeleteFlag` bool。
    - `Mock_Customer`：`CustomerNo` nvarchar(20) PK、`Name` nvarchar(100)、`DeleteFlag` bool。
    - 種子（`SeedData`，冪等）：
-     - 模具：`M-0001` 外殼上蓋模、`M-0002` 外殼下蓋模、`M-0003` 按鍵模、`M-0004` 電池蓋模、`M-0005` 支架模。
+     - 設備：`EQ-0001` CNC 車床 A、`EQ-0002` CNC 車床 B、`EQ-0003` 立式加工中心、`EQ-0004` 臥式加工中心、`EQ-0005` 平面研磨機。
      - 客戶：`C-001` 嵐岳精密、`C-002` 恆川機械、`C-003` 曜陽電子。
-   - 標題格式：`{編號} {名稱}`，例如 `M-0001 外殼上蓋模`。`DeleteFlag = true` 的資料 light 查不到、`TitlesAsync` 不回（顯示為 missing）。
-   - 實體名稱：`design.mold` → 模具；`sales.customer` → 客戶（I18nText，四語系）。
+   - 標題格式：`{編號} {名稱}`，例如 `EQ-0001 CNC 車床 A`。`DeleteFlag = true` 的資料 light 查不到、`TitlesAsync` 不回（顯示為 missing）。
+   - 實體名稱：`design.equipment` → 設備；`sales.customer` → 客戶（I18nText，四語系）。
 10. **擴充模組**：
     - `CreateModuleRequest` 加 `Kind`（`standalone` 預設、`extension`）與 `HostEntityKey`。
       - `extension` 沒給或給了未登錄的實體：400，鍵 `HostEntityKey`，訊息 `擴充模組必須指定既有實體`。
@@ -144,7 +144,7 @@
   |---|---|---|
   | `Dynamic_Module` | 加 `Kind` nvarchar(20) 非 null 預設 `standalone`、`HostEntityKey` nvarchar(100) null | `HostEntityKey` 唯一（filtered：非 null） |
   | `Dynamic_Record` | 加 `HostKey` nvarchar(100) null | `(ModuleId, HostKey)` 唯一（filtered：`HostKey` 非 null 且 `DeleteFlag = 0`） |
-  | `Mock_Mold` | 新表：`MoldNo`、`Name`、`DeleteFlag` | PK `MoldNo` |
+  | `Mock_Equipment` | 新表：`EquipmentNo`、`Name`、`DeleteFlag` | PK `EquipmentNo` |
   | `Mock_Customer` | 新表：`CustomerNo`、`Name`、`DeleteFlag` | PK `CustomerNo` |
 
   mock 表不加 `Dynamic_` 前綴：它們代表外部系統既有的表，不屬於動態模組。
@@ -186,7 +186,7 @@
    - 測試：Task 3 的 `Create_RefOutOfScope_Rejected`，Task 4 的 `Get_RefTargetOutOfScope_Restricted`、`Light_OutOfScope_Excluded`。
 2. **連帶刪除的鏈上某處是 Restrict**：A ←(cascade) B ←(restrict) C。刪 A 回 409，A、B 都沒被刪、C 不變。→ Task 6 的 `Delete_CascadeChainHitsRestrict_NothingChanged`。
 3. **連帶刪除遇到循環或自我參照**：「上層設備」指向自己模組且 cascade，或 A、B 兩個模組互相 cascade。刪除會結束、每筆只刪一次，不是無窮遞迴或 500。→ Task 6 的 `Delete_CascadeCycle_Terminates`、`Delete_SelfReferenceCascade_DeletesChain`。
-4. **既有資料被刪掉之後**：模具 M-0003 的 `DeleteFlag` 改成 true。引用它的記錄顯示「已失效」；使用者修改這筆記錄的其他欄位、沒動模具欄位，照樣存得進去；改成另一個失效的值則被擋。→ Task 4 的 `Get_EntityGone_Missing`，Task 3 的 `Update_StaleEntityRefUnchanged_Saves`、`Update_ChangedToGoneEntity_Rejected`。
+4. **既有資料被刪掉之後**：設備 EQ-0003 的 `DeleteFlag` 改成 true。引用它的記錄顯示「已失效」；使用者修改這筆記錄的其他欄位、沒動設備欄位，照樣存得進去；改成另一個失效的值則被擋。→ Task 4 的 `Get_EntityGone_Missing`，Task 3 的 `Update_StaleEntityRefUnchanged_Saves`、`Update_ChangedToGoneEntity_Rejected`。
 5. **反向分頁不洩漏**：來源模組的參照欄位對 floor 群組隱藏時，floor01 看被參照記錄的明細，沒有這個分頁，直接打 `related/{fieldId}/paged` 回 404；來源記錄超出資料範圍的不列出。→ Task 5 的 `Related_FieldHidden_NoTab`、`RelatedPaged_FieldHidden_NotFound`、`RelatedPaged_OutOfScope_Excluded`。
 
 ---
@@ -205,9 +205,9 @@ Domain/
   Entities/Dynamic/{ModuleKind,ReferenceOnDelete}.cs
   Entities/Dynamic/Module.cs               + Kind、HostEntityKey
   Entities/Dynamic/Record.cs               + HostKey
-  Entities/Mock/{MockMold,MockCustomer}.cs
+  Entities/Mock/{MockEquipment,MockCustomer}.cs
   ValueObjects/FieldConfig.cs              + RefTarget、OnDelete；ReferenceTarget
-  Data/DynamicDbContext.cs                 + MockMolds、MockCustomers
+  Data/DynamicDbContext.cs                 + MockEquipment、MockCustomers
   Data/Configurations/{Module,Record}Configuration.cs
   Data/Configurations/MockConfigurations.cs
   FieldTypes/FieldTypeContext（IFieldTypeHandler.cs）   + ValidRefKeys
@@ -231,7 +231,7 @@ Application/
   Dynamic/SchemaService/**                 SchemaField.Reference
 
 Persistence/
-  References/{MockMoldProvider,MockCustomerProvider}.cs
+  References/{MockEquipmentProvider,MockCustomerProvider}.cs
   Repositories/Dynamic/RecordRepository.cs + 依 RefKey 查來源、依 HostKey 查
   Dynamic/Query/DynamicQueryBuilder.cs     reference → RefKey
   Seed/SeedData.cs                         mock 資料
@@ -263,11 +263,11 @@ poc/frontend/src/
 
 **Files:**
 - Create：
-  - `Domain/Entities/Dynamic/ModuleKind.cs`、`Domain/Entities/Mock/{MockMold,MockCustomer}.cs`
+  - `Domain/Entities/Dynamic/ModuleKind.cs`、`Domain/Entities/Mock/{MockEquipment,MockCustomer}.cs`
   - `Domain/Data/Configurations/MockConfigurations.cs`
   - `Application/Dynamic/References/{IReferenceProvider,ReferenceProviderRegistry}.cs`
   - `Application/Dynamic/EntityService/Queries/{ListEntities,GetEntityLight}/*`
-  - `Persistence/References/{MockMoldProvider,MockCustomerProvider}.cs`
+  - `Persistence/References/{MockEquipmentProvider,MockCustomerProvider}.cs`
   - `WebAPI/Controllers/v3/Dynamic/EntitiesController.cs`
 - Modify：`Module.cs`、`Record.cs`、`DynamicDbContext.cs`、`{Module,Record}Configuration.cs`、`Persistence/DependencyInjection.cs`、`Persistence/Seed/SeedData.cs`
 - Test：`ApplicationTests/Dynamic/EntityServiceTests.cs`、`WebAPITests/Dynamic/EntitiesApiTests.cs`
@@ -282,15 +282,15 @@ poc/frontend/src/
 
 - [ ] **Step 1：寫失敗測試**
   - `EntityServiceTests`：
-    - `Light_Mold_KeywordMatchesNoOrName`：keyword `上蓋` 只回 `M-0001 外殼上蓋模`；keyword `M-000` 回 5 筆，依 `MoldNo` 排序。
-    - `Light_DeletedMold_Excluded`：把 `M-0003` 的 `DeleteFlag` 設 true，total 變 4。
-    - `Titles_MixedKeys_OnlyExisting`：`["M-0001","M-9999","M-0003"(已刪)]` 只回 `M-0001`。
+    - `Light_Equipment_KeywordMatchesNoOrName`：keyword `車床 A` 只回 `EQ-0001 CNC 車床 A`；keyword `EQ-000` 回 5 筆，依 `EquipmentNo` 排序。
+    - `Light_DeletedEquipment_Excluded`：把 `EQ-0003` 的 `DeleteFlag` 設 true，total 變 4。
+    - `Titles_MixedKeys_OnlyExisting`：`["EQ-0001","EQ-9999","EQ-0003"(已刪)]` 只回 `EQ-0001`。
     - `Light_SizeCappedAt50`。
   - `EntitiesApiTests`：
-    - `List_Admin_ReturnsTwoEntities`：`design.mold`／模具、`sales.customer`／客戶。
+    - `List_Admin_ReturnsTwoEntities`：`design.equipment`／設備、`sales.customer`／客戶。
     - `List_NonAdmin_Forbidden`：sales01 回 403。
     - `Light_UnknownEntity_NotFound`：404，`message` 為 `既有實體不存在`。
-    - `Light_AnyUser_Ok`：floor01 查 `design.mold` 回 200。
+    - `Light_AnyUser_Ok`：floor01 查 `design.equipment` 回 200。
 - [ ] **Step 2：跑測試確認失敗**：`cd poc/backend && dotnet test --filter "EntityService|EntitiesApi"`。
 - [ ] **Step 3：實作**
   - 實體、設定、mock provider、seed（冪等：依主鍵存在與否新增）。標題 `$"{No} {Name}"`；keyword 比對 No 或 Name 包含。
@@ -326,9 +326,9 @@ poc/frontend/src/
   - `ReferenceHandlerTests`：
     - `Normalize_ModuleTarget_NumberOk`、`Normalize_ModuleTarget_StringRejected`、`Normalize_EntityTarget_NumberRejected`。
     - `Normalize_NotInValidKeys_Rejected`、`Normalize_ValidKeysNull_Skipped`、`Normalize_UnchangedFromPrevious_NotChecked`（`ValidRefKeys` 是空集合、值等於 `PreviousValue` → Ok）。
-    - `ToIndex_PutsStringInRefKey`：`42` → `RefKey = "42"`；`"M-0001"` → `"M-0001"`。
+    - `ToIndex_PutsStringInRefKey`：`42` → `RefKey = "42"`；`"EQ-0001"` → `"EQ-0001"`。
   - `filter-operators.json` 加 `"reference": ["eq","ne","in","notIn","isEmpty","isNotEmpty"]`；既有對照測試會自動涵蓋。
-  - `rule-cases.json` 加三個案例：`referenceEqNumber`（值 42、條件 `eq 42` 成立）、`referenceInEntity`（`"M-0001"` in `["M-0001","M-0002"]` 成立）、`referenceEmpty`（沒值時 `isEmpty` 成立、`eq` 不成立）。
+  - `rule-cases.json` 加三個案例：`referenceEqNumber`（值 42、條件 `eq 42` 成立）、`referenceInEntity`（`"EQ-0001"` in `["EQ-0001","EQ-0002"]` 成立）、`referenceEmpty`（沒值時 `isEmpty` 成立、`eq` 不成立）。
   - `FieldServiceTests`：
     - `AddField_Reference_ModuleTarget_Created`、`AddField_Reference_EntityTarget_Created`。
     - `AddField_Reference_UnknownModule_Rejected`、`AddField_Reference_ExtensionModule_Rejected`、`AddField_Reference_UnknownEntity_Rejected`：都是 `Config.RefTarget`／`參照目標不正確`。
@@ -339,7 +339,7 @@ poc/frontend/src/
     - `UpdateField_Reference_ChangeTarget_Rejected`：`參照目標建立後不能更改`；`UpdateField_Reference_ChangeOnDelete_Ok`。
     - `AddField_Formula_UsesReference_Rejected`。
     - `UpdateModule_TitleToReference_Rejected`。
-  - `SchemaServiceTests`：`Schema_ReferenceField_HasReferenceInfo`：模組目標的 `lightUrl` 為 `/modules/{key}/records/light`，實體目標為 `/entities/design.mold/light`，`name` 是目標名稱。
+  - `SchemaServiceTests`：`Schema_ReferenceField_HasReferenceInfo`：模組目標的 `lightUrl` 為 `/modules/{key}/records/light`，實體目標為 `/entities/design.equipment/light`，`name` 是目標名稱。
   - `RecordIndexTests`：`Index_ReferenceNotFilterable_StillIndexed`。
 - [ ] **Step 2：跑測試確認失敗**：`cd poc/backend && dotnet test --filter "ReferenceHandler|FieldService|SchemaService|RecordIndex|RuleCases|IndexAndOperator"`。
 - [ ] **Step 3：實作**
@@ -371,8 +371,8 @@ poc/frontend/src/
   - `Create_RefOutOfScope_Rejected`：目標模組給 sales 群組 Own 範圍，sales01 參照 sales02 擁有的記錄 → 400 同訊息。
   - `Create_RefTargetNoRead_Rejected`、`Create_RefTargetInactive_Rejected`。
   - `Create_RefToEntity_Ok`、`Create_RefToUnknownEntityKey_Rejected`。
-  - `Update_StaleEntityRefUnchanged_Saves`：記錄參照 `M-0003`，之後 `M-0003` 被刪；送同樣的 `M-0003` 加改其他欄位 → 200。
-  - `Update_ChangedToGoneEntity_Rejected`：改成已刪的 `M-0004` → 400。
+  - `Update_StaleEntityRefUnchanged_Saves`：記錄參照 `EQ-0003`，之後 `EQ-0003` 被刪；送同樣的 `EQ-0003` 加改其他欄位 → 200。
+  - `Update_ChangedToGoneEntity_Rejected`：改成已刪的 `EQ-0004` → 400。
   - `Update_RefCleared_Ok`：送 null → 值與索引都移除。
 - [ ] **Step 2：跑測試確認失敗**：`dotnet test poc/backend --filter RecordReferenceWrite`。
 - [ ] **Step 3：實作**
@@ -520,12 +520,12 @@ poc/frontend/src/
   - `CreateModule_Extension_NoHost_Rejected`、`CreateModule_Extension_UnknownHost_Rejected`：`HostEntityKey`／`擴充模組必須指定既有實體`。
   - `CreateModule_Extension_Duplicate_Conflict`：409 `這個既有實體已經有擴充模組`。
   - `UpdateModule_Extension_SetTitle_Rejected`：`TitleFieldId`／`擴充模組的標題取自既有資料`。
-  - `CreateRecord_Extension_TitleIsHostSnapshot`：`hostKey = "M-0001"` → `title = "M-0001 外殼上蓋模"`、`hostKey` 在回應裡。
+  - `CreateRecord_Extension_TitleIsHostSnapshot`：`hostKey = "EQ-0001"` → `title = "EQ-0001 CNC 車床 A"`、`hostKey` 在回應裡。
   - `CreateRecord_Extension_NoHostKey_Rejected`、`CreateRecord_Extension_UnknownHost_Rejected`。
   - `CreateRecord_Extension_DuplicateHost_Conflict`：409 `這筆既有資料已經有擴充資料`。
   - `CreateRecord_Extension_AfterDelete_Allowed`：刪掉後同一 host 可再建。
   - `GetByHost_Found`、`GetByHost_Missing_NotFound`、`GetByHost_OutOfScope_NotFound`。
-  - `Schema_ExtensionModule_HasHostEntity`：schema 的 `kind = "extension"`、`hostEntityKey = "design.mold"`。
+  - `Schema_ExtensionModule_HasHostEntity`：schema 的 `kind = "extension"`、`hostEntityKey = "design.equipment"`。
   - `CreateRecord_Standalone_HostKeyIgnored`。
 - [ ] **Step 2：跑測試確認失敗**：`dotnet test poc/backend --filter "ExtensionModule|ModulesApi"`。
 - [ ] **Step 3：實作**：重複 host 先查 `GetByHostAsync`，再靠唯一索引兜底（捕捉 `DbUpdateException` 轉同一個 409）。
@@ -628,27 +628,27 @@ poc/frontend/src/
 - Modify：`README.md`（進度表第 5 列、文件表）、`docs/manual.md`（新增「關聯」章節：參照欄位、刪除方式、反向分頁、擴充模組）、spec §15（新增條目，見下）
 
 - [ ] **Step 1：寫驗收測試** `Phase5_Scenario`（固定時鐘 2026-11-04），以 API 走完並逐步斷言：
-  1. admin 建 `repair-req`（模具維修申請）：申請人（標題）、模具（`reference` → `entity:design.mold`，必填）、故障說明（`textarea`）；啟用。
+  1. admin 建 `repair-req`（設備維修申請）：申請人（標題）、設備（`reference` → `entity:design.equipment`，必填）、故障說明（`textarea`）；啟用。
   2. 建 `repair-log`（維修紀錄）：處理內容（標題）、申請單（`reference` → `module:repair-req`，`onDelete = restrict`）、工時（`decimal`）；啟用。
-  3. 建擴充模組 `mold-ext`（`extension`、`design.mold`）：保養週期（`integer`）、上次保養日（`date`）；啟用。
-  4. 申請 A 參照 `M-0001` → 201，`references.f_x` 為 `{ key: "M-0001", title: "M-0001 外殼上蓋模", state: "ok" }`。參照 `M-9999` → 400 `參照的資料不存在或無權選取`。
+  3. 建擴充模組 `equipment-ext`（`extension`、`design.equipment`）：保養週期（`integer`）、上次保養日（`date`）；啟用。
+  4. 申請 A 參照 `EQ-0001` → 201，`references.f_x` 為 `{ key: "EQ-0001", title: "EQ-0001 CNC 車床 A", state: "ok" }`。參照 `EQ-9999` → 400 `參照的資料不存在或無權選取`。
   5. 兩筆維修紀錄參照申請 A；`GET /records/{A}/related` 有一個分頁（維修紀錄），`paged` 回 2 筆。
   6. 刪除申請 A → 409 `還有其他資料參照這筆記錄，不能刪除`，`total = 2`；刪掉兩筆維修紀錄後，再刪申請 A → 200。
-  7. `mold-ext` 為 `M-0001` 建擴充資料 → 201，`title = "M-0001 外殼上蓋模"`；再建一次 → 409 `這筆既有資料已經有擴充資料`；`GET /modules/mold-ext/records/by-host/M-0001` → 200，保養週期正確。
+  7. `equipment-ext` 為 `EQ-0001` 建擴充資料 → 201，`title = "EQ-0001 CNC 車床 A"`；再建一次 → 409 `這筆既有資料已經有擴充資料`；`GET /modules/equipment-ext/records/by-host/EQ-0001` → 200，保養週期正確。
   8. 權限：`repair-log` 給 floor 群組 Read／Add、範圍 Own；floor01 建一筆維修紀錄參照申請 B，admin 也建一筆；floor01 看申請 B 的反向分頁只有 1 筆。
-  9. 把 `Mock_Mold` 的 `M-0002` 設為已刪除（測試直接改 DB）；參照 `M-0002` 的申請 → `state = "missing"`、`title = null`；只改故障說明照樣 200。
+  9. 把 `Mock_Equipment` 的 `EQ-0002` 設為已刪除（測試直接改 DB）；參照 `EQ-0002` 的申請 → `state = "missing"`、`title = null`；只改故障說明照樣 200。
 - [ ] **Step 2：跑驗收與全部測試**：
   - `dotnet test poc/backend --filter Phase5_Scenario` → 通過。
   - `dotnet test poc/backend` → 全部通過，記下各專案數字。
   - `cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit && bunx quasar build` → 全部通過。
 - [ ] **Step 3：實機走查**（`poc/start.command`，Chrome），逐項截圖到 `docs/acceptance/phase5/`：
   1. 設計器加參照欄位（模組目標與實體目標）、選刪除方式；擴充模組的建立對話框。
-  2. 表單用 PopupSelect 搜尋並挑模具。
-  3. 明細顯示模具標題；維修紀錄的申請單是連結，點了到申請明細。
+  2. 表單用 PopupSelect 搜尋並挑設備。
+  3. 明細顯示設備標題；維修紀錄的申請單是連結，點了到申請明細。
   4. 申請明細的「維修紀錄」分頁，按新增後表單已帶好申請單。
   5. 刪除有維修紀錄的申請 → 對話框列出參照來源。
-  6. 模具擴充資料：新增時挑模具、存檔後明細標題是模具名稱。
-  7. 已失效的模具顯示「已失效」。
+  6. 設備擴充資料：新增時挑設備、存檔後明細標題是設備名稱。
+  7. 已失效的設備顯示「已失效」。
   8. floor01 看反向分頁只有自己的記錄。
 - [ ] **Step 4：寫文件**
   - `docs/acceptance/phase5.md`：照 `phase4.md` 的格式（自動測試表、情境、走查表、逐項觀察、截圖表、已知限制、實作裁決）。

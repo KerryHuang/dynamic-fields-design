@@ -331,7 +331,7 @@ a3（簽核：轉交、加簽、代理、逾期提醒、列印預覽）正在另
 | 業務一 | 更新客戶聯絡人資料 | 今天 +12 | 待辦 |
 | 業務一 | 整理名片 | 無 | 待辦 |
 | 業務一 | 寄送曜陽電子型錄 | 今天 −3 | 完成（昨天完成） |
-| 業務一 | 確認標準導柱庫存（掛在進銷存品項記錄上，`manager01` 讀不到） | 今天 +2 | 待辦 |
+| 業務一 | 確認標準軸承庫存（掛在進銷存品項記錄上，`manager01` 讀不到） | 今天 +2 | 待辦 |
 | 業務二 | 確認岳峰精機交期 | 今天 −1 | 待辦 |
 | 業務二 | 季度目標草稿 | 無 | 進行中 |
 | 業務二 | 整理樣品櫃（建立後清空負責人，未指派、建立者是部屬，U3） | 今天 +5 | 待辦 |
@@ -345,7 +345,7 @@ a3（簽核：轉交、加簽、代理、逾期提醒、列印預覽）正在另
 - `PersonalTasks_CreatedByAssignee_NoAssignedNotifications`：上表任務都在、`CreatedBy == 負責人`，這些任務沒有 `TaskAssigned` 通知。
 - `Manager01_SubordinatesTab_ListsSalesAndOthers`：以 `manager01` 查「部屬的任務」分頁含上表全部未完成的任務（`manager01` 管總經理室，範圍遞迴到全公司）。
 - `Ops01_SubordinatesTab_ListsKeeperOnlyFromThisSet`：`ops01` 看得到「盤點備品倉」，看不到業務的任務。
-- `Manager01_InventoryTask_RecordHidden`：「確認標準導柱庫存」在 `manager01` 的清單是「相關記錄（無權限查看）」。
+- `Manager01_InventoryTask_RecordHidden`：「確認標準軸承庫存」在 `manager01` 的清單是「相關記錄（無權限查看）」。
 
 **驗收：** `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~TaskBoardScenario|FullyQualifiedName~CampaignTaskScenario|FullyQualifiedName~DemoGeneration"`。
 
@@ -374,7 +374,7 @@ a3（簽核：轉交、加簽、代理、逾期提醒、列印預覽）正在另
 **驗收：** `cd poc/frontend && bunx vitest run src/pages/tasks src/presentation/dynamic/tasks src/application/dynamic/queries/tasks-queries.vitest.spec.ts src/services/api/dynamic-api.tasks.vitest.spec.ts src/i18n --maxWorkers=2`；`bun run typecheck`；`bun run build`。
 
 **實機走查**（`bash scripts/unattended/local-demo.sh ../dynamic-fields-design.taskboard`，`http://127.0.0.1:9180`，照 `formwright-demo-verify`，只用一鍵 Demo 登入按鈕）：
-1. 業務主管登入 → 任務頁出現「部屬的任務」分頁 → 列出業務一、業務二、業務三、倉管人員的任務；「確認標準導柱庫存」顯示「相關記錄（無權限查看）」；「整理樣品櫃」負責人顯示「未指派」。
+1. 業務主管登入 → 任務頁出現「部屬的任務」分頁 → 列出業務一、業務二、業務三、倉管人員的任務；「確認標準軸承庫存」顯示「相關記錄（無權限查看）」；「整理樣品櫃」負責人顯示「未指派」。
 2. 點業務一的「整理名片」→ 詳細只有負責人可改、說明文字出現 → 改成「業務二」→ 儲存 → 清單更新，仍在分頁內。
 3. 進銷存主管（`ops01`）登入 →「部屬的任務」有倉管人員的「盤點備品倉」→ 改負責人為「業務一」（不是他的部屬）→ 對話框關閉、底部「已移出你的範圍　復原」→ 按「復原」→ 任務回到倉管人員、留言串兩筆改負責人記錄。再做一次、等提示消失 → 任務不在分頁內；最後以系統管理員把它改回倉管人員。
 4. 業務一登入 → 沒有「部屬的任務」分頁；系統管理員登入 → 政策頁看得到兩個新政策；把「部門主管可看與重派部屬的任務」關掉 → 業務主管重新整理後分頁消失；改回開。

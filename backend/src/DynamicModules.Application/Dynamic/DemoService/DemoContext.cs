@@ -4,7 +4,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.DemoService;
 
-/// <summary>一次產生用的共用資料：今天、送指令的 ISender、「MES 模具廠」套件的 id 對照、群組 id。</summary>
+/// <summary>一次產生用的共用資料：今天、送指令的 ISender、「MES 生產製造」套件的 id 對照、群組 id。</summary>
 public sealed class DemoContext(DateOnly today, ISender sender, TemplateIdMap ids, IReadOnlyDictionary<string, long> groupIds)
 {
     public DateOnly Today { get; } = today;

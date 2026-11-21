@@ -52,7 +52,7 @@ public sealed class MasterScenario(IReadOnlyCollection<string> openApps) : IDemo
         ("嵐岳精密", "customer", [DemoCatalog.MesAppId], null), ("恆川機械", "customer", [DemoCatalog.MesAppId], null),
         ("曜陽電子", "customer", [DemoCatalog.MesAppId], null), ("岳峰精機", "customer", [DemoCatalog.MesAppId], null),
         ("昌盛鋼鐵", "supplier", [DemoCatalog.InventoryAppId], "林經理"), ("宏達五金", "supplier", [DemoCatalog.InventoryAppId], "陳小姐"),
-        ("精工模料", "supplier", [DemoCatalog.InventoryAppId], "王先生"),
+        ("精工材料", "supplier", [DemoCatalog.InventoryAppId], "王先生"),
         ("恆久工業", "customer", [DemoCatalog.InventoryAppId], "黃經理")
     ];
 

@@ -6,7 +6,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests;
 
-/// <summary>第 3 階段驗收情境：模具維修申請依角色看到不同的記錄、欄位與選項。</summary>
+/// <summary>第 3 階段驗收情境：設備維修申請依角色看到不同的記錄、欄位與選項。</summary>
 public class Phase3AcceptanceTests : IClassFixture<TestApp>
 {
     private const string Module = "repair-request";
@@ -60,7 +60,7 @@ public class Phase3AcceptanceTests : IClassFixture<TestApp>
         var floor = _app.AsUser("floor01");
 
         // 1. admin 建模組與欄位並啟用
-        (await _admin.PostAsJsonAsync($"{Base}/modules", new { key = Module, name = Zh("模具維修申請") }))
+        (await _admin.PostAsJsonAsync($"{Base}/modules", new { key = Module, name = Zh("設備維修申請") }))
             .StatusCode.Should().Be(HttpStatusCode.Created);
         var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Module}"));
         var blockId = module.GetProperty("blocks")[0].GetProperty("id").GetInt64();
@@ -71,7 +71,7 @@ public class Phase3AcceptanceTests : IClassFixture<TestApp>
             type = "text", label = Zh("申請人"), config = new { required = true }, blockId
         })).StatusCode.Should().Be(HttpStatusCode.OK);
         var category = await AddField(blockId, "enum", "故障類別", new { });
-        var optDamage = await AddOption(category.Id, "模具損壞");
+        var optDamage = await AddOption(category.Id, "設備損壞");
         await AddOption(category.Id, "機台異常");
         var optOutsource = await AddOption(category.Id, "外包");
         var cost = await AddField(blockId, "currency", "預估費用", new { scale = 0, required = true, isSortable = true });

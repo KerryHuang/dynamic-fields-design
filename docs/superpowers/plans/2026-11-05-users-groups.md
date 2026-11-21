@@ -53,12 +53,12 @@
 **Interfaces:**
 - Produces:
   - `AppUser` 新欄位：`string? PasswordHash`、`bool MustChangePassword`、`bool IsActive = true`、`bool IsDemoAccount`、`int FailedLoginCount`、`DateTimeOffset? LockedUntil`、`string SecurityStamp = Guid.NewGuid().ToString("N")`。
-  - `DynamicModules.Persistence.Seed.DemoPeople`：`static Task EnsureAsync(DynamicDbContext db, CancellationToken ct = default)`，補齊示範使用者（`IsDemoAccount = true`、`PasswordHash = null`）、群組、成員、模具、客戶，已存在的不覆寫。給測試用，也給 `IDemoPeople` 的實作用。
+  - `DynamicModules.Persistence.Seed.DemoPeople`：`static Task EnsureAsync(DynamicDbContext db, CancellationToken ct = default)`，補齊示範使用者（`IsDemoAccount = true`、`PasswordHash = null`）、群組、成員、設備、客戶，已存在的不覆寫。給測試用，也給 `IDemoPeople` 的實作用。
   - `IDemoPeople`：`Task<IReadOnlyList<string>> ConflictsAsync(CancellationToken ct)`、`Task AddAsync(CancellationToken ct)`。
   - `TestApp(bool seedDemoPeople = true, bool realAuth = false)`：`realAuth` 在 Task 2 才有作用，這裡先加 `seedDemoPeople`。
 
 - [ ] **Step 1: 寫失敗的測試**（`SeedDataTests`，先刪掉斷言示範使用者、`firstUpgrade` 授權的舊測試）
-  - `FreshDatabase_HasOnlyAdmin`：`AppUser` 只有 `admin`，`IsSystemAdmin == true`，`PermissionGroup`、`MockMold`、`MockCustomer` 都是 0 筆。
+  - `FreshDatabase_HasOnlyAdmin`：`AppUser` 只有 `admin`，`IsSystemAdmin == true`，`PermissionGroup`、`MockEquipment`、`MockCustomer` 都是 0 筆。
   - `Reseed_DoesNotRestoreRemovedMembers`：`EnsureAsync` 後移除 `sales01` 的成員對應，再跑 `EnsureSeededAsync`，對應仍不存在。
   - `Reseed_DoesNotForceAdminFlag`：另建一位管理員、取消 `admin` 的 `IsSystemAdmin`，再跑 `EnsureSeededAsync`，`admin.IsSystemAdmin == false`。
   - `DemoPeopleTests.Generate_CreatesPeopleFlaggedAsDemo`：跑產生器後 `sales01.IsDemoAccount == true`、`PasswordHash == null`，`admin.IsDemoAccount == false`。
@@ -68,9 +68,9 @@
 - [ ] **Step 2: 跑測試確認失敗**：`dotnet test poc/backend --filter "FullyQualifiedName~SeedDataTests|FullyQualifiedName~DemoPeopleTests"`，預期因 `DemoPeople` 不存在而編譯失敗。
 - [ ] **Step 3: 實作。**
   - `IsActive` 的設定要 `HasDefaultValue(true).ValueGeneratedNever()`，否則 EF 會把明確寫入的 `false` 換成資料庫預設值。`SecurityStamp` 的 migration 預設值用 `"initial"`。
-  - `SeedData.Users`、`Groups`、`Molds`、`Customers`、`SeedMockEntitiesAsync`、`SeedGroupsAsync` 移到 `DemoPeople`；移除 `UpgradeGrantGroups`、`GrantExistingModulesAsync`、`firstUpgrade`、每次強制 `admin.IsSystemAdmin = true`。
+  - `SeedData.Users`、`Groups`、`Equipment`、`Customers`、`SeedMockEntitiesAsync`、`SeedGroupsAsync` 移到 `DemoPeople`；移除 `UpgradeGrantGroups`、`GrantExistingModulesAsync`、`firstUpgrade`、每次強制 `admin.IsSystemAdmin = true`。
   - 核心種子：`DYN00000`；資料庫沒有任何系統管理員時才建 `admin`（`IsSystemAdmin = true`）；其餘資料修復步驟保留。
-  - `DemoPeopleSeeder : IDemoPeople` 放在 Persistence，用 scoped `DynamicDbContext`，`AddAsync` 呼叫 `DemoPeople.EnsureAsync` 後 `SaveChanges`。衝突訊息：`使用者 {id} 已存在`、`群組 {key} 已存在`、`模具 {no} 已存在`、`客戶 {no} 已存在`。
+  - `DemoPeopleSeeder : IDemoPeople` 放在 Persistence，用 scoped `DynamicDbContext`，`AddAsync` 呼叫 `DemoPeople.EnsureAsync` 後 `SaveChanges`。衝突訊息：`使用者 {id} 已存在`、`群組 {key} 已存在`、`設備 {no} 已存在`、`客戶 {no} 已存在`。
   - `DemoPreflight.ConflictsAsync` 合併 `IDemoPeople.ConflictsAsync`。`GenerateDemoDataHandler` 順序：衝突檢查 → `people.AddAsync` → `structure.BuildAsync`，同一個交易。409 訊息改成 `已有相同的資料，未產生 Demo 資料`。
   - `DbKnownUsers` 改成每次查資料庫，因為產生器會新增使用者。
   - 測試：在每個 `await SeedData.EnsureSeededAsync(...)` 後面補 `await DemoPeople.EnsureAsync(...)`；**例外**是 `DemoGeneratedFixture` 和所有跑產生器的測試，它們只跑核心種子，否則會衝突。`TestApp` 覆寫 `CreateHost`，`seedDemoPeople` 為 true 時在 host 建好後呼叫 `DemoPeople.EnsureAsync`。`DemoDataApiTests` 改用 `seedDemoPeople: false`，但它用到的非 admin 身分要在測試內自行建立，或在產生完成後才使用。

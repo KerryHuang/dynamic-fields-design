@@ -51,7 +51,7 @@ describe('DemoDataPage', () => {
     api.generateDemoData.mockResolvedValue(status({ state: 'running' }));
     const w = await mountPage(status({}));
     expect(text('demo-state')).toBe('尚未產生');
-    expect(w.text()).toContain('開啟 MES 模具廠、CRM、進銷存三個內建應用程式');
+    expect(w.text()).toContain('開啟 MES 生產製造、CRM、進銷存三個內建應用程式');
     expect(q('demo-generate')!.disabled).toBe(false);
     q('demo-generate')!.click();
     await flushPromises();

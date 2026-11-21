@@ -7,18 +7,18 @@ using FluentAssertions;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
-/// <summary>內建應用程式「MES 模具廠」（apps/mes-mold.app.json）的載入驗證與約定：四語系、代碼前綴、不依賴其他應用程式。</summary>
+/// <summary>內建應用程式「MES 生產製造」（apps/mes.app.json）的載入驗證與約定：四語系、代碼前綴、不依賴其他應用程式。</summary>
 public class MesPackageTests
 {
     private static readonly Lazy<AppPackageData> Package = new(() =>
-        AppCatalog.Load(AppCatalog.DefaultDirectory).BuiltIns.Single(p => p.Manifest.Id == "mes-mold"));
+        AppCatalog.Load(AppCatalog.DefaultDirectory).BuiltIns.Single(p => p.Manifest.Id == "mes"));
 
     [Fact]
     public void Catalog_LoadsMes_AndTheValidatorReportsNoErrors()
     {
         var p = Package.Value;
         p.FormatVersion.Should().Be(6);
-        p.Modules.Single(m => m.Code == "mold").TitleTemplate.Should().Be("{no} {name}");
+        p.Modules.Single(m => m.Code == "equipment").TitleTemplate.Should().Be("{no} {name}");
         p.Manifest.Requires.Apps.Should().BeEmpty("三個應用程式彼此獨立");
         AppPackageValidator.Validate(p).Errors.Should().BeEmpty();
         p.Modules.Should().HaveCount(13, "客戶擴充模組改為往來對象的貢獻");
@@ -73,22 +73,22 @@ public class MesPackageTests
     }
 
     [Fact]
-    public void Mold_IsMesOwnModule_NotAnExtensionOfACoreEntity()
+    public void Equipment_IsMesOwnModule_NotAnExtensionOfACoreEntity()
     {
-        // s2d-0：模具歸 MES 自己的模組，核心不再有模擬實體 design.mold
+        // s2d-0：設備歸 MES 自己的模組，不依賴核心的模擬實體
         var p = Package.Value;
-        p.Manifest.Requires.Entities.Should().NotContain("design.mold");
-        var mold = p.Modules.Single(m => m.Code == "mold");
-        mold.Key.Should().Be("mes-mold");
-        mold.Kind.Should().Be(ModuleKind.Standalone);
-        mold.HostEntityKey.Should().BeNull();
-        mold.TitleField.Should().Be("name");
-        var fields = mold.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Code);
-        fields.Keys.Should().BeEquivalentTo("no", "name", "lastCareDate", "cycleDays", "shotCount");
+        p.Manifest.Requires.Entities.Should().BeEmpty();
+        var equipment = p.Modules.Single(m => m.Code == "equipment");
+        equipment.Key.Should().Be("mes-equipment");
+        equipment.Kind.Should().Be(ModuleKind.Standalone);
+        equipment.HostEntityKey.Should().BeNull();
+        equipment.TitleField.Should().Be("name");
+        var fields = equipment.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Code);
+        fields.Keys.Should().BeEquivalentTo("no", "name", "lastCareDate", "cycleDays", "runHours");
         fields["no"].Type.Should().Be(FieldType.Text);
         fields["no"].Config.GetProperty("required").GetBoolean().Should().BeTrue();
         fields["name"].Config.GetProperty("required").GetBoolean().Should().BeTrue();
-        mold.Blocks.Single(b => b.Code == "care").Fields.Select(f => f.Code).Should().Equal("lastCareDate", "cycleDays", "shotCount");
+        equipment.Blocks.Single(b => b.Code == "care").Fields.Select(f => f.Code).Should().Equal("lastCareDate", "cycleDays", "runHours");
     }
 
     [Fact]
@@ -145,11 +145,11 @@ public class MesPackageTests
     [Theory]
     [InlineData("repair")]
     [InlineData("care")]
-    public void RepairAndCare_ReferToTheMoldModule(string module)
+    public void RepairAndCare_ReferToTheEquipmentModule(string module)
     {
-        var field = Package.Value.Modules.Single(m => m.Code == module).Blocks.SelectMany(b => b.Fields).Single(f => f.Code == "mold");
+        var field = Package.Value.Modules.Single(m => m.Code == module).Blocks.SelectMany(b => b.Fields).Single(f => f.Code == "equipment");
         var target = field.Config.GetProperty("refTarget");
         target.GetProperty("kind").GetString().Should().Be("module");
-        target.GetProperty("key").GetString().Should().Be("mold");
+        target.GetProperty("key").GetString().Should().Be("equipment");
     }
 }

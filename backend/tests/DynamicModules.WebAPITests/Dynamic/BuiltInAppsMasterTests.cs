@@ -30,7 +30,7 @@ public class BuiltInAppsMasterTests
     public async Task OpeningOnlyMes_OpensThePartnerMaster_WithTheMesBlock()
     {
         using var rig = new SharedMasterRig();
-        await rig.OpenOkAsync("mes-mold", NoGroups);
+        await rig.OpenOkAsync("mes", NoGroups);
         await rig.AssertIntegrityAsync();
 
         rig.StatusOf("partner").Should().Be(Domain.Entities.Dynamic.AppStatus.Open);
@@ -45,7 +45,7 @@ public class BuiltInAppsMasterTests
     public async Task MesQuotes_TakeCustomersOrBoth_NotSuppliers()
     {
         using var rig = new SharedMasterRig();
-        var mes = await rig.OpenOkAsync("mes-mold", NoGroups);
+        var mes = await rig.OpenOkAsync("mes", NoGroups);
         var q = await FieldKeys(rig.Admin, Key(mes, "quote"));
 
         async Task<HttpStatusCode> QuoteFor(long partner) =>
@@ -61,9 +61,9 @@ public class BuiltInAppsMasterTests
     public async Task ExportingTheBuiltInMes_PutsPartnerInRequiresMasters_AndRebuildsTheMesContribution()
     {
         using var rig = new SharedMasterRig();
-        await rig.OpenOkAsync("mes-mold", NoGroups);
+        await rig.OpenOkAsync("mes", NoGroups);
 
-        var (package, _) = await rig.ExportAsync("mes-mold");
+        var (package, _) = await rig.ExportAsync("mes");
 
         var requires = package.GetProperty("manifest").GetProperty("requires");
         (requires.TryGetProperty("apps", out var apps) ? apps.EnumerateArray().Select(a => a.GetProperty("id").GetString()).ToList() : [])
@@ -82,7 +82,7 @@ public class BuiltInAppsMasterTests
     {
         // 遷移前信用等級、網站在擴充模組 mes-customer-info，只給業務與業務主管；改成貢獻欄位後，生管、現場、品保為了參照標題拿到讀取，不能連帶看到這兩欄
         using var rig = new SharedMasterRig();
-        await rig.OpenOkAsync("mes-mold", new
+        await rig.OpenOkAsync("mes", new
         {
             groupMap = new Dictionary<string, object>
             {
@@ -223,7 +223,7 @@ public class BuiltInAppsMasterTests
     // ---- 三個內建應用程式的開啟順序（§11.5 最後一點、§15.2「開啟」）----
 
     public static IEnumerable<object[]> OpeningOrders =>
-        new[] { "crm-sales", "mes-mold", "inventory" }.Permutations().Select(o => new object[] { o });
+        new[] { "crm-sales", "mes", "inventory" }.Permutations().Select(o => new object[] { o });
 
     [Theory]
     [MemberData(nameof(OpeningOrders))]
@@ -234,7 +234,7 @@ public class BuiltInAppsMasterTests
         await rig.AssertIntegrityAsync();
 
         var partner = rig.Blocks(Partner);
-        partner.Select(b => b.Block).Should().Equal(["基本資料", "CRM", "進銷存", "MES"], "基本區塊在前，貢獻區塊依應用程式 id（crm-sales、inventory、mes-mold）排序");
+        partner.Select(b => b.Block).Should().Equal(["基本資料", "CRM", "進銷存", "MES"], "基本區塊在前，貢獻區塊依應用程式 id（crm-sales、inventory、mes）排序");
         partner[0].Fields.Should().Equal("編號:AutoNumber:Active", "名稱:Text:Active", "角色:Enum:Active", "統一編號:Text:Active", "電話:Phone:Active",
             "Email:Email:Active", "地址:Text:Active", "負責人:User:Active", "銷售付款條件:Text:Active", "採購付款條件:Text:Active", "啟用:Boolean:Active");
         partner[1].Fields.Should().Equal("產業:Enum:Active", "來源潛在客戶:Reference:Active");

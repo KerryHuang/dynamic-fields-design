@@ -126,12 +126,12 @@ describe('FormPage', () => {
       expect(w2.findComponent(PopupSelect).props('modelValue') ?? null).toBeNull();
       const w3 = await mountPage(refSchema([refField(12, 'module')]), '/dynamic/m/new?prefill=f_12:abc');
       expect(w3.findComponent(PopupSelect).props('modelValue') ?? null).toBeNull();
-      const w4 = await mountPage(refSchema([refField(13, 'entity')]), '/dynamic/m/new?prefill=f_13:M-0001');
-      expect(w4.findComponent(PopupSelect).props('modelValue')).toBe('M-0001');
+      const w4 = await mountPage(refSchema([refField(13, 'entity')]), '/dynamic/m/new?prefill=f_13:EQ-0001');
+      expect(w4.findComponent(PopupSelect).props('modelValue')).toBe('EQ-0001');
     });
 
     it('extension module new form requires host pick', async () => {
-      api.light.mockResolvedValue({ items: [{ key: 'M-0001', title: 'M-0001 外殼上蓋模' }], total: 1 });
+      api.light.mockResolvedValue({ items: [{ key: 'EQ-0001', title: 'EQ-0001 CNC 車床 A' }], total: 1 });
       api.createRecord.mockResolvedValue({ ...record, id: 9 } as never);
       const w = await mountPage(refSchema([], { kind: 'extension', hostEntityKey: 'test.entity', titleFieldKey: null }), '/dynamic/m/new');
       const host = w.findComponent(PopupSelect);
@@ -142,10 +142,10 @@ describe('FormPage', () => {
       await flushPromises();
       expect(api.createRecord).not.toHaveBeenCalled();
       expect(w.text()).toContain(zhTW.designer.extension.hostEntityRequired);
-      host.vm.$emit('update:modelValue', 'M-0001');
+      host.vm.$emit('update:modelValue', 'EQ-0001');
       await flushPromises();
       await w.find('form').trigger('submit');
-      await vi.waitFor(() => expect(api.createRecord).toHaveBeenCalledWith('m', expect.anything(), 'M-0001', undefined, expect.any(String)));
+      await vi.waitFor(() => expect(api.createRecord).toHaveBeenCalledWith('m', expect.anything(), 'EQ-0001', undefined, expect.any(String)));
     });
 
     it('create-mode 409 shows the server message, not the stale notice', async () => {
@@ -153,7 +153,7 @@ describe('FormPage', () => {
       api.light.mockResolvedValue({ items: [], total: 0 });
       api.createRecord.mockRejectedValue({ status: 409, message: '這筆既有資料已經有擴充資料' });
       const w = await mountPage(refSchema([], { kind: 'extension', hostEntityKey: 'test.entity', titleFieldKey: null }), '/dynamic/m/new');
-      w.findComponent(PopupSelect).vm.$emit('update:modelValue', 'M-0001');
+      w.findComponent(PopupSelect).vm.$emit('update:modelValue', 'EQ-0001');
       await flushPromises();
       await w.find('form').trigger('submit');
       await vi.waitFor(() => expect(w.text()).toContain('這筆既有資料已經有擴充資料'));
@@ -163,7 +163,7 @@ describe('FormPage', () => {
     it('create-mode hostKey 400 lands on the host picker without a schema refetch', async () => {
       api.createRecord.mockRejectedValue({ status: 400, message: 'x', errors: { hostKey: ['既有資料不存在'] } });
       const w = await mountPage(refSchema([], { kind: 'extension', hostEntityKey: 'test.entity', titleFieldKey: null }), '/dynamic/m/new');
-      w.findComponent(PopupSelect).vm.$emit('update:modelValue', 'M-0001');
+      w.findComponent(PopupSelect).vm.$emit('update:modelValue', 'EQ-0001');
       await flushPromises();
       await w.find('form').trigger('submit');
       await vi.waitFor(() => expect(w.findComponent(PopupSelect).props('error')).toBe('既有資料不存在'));

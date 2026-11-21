@@ -32,7 +32,7 @@ public sealed class QualityScenario : IDemoScenario
 
     private static readonly string[] Actions = ["rework", "scrap", "sort", "concession", "return"];
 
-    private static readonly string[] Units = ["成型課", "模具課", "組裝課", "外包廠商"];
+    private static readonly string[] Units = ["加工課", "設備課", "組裝課", "外包廠商"];
 
     public void Plan(DemoPlan plan)
     {

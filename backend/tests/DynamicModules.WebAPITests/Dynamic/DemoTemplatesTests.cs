@@ -6,7 +6,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
-/// <summary>Demo 資料用的三個內建範本：故障報修、模具保養＋客戶擴充、品質異常。</summary>
+/// <summary>Demo 資料用的三個內建範本：設備報修、設備保養＋客戶擴充、品質異常。</summary>
 /// <remarks>每個測試一個新的資料庫：內建範本的模組代碼固定，共用會互相撞。</remarks>
 public sealed class DemoTemplatesTests : IDisposable
 {
@@ -89,10 +89,10 @@ public sealed class DemoTemplatesTests : IDisposable
         (await Ok(c.GetAsync($"{Base}/modules/{module}/records/paged?currentPage=1&pagesSize=50")))
             .GetProperty("items").EnumerateArray().Select(IdOf).ToList();
 
-    /// <summary>報修的必填欄位：模具、申請人、故障說明（報修日期預設今天、狀態預設待處理）。</summary>
+    /// <summary>報修的必填欄位：設備、申請人、故障說明（報修日期預設今天、狀態預設待處理）。</summary>
     private static Dictionary<string, object?> RepairValues(Layout r, string requester, Dictionary<string, object?>? extra = null)
     {
-        var v = new Dictionary<string, object?> { [r["模具"]] = "E-0001", [r["申請人"]] = requester, [r["故障說明"]] = "冷卻水路漏水" };
+        var v = new Dictionary<string, object?> { [r["設備"]] = "E-0001", [r["申請人"]] = requester, [r["故障說明"]] = "油壓管漏油" };
         foreach (var (k, x) in extra ?? []) v[k] = x;
         return v;
     }
@@ -107,25 +107,25 @@ public sealed class DemoTemplatesTests : IDisposable
     }
 
     [Fact]
-    public async Task Instantiate_MoldCare_Standalone_ThenActivateAll()
+    public async Task Instantiate_EquipmentCare_Standalone_ThenActivateAll()
     {
-        await InstantiateAndActivate("mold-care", "mold-info", "customer-info", "mold-care", "mold-care-part");
+        await InstantiateAndActivate("equipment-care", "equipment-info", "customer-info", "equipment-care", "equipment-care-part");
 
-        var part = await LayoutOf("mold-care-part");
+        var part = await LayoutOf("equipment-care-part");
         part.Field("保養紀錄").GetProperty("config").GetProperty("onDelete").GetString().Should().Be("cascade");
-        var care = await LayoutOf("mold-care");
+        var care = await LayoutOf("equipment-care");
         long Id(string label) => care.Field(label).GetProperty("id").GetInt64();
         care.Field("下次保養日").GetProperty("config").GetProperty("formula").GetString()
             .Should().Be($"DATEADD({{{Id("保養日期")}}}, {{{Id("保養週期（天）")}}})");
     }
 
     [Theory]
-    [InlineData("mold-info", "上次保養日", "累計射出數")]
+    [InlineData("equipment-info", "上次保養日", "累計運轉時數")]
     [InlineData("customer-info", "信用等級", "業務窗口")]
-    [InlineData("mold-care-part", "保養紀錄", "零件名稱")]
-    public async Task Instantiate_MoldCare_MenuModulesHaveFilterableFields(string module, params string[] labels)
+    [InlineData("equipment-care-part", "保養紀錄", "零件名稱")]
+    public async Task Instantiate_EquipmentCare_MenuModulesHaveFilterableFields(string module, params string[] labels)
     {
-        await InstantiateAndActivate("mold-care", "mold-info", "customer-info", "mold-care", "mold-care-part");
+        await InstantiateAndActivate("equipment-care", "equipment-info", "customer-info", "equipment-care", "equipment-care-part");
 
         var layout = await LayoutOf(module);
         foreach (var label in labels)
@@ -212,16 +212,16 @@ public sealed class DemoTemplatesTests : IDisposable
     [Fact]
     public async Task DeleteBehaviors()
     {
-        await InstantiateAndActivate("mold-care", "mold-info", "customer-info", "mold-care", "mold-care-part");
+        await InstantiateAndActivate("equipment-care", "equipment-info", "customer-info", "equipment-care", "equipment-care-part");
         await InstantiateAndActivate("repair", "repair");
         await InstantiateAndActivate("order", "order", "order-line");
         await InstantiateAndActivate("quality", "quality");
 
         // Cascade：刪保養紀錄，它的更換零件跟著刪
-        var care = await LayoutOf("mold-care");
-        var part = await LayoutOf("mold-care-part");
-        var careRec = await Create(_admin, "mold-care", new() { [care["模具"]] = "E-0001", [care["保養週期（天）"]] = 90 });
-        var partRec = await Create(_admin, "mold-care-part", new() { [part["保養紀錄"]] = IdOf(careRec), [part["零件名稱"]] = "頂針" });
+        var care = await LayoutOf("equipment-care");
+        var part = await LayoutOf("equipment-care-part");
+        var careRec = await Create(_admin, "equipment-care", new() { [care["設備"]] = "E-0001", [care["保養週期（天）"]] = 90 });
+        var partRec = await Create(_admin, "equipment-care-part", new() { [part["保養紀錄"]] = IdOf(careRec), [part["零件名稱"]] = "軸承" });
         (await Delete(IdOf(careRec))).StatusCode.Should().Be(HttpStatusCode.OK);
         (await _admin.GetAsync($"{Base}/records/{IdOf(partRec)}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
 

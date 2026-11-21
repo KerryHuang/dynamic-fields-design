@@ -401,7 +401,7 @@ public class SchemaServiceTests : IAsyncLifetime
         await CreateModule("customer", "客戶");
         var toModule = (FieldResponse)(await Send(new AddFieldRequest("order", m.Blocks[0].Id, FieldType.Reference, Text("客戶"),
             new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.ModuleKind, "customer") }))).Data!;
-        var toEntity = (FieldResponse)(await Send(new AddFieldRequest("order", m.Blocks[0].Id, FieldType.Reference, Text("模具"),
+        var toEntity = (FieldResponse)(await Send(new AddFieldRequest("order", m.Blocks[0].Id, FieldType.Reference, Text("設備"),
             new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") }))).Data!;
         var plain = await AddField("order", m.Blocks[0].Id);
         await Send(new ActivateModuleRequest("order"));

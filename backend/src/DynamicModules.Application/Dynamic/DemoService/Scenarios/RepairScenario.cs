@@ -18,32 +18,32 @@ public sealed class RepairScenario : IDemoScenario
 
     private const string Maint = "maint01";
 
-    /// <summary>relatedRepair 指向同模具較早一筆的報修（第 n 筆）。</summary>
+    /// <summary>relatedRepair 指向同設備較早一筆的報修（第 n 筆）。</summary>
     private static readonly int[] Related = [7, 23, 41];
 
     private static readonly string[] Categories = ["leak", "crack", "wear", "stuck"];
 
     private static readonly Dictionary<string, string[]> Descriptions = new()
     {
-        ["leak"] = ["冷卻水路接頭滲水", "模仁周邊有水漬，疑似水路破裂"],
-        ["crack"] = ["模仁角落出現細裂紋", "頂針孔周圍龜裂"],
-        ["wear"] = ["分模面磨耗，產品毛邊變大", "滑塊磨耗，開模有異音"],
-        ["stuck"] = ["開模時產品卡在公模", "頂出不順，滑塊卡住"],
-        ["other"] = ["溫控器顯示異常", "模具定位環鬆脫"]
+        ["leak"] = ["油壓管接頭滲油", "冷卻液管路滲漏，地面有積液"],
+        ["crack"] = ["防護罩出現細裂紋", "夾治具座周圍龜裂"],
+        ["wear"] = ["主軸磨耗，加工面粗糙度變差", "導軌磨耗，運轉有異音"],
+        ["stuck"] = ["送料機構卡料停機", "夾頭卡住無法鬆開"],
+        ["other"] = ["溫控器顯示異常", "定位感測器鬆脫"]
     };
 
     private static readonly string[] OtherNotes = ["周邊設備連動異常", "外部廠商反映", "原因待查"];
 
     private static readonly string[] Resolutions =
-        ["更換密封圈並試模確認", "研磨修補後試模正常", "更換頂針與彈簧", "清理水路並更換接頭", "調整滑塊間隙後試模正常"];
+        ["更換密封圈並試車確認", "研磨修補後試車正常", "更換軸承與彈簧", "清理管路並更換接頭", "調整導軌間隙後試車正常"];
 
     public void Plan(DemoPlan plan)
     {
         var today = plan.Today;
         var rnd = plan.Random;
-        if (!plan.Records.TryGetValue("mold", out var molds) || molds.Count == 0)
-            throw new InvalidOperationException("模具保養情境必須排在報修之前：報修要挑的模具資料還沒有規劃");
-        var planned = new List<(int N, string Creator, DemoRecord Mold, DemoRecord Record)>();
+        if (!plan.Records.TryGetValue("equipment", out var equipment) || equipment.Count == 0)
+            throw new InvalidOperationException("設備保養情境必須排在報修之前：報修要挑的設備資料還沒有規劃");
+        var planned = new List<(int N, string Creator, DemoRecord Equipment, DemoRecord Record)>();
         var toggle = false;
 
         for (var n = 1; n <= Count; n++)
@@ -51,15 +51,15 @@ public sealed class RepairScenario : IDemoScenario
             var date = today.AddDays(-(90 - (int)Math.Round((n - 1) * 89.0 / (Count - 1))));
             var days = today.DayNumber - date.DayNumber;
             var creator = n % 10 == 0 ? Maint : n % 2 == 1 ? "floor01" : "floor02";
-            var mold = molds[rnd.Next(molds.Count)];
+            var machine = equipment[rnd.Next(equipment.Count)];
             DemoRecord? related = null;
             if (Related.Contains(n))
             {
-                // 建立者看得到的較早一筆（現場人員的範圍不含 maint01 建的），模具改成同一副
+                // 建立者看得到的較早一筆（現場人員的範圍不含 maint01 建的），設備改成同一台
                 var candidates = planned.Where(p => p.Creator != Maint).ToList();
                 var target = candidates[rnd.Next(candidates.Count)];
                 related = target.Record;
-                mold = target.Mold;
+                machine = target.Equipment;
             }
             var category = rnd.NextDouble() < 0.1 ? "other" : Categories[rnd.Next(Categories.Length)];
             var otherNote = category == "other" ? OtherNotes[rnd.Next(OtherNotes.Length)] : null;
@@ -78,7 +78,7 @@ public sealed class RepairScenario : IDemoScenario
             var record = plan.Create("repair", createdAt, creator, $"{label} 提報", ctx =>
             {
                 var values = ctx.Values("repair",
-                    ("mold", mold.Id), ("requester", creator), ("reportDate", Iso(date)), ("occurredAt", occurredAt),
+                    ("equipment", machine.Id), ("requester", creator), ("reportDate", Iso(date)), ("occurredAt", occurredAt),
                     ("urgent", urgent), ("category", ctx.Opt("repair", category)),
                     ("status", ctx.Opt("repair", "pending")), ("description", description));
                 if (otherNote is not null) values[ctx.Key("repair.otherNote")] = Json(otherNote);
@@ -86,7 +86,7 @@ public sealed class RepairScenario : IDemoScenario
                 return new CreateRecordRequest(ctx.Ids.ModuleKeys["repair"], values);
             });
             record.Facts["status"] = status;
-            planned.Add((n, creator, mold, record));
+            planned.Add((n, creator, machine, record));
 
             if (status == "pending") continue;
             var workingAt = plan.At(date.AddDays(rnd.Next(2)), createdAt);
