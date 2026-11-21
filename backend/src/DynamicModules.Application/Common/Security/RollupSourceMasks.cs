@@ -7,14 +7,14 @@ namespace DynamicModules.Application.Common.Security;
 
 /// <summary>
 /// 彙總來源的遮罩輸入（給 <see cref="PermissionResolver.Resolve"/>）：
-/// <see cref="HiddenSourceFieldIds"/> 是使用者在各彙總來源模組看不到的欄位；<see cref="ConditionRefs"/> 只在 MCP 通道有值，
+/// <see cref="HiddenSourceFieldIds"/> 是使用者在各彙總來源模組看不到的欄位；<see cref="ConditionRefs"/>
 /// 是每個有加總對象或條件的彙總、以正式 <see cref="ConditionParser"/> 解析出的條件欄位（沒有條件是空集合；來源模組找不到或條件解析失敗是 null＝隱藏）。
 /// </summary>
 public sealed record RollupSourceMask(IReadOnlySet<long> HiddenSourceFieldIds, IReadOnlyDictionary<long, IReadOnlySet<long>?> ConditionRefs);
 
 /// <summary>
-/// 依彙總實際的來源模組算遮罩（mcp1a 第五輪審查必修 7、9）。明細來源：動作軸取表頭、欄位例外取明細；一般參照來源用來源模組自己的權限，
-/// 畫面通道與 MCP 通道相同（#74，使用者 2026-11-21 裁決，取代 mcp1a 計畫 Q3「畫面通道不改」）。彙總條件目前只有 MCP 通道看。
+/// 依彙總實際的來源模組算遮罩（mcp1a 第五輪審查必修 7、9）。明細來源：動作軸取表頭、欄位例外取明細；一般參照來源用來源模組自己的權限。
+/// 加總對象與彙總條件都看；畫面通道與 MCP 通道相同（#74、#75，使用者 2026-11-21 裁決，取代 mcp1a 計畫 Q3「畫面通道不改」）。
 /// </summary>
 public sealed class RollupSourceMasks(IPermissionRepository permissions, IModuleRepository modules, FieldTypeRegistry registry)
 {
@@ -22,7 +22,7 @@ public sealed class RollupSourceMasks(IPermissionRepository permissions, IModule
     public async Task<(bool Ok, RollupSourceMask? Mask)> LoadAsync(Module module, PermissionInputs inputs, string userId, CancellationToken ct)
     {
         var rollups = module.Blocks.SelectMany(b => b.Fields)
-            .Where(f => f is { Type: FieldType.Rollup, Config.Rollup: { } r } && (r.AggregateFieldId is not null || (inputs.AiMasked && r.Condition is not null)))
+            .Where(f => f is { Type: FieldType.Rollup, Config.Rollup: { } r } && (r.AggregateFieldId is not null || r.Condition is not null))
             .ToList();
         if (rollups.Count == 0) return (true, null);
 
@@ -39,7 +39,7 @@ public sealed class RollupSourceMasks(IPermissionRepository permissions, IModule
             var sourceField = source?.Blocks.SelectMany(b => b.Fields).FirstOrDefault(x => x.Id == cfg.SourceFieldId);
             if (source is null || sourceField is null)
             {
-                if (inputs.AiMasked) conditionRefs[f.Id] = null;
+                conditionRefs[f.Id] = null;
                 continue;
             }
             var detail = sourceField.Config.Relation == ReferenceRelation.Detail;
@@ -53,7 +53,6 @@ public sealed class RollupSourceMasks(IPermissionRepository permissions, IModule
                     : PermissionResolver.Resolve(source, sourceInputs)).HiddenFieldIds);
             }
 
-            if (!inputs.AiMasked) continue;
             if (cfg.Condition is not { } condition)
             {
                 conditionRefs[f.Id] = new HashSet<long>();

@@ -162,7 +162,7 @@ public class McpAiExclusionTests : ApprovalTestBase
         // Q3：公式 salary * 1；Rollup_SumOfExcluded（加總對象是被遮的單價）；Rollup_SourceFormulaOfExcluded（加總對象是引用單價的小計）；
         // Rollup_CountWithConditionOnExcluded（沒有加總對象、條件引用單價）；條件只引用數量的計數照給
         mcp.HiddenFieldIds.Should().Contain([_salaryX, _priceSum, _r.LineSum, _countCond]).And.NotContain(_countQty);
-        (await Perms(RequestChannel.Ui, "buyer1")).HiddenFieldIds.Should().NotContain(_countCond, "畫面通道的彙總條件缺口本段不改");
+        (await Perms(RequestChannel.Ui, "buyer1")).HiddenFieldIds.Should().NotContain(_countCond, "畫面通道不看「不提供給 AI」旗標；單價對 buyers 看得到");
     }
 
     [Fact]
@@ -381,7 +381,7 @@ public class McpAiExclusionTests : ApprovalTestBase
     {
         await RigRegularSource();
         (await Perms(RequestChannel.Mcp, user)).HiddenFieldIds.Should().Contain(_refSum);
-        (await Perms(RequestChannel.Ui, user)).HiddenFieldIds.Should().NotContain(_refSum, "畫面通道不改");
+        (await Perms(RequestChannel.Ui, user)).HiddenFieldIds.Should().NotContain(_refSum, "畫面通道不看「不提供給 AI」旗標；機密對 buyers 看得到");
     }
 
     [Theory]

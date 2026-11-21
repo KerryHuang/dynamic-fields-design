@@ -39,6 +39,7 @@ public class ReportRollupMaskTests : ReportTestBase
 
     [Theory]
     [InlineData("sum")]
+    [InlineData("count")]
     public async Task Rollup_OverHiddenSourceField_HiddenForReader(string which)
     {
         var (sum, count, _) = await Rollups();

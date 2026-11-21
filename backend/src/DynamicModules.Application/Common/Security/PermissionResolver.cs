@@ -13,8 +13,8 @@ public static class PermissionResolver
 
     /// <param name="accessModule">動作軸、資料範圍取自哪個模組的 ProgramCode 與資料範圍；明細模組傳表頭，其餘為 null（取 module 自己）。</param>
     /// <param name="sources">
-    /// 彙總來源的遮罩（<see cref="RollupSourceMasks"/>）：以來源模組裡看不到的欄位為加總對象的彙總一併隱藏；MCP 通道另看條件。
-    /// MCP 通道沒給時，有加總對象或條件的彙總一律隱藏（fail closed）。
+    /// 彙總來源的遮罩（<see cref="RollupSourceMasks"/>）：以來源模組裡看不到的欄位為加總對象或條件的彙總一併隱藏。
+    /// 沒給時，有加總對象或條件的彙總一律隱藏（fail closed）。
     /// </param>
     /// <param name="forAction">
     /// 要執行的動作。模組有逐動作範圍列（共用主檔模組，設計 §6）時，資料範圍取「使用者所屬群組中授予這個動作者」的最寬範圍；
@@ -86,23 +86,23 @@ public static class PermissionResolver
         module.Blocks.SelectMany(b => b.Fields).Where(f => f.ExcludeFromAi).Select(f => f.Id).ToHashSet();
 
     /// <summary>
-    /// 彙總與公式不洩漏看不到的值：加總對象看不到的彙總一併隱藏；MCP 通道（<paramref name="aiMasked"/>）另外隱藏條件引用看不到欄位、
-    /// 條件解析失敗、或來源模組找不到的彙總（fail closed，Q3、第五輪審查必修 7、9）。公式引用任一隱藏欄位（含隱藏的公式）或金額結果但無 Pricing，
-    /// 就一併隱藏；MCP 通道另含停用但值仍讀得到的公式（第五輪審查必修 8）。
+    /// 彙總與公式不洩漏看不到的值：加總對象看不到、條件引用看不到欄位、條件解析失敗、或來源模組找不到的彙總一併隱藏
+    /// （fail closed，mcp1a 第五輪審查必修 7、9）。公式引用任一隱藏欄位（含隱藏的公式）或金額結果但無 Pricing，就一併隱藏，
+    /// MCP 通道（<paramref name="aiMasked"/>）另含停用但值仍讀得到的公式（必修 8）。彙總部分畫面通道與 MCP 通道相同（#74、#75）。
     /// </summary>
     private static void HideDependents(Module module, HashSet<long> hidden, RollupSourceMask? sources, bool aiMasked, bool pricing)
     {
         foreach (var f in module.Blocks.SelectMany(b => b.Fields))
         {
             if (f is not { Type: FieldType.Rollup, Config.Rollup: { } rollup }) continue;
-            if (rollup.AggregateFieldId is null && !(aiMasked && rollup.Condition is not null)) continue;
+            if (rollup.AggregateFieldId is null && rollup.Condition is null) continue;
             if (sources is null)
             {
-                if (aiMasked) hidden.Add(f.Id);
+                hidden.Add(f.Id);
                 continue;
             }
             if (rollup.AggregateFieldId is { } agg && sources.HiddenSourceFieldIds.Contains(agg)) hidden.Add(f.Id);
-            else if (aiMasked && (!sources.ConditionRefs.TryGetValue(f.Id, out var refs) || refs is null || refs.Overlaps(sources.HiddenSourceFieldIds)))
+            else if (!sources.ConditionRefs.TryGetValue(f.Id, out var refs) || refs is null || refs.Overlaps(sources.HiddenSourceFieldIds))
                 hidden.Add(f.Id);
         }
         bool Leaks(Field f) => FormulaGraph.RefsOf(f).Overlaps(hidden) || (f.Config.ResultType == "currency" && !pricing);
