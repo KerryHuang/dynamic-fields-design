@@ -84,11 +84,17 @@ public static class TaskEditParser
             : (new TaskEdit(title, setDescription, description, setAssignee, assignee, setDue, due, status, cascade, setStart, start), errors);
     }
 
+    /// <summary>合法的 status 字串（MCP 工具的參數列舉據此產生，與 <see cref="TryParseStatus"/> 同步）。</summary>
+    public static IReadOnlyList<string> StatusValues { get; } = Enum.GetValues<TaskItemStatus>().Select(TaskWriter.StatusText).ToList();
+
+    /// <summary>合法的 cascade 字串（同上，與 <see cref="TryParseCascade"/> 同步）。</summary>
+    public static IReadOnlyList<string> CascadeValues { get; } = ["complete", "cancel"];
+
     /// <summary>連動方式（看板設計 §10.7.2）：只認 complete、cancel，其他（含空字串）都是錯；沒帶由呼叫端自己判斷。</summary>
     public static bool TryParseCascade(string? s, out TaskCascade cascade)
     {
         cascade = s == "cancel" ? TaskCascade.Cancel : TaskCascade.Complete;
-        return s is "complete" or "cancel";
+        return s is not null && CascadeValues.Contains(s);
     }
 
     /// <summary>null 代表標題合法；傳入的標題應已去頭尾空白。</summary>

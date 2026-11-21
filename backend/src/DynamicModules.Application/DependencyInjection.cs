@@ -238,6 +238,9 @@ public static class DependencyInjection
         // 一般寫入工具（mcp2a 判斷 1、2）
         services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Write.CreateRecordTool>();
         services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Write.UpdateRecordTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Write.CreateTaskTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Write.UpdateTaskTool>();
+        services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Write.AddTaskCommentTool>();
         services.AddScoped<Dynamic.McpService.Tools.McpToolInvoker>();
         services.AddScoped<Dynamic.McpService.Confirmations.McpConfirmationScope>();
         services.AddScoped<Dynamic.McpService.Writes.McpWriteScope>();

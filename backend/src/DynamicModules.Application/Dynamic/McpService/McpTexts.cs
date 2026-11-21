@@ -99,6 +99,47 @@ public static class McpTexts
         + "\"details\":{\"type\":\"object\",\"description\":\"Detail rows by detail module key: with id and rowVersion to update, without id to add\",\"additionalProperties\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"minimum\":1},\"rowVersion\":{\"type\":\"string\"},\"values\":{\"type\":\"object\"}},\"required\":[\"values\"],\"additionalProperties\":false}}},"
         + IdempotencyKeyProperty + "},\"required\":[\"recordId\",\"rowVersion\",\"idempotencyKey\"],\"additionalProperties\":false}";
 
+    public const string CreateTaskDescription =
+        "Creates a task. Without recordId or parentTaskId it is a personal task; with recordId it is a task on that record; "
+        + "with parentTaskId it is a subtask of that task (give at most one of the two). To comment on a record, create a task on it and then "
+        + "use add_task_comment. Dates are yyyy-MM-dd. Requires idempotencyKey: reuse the same key only when resending the same call.";
+    public const string UpdateTaskDescription =
+        "Changes a task's status, assignee, due date or start date: only the arguments you send change; null clears assigneeUserId, dueDate "
+        + "or startDate. Title and description cannot be changed here. Marking a parent task done or cancelled while subtasks are open "
+        + "returns error code conflict with fields.code subtasksOpen; resend with cascade (complete or cancel) and a new idempotencyKey. "
+        + "If you can no longer see the task after the change, data is {taskId, hiddenAfterWrite: true}. "
+        + "Requires idempotencyKey: reuse the same key only when resending the same call.";
+    public const string AddTaskCommentDescription =
+        "Adds a text comment to a task (no attachments). Mention a user with @{userId}; mentioned users become participants and are notified. "
+        + "Requires idempotencyKey: reuse the same key only when resending the same call.";
+
+    private const string TaskDateProperties =
+        "\"dueDate\":{\"type\":[\"string\",\"null\"],\"format\":\"date\"},\"startDate\":{\"type\":[\"string\",\"null\"],\"format\":\"date\"}";
+
+    /// <summary>長度上限由既有 request 的常數插值（單一來源，mcp2a 判斷 2）。</summary>
+    public static readonly string CreateTaskSchema =
+        "{\"type\":\"object\",\"properties\":{"
+        + $"\"title\":{{\"type\":\"string\",\"minLength\":1,\"maxLength\":{TaskService.TaskEditParser.TitleMax}}},"
+        + $"\"description\":{{\"type\":\"string\",\"maxLength\":{TaskService.TaskEditParser.DescriptionMax}}},"
+        + "\"assigneeUserId\":{\"type\":\"string\",\"description\":\"User id\"}," + TaskDateProperties + ","
+        + "\"recordId\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"Attach the task to this record\"},"
+        + "\"parentTaskId\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"Create a subtask of this task\"},"
+        + IdempotencyKeyProperty + "},\"required\":[\"title\",\"idempotencyKey\"],\"additionalProperties\":false}";
+
+    /// <summary>狀態與連動方式的列舉取自 <c>TaskEditParser</c>（handler 解析用的同一份），與 handler 同步。</summary>
+    public static readonly string UpdateTaskSchema =
+        "{\"type\":\"object\",\"properties\":{\"taskId\":{\"type\":\"integer\",\"minimum\":1},"
+        + "\"status\":{\"type\":\"string\",\"enum\":[" + string.Join(",", TaskService.TaskEditParser.StatusValues.Select(v => $"\"{v}\"")) + "]},"
+        + "\"assigneeUserId\":{\"type\":[\"string\",\"null\"],\"description\":\"User id; null clears\"}," + TaskDateProperties + ","
+        + "\"cascade\":{\"type\":\"string\",\"enum\":[" + string.Join(",", TaskService.TaskEditParser.CascadeValues.Select(v => $"\"{v}\"")) + "],"
+        + "\"description\":\"Only when completing or cancelling a parent task with open subtasks\"},"
+        + IdempotencyKeyProperty + "},\"required\":[\"taskId\",\"idempotencyKey\"],\"additionalProperties\":false}";
+
+    public static readonly string AddTaskCommentSchema =
+        "{\"type\":\"object\",\"properties\":{\"taskId\":{\"type\":\"integer\",\"minimum\":1},"
+        + $"\"body\":{{\"type\":\"string\",\"minLength\":1,\"maxLength\":{TaskService.TaskCommentRules.BodyMax}}},"
+        + IdempotencyKeyProperty + "},\"required\":[\"taskId\",\"body\",\"idempotencyKey\"],\"additionalProperties\":false}";
+
     /// <summary>沒有參數的工具的 JSON Schema。</summary>
     public const string NoArgumentsSchema = """{"type":"object","properties":{},"additionalProperties":false}""";
 }

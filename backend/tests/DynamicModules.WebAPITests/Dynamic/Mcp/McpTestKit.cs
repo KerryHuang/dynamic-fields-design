@@ -25,9 +25,10 @@ internal static class McpTestKit
     /// <summary>不是示範帳號、不必改密碼的一般使用者（Demo 種子的人員都是示範帳號，不能用 MCP）。</summary>
     public const string UserId = "mcp-user", OtherUserId = "mcp-other";
 
-    public static TestApp NewApp(bool realAuth = false, Action<IServiceCollection>? services = null, Dictionary<string, string?>? settings = null)
+    public static TestApp NewApp(bool realAuth = false, Action<IServiceCollection>? services = null, Dictionary<string, string?>? settings = null,
+        bool seedDemoPeople = true)
     {
-        var app = new TestApp(seedDemoPeople: true, realAuth: realAuth);
+        var app = new TestApp(seedDemoPeople: seedDemoPeople, realAuth: realAuth);
         foreach (var (k, v) in settings ?? []) app.Settings[k] = v;
         app.ExtraServices = s =>
         {

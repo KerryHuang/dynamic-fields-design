@@ -13,10 +13,11 @@ using Record = DynamicModules.Domain.Entities.Dynamic.Record;
 namespace DynamicModules.WebAPITests.Dynamic.Mcp;
 
 /// <summary>
-/// 記錄寫入的 REST／MCP 對照（設計 §12 mcp2a 驗收、mcp2a 計畫 Task 4）：同一位虛構使用者一邊用 REST（cookie 身分）、一邊用 MCP
+/// 寫入的 REST／MCP 對照（設計 §12 mcp2a 驗收、mcp2a 計畫 Task 4、6、7）。記錄（Task 4）：同一位虛構使用者一邊用 REST（cookie 身分）、一邊用 MCP
 /// （<c>business.write</c> 權杖）送同樣的值，比對記錄值與明細、歷程、事件事實、任務規則、檢查失敗、版本過期、資料範圍與權限。
 /// 造模：單據模組有自動編號、公式、負責人、跨記錄檢查（同品項金額加總 ≥ 0）、建立時與修改時各一個有條件的事件效果（在異動模組新增一筆）、
 /// 建立時的任務規則，以及一個明細模組。權限照 <c>McpParityTests.SetSales</c> 的寫法。
+/// 任務與留言（Task 6）：三種建法、改狀態負責人到期日、留言提及，比對任務欄位、參與者、系統事件與通知（收件人與種類）。
 /// </summary>
 [Trait("Category", "Postgres")]
 public class McpWriteParityTests : IAsyncLifetime
@@ -329,5 +330,86 @@ public class McpWriteParityTests : IAsyncLifetime
         rest.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         Code(mcp).Should().Be(McpErrorCodes.Forbidden);
         Count(_doc).Should().Be(docs);
+    }
+
+    // ───────── 任務與留言（Task 6）─────────
+
+    private async Task<long> RestTask(object body, string path = "tasks")
+    {
+        var res = await _rest.PostAsJsonAsync($"{Base}/{path}", body);
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+        return (await JsonOf(res)).GetProperty("id").GetInt64();
+    }
+
+    private async Task<long> McpTask(object args) => Data(await Mcp("create_task", args)).GetProperty("id").GetInt64();
+
+    /// <summary>任務的對照形式：欄位、參與者、系統事件（含內容）、通知（收件人與種類）。</summary>
+    private string TaskShape(long id) => Query(_app, db =>
+    {
+        var t = db.Set<TaskItem>().Single(x => x.Id == id);
+        var participants = db.Set<TaskParticipant>().Where(x => x.TaskId == id).AsEnumerable()
+            .Select(x => $"{x.UserId}/{x.Reason}").Order(StringComparer.Ordinal);
+        var events = db.Set<TaskComment>().Where(x => x.TaskId == id).OrderBy(x => x.Id).AsEnumerable()
+            .Select(x => x.Kind == TaskCommentKind.System ? $"system:{x.SystemEvent}:{x.SystemData}" : $"comment:{x.AuthorUserId}:{x.Body}");
+        var notices = db.Set<Notification>().Where(n => n.SourceType == "task" && n.SourceId == id).AsEnumerable()
+            .Select(n => $"{n.UserId}/{n.Kind}").Order(StringComparer.Ordinal);
+        return string.Join("\n", [
+            $"{t.Title}|{t.Description}|{t.AssigneeUserId}|{t.DueDate}|{t.StartDate}|{t.Status}|{t.CreatedBy}|{t.RecordId}|{t.ParentTaskId}",
+            "participants: " + string.Join(",", participants), "events: " + string.Join(";", events), "notices: " + string.Join(",", notices),
+        ]);
+    });
+
+    [Fact]
+    public async Task CreateTask_SameAsRest()
+    {
+        var record = (await RestCreated(Values("掛任務單", 1, item: "T"))).GetProperty("id").GetInt64();
+        var parent = await RestTask(new { title = "父任務" });
+        var input = new { title = "跟進報價", description = "確認數量", assigneeUserId = "sales02", dueDate = "2026-12-01", startDate = "2026-11-25" };
+
+        var cases = new (string Kind, string Path, object Mcp)[]
+        {
+            ("personal", "tasks", new { input.title, input.description, input.assigneeUserId, input.dueDate, input.startDate, idempotencyKey = NewIdem() }),
+            ("record", $"records/{record}/tasks", new { input.title, input.description, input.assigneeUserId, input.dueDate, input.startDate, recordId = record, idempotencyKey = NewIdem() }),
+            ("subtask", $"tasks/{parent}/subtasks", new { input.title, input.description, input.assigneeUserId, input.dueDate, input.startDate, parentTaskId = parent, idempotencyKey = NewIdem() }),
+        };
+        foreach (var (kind, path, mcpArgs) in cases)
+        {
+            var rest = await RestTask(input, path);
+            var mcp = await McpTask(mcpArgs);
+            var shape = TaskShape(rest);
+            shape.Should().Contain("sales02/Assignee", kind);
+            TaskShape(mcp).Should().Be(shape, kind);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateTask_Status_SameSystemEvents()
+    {
+        var a = await RestTask(new { title = "改任務", assigneeUserId = "sales02", dueDate = "2026-12-01" });
+        var b = await RestTask(new { title = "改任務", assigneeUserId = "sales02", dueDate = "2026-12-01" });
+        var patch = new { status = "inProgress", assigneeUserId = "sales03", dueDate = "2026-12-05" };
+
+        var res = await _rest.PatchAsJsonAsync($"{Base}/tasks/{a}", patch);
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        Data(await Mcp("update_task", new { taskId = b, patch.status, patch.assigneeUserId, patch.dueDate, idempotencyKey = NewIdem() }));
+
+        var shape = TaskShape(a);
+        shape.Should().Contain("assigneeChanged").And.Contain("sales03/");
+        TaskShape(b).Should().Be(shape);
+    }
+
+    [Fact]
+    public async Task AddComment_Mentions_SameNotifications()
+    {
+        var a = await RestTask(new { title = "提及" });
+        var b = await RestTask(new { title = "提及" });
+        const string body = "請 @{sales02} 看一下";
+
+        (await _rest.PostAsJsonAsync($"{Base}/tasks/{a}/comments", new { body })).StatusCode.Should().Be(HttpStatusCode.Created);
+        Data(await Mcp("add_task_comment", new { taskId = b, body, idempotencyKey = NewIdem() }));
+
+        var shape = TaskShape(a);
+        shape.Should().Contain("sales02/Mentioned");
+        TaskShape(b).Should().Be(shape);
     }
 }

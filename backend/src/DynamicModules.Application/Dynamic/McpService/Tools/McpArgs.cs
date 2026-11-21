@@ -42,6 +42,9 @@ public sealed class McpArgs
         return _args.ValueKind == JsonValueKind.Object && _args.TryGetProperty(name, out value) && value.ValueKind != JsonValueKind.Null;
     }
 
+    /// <summary>參數有沒有帶（含明確的 JSON null）：「帶 null 代表清除」的參數用它分辨沒帶與清除（mcp2a 判斷 2）。</summary>
+    public bool Has(string name) => _args.ValueKind == JsonValueKind.Object && _args.TryGetProperty(name, out _);
+
     public void Fail(string name) => _errors.TryAdd(name, McpMessages.InvalidArgument(name));
 
     public string? String(string name, bool required = false, int maxLength = 200)
