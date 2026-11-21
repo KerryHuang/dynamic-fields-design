@@ -15,7 +15,8 @@ public static partial class IncidentTitles
 {
     public const string ServerError = "ops.title.serverError", ClientError = "ops.title.clientError",
         AdminChanged = "ops.title.adminChanged", HealthPrefix = "ops.title.health.", ChannelFailed = "ops.title.channelFailed",
-        ConfigPrefix = "ops.title.config.", RulePaused = "ops.title.rulePaused", PrivilegeChanged = "ops.title.privilegeChanged";
+        ConfigPrefix = "ops.title.config.", RulePaused = "ops.title.rulePaused", PrivilegeChanged = "ops.title.privilegeChanged",
+        McpWriteLoop = "ops.title.mcpWriteLoop";
 
     /// <summary>JavaScript 內建錯誤名稱；其他一律換成 <c>Error</c>（§17.2.2 標題表）。</summary>
     private static readonly HashSet<string> JsErrorNames = new(StringComparer.Ordinal)
@@ -46,6 +47,10 @@ public static partial class IncidentTitles
         int failures) =>
         Params(("ruleKind", Code(ruleKind)), ("ruleKey", Code(ruleKey)), ("moduleKey", Code(moduleKey)), ("errorCode", Code(lastErrorCode)),
             ("threshold", (long)threshold), ("failures", (long)failures));
+
+    /// <summary>AI 寫入迴圈（MCP 設計 §20 C3）：只放權杖 id、記錄 id、次數、時間窗分鐘數，權杖名稱是使用者輸入的字串不進標題。</summary>
+    public static IReadOnlyDictionary<string, object> WriteLoop(long tokenId, long recordId, int count, int minutes) =>
+        Params(("tokenId", tokenId), ("recordId", recordId), ("count", (long)count), ("minutes", (long)minutes));
 
     public static string? ToJson(IReadOnlyDictionary<string, object>? p) => p is null or { Count: 0 } ? null : JsonSerializer.Serialize(p);
 
@@ -79,6 +84,7 @@ public static partial class IncidentTitles
                 + (P("serverCode") is { Length: > 0 } c ? m.Get(locale, AlertMailText.TitleChannelCode, c) : "")),
             PrivilegeChanged => m.Get(locale, P("change") == "granted" ? AlertMailText.TitlePrivilegeGranted : AlertMailText.TitlePrivilegeRevoked),
             RulePaused => m.Get(locale, AlertMailText.TitleRulePaused, P("ruleKey"), P("failures")),
+            McpWriteLoop => m.Get(locale, AlertMailText.TitleMcpWriteLoop, P("tokenId"), P("recordId"), P("count"), P("minutes")),
             _ when titleKey.StartsWith(ConfigPrefix, StringComparison.Ordinal) => m.Get(locale, AlertMailText.TitleConfig, P("ruleKey"),
                 AlertMailText.Label(m, locale, "ruleError." + titleKey[ConfigPrefix.Length..])),
             _ when titleKey.StartsWith(HealthPrefix, StringComparison.Ordinal) => m.Get(locale, AlertMailText.TitleHealth,

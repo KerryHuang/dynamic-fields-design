@@ -43,6 +43,14 @@ public sealed class McpPolicies(IPolicyReader policies, RecipientResolver recipi
             IntOf(PolicyCatalog.McpCallsPerMinute), IntOf(PolicyCatalog.McpCallsPerDay), IntOf(PolicyCatalog.McpMaxRows), IntOf(PolicyCatalog.McpConfirmTtlSeconds));
     }
 
+    /// <summary>
+    /// 寫入迴圈的門檻與時間窗（mcp2a 判斷 8、D5）。不併進 <see cref="ReadAsync"/> 的存取判斷：這兩項壞值不該讓整個 AI 連線停擺，
+    /// 照 <see cref="IPolicyReader"/> 的一般規則用出廠值。
+    /// </summary>
+    public async Task<(int Triggers, int WindowMinutes)> ReadLoopAsync(CancellationToken ct) =>
+        (await policies.IntAsync(PolicyCatalog.OpsRuleLoopTriggersPerRecord, null, ct),
+            await policies.IntAsync(PolicyCatalog.OpsRuleLoopWindowMinutes, null, ct));
+
     private static readonly PolicyDefinition[] Defs =
     [
         PolicyCatalog.McpEnabled, PolicyCatalog.McpAllowedGroups, PolicyCatalog.McpTokenMaxLifetimeDays, PolicyCatalog.McpTokenDefaultLifetimeDays,

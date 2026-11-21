@@ -22,6 +22,8 @@ describe('incidentTitle', () => {
     expect(incidentTitle(t, te, 'ops.title.adminChanged', { change: 'granted' })).toBe('系統管理員權限異動：授予');
     expect(incidentTitle(t, te, 'ops.title.privilegeChanged', { change: 'granted' })).toBe('有人取得設計器或權限設定權限');
     expect(incidentTitle(t, te, 'ops.title.privilegeChanged', { change: 'revoked' })).toBe('有人的設計器或權限設定權限被收回');
+    expect(incidentTitle(t, te, 'ops.title.mcpWriteLoop', { tokenId: 3, recordId: 42, count: 30, minutes: 10 }))
+      .toBe('AI 權杖 #3 在 10 分鐘內修改記錄 #42 達 30 次，已暫停它對這筆的寫入');
   });
   it('換語系就換文字；沒登記的代碼回代碼本身', () => {
     const en = i18n('en-US');

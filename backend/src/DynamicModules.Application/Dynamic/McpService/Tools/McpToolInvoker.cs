@@ -1,14 +1,17 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Localization;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.McpService.Confirmations;
+using DynamicModules.Application.Dynamic.McpService.WriteLoop;
 using DynamicModules.Application.Dynamic.McpService.Writes;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Mcp;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace DynamicModules.Application.Dynamic.McpService.Tools;
@@ -34,7 +37,7 @@ public sealed record McpCallContext(string? ClientName = null, string? ClientVer
 public sealed class McpToolInvoker(
     IEnumerable<IMcpTool> tools, IRequestChannel channel, McpPolicies policies, McpRateGate rate, McpUsage usage, IAuditLog audit,
     IMessageCatalog messages, RequestLocale locale, ISender sender, IMcpConfirmationScope confirmations, IMcpWriteScope writes,
-    IOperationContext operation, TimeProvider time, ILogger<McpToolInvoker> log)
+    IOperationContext operation, ICurrentUser user, IServiceScopeFactory scopes, TimeProvider time, ILogger<McpToolInvoker> log)
 {
     private readonly IReadOnlyList<IMcpTool> _tools = tools.ToList();
 
@@ -148,8 +151,16 @@ public sealed class McpToolInvoker(
                     outcome = McpToolOutcome.InvalidArguments(errors);
                     return (Format(tool.Descriptor.Name, outcome, Text), AuditResult.Invalid, McpErrorCodes.InvalidArguments);
                 }
+                var key = args.GetProperty(McpArgs.IdempotencyKey).GetString()!;
+                // 寫入迴圈（判斷 8）：在上膛之前；擋下時工具不執行，稽核只有執行器事後寫的那一列 Denied
+                if (tool.Descriptor.LoopTargetArg is { } loopArg && args.TryGetProperty(loopArg, out var loopTarget)
+                    && loopTarget.ValueKind == JsonValueKind.Number && await WriteLoopAsync(tokenId, loopTarget.GetInt64(), key) is { } blocked)
+                {
+                    outcome = blocked;
+                    return (Format(tool.Descriptor.Name, outcome, Text), AuditResult.Denied, McpErrorCodes.WriteLoop);
+                }
                 // IdempotencyBehavior 接手（判斷 5）；設在上膛之前，摘要的 op 與事件事實的 OperationId 都是這把 key
-                operation.ClientKey = args.GetProperty(McpArgs.IdempotencyKey).GetString();
+                operation.ClientKey = key;
                 writes.Arm(call, new McpWriteAudit(tool.Descriptor.AuditCode, name, McpArguments.Hash(args),
                     Summary(args, null, context, started: null, op: operation.OperationId)));
             }
@@ -179,6 +190,19 @@ public sealed class McpToolInvoker(
             }
             var fitted = McpResultFormatter.Fit(tool.Descriptor.Name, outcome, Text(McpMessages.ResultTooLarge));
             return fitted.IsError ? (fitted, AuditResult.Failed, McpErrorCodes.ResultTooLarge) : (fitted, AuditResult.Success, AuditReasonOf(outcome));
+        }
+
+        // 寫入迴圈（判斷 8、D4）：這把 key 已有冪等紀錄（重送）不擋，讓它照常回放；只計成功、非回放、非預覽的寫入。
+        // 達門檻回 write_loop（目標是那筆記錄），並另開 scope 開或更新維運事件；事件寫不進去只記 Error log，不影響回給模型的錯誤
+        async Task<McpToolOutcome?> WriteLoopAsync(long tokenId, long recordId, string key)
+        {
+            if (await usage.HasOperationAsync(user.UserId, key, ct)) return null;
+            var (triggers, minutes) = await policies.ReadLoopAsync(ct);
+            var count = await usage.CountLoopWritesAsync(tokenId, recordId, minutes, ct);
+            if (count < triggers) return null;
+            await RecordLoopIncidentAsync(new RecordMcpWriteLoopIncidentRequest(tokenId, recordId, count, minutes, time.GetUtcNow().UtcDateTime));
+            return McpToolOutcome.Error(McpErrorCodes.WriteLoop, McpMessages.WriteLoop(count, minutes))
+                with { TargetKind = McpWriteTargets.Record, TargetId = recordId.ToString(System.Globalization.CultureInfo.InvariantCulture) };
         }
 
         // 工具沒回錯誤、本次也沒提交時才採用；值限定常數集合（判斷 3）
@@ -221,6 +245,22 @@ public sealed class McpToolInvoker(
 
         McpFormattedResult Executed(string tool, string omitted) =>
             McpResultFormatter.Executed(tool, confirmations.ConfirmationId, omitted, McpTexts.ConfirmedResultOmitted);
+    }
+
+    /// <summary>迴圈事件另開 scope 送（照 <c>RuleFailureBehavior</c>）：執行器在交易外，事件只能在交易型請求裡寫。</summary>
+    private async Task RecordLoopIncidentAsync(RecordMcpWriteLoopIncidentRequest request)
+    {
+        try
+        {
+            using var system = ActingScope.Begin("");
+            await using var scope = scopes.CreateAsyncScope();
+            if (await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, CancellationToken.None) is { IsSuccess: false } failed)
+                log.LogError("AI 寫入迴圈事件寫入失敗：{Result}", failed.Message ?? failed.Code);
+        }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "AI 寫入迴圈事件寫入失敗");
+        }
     }
 
     /// <summary>從高風險工具的參數拿掉 <c>confirmationCode</c>；不是字串的碼當成空碼（一定不符）。</summary>

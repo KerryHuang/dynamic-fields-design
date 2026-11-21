@@ -60,6 +60,8 @@ public static class McpMessages
     public static MessageRef InvalidArgument(string name) => MessageRef.Of(MessageText.McpInvalidArgument, name);
     /// <summary>寫入工具的 <c>idempotencyKey</c> 沒帶或格式不符（mcp2a 判斷 5、13）。</summary>
     public static MessageRef IdempotencyKeyRequired => MessageRef.Of(MessageText.McpIdempotencyKeyRequired);
+    /// <summary>寫入迴圈被擋（mcp2a 判斷 8）：時間窗內已成功修改 <paramref name="count"/> 次。</summary>
+    public static MessageRef WriteLoop(int count, int minutes) => MessageRef.Of(MessageText.McpWriteLoop, count, minutes);
     public static MessageRef InternalError => MessageRef.Of(MessageText.McpInternalError);
     public static MessageRef Unauthorized => MessageRef.Of(MessageText.McpUnauthorized);
     public static MessageRef TokenInQuery => MessageRef.Of(MessageText.McpTokenInQuery);

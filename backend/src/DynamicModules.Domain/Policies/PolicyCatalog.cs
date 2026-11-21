@@ -200,6 +200,17 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition OpsRulePauseWindowMinutes =
         new("ops.rulePauseWindowMinutes", "ops", PolicyKind.Integer, PolicyScope.System, "60", 1, 1440, Unit: "minutes");
 
+    /// <summary>
+    /// C3（MCP 設計 §20、mcp2a 計畫判斷 8、D4）：同一把 AI 權杖在時間窗內成功修改同一筆記錄幾次，就暫停它對這筆的寫入並開維運事件。
+    /// 只計成功、非回放、非預覽的寫入；時間窗滑過自動恢復。
+    /// </summary>
+    public static readonly PolicyDefinition OpsRuleLoopTriggersPerRecord =
+        new("ops.ruleLoopTriggersPerRecord", "ops", PolicyKind.Integer, PolicyScope.System, "30", 5, 1000, Unit: "count");
+
+    /// <summary>計算 <see cref="OpsRuleLoopTriggersPerRecord"/> 的時間窗（分鐘；滑動窗口，mcp2a 計畫 D5）。</summary>
+    public static readonly PolicyDefinition OpsRuleLoopWindowMinutes =
+        new("ops.ruleLoopWindowMinutes", "ops", PolicyKind.Integer, PolicyScope.System, "10", 1, 1440, Unit: "minutes");
+
     /// <summary>O2：客戶設定類事件與規則自動暫停的站內通知對象（B14）；另允許 <c>ruleEditor</c>（該規則的最後修改者）。解析為空時改送全部系統管理員。</summary>
     public static readonly PolicyDefinition OpsConfigIssueRecipients =
         new("ops.configIssueRecipients", "ops", PolicyKind.Recipients, PolicyScope.System, "ruleEditor,admins", 1, 20,
@@ -481,6 +492,7 @@ public static class PolicyCatalog
          OpsSlowRequestMs, OpsClientErrorCollection, OpsUpkeepMinutes, OpsAuditRetentionDays,
          OpsMonitorScanMinutes, OpsHealthResultRetentionDays, OpsIncidentRetentionDays, OpsIncidentSampleRetentionDays,
          OpsIncidentRenotifyHours, OpsIncidentAutoResolveHours, OpsRulePauseConsecutiveFailures, OpsRulePauseWindowMinutes,
+         OpsRuleLoopTriggersPerRecord, OpsRuleLoopWindowMinutes,
          OpsConfigIssueRecipients, OpsAlertRecipients, OpsAlertEmailCategories, OpsAlertEmailMinSeverity, OpsAlertEmailMaxPerHour,
          OpsLoginFailureWindowMinutes, OpsSchedulerLagIntervals,
          ApprovalMaxStages, ApprovalMaxBranches, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,

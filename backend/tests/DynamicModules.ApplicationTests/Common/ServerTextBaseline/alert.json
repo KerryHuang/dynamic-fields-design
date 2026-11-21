@@ -149,6 +149,12 @@
     "th": "การตรวจสุขภาพ \"{0}\": {1}",
     "vi": "Kiểm tra sức khỏe \"{0}\": {1}"
   },
+  "alert.TitleMcpWriteLoop": {
+    "zh-TW": "AI 權杖 #{0} 在 {3} 分鐘內修改記錄 #{1} 達 {2} 次，已暫停它對這筆的寫入",
+    "en-US": "AI token #{0} modified record #{1} {2} times within {3} minutes; its writes to this record are paused",
+    "th": "โทเค็น AI #{0} แก้ไขระเบียน #{1} ครบ {2} ครั้งภายใน {3} นาที จึงหยุดการเขียนระเบียนนี้ของโทเค็นไว้ชั่วคราว",
+    "vi": "Token AI #{0} đã sửa bản ghi #{1} {2} lần trong {3} phút; việc ghi vào bản ghi này của token đã bị tạm dừng"
+  },
   "alert.TitlePrivilegeGranted": {
     "zh-TW": "有人取得設計器或權限設定權限",
     "en-US": "Someone gained designer or permission settings rights",

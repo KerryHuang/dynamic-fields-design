@@ -141,7 +141,7 @@ public static class MessageText
         McpInvalidArgument = nameof(McpInvalidArgument), McpInternalError = nameof(McpInternalError), McpUnauthorized = nameof(McpUnauthorized),
         McpTokenInQuery = nameof(McpTokenInQuery), McpOriginDenied = nameof(McpOriginDenied), McpHttpsRequired = nameof(McpHttpsRequired),
         // AI 連線一般寫入（mcp2a 計畫判斷 13）
-        McpIdempotencyKeyRequired = nameof(McpIdempotencyKeyRequired);
+        McpIdempotencyKeyRequired = nameof(McpIdempotencyKeyRequired), McpWriteLoop = nameof(McpWriteLoop);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -620,6 +620,10 @@ public static class MessageText
             "The argument idempotencyKey is required: 8 to 64 letters, digits, underscores, or hyphens. Reuse the same value when resending the same operation",
             "ต้องระบุอาร์กิวเมนต์ idempotencyKey: ตัวอักษร ตัวเลข ขีดล่าง หรือขีดกลาง 8 ถึง 64 ตัว และใช้ค่าเดิมเมื่อส่งการดำเนินการเดิมซ้ำ",
             "Tham số idempotencyKey là bắt buộc: 8 đến 64 chữ cái, chữ số, dấu gạch dưới hoặc gạch nối; dùng lại cùng giá trị khi gửi lại cùng một thao tác"),
+        [McpWriteLoop] = ("同一筆記錄在 {1} 分鐘內已被這把權杖修改 {0} 次，已暫停這把權杖對它的寫入，請停下來請使用者確認",
+            "This token has modified the same record {0} times within {1} minutes, so its writes to this record are paused. Stop and ask the user to confirm",
+            "โทเค็นนี้แก้ไขระเบียนเดียวกัน {0} ครั้งภายใน {1} นาทีแล้ว จึงหยุดการเขียนระเบียนนี้ของโทเค็นไว้ชั่วคราว โปรดหยุดและให้ผู้ใช้ยืนยัน",
+            "Token này đã sửa cùng một bản ghi {0} lần trong {1} phút nên việc ghi vào bản ghi này đã bị tạm dừng. Hãy dừng lại và nhờ người dùng xác nhận"),
     };
 
     /// <summary>給 <see cref="Localization.BuiltinServerText"/> 合併用（鍵不加前綴）。</summary>

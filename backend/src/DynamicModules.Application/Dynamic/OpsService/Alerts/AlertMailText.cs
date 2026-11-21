@@ -27,7 +27,8 @@ public static class AlertMailText
         TitleAdminGranted = P + nameof(TitleAdminGranted), TitleAdminRevoked = P + nameof(TitleAdminRevoked), TitleHealth = P + nameof(TitleHealth),
         TitleChannel = P + nameof(TitleChannel), TitleChannelCode = P + nameof(TitleChannelCode),
         TitleConfig = P + nameof(TitleConfig), TitleRulePaused = P + nameof(TitleRulePaused),
-        TitlePrivilegeGranted = P + nameof(TitlePrivilegeGranted), TitlePrivilegeRevoked = P + nameof(TitlePrivilegeRevoked);
+        TitlePrivilegeGranted = P + nameof(TitlePrivilegeGranted), TitlePrivilegeRevoked = P + nameof(TitlePrivilegeRevoked),
+        TitleMcpWriteLoop = P + nameof(TitleMcpWriteLoop);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -84,6 +85,10 @@ public static class AlertMailText
             "Quy tắc \"{0}\" có vấn đề cấu hình: {1}"),
         [TitleRulePaused] = ("任務規則「{0}」連續失敗 {1} 次，已自動暫停", "Task rule \"{0}\" failed {1} times in a row and was paused automatically",
             "กฎงาน \"{0}\" ล้มเหลวติดกัน {1} ครั้ง และถูกหยุดอัตโนมัติ", "Quy tắc công việc \"{0}\" lỗi liên tiếp {1} lần và đã tự động tạm dừng"),
+        [TitleMcpWriteLoop] = ("AI 權杖 #{0} 在 {3} 分鐘內修改記錄 #{1} 達 {2} 次，已暫停它對這筆的寫入",
+            "AI token #{0} modified record #{1} {2} times within {3} minutes; its writes to this record are paused",
+            "โทเค็น AI #{0} แก้ไขระเบียน #{1} ครบ {2} ครั้งภายใน {3} นาที จึงหยุดการเขียนระเบียนนี้ของโทเค็นไว้ชั่วคราว",
+            "Token AI #{0} đã sửa bản ghi #{1} {2} lần trong {3} phút; việc ghi vào bản ghi này của token đã bị tạm dừng"),
     };
 
     /// <summary>代碼值的四語名稱：嚴重度、類別、處理者、轉換、健康狀態、寄送階段。</summary>

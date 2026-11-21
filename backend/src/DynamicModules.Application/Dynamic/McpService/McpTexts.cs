@@ -74,7 +74,8 @@ public static class McpTexts
     public const string UpdateRecordDescription =
         "Updates one record: only the fields in values change. rowVersion must be the record's current rowVersion from get_record or query_records; "
         + "on error code stale, read the record again and retry. Detail rows: a row with id and rowVersion updates that row, a row without id is added; "
-        + "rows cannot be deleted here. Send all detail changes in the same update_record call. "
+        + "rows cannot be deleted here. Send all detail changes in the same update_record call: many writes to one record in a short time "
+        + "pause your writes to it (error code write_loop); on write_loop, stop and ask the user. "
         + "Fields you cannot write are ignored and listed in meta.ignoredFields. Requires idempotencyKey: reuse the same key only when resending the same call.";
 
     /// <summary>寫入工具共用的 <c>idempotencyKey</c> 參數（格式沿用 <see cref="Common.OperationContext.KeyPattern"/>）。</summary>
@@ -142,8 +143,8 @@ public static class McpTexts
 
     public const string SubmitApprovalDescription =
         "Submits a record for approval, moving it to status option `to` (one of submitTargets from get_record_approval). "
-        + "rowVersion is the record's current rowVersion; on error code stale, read the record again and retry. "
-        + "With previewOnly true nothing is written and rowVersion is not needed: data.preview lists the stages and, in picks, the stages "
+        + "rowVersion is the record's current rowVersion; on error code stale, read the record again and retry; "
+        + "on error code write_loop, stop and ask the user. With previewOnly true nothing is written and rowVersion is not needed: data.preview lists the stages and, in picks, the stages "
         + "where you must choose approvers with their candidates; send them as picks {stageCode: [userId]}. "
         + "Without previewOnly, data is {outcome, instanceId, recordRowVersion}; outcome is submitted, approved (all stages skipped) "
         + "or direct (no flow matched and the move was applied directly). Requires idempotencyKey: reuse the same key only when resending the same call.";

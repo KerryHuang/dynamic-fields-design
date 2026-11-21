@@ -67,6 +67,8 @@ public class AuditLogTests : IAsyncLifetime
         public Task<int> CountForTokenSinceAsync(long tokenId, DateTime sinceUtc, IReadOnlyCollection<string> actions, CancellationToken ct) => throw new NotSupportedException();
         public Task<Dictionary<long, int>> CountForTokensSinceAsync(
             IReadOnlyCollection<long> tokenIds, DateTime sinceUtc, IReadOnlyCollection<string> actions, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int> CountWritesForTargetSinceAsync(long tokenId, string targetKind, string targetId, DateTime sinceUtc,
+            IReadOnlyCollection<string> actions, CancellationToken ct) => throw new NotSupportedException();
     }
 
     /// <summary>計數的 scope factory：驗證交易守衛在建立新 scope 之前（A09）。</summary>

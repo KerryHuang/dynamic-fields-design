@@ -26,6 +26,11 @@ export function incidentTitle(t: Translate, te: Exists, titleKey: string, params
     return t('ops.titles.channel', { stage: labelOr(t, te, `ops.stage.${stage}`, stage) }) + (code ? t('ops.titles.channelCode', { code }) : '');
   }
   if (titleKey === 'ops.title.rulePaused') return t('ops.titles.rulePaused', { rule: str(params, 'ruleKey'), failures: str(params, 'failures') });
+  if (titleKey === 'ops.title.mcpWriteLoop') {
+    return t('ops.titles.mcpWriteLoop', {
+      tokenId: str(params, 'tokenId'), recordId: str(params, 'recordId'), count: str(params, 'count'), minutes: str(params, 'minutes'),
+    });
+  }
   if (titleKey.startsWith('ops.title.config.')) {
     const code = titleKey.slice('ops.title.config.'.length);
     return t('ops.titles.config', { rule: str(params, 'ruleKey'), problem: labelOr(t, te, `ops.ruleError.${code}`, code) });
