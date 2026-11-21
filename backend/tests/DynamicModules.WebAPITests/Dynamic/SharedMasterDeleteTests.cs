@@ -337,6 +337,62 @@ public class SharedMasterDeleteTests : IDisposable
         await _rig.AssertIntegrityAsync();
     }
 
+    /// <summary>欄位 API 把「不提供給 AI」設成 true（要權限設定，系統管理員有）。</summary>
+    private async Task ExcludeFromAiAsync(string moduleKey, long fieldId)
+    {
+        var m = await JsonOf(await _rig.Admin.GetAsync($"{Base}/modules/{moduleKey}"));
+        var f = m.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Single(x => x.GetProperty("id").GetInt64() == fieldId);
+        var res = await _rig.Admin.PutAsJsonAsync($"{Base}/fields/{fieldId}", new
+        {
+            type = f.GetProperty("type").GetString(), label = f.GetProperty("label"), config = f.GetProperty("config"),
+            blockId = f.GetProperty("blockId").GetInt64(), excludeFromAi = true,
+        });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        FieldById(fieldId).ExcludeFromAi.Should().BeTrue();
+    }
+
+    private List<Field> FieldsOfApp(string appKey) => _rig.Db(db =>
+        (from a in db.Set<App>() where a.Key == appKey
+         join af in db.Set<AppField>() on a.Id equals af.AppId
+         join f in db.Set<Field>() on af.FieldId equals f.Id
+         select f).ToList());
+
+    /// <summary>
+    /// mcp1a 計畫 Q4：套件不碰既有欄位的「不提供給 AI」旗標。開套件建的欄位一律 false；API 設成 true 之後，
+    /// 關閉再重新開啟、刪除後重開同一個套件（貢獻欄位接回孤兒，走套件的 UpdateField）都保持 true；重開時另建的新欄位是 false。
+    /// </summary>
+    [Fact]
+    public async Task PackageReapply_KeepsExistingTrue()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        FieldsOfApp("crmx").Should().NotBeEmpty().And.OnlyContain(f => !f.ExcludeFromAi, "開套件建的欄位一律 false");
+
+        var lead = await CreateLeadAsync("甲公司");
+        var partner = await ConvertAsync(lead);
+        var industry = _rig.FieldId("crmx", "bp/partner.industry");
+        var company = _rig.FieldId("crmx", "lead.company");
+        var option = _rig.Db(db => db.Set<FieldOption>().First(o => o.FieldId == industry).Id);
+        await UpdateAsync(partner, new() { [Key("crmx", "bp/partner.industry")] = $"opt_{option}" });
+        await ExcludeFromAiAsync(Partner, industry);
+        await ExcludeFromAiAsync("crmx-lead", company);
+
+        await _rig.CloseOkAsync("crmx");
+        await _rig.ReopenOkAsync("crmx");
+        FieldById(industry).ExcludeFromAi.Should().BeTrue("重新開啟不碰旗標");
+        FieldById(company).ExcludeFromAi.Should().BeTrue("重新開啟不碰旗標");
+
+        await SoftDeleteAsync(lead);
+        await _rig.CloseOkAsync("crmx");
+        await DeleteOkAsync("crmx");
+        await _rig.OpenOkAsync("crmx");
+        _rig.FieldId("crmx", "bp/partner.industry").Should().Be(industry, "接回同一個欄位");
+        FieldById(industry).ExcludeFromAi.Should().BeTrue("重開套件接回的欄位保持 true");
+        FieldsOfApp("crmx").Where(f => f.Id != industry).Should().NotBeEmpty().And.OnlyContain(f => !f.ExcludeFromAi, "重開時新建的欄位是 false");
+    }
+
     [Fact]
     public async Task ReopeningWithADifferentType_CreatesANewFieldWithTheOriginalCode_AndCanBeDeletedAgain()
     {
