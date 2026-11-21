@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 合併前本機走查用：以全新 Demo 資料啟動後端（5180，開 Demo 一鍵登入）與前端 dev（9180）。
 # 用法：bash scripts/unattended/local-demo.sh [worktree 根目錄，預設目前 repo]
+# DEMO_LOGIN=false 時關掉 Demo 一鍵登入（Demo 登入開著時 MCP 整個停用；MCP 實機驗收用，見 mcp1a 計畫判斷 25）。
 # 前景執行到被停止為止（請用背景執行）；就緒時印 READY。資料庫另放 local-e2e.db，不碰 poc.db。
 set -u
 ROOT="${1:-$(git rev-parse --show-toplevel)}"
@@ -25,7 +26,7 @@ dotnet run --project "$API" -- --generate-demo-data >/dev/null 2>&1 || { echo "D
 # 後端輸出寫到 local-e2e.log（走查要看 JSON log 時加環境變數 Logging__Console__FormatterName=json 啟動）
 LOG="$ROOT/backend/data/local-e2e.log"
 rm -f "$LOG"
-Demo__LoginEnabled=true dotnet run --no-build --project "$API" >"$LOG" 2>&1 &
+Demo__LoginEnabled="${DEMO_LOGIN:-true}" dotnet run --no-build --project "$API" >"$LOG" 2>&1 &
 BACKEND=$!
 (cd frontend && exec bunx quasar dev >/dev/null 2>&1) &
 FRONTEND=$!

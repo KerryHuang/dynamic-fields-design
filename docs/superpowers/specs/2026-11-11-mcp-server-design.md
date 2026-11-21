@@ -112,7 +112,7 @@ MCP（Model Context Protocol）是 AI client（Claude Code、Codex、Claude.ai�
 
 ### 4.3 協定版本與 SDK
 
-查證日 2026-11-11（來源見 §19）。下面分「已查證」與「未查證」；未查證的不作為設計依據，mcp1a 第一步實測時確認。
+查證日 2026-11-11（來源見 §19）；SDK 部分在 2026-11-21 由 mcp1a 計畫期間的研究 subagent 與 Task 0 在 repo 內實測（[mcp1a 計畫](../plans/2026-11-11-mcp-server-mcp1a.md)「SDK 查證結果」）。
 
 **MCP 規範 2026-07-28**（builder 讀 changelog 確認）：
 
@@ -133,15 +133,17 @@ MCP（Model Context Protocol）是 AI client（Claude Code、Codex、Claude.ai�
 **官方 C# SDK `ModelContextProtocol.AspNetCore`**：
 
 - 已查證（builder 讀 NuGet 頁）：最新穩定版 2.4.0（2026-11-07）；1.0.0 發佈於 2026-02-25；2.0.0 發佈於 2026-07-28；1.4.2 發佈於 2026-11-03；支援 net8.0。
-- ⚠️ 未查證（研究 subagent 讀 release notes，主控與 builder 都沒有複核）：2.0 起預設 stateless；2.2 起同一個 endpoint 可以同時服務 2025-11-25 與 2026-07-28 的 client；2.3.1 修補了已認證 stateful session 與 OAuth 的安全問題。
-- ⚠️ 未查證：SDK 2.4.0 依賴 10.0.x 版的 `Microsoft.Extensions.*.Abstractions`（NuGet 頁沒顯示 net8 的依賴版本），在 .NET 8 專案能不能乾淨 restore，要在 mcp1 計畫的第一步實測。不行就退回 1.x 維護線（1.4.2，已確認存在），代價是只支援到 2025-11-25 協定。
+- 已查證（mcp1a 實測）：2.0 起預設 stateless，`WithHttpTransport(o => o.Stateless = true)` 明確設定有效。stateless 模式本來就同時回應 2025-11-25 與 2026-07-28 的 client（mcp1a 的協定測試以 2025-11-25、2025-06-18 的 `initialize` 驗過）；2.2 的 hybrid 是 `StatefulForInitializeClients`，與本產品無關。
+- 已查證（mcp1a 實測）：2.4.0 在 net8.0 會帶進 `Microsoft.Extensions.*` 10.x，本 repo restore、build、測試都正常，沒有退回 1.x。
+- 已查證：`server/discover`、`Mcp-Method`／`Mcp-Name` 的驗證（缺標頭或與 body 不符回 400）、`resultType` 都由 SDK 處理；`ttlMs`／`cacheScope` 由應用程式設 60 秒／`private`。
+- 已查證：每個 POST 的回應都是 `text/event-stream`（單一 `event: message`），2.4.0 沒有改回 `application/json` 的選項；請求的 `Accept` 要同時含兩者，否則 406。逐種回應見 §17 第 5 點。
 
 **採用方式**（主控判斷 T2）：
 
 - 用 2.x 最新穩定版，設定成 stateless 模式（不依賴「預設」是什麼，明確設定）。
 - 不用 server 主動推送，也不用 sampling、roots、logging；後三者在 2026-07-28 都已 deprecated。
 - 有沒有 session 不影響身分，每個 POST 都重新驗權杖。
-- 「同一 endpoint 服務新舊兩版 client」不作為依據：mcp1a 實測；做不到時先只支援 SDK 實際支援的版本，在手冊寫明。
+- 「同一 endpoint 服務新舊兩版 client」：stateless 模式本來就做得到（mcp1a 實測），不需要 hybrid 模式。
 
 ### 4.4 工具怎麼重用既有 handler
 
@@ -236,18 +238,20 @@ mcp1 唯讀工具對應的既有 request（builder 審查時逐一查證，12 �
 
 使用者看得到的欄位，不一定適合送給 AI 服務商，例如身分證字號、薪資、銀行帳號。做法：
 
-- 欄位設定加一個布林「不提供給 AI 工具」，由有設計權的人在設計器勾選，出廠不勾。
-- 通道是 MCP 時，`DynamicAccessGuard` 把這些欄位加進 `HiddenFieldIds`。效果和使用者沒有那個欄位的讀取權一樣：
+- 欄位加一個布林「不提供給 AI 工具」，出廠不勾。存在 `Dynamic_Field.ExcludeFromAi` 欄（權限軸 §7.4 的守衛欄，不放在欄位設定 JSON：攔截器看不到 JSON）；變動要權限設定、不准批次寫入（mcp1a 計畫判斷 3）。mcp1a 只有 API 能設，畫面在 mcp1b。
+- 通道是 MCP 時，權限解析（`ChannelPermissionRepository` 帶 `AiMasked`、`PermissionResolver`、`RollupSourceMasks`）把這些欄位加進隱藏欄位。效果和使用者沒有那個欄位的讀取權一樣：
   - schema 不出現。
   - 值不回傳。
   - 篩選與排序用到就回驗證錯誤；`ConditionParser` 已經用 `CanSee` 擋隱藏欄位，所以不能用 `薪資 > 100000` 這類條件反推值。
   - 歷程不顯示。
 - 必須在 guard 做，不能只在輸出端遮：只遮輸出會從篩選條件洩漏。
 - 附件欄位只回中繼資料（檔名、大小、型別），不回內容與下載連結（寫死，mcp1 的能力邊界）。
+- 連帶遮罩（mcp1a 實作，計畫 Q3 規劃者暫定）：引用被遮欄位的公式、彙總（加總對象、條件、來源公式）、含被遮欄位的標題一併隱藏；涵蓋簽核臨時讀取權與明細；匯出與報表（記憶體引擎與 SQL 聚合）同樣適用。畫面通道本來就讓引用隱藏欄位的公式隱藏、標題清空、參照目標標題看不到時顯示受限文字。
 - 已知限制：
-  - 公式、彙總、標題樣板若引用了被遮的欄位，算出來的結果照常回傳，與畫面上的欄位隱藏行為一致。
-  - 設計者要避免把敏感欄位放進標題樣板；§13.8 的測試會列出這個情況，mcp1 計畫時查 `ReferenceResolver` 與標題組字是否已經套用 `CanSee`。
-- 套件格式：這個旗標是欄位設定的一部分，套件會帶出去（例如 HRM 套件可預先標好身分證字號）。若套件格式嚴格驗證欄位設定、需要升版，就併入 mcp1b（§18 第 4 條）。
+  - 簽核標題快照：MCP 通道中，模組有任何「不提供給 AI」欄位時一律給空字串（mcp1a 計畫 Q7，規劃者暫定）。
+  - 畫面通道「彙總的條件引用隱藏欄位」不會遮，是既有缺口；mcp1a 只補 AI 遮罩，畫面另開票（票號待開）。
+  - `AiMasked` 也會流進寫入端的權限解析；mcp1a 沒有寫入工具，寫入端在 AI 遮罩下的語意留給 mcp2a 審。
+- 套件格式（mcp1a 計畫 Q4，規劃者暫定）：旗標不進套件與範本；更新套件不清除既有的 true；匯出再匯入另一套系統會失去旗標。
 
 ### 5.6 維運服務帳號（對齊維運設計 T7）
 
@@ -365,20 +369,21 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 | 工具 | 用途 | 主要參數 | 回傳 |
 |---|---|---|---|
 | whoami | 我是誰、這把權杖能做什麼 | 無 | 使用者名稱、權杖範圍與到期日、本次適用的回傳筆數上限與速率上限、伺服器版本 |
-| list_modules | 列出我能讀的模組 | 無 | 代碼、名稱、選單分區、所屬應用程式、是否有明細 |
+| list_modules | 列出我能讀的模組 | 無 | 代碼、名稱、選單分區、是否關閉新增（mcp1a 照選單 `GetMenuHandler`，只列非明細模組；不回所屬應用程式、是否有明細，計畫判斷 21） |
 | describe_module | 模組 schema | moduleKey | 我看得到的欄位（代碼、標籤、型別、必填、選項、參照目標）、明細模組、狀態與可用轉移、篩選語法說明與範例 |
 | query_records | 查記錄 | moduleKey、filter（條件樹）、sort、keyword、page、pageSize | 記錄（id、標題、欄位值、rowVersion）、總筆數、下一頁 |
 | get_record | 單筆記錄 | recordId、includeDetails | 欄位值、明細列、附件中繼資料、所屬模組 |
 | get_record_history | 欄位變更歷程 | recordId、page | 誰、何時、哪個欄位、舊值、新值 |
 | list_reports | 我能看的報表 | 無 | id、名稱、主模組 |
-| run_report | 跑一張既有報表 | reportId、日期範圍 | 分組結果列、合計；超過筆數上限時截斷並標示 |
+| run_report | 跑一張既有報表 | reportId、rangeKind／rangeN（既有報表期間的相對種類，mcp1a 沒有絕對起訖） | 分組結果列、合計；明細超過筆數上限或放不下時截斷並標示，分組結果放不下回 `result_too_large` |
 | list_my_tasks | 我的任務 | tab（指派給我／我建立的…）、filter、page | 任務、到期日、狀態、關聯記錄 |
 | get_task | 任務與留言 | taskId | 任務內容、留言（附件只給中繼資料） |
 | list_approval_tasks | 我的簽核匣 | box（待我簽／我送出的…）、moduleKey、日期範圍、page | 待簽項目、關卡、期限 |
 | get_record_approval | 一筆記錄的簽核狀態與歷程 | recordId | 目前關卡、簽核人、歷程 |
 
 - **篩選**：filter 沿用列表的條件樹 JSON（`ConditionParser`、`ConditionUsage.ListFilter`）。describe_module 回傳這個語法的說明與一個範例。驗證錯誤原樣回給模型。
-- **分頁**：pageSize 超過 `mcp.maxRows` 時以 `mcp.maxRows` 為準，回傳中寫明實際筆數。
+- **篩選欄位**：條件樹的 `field` 是欄位的數字 id（describe_module 給），只能用可篩選的欄位；排序用欄位 key。
+- **分頁**：pageSize 超過 `mcp.maxRows` 時以 `mcp.maxRows` 為準，回傳中寫明實際頁大小；明確帶了超出工具上限（0 或大於 200，任務與簽核匣大於 100）的值回 `invalid_arguments`。`get_record_history`、`list_my_tasks`、`list_approval_tasks` 也收 `pageSize`。
 - **不做跨模組全文搜尋**：功能清單「全站搜尋」決定不做，AI 要先 list_modules 再逐模組查。
 - **報表只跑既有的**：不提供即席報表；即席彙總要等 mcp3 的設計器工具，或由 AI 用 query_records 自己算。
 
@@ -461,14 +466,14 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 ### 8.2 速率與用量（主控判斷 U7）
 
 - 每把權杖：每分鐘 `mcp.callsPerMinute`、每日 `mcp.callsPerDay`。
-  - 每分鐘上限用 ASP.NET Core 內建 rate limiter，依權杖 id 分區；新值在下一個時間窗生效。
-  - 每日上限改用稽核表計數判斷（主控判斷 B18）：記憶體 rate limiter 在重啟或 Render 休眠後會歸零，每日上限會失效。依權杖 id＋UTC 起訖計數，稽核表要有（權杖、時間）索引；起訖由應用層算出，不用資料庫的日期函式。
+  - 每分鐘上限用自製的每分鐘固定窗（mcp1a 計畫判斷 13）：內建 rate limiter 中介軟體只能回 HTTP 429，做不到工具結果 `rate_limited`。同一把權杖的判斷與每日名額保留在同一把鎖內，並行呼叫不會一起超過。
+  - 每日上限改用稽核表計數判斷（主控判斷 B18）：記憶體 rate limiter 在重啟或 Render 休眠後會歸零，每日上限會失效。依權杖 id＋UTC 起訖計數，稽核表要有（權杖、時間）索引；起訖由應用層算出，不用資料庫的日期函式。「每日」的切點是營運時區的午夜（mcp1a 計畫 Q2）。被擋與失敗的呼叫也計入（待使用者裁決）。
   - 超過時回工具錯誤 `rate_limited`，附重試秒數。
 - 每日用量同樣從稽核表計算（依權杖、依日彙總），不另開計數表；個人頁與管理頁顯示今日次數。
 - 認證失敗（壞權杖）依來源 IP 降速，回 HTTP 429（寫死）。
-- 回應大小：單次工具結果的文字上限 60,000 字元（技術限制）。
-  - 超過時截斷筆數並標示 `truncated` 與下一頁參數。
-  - 理由：Claude Code 預設單次工具輸出上限 25,000 tokens，超過 10,000 會警告（研究 subagent 讀 Claude Code 文件；builder 所知一致但沒有重讀，⚠️ 未查證）；回太多只會塞爆 AI 的 context。60,000 字元是技術限制，數字不對時改常數即可，mcp1a 實測一次。
+- 回應大小：單次工具結果的文字內容加結構化內容合計 40,000 字元（技術限制；原訂 60,000 超過 Claude Code 的 50,000 字元上限，mcp1a 計畫「與設計的矛盾」第 7 點）。錯誤結果同樣適用。
+  - 分頁列表放不下時不截斷，回 `result_too_large` 與建議的 `retry.pageSize`；報表明細截斷並標 `truncated`；單筆與分組報表放不下回 `result_too_large`。
+  - 理由：Claude Code 預設單次工具輸出上限 25,000 tokens，超過 10,000 會警告，另有 50,000 字元上限，超過就存成檔案（mcp1a 計畫期間查證）；回太多只會塞爆 AI 的 context。數字不對時改常數即可，實機驗收量一次。
 - 已知限制：每分鐘的 rate limiter 在單一實例記憶體，與維運設計 §12 的登入限流同一個限制；雲端版每客戶一套、單一實例時沒有影響。每日上限走稽核表，不受這個限制。
 
 ### 8.3 誰看得到什麼
@@ -507,7 +512,9 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 
 ### 9.3 權杖處理
 
-- 權杖只在 HTTPS 上收。例外：請求來自 loopback（本機開發與單機試用）。
+- 權杖只在 HTTPS 上收。例外：請求來自可信 loopback（本機開發與單機試用）：連線來源是 loopback，而且沒開轉送標頭（`Auth:TrustForwardedHeaders`）；開了就不給例外（mcp1a 計畫判斷 11）。
+- `Origin` 的允許清單：`Ops:PublicUrl` 加上可信 loopback 的固定 origin；不認請求的 Host（`AllowedHosts` 是 `*`），`Origin: null` 拒絕。
+- 部署前提：開轉送標頭時，HTTPS 判斷採用 `X-Forwarded-Proto`，現行設定不限定可信代理；應用程式只能經代理到達、由代理覆寫這個標頭。
 - 地端內網沒有 TLS 時，部署設定可以明確放行 HTTP，啟動時記 Warning，手冊建議用反向代理加 TLS（主控判斷 U14）。
 - 權杖不進 log。request log 的 `Authorization` 標頭、權杖與確認碼明文一律不記，已併入維運設計 §10.2.2 的「不准寫進 log 的內容」，以那一份清單為準。
 - 不轉送：產品不會把收到的權杖帶去呼叫任何其他服務（規範 MUST NOT token passthrough）。
@@ -652,7 +659,7 @@ mcp1 分兩小段（主控判斷 T11）。只有 mcp1a 有 migration。mcp1b 是
 
 ### 13.3 資料表
 
-兩張新表，同一個 migration。命名沿用 `Dynamic_` 前綴（同維運設計 T11）。時間一律 UTC、`Kind` 明確。
+兩張新表加一欄（`Dynamic_Field.ExcludeFromAi`），同一個 migration。命名沿用 `Dynamic_` 前綴（同維運設計 T11）。時間一律 UTC、`Kind` 明確。
 
 **`Dynamic_McpToken`**
 
@@ -664,9 +671,9 @@ mcp1 分兩小段（主控判斷 T11）。只有 mcp1a 有 migration。mcp1b 是
 | TokenHash | SHA-256 十六進位（64 字）；唯一索引 |
 | Last4 | 末四碼，畫面辨識用 |
 | Scopes | 範圍代碼以逗號串接的文字，應用層解析；不用資料庫的 JSON 運算 |
-| CreatedTime、ExpiresTime | 建立、到期 |
-| LastUsedTime、LastUsedIp | 最後使用（可空） |
-| RevokedTime、RevokedBy、RevokeReason | 撤銷時間、撤銷者、原因代碼（本人、管理員、帳號停用、密碼被重設）；可空 |
+| CreatedUtc、ExpiresUtc | 建立、到期 |
+| LastUsedUtc、LastUsedIp | 最後使用（可空） |
+| RevokedUtc、RevokedBy、RevokeReason | 撤銷時間、撤銷者、原因代碼（本人、管理員、帳號停用、密碼被重設）；可空 |
 
 **`Dynamic_McpConfirmation`**
 
@@ -678,10 +685,12 @@ mcp1 分兩小段（主控判斷 T11）。只有 mcp1a 有 migration。mcp1b 是
 | ToolName、ArgumentsHash | 綁定的工具與參數雜湊 |
 | TargetVersion | 預演當下的目標版本或預演指紋 |
 | PreviewSummary | 預演摘要文字（稽核與除錯用，2000 字） |
-| CreatedTime、ExpiresTime、UsedTime | 建立、到期、使用（可空） |
+| CreatedUtc、ExpiresUtc、UsedUtc、VoidedUtc | 建立、到期、使用（可空）、作廢（可空；每把權杖未使用的碼超過 20 個時最舊的作廢） |
 
-- 過期與已用的確認碼，由 O1 排程器的工作在 1 天後刪除（技術限制）。刪除前把逾時未確認的結果補寫進稽核。
-- 撤銷的權杖保留列，供稽核關聯。過期超過 `ops.auditRetentionDays` 的權杖列隨稽核一起清理。
+欄名照 backend.md「存 UTC 的屬性名稱以 Utc 結尾」（mcp1a 計畫判斷 2）。
+
+- 過期、已用、作廢的確認碼，在結束（過期、使用、作廢）1 天後由 `ops.upkeep` 刪除（技術限制）。沒用過的刪除前寫一列 `Expired` 稽核（權杖是碼的權杖、行為者是碼的擁有者）。
+- 撤銷的權杖保留列，供稽核關聯。到期或撤銷超過 `ops.auditRetentionDays` 的權杖列由同一個工作清理。
 - PostgreSQL 注意：
   - 唯一索引不用部分索引。
   - 布林不寫成 `= 0／= 1` 的 filter。
@@ -702,7 +711,7 @@ mcp1 分兩小段（主控判斷 T11）。只有 mcp1a 有 migration。mcp1b 是
 | POST | `/api/v3/dynamic/system/mcp/users/{userId}/revoke-all` | 系統管理員 | 撤銷某人全部權杖 |
 | POST | `/mcp` | 權杖 | MCP endpoint |
 
-- 伺服器 URL 用部署設定 `Mcp:PublicUrl`，沒設時用請求的 host（技術判斷）。
+- 伺服器 URL 沿用部署設定 `Ops:PublicUrl`（不另設 `Mcp:PublicUrl`，mcp1a 計畫判斷 15），沒設時用請求的 host。管理路徑照維運慣例放在 `system/` 下。
 - 建立權杖時檢查：名稱 1–100 字；範圍非空且都是使用者用得到的；到期日在明天到最長效期之間；未超過每人上限。違反時回 400 並寫出允許範圍。
 
 ### 13.5 前端
@@ -820,6 +829,8 @@ mcp1 分兩小段（主控判斷 T11）。只有 mcp1a 有 migration。mcp1b 是
 
 **本機實機驗收**（`scripts/unattended/local-demo.sh`）
 
+mcp1a 的版本以 [mcp1a 計畫](../plans/2026-11-11-mcp-server-mcp1a.md)「實機驗收」為準：Demo 登入開著時 MCP 整個停用、示範帳號都是 Demo 帳號，所以用 `DEMO_LOGIN=false bash scripts/unattended/local-demo.sh` 啟動，另建一個非示範帳號；MCP 在 5180，不在 9180。Codex 的設定鍵名已在 mcp1a 計畫期間查證（`url`、`bearer_token_env_var`）。下列是 mcp1（含畫面）的完整版本。
+
 1. 以虛構使用者登入，建一把 `business.read` 權杖。
 2. Claude Code：`claude mcp add --transport http formwright http://127.0.0.1:5180/mcp --header "Authorization: Bearer ${FORMWRIGHT_TOKEN}"`。
    - 問「列出我能看的模組」「查本月逾期的任務」「跑某張報表」，結果與畫面一致。
@@ -827,6 +838,17 @@ mcp1 分兩小段（主控判斷 T11）。只有 mcp1a 有 migration。mcp1b 是
 4. 管理員的稽核頁看到這些呼叫，帶權杖 id。
 5. 撤銷權杖後，下一次呼叫被拒。
 6. 四種寬度走查兩個新頁與設計器欄位設定。
+
+**mcp1a 已知限制**（2026-11-21；與設計的矛盾逐條見 mcp1a 計畫「與設計的矛盾」，已回填到 §4.3、§5.5、§7.1、§8.2、§9.3、§13.3、§13.4、§15、§17、§18）
+
+- 回應一律 SSE（SDK 限制，§17 第 5 點）。
+- 每分鐘速率、每日名額保留、認證失敗降速只在單一實例記憶體，重啟後歸零；每日已提交數走稽核表，重啟後每日上限照樣生效。認證失敗降速把進行中的嘗試也計入，同一 IP 同時超過 20 個進行中的請求會收到 429。
+- 分頁列表放不下時回錯誤與建議筆數，不截斷；報表明細會截斷、沒有續取，要全部用匯出。`run_report` 只收既有報表期間的相對種類，沒有絕對起訖。
+- 簽核標題快照在有被遮欄位的模組一律不給 AI；畫面通道「彙總條件引用隱藏欄位」不會遮（既有缺口，另開票）。
+- 「不提供給 AI」旗標只有 API 能設；套件與範本不帶（Q4）。`whoami` 回的 `limits` 只反映呼叫當下的值。
+- 只有 `business.read` 範圍可建立；維運服務帳號（mcpO1）沒有做，所有 MCP 呼叫的行為者都是人員。
+- 確認碼不能證明有人同意（§6.3）；mcp1a 只有測試專用的高風險工具，沒有正式的。稽核的風險級別取自靜態動作目錄，mcp2b 讓高風險清單可調時改由呼叫端傳。
+- 被擋與失敗的呼叫計入每日名額（待使用者裁決）。
 
 ### 13.9 手冊
 
@@ -883,7 +905,7 @@ mcp1 分兩小段（主控判斷 T11）。只有 mcp1a 有 migration。mcp1b 是
 - 有效權限＝使用者權限 ∩ 權杖範圍，範圍只縮不放；每次呼叫重查帳號與權杖狀態。
 - 停用帳號、管理員重設密碼時撤銷全部權杖。
 - 認證失敗依 IP 降速。
-- 「不提供給 AI」欄位在 guard 層隱藏（含篩選與排序）；附件內容不經 MCP 回傳。
+- 「不提供給 AI」欄位在權限解析隱藏（含篩選與排序、連帶公式、彙總、標題、簽核臨時讀取權與明細）；附件內容不經 MCP 回傳。
 - 工具名稱與描述是固定文字，不夾帶使用者定義的內容；記錄內容一律放在標成不可信的 `data` 區。
 - 高風險地板（依 C7 使用者裁決（2026-11-12））：改權限、套用應用程式套件、刪除模組或欄位、全部維運處置工具。唯讀工具不能設成高風險。
 - 確認碼單次有效，綁權杖、工具、參數雜湊、目標版本；只存雜湊；驗證失敗不說明原因。
@@ -895,16 +917,54 @@ mcp1 分兩小段（主控判斷 T11）。只有 mcp1a 有 migration。mcp1b 是
 
 **技術限制**
 
-- 單次工具結果文字上限 60,000 字元，超過截斷並標示。
+- 單次工具結果（文字加結構化內容）上限 40,000 字元：分頁列表回建議頁大小、報表明細截斷並標示、其餘回 `result_too_large`；錯誤結果同樣適用，訊息超長截到 1,000 字。
 - 每把權杖同時未使用的確認碼最多 20 個；確認碼 128 位元。
 - 權杖名稱 1–100 字；權杖 32 bytes 隨機值。
 - 最後使用時間最多每 60 秒寫一次。
 - 稽核參數摘要 2000 字、目標記錄 id 最多記 20 個；預演摘要 2000 字。
-- 過期與已用的確認碼 1 天後清除。
+- 過期、已用、作廢的確認碼在結束 1 天後清除。
 - 範圍代碼清單、工具清單、工具分級的宣告（平台功能清單，不是政策）。
-- 每分鐘的 rate limiter 只在單一實例記憶體（已知限制，同維運設計 §12）；每日上限走稽核表計數。
+- 每分鐘速率（自製固定窗）與每日名額保留只在單一實例記憶體（已知限制，同維運設計 §12）；每日已提交數走稽核表計數。
 - `tools/list` 結果的 `cacheScope` 固定 `private`、`ttlMs` 60 秒。
 - 不支援 stdio transport；只用 SDK 的 stateless 模式。
+
+**mcp1a 新增與落點（2026-11-21，[mcp1a 計畫](../plans/2026-11-11-mcp-server-mcp1a.md)「寫死清單」，逐條標性質；業務政策只有 §13.6 的 9 項，出廠值與上下限只在 `PolicyCatalog`）**
+
+| 項目 | 常數位置 | 性質 |
+|---|---|---|
+| 權杖前綴 `fwp_`、32 bytes 隨機值、base62；確認碼前綴 `fwc_`、16 bytes（128 位元） | `McpSecrets` | 安全 |
+| 權杖與確認碼只存 SHA-256 小寫十六進位；查到列之後以 `FixedTimeEquals` 比對 | `McpSecrets.Hash`、`HashEquals` | 安全 |
+| 存取類政策（`mcp.enabled`、`mcp.allowedGroups`）壞值一律拒絕；允許對象展開為空＝沒有人 | `McpPolicies` | 安全 |
+| 權杖只在 `/mcp`、`/mcp` 不收 cookie、不收 query string 的權杖 | `McpGateMiddleware` | 安全 |
+| Demo 帳號、停用、必須改密碼不能建立或使用；`Demo:LoginEnabled` 開著時整個 MCP 停用 | `AuthenticateMcpTokenHandler`、`CreateMcpTokenHandler` | 安全 |
+| 權杖一律有到期日（明天到最長效期）；建立要重新輸入密碼、計入登入降速 | `CreateMcpTokenHandler` | 安全（效期天數本身是政策） |
+| 有效權限＝使用者權限 ∩ 範圍；可建立的範圍 mcp1a 只有 `business.read` | `McpScopes.Issuable` | 平台功能清單 |
+| 範圍代碼、工具清單、工具級別的宣告 | `McpScopes`、`McpToolCatalog` | 平台功能清單 |
+| MCP 通道一律拒絕權限設定類請求 | `PermissionAdminGate` | 安全（權限軸 M8） |
+| 「不提供給 AI」欄位在權限解析隱藏，連帶公式、彙總（加總對象、條件、來源公式）、標題；涵蓋簽核臨時讀取權與明細 | `PermissionResolver`（`AiMasked`）、`ChannelPermissionRepository` | 安全 |
+| MCP 通道中，有「不提供給 AI」欄位的模組，簽核標題快照給空字串 | 簽核查詢 handler | 安全（Q7） |
+| 「不提供給 AI」旗標的變動要權限設定、不准批次寫入 | 攔截器、`AddField`／`UpdateField` | 安全 |
+| 稽核寫不進去就不回資料 | `McpToolInvoker` | 安全 |
+| 確認碼單次有效，綁權杖、工具、參數雜湊、目標版本；失敗不說原因；標記已用與執行同一交易 | `McpConfirmationBehavior` | 安全、資料完整性 |
+| `Origin` 只認 `Ops:PublicUrl` 與可信 loopback 的固定 origin，不認請求 Host；`Origin: null` 拒絕 | `McpGateMiddleware` | 安全 |
+| 非 HTTPS 只收可信 loopback（連線來源是 loopback 且沒開轉送標頭），或明確設 `Mcp:AllowHttp` | `McpGateMiddleware` | 安全 |
+| 認證失敗依 IP：15 分鐘 20 次，擋 15 分鐘；進行中的嘗試也計入 | `McpAuthThrottle` | 安全（數字對齊 `LoginThrottle`） |
+| 高風險請求在 MCP 通道必須帶確認碼；確認請求必為交易型、不可巢狀（依交易深度判定）、不與 `IAuditedRequest` 並用 | `McpConfirmationBehavior` | 安全 |
+| 工具名稱、描述、參數說明、伺服器說明、不可信提醒是固定英文 | `McpTexts` | 安全（§9.2） |
+| 單次結果文字 40,000 字元 | `McpLimits.MaxResultChars` | 技術限制 |
+| 每把權杖未使用的確認碼最多 20 個 | `McpLimits.MaxOpenConfirmations` | 技術限制 |
+| 權杖名稱 1–100 字 | `McpLimits.TokenNameMax` | 技術限制 |
+| 最後使用時間最多每 60 秒寫一次 | `McpLimits.LastUsedWriteSeconds` | 技術限制 |
+| 稽核參數摘要 2000 字、記錄 id 最多 20 個；預演摘要 2000 字 | `McpLimits` | 技術限制 |
+| 過期、已用、作廢的確認碼，在結束（過期、使用、作廢）1 天後清除 | `McpLimits.ConfirmationPurgeDays` | 技術限制 |
+| `tools/list` 的 `ttlMs` 60 秒、`cacheScope` private | `McpLimits.ListToolsTtlSeconds` | 技術限制 |
+| 每分鐘速率與每日名額保留只在單一實例記憶體（已知限制）；每日已提交數走稽核表 | `McpRateGate` | 技術限制 |
+| 分頁列表放不下時回錯誤與建議筆數，不截斷 | `McpResultFormatter` | 技術限制 |
+| 只用 SDK 的 stateless 模式，不做 stdio | `McpEndpoints` | 技術限制 |
+| 我的權杖呼叫紀錄只列最近 50 筆 | `McpLimits.RecentCalls` | 技術限制 |
+| 唯讀工具的 schema 列舉（任務分頁與篩選、報表期間種類、簽核匣）與 handler 的合法值同步；工具先驗、handler 仍會驗 | `ReadTools` | 技術限制（API 詞彙） |
+| 分頁工具的每頁上限沿用既有 request 的常數：記錄與歷程 200（`PagedRequest.MaxPagesSize`）、任務與簽核匣 100（`GetMyTasksRequest`／`GetApprovalTasksRequest.MaxPagesSize`） | `ReadTools` | 技術限制（單一來源） |
+| 錯誤結果放不下時去掉欄位明細、訊息截到 1,000 字 | `McpToolInvoker.ErrorMessageMax` | 技術限制 |
 
 ## 16. 主控判斷（待使用者確認；U11 已於 2026-11-12 確認）
 
@@ -1116,7 +1176,7 @@ builder 審查（2026-11-11）的 (b) 類中與本文件有關的，主控照建
    - 維運中心對產品是一般的 MCP client，持有維運服務帳號的權杖。
    - agent 的 token 是維運中心自己的，**不會轉給產品**；產品也只接受自己簽發的權杖（§5.7）。
    - 產品 mcp1 起就是 stateless、每個 POST 一次回應，轉送點不必維持長連線或 session，對 Worker 的 CPU 與連線限制比較友善。
-     - ⚠️ 未驗證：SDK 能不能對所有工具固定回 `application/json`、不開 SSE。mcp1a 計畫時確認；不行的話，轉送點要能讀單一請求範圍的 SSE 回應。
+     - mcp1a 實測（SDK 2.4.0，`McpProtocolTests`）：成功的請求（`initialize`、`tools/list`、`tools/call`）回 `text/event-stream`（單一 `event: message`）；方法不存在這類分派錯誤回 404、`text/event-stream`；標頭錯誤（`Mcp-Method`／`Mcp-Name` 缺或不符、`Content-Type` 不對）回 400、`application/json`；通知回 202、沒有內容。沒有改成固定 JSON 的選項，轉送點要能讀單一請求範圍的 SSE 回應。
    - 轉送點可在請求帶工作編號標頭，產品只當不可信標籤記進稽核，不據此授權。
    - 依分級過濾工具是轉送點的責任，產品端的範圍是第二道防線：L1 工作用的權杖只有 `ops.read`。
    - 維運中心持有兩把權杖（只有 `ops.read` 的、加上 `ops.act` 的），L1 轉送只用前者。這樣即使轉送點的過濾寫錯，產品端也擋得住。維運設計 §6 已採用。
@@ -1126,19 +1186,19 @@ builder 審查（2026-11-11）的 (b) 類中與本文件有關的，主控照建
 ## 18. 未決問題
 
 1. **功能清單與路線的「對外 API 與 Webhook 不做」**：已處理。功能清單「決定不做」與路線「這版不做」都改成「通用 REST API 與 Webhook 仍不做；AI agent 接入走 MCP server，個人存取權杖只限 MCP」。
-2. **SDK 在 .NET 8 的相容性**：2.4.0 可能依賴 10.0.x 的 Abstractions 套件（未查證），mcp1a 第一步實測 restore 與執行；不行就用 1.4.2（builder 已確認 NuGet 有這一版，2026-11-03 發佈；§4.3）。
+2. **SDK 在 .NET 8 的相容性**：已解決。2.4.0 帶進 `Microsoft.Extensions.*` 10.x，本 repo restore、build、測試正常（mcp1a 實測，§4.3）。
 3. **「人親手按」的高風險確認**：確認碼擋不住會自動連續呼叫的 AI（§6.3）。兩個強化方向：
    - client 宣告 elicitation 時改走 elicitation，由人在 client 的對話框回答。2026-07-28 版用 MRTR；Claude Code 已支援，其他 client 未查證。
    - 高風險改成在產品畫面或站內通知按確認。
 
    要不要做、排在哪段，待使用者決定。
 4. **「不提供給 AI」旗標與套件格式**：要查欄位設定在套件裡是不是整包序列化、格式驗證會不會擋未知屬性；若要升格式版本，排在 mcp1b 並和當時的格式順序（簽核 8、s2e 9、10）對齊。
-5. **公式與標題樣板引用遮罩欄位**：目前與畫面行為一致（結果照回）。若使用者認為 AI 情境要更嚴（引用到遮罩欄位的公式也遮），要另做依賴分析。
+5. **公式與標題樣板引用遮罩欄位**：mcp1a 已一起遮（§5.5，計畫 Q3 規劃者暫定，待使用者裁決）。
 6. **雲端版的合約與隱私說明**：資料經 AI client 送到第三方，訂閱條款要寫清楚責任歸屬；雲端版方案是否都含 MCP，也是商業決定。
 7. **Claude.ai 靜態標頭連接**：Claude.ai 有 static headers 選項，但是 beta、限定組織，可能讓雲端版在 mcp4 之前就能用個人權杖接 Claude.ai。目前以「不可用」為保守假設，mcp4 前再查一次。
 8. **ChatGPT 的 transport 支援**：OpenAI 文件範例仍是 SSE，是否支援 Streamable HTTP 與 2026-07-28 協定未查證；mcp4 開工前實測。
 9. **多實例**：每分鐘 rate limiter 與認證失敗降速都在記憶體；雲端版若要多實例，要和維運設計 §15 第 8 條一起改成共享狀態。
-10. **SDK 能否固定回 JSON、不開 SSE**：未查證（§17 第 5 點）。轉送點要不要讀 SSE 看這一點，mcp1a 確認。
+10. **SDK 能否固定回 JSON、不開 SSE**：不能（mcp1a 實測，逐種回應見 §17 第 5 點）；轉送點要讀 SSE。
 
 ## 19. 來源
 
