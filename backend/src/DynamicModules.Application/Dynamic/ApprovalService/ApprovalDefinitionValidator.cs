@@ -57,7 +57,12 @@ public sealed partial class ApprovalDefinitionValidator(
         }
 
         if (d.Shape == ApprovalShapes.Graph) GraphErrors(x);
-        else SequenceErrors(x);
+        else
+        {
+            // sequence 不帶 nodes、edges：夾帶的簽核節點會被 ApprovalDefinitionRefs 算進引用、重新比對後也會誤判（#25）
+            if (d.Nodes is not null || d.Edges is not null) x.Err("shape", ApprovalMessages.ShapeInvalid);
+            SequenceErrors(x);
+        }
         return (errors, errors.Count > 0 ? [] : warnings);
     }
 

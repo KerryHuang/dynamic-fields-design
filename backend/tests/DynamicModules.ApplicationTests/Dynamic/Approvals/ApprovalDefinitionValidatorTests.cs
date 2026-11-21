@@ -88,6 +88,14 @@ public class ApprovalDefinitionValidatorTests : ApprovalTestBase
         E(await Validate(Valid() with { Shape = "mesh" }), "shape").Should().Be(ApprovalMessages.ShapeInvalid);
 
     [Fact]
+    public async Task Sequence_WithNodes_400() =>
+        E(await Validate(Valid() with { Nodes = [new ApprovalNodeDef("n1", ApprovalNodeKinds.End)] }), "shape").Should().Be(ApprovalMessages.ShapeInvalid);
+
+    [Fact]
+    public async Task Sequence_WithEdges_400() =>
+        E(await Validate(Valid() with { Edges = [new ApprovalEdgeDef("e1", "a", "b")] }), "shape").Should().Be(ApprovalMessages.ShapeInvalid);
+
+    [Fact]
     public async Task When_UnknownField_400()
     {
         await BuildRig();
