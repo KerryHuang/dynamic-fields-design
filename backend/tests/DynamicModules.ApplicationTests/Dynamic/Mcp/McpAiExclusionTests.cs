@@ -15,6 +15,7 @@ using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecordHistory;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.ApplicationTests.Dynamic.Approvals;
+using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
@@ -64,7 +65,7 @@ public class McpAiExclusionTests : ApprovalTestBase
         {
             Rollup = new RollupConfig(_r.LineHead, RollupFunction.Count, null, J($$"""{"field":{{_r.LineQty}},"op":"gt","value":0}"""))
         }, "數量筆數")).Id;
-        await SeedFlow(_r, "po-g", _r.Confirmed, 1, Def(null, Stage("fin", Group(FinanceGroup), editable: [_salary])));
+        await SeedFlow(_r, "po-g", _r.Confirmed, 1, Def(null, Stage("fin", Group(FinanceGroup), editable: [_salary, _bonus])));
         (await SaveWorkflow(_r, [Needs(_r.Draft, _r.Confirmed), Plain(_r.Confirmed, _r.Partial), Plain(_r.Partial, _r.Received),
             Plain(_r.Confirmed, _r.Cancelled)])).IsSuccess.Should().BeTrue();
 
@@ -319,15 +320,24 @@ public class McpAiExclusionTests : ApprovalTestBase
         ui.Values.Keys.Should().Contain([$"f_{_r.LinePrice}", $"f_{_r.LineSubtotal}"]);
     }
 
-    [Fact]
-    public async Task ApprovalHistory_Mcp_HidesExcludedEdits()
+    /// <summary>
+    /// 同意、加簽時改過的欄位鍵依讀者欄位權限遮蔽（計畫判斷 10 列的例外：畫面通道也照讀者欄位權限遮）。三種對照：
+    /// 畫面通道的一般隱藏欄位（獎金對 buyers 隱藏）不出現；只標「不提供給 AI」的欄位（薪資）在畫面通道照常出現；MCP 通道遮掉薪資。
+    /// </summary>
+    [Theory]
+    [InlineData("approve")]
+    [InlineData("addSign")]
+    public async Task ApprovalHistory_EditedKeys_MaskedByReader(string action)
     {
         await Rig();
         var (po, id) = await Pending();
         As("fin1");
         var task = TasksOf(id).Single(t => t.AssigneeUserId == "fin1");
-        var approved = await Send(new ApproveTaskRequest(task.Id, Inst(id).RowVersion, null, V((_salary, 48000))));
-        approved.IsSuccess.Should().BeTrue(Dump(approved));
+        var values = V((_salary, 48000), (_bonus, 9));
+        var done = action == "approve"
+            ? await Send(new ApproveTaskRequest(task.Id, Inst(id).RowVersion, null, values))
+            : await Send(new AddSignTaskRequest(task.Id, Inst(id).RowVersion, null, values, ["emp1"], ApprovalModes.Any));
+        done.IsSuccess.Should().BeTrue(Dump(done));
 
         static string Data(ServiceResult r)
         {
@@ -335,10 +345,13 @@ public class McpAiExclusionTests : ApprovalTestBase
             var all = (view.Current is null ? view.Previous : [view.Current, .. view.Previous]).SelectMany(i => i.Actions);
             return string.Join("\n", all.Select(a => a.Data?.GetRawText() ?? ""));
         }
-        var key = $"\"f_{_salary}\"";   // 同意時改過的欄位記在動作的 Data（鍵清單）
-        Data(await Ui("buyer1", new GetRecordApprovalRequest(po))).Should().Contain(key);
-        Data(await Mcp("buyer1", new GetRecordApprovalRequest(po))).Should().NotContain(key);
-        Data(await Mcp("admin", new GetRecordApprovalRequest(po))).Should().NotContain(key);
+        string salary = $"\"f_{_salary}\"", bonus = $"\"f_{_bonus}\"";   // 改過的欄位記在動作的 Data（鍵清單）
+        Data(await Ui("fin1", new GetRecordApprovalRequest(po))).Should().Contain(salary).And.Contain(bonus, "對照：寫進歷程的鍵兩個都有");
+        var ui = Data(await Ui("buyer1", new GetRecordApprovalRequest(po)));
+        ui.Should().NotContain(bonus, "畫面通道的一般隱藏欄位照讀者權限遮");
+        ui.Should().Contain(salary, "只標不提供給 AI 的欄位在畫面通道照常出現");
+        Data(await Mcp("buyer1", new GetRecordApprovalRequest(po))).Should().NotContain(salary).And.NotContain(bonus);
+        Data(await Mcp("admin", new GetRecordApprovalRequest(po))).Should().NotContain(salary);
     }
 
     // ───────── 一般參照來源的彙總（第五輪審查必修 7）─────────
