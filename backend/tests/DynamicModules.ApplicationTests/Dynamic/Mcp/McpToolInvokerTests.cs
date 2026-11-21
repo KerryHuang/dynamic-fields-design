@@ -469,6 +469,37 @@ public class McpToolInvokerAuditTests : McpInvokerTestBase
     }
 
     [Fact]
+    public async Task Conflict_Other()
+    {
+        List.Behavior = (_, _) => Task.FromResult(McpToolOutcome.From(
+            ServiceResult.Conflict(MessageRef.Of(MessageText.Forbidden), "subtasksOpen", new { count = 3 })));
+        Locale.Locale = "en-US";
+
+        var r = await Invoke();
+
+        CodeOf(r).Should().Be(McpErrorCodes.Conflict);
+        var error = r.Structured.GetProperty("error");
+        error.GetProperty("fields").GetProperty("code").GetString().Should().Be("subtasksOpen");
+        error.GetProperty("fields").GetProperty("params.count").GetString().Should().Be("3");
+        error.GetProperty("message").GetString().Should().NotBe(ServiceResult.Forbidden().Message, "訊息照 handler、依 X-Locale");
+        (await SingleRow()).Result.Should().Be(AuditResult.Invalid);
+    }
+
+    [Fact]
+    public async Task Unprocessable_IdempotencyReused()
+    {
+        List.Behavior = (_, _) => Task.FromResult(McpToolOutcome.From(ServiceResult.Unprocessable(MessageRef.Of(MessageText.IdempotencyKeyReused))));
+        CodeOf(await Invoke()).Should().Be(McpErrorCodes.IdempotencyKeyReused);
+    }
+
+    [Fact]
+    public async Task Conflict_WithoutStaleCode_IsNotStale()
+    {
+        List.Behavior = (_, _) => Task.FromResult(McpToolOutcome.From(ServiceResult.Conflict(MessageRef.Of(MessageText.Stale))));
+        CodeOf(await Invoke()).Should().Be(McpErrorCodes.Conflict);
+    }
+
+    [Fact]
     public async Task RateLimited_AuditedDenied()
     {
         await SetSystem(PolicyCatalog.McpCallsPerMinute, "1");

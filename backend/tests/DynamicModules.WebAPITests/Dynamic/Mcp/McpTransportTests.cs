@@ -64,6 +64,7 @@ public class McpTransportTests : IDisposable
         foreach (var tool in tools)
         {
             tool.ProtocolTool.Annotations!.ReadOnlyHint.Should().BeTrue();
+            tool.ProtocolTool.Annotations.DestructiveHint.Should().BeFalse();
             tool.ProtocolTool.Annotations.OpenWorldHint.Should().BeFalse();
         }
     }

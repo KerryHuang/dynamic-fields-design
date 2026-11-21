@@ -28,7 +28,9 @@ public static class McpSdkAdapter
             Annotations = new ToolAnnotations
             {
                 ReadOnlyHint = t.Descriptor.Risk == McpRisk.Read,
-                DestructiveHint = t.Descriptor.Risk == McpRisk.Read ? false : null,
+                // 一般寫入不具破壞性、冪等鍵必填所以一律冪等（mcp2a 判斷 5、10）；高風險標破壞性
+                DestructiveHint = t.Descriptor.Risk == McpRisk.HighRisk,
+                IdempotentHint = t.Descriptor.Risk == McpRisk.Write ? true : null,
                 OpenWorldHint = false,
             },
         }).ToList();
