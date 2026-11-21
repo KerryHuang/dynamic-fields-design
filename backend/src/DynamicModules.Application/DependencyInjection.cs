@@ -221,6 +221,9 @@ public static class DependencyInjection
         // MCP 工具（mcp1a 判斷 19）：每個工具一筆 IMcpTool，執行器依名稱找
         services.AddScoped<Dynamic.McpService.Tools.IMcpTool, Dynamic.McpService.Tools.Read.WhoAmITool>();
         services.AddScoped<Dynamic.McpService.Tools.McpToolInvoker>();
+        services.AddScoped<Dynamic.McpService.McpUsage>();
+        // 速率與名額保留跨請求共用（單一實例記憶體，判斷 13）
+        services.AddSingleton<Dynamic.McpService.Tools.McpRateGate>();
         services.AddScoped<Dynamic.ApprovalService.ApproverResolver>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalWriteContext>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalGate>();

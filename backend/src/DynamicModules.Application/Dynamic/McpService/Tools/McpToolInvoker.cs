@@ -10,12 +10,12 @@ namespace DynamicModules.Application.Dynamic.McpService.Tools;
 public sealed record McpCallContext(string? ClientName = null, string? ClientVersion = null, string? Job = null);
 
 /// <summary>
-/// 工具執行器（mcp1a 計畫判斷 19）：通道 → 找工具 → 範圍 → 執行 → 格式化。回傳格式化好的結果，SDK 介面只負責包成 <c>CallToolResult</c>。
+/// 工具執行器（mcp1a 計畫判斷 19）：通道 → 找工具 → 範圍 → 速率與名額保留（判斷 13）→ 執行 → 格式化 → 釋放保留。回傳格式化好的結果，SDK 介面只負責包成 <c>CallToolResult</c>。
 /// 不認得的工具回 <c>unknown_tool</c> 錯誤結果（模型可修正），不用 JSON-RPC error。
 /// </summary>
 public sealed class McpToolInvoker(
-    IEnumerable<IMcpTool> tools, IRequestChannel channel, McpPolicies policies, IMessageCatalog messages, RequestLocale locale,
-    ILogger<McpToolInvoker> log)
+    IEnumerable<IMcpTool> tools, IRequestChannel channel, McpPolicies policies, McpRateGate rate, McpUsage usage, IMessageCatalog messages,
+    RequestLocale locale, TimeProvider time, ILogger<McpToolInvoker> log)
 {
     private readonly IReadOnlyList<IMcpTool> _tools = tools.ToList();
 
@@ -38,9 +38,26 @@ public sealed class McpToolInvoker(
 
         var args = arguments is { ValueKind: not JsonValueKind.Undefined } a ? a : EmptyObject;
         var snapshot = await policies.ReadAsync(ct);
-        var outcome = await tool.RunAsync(new McpToolCall(args, snapshot, lc.Locale), ct);
-        return Format(tool.Descriptor.Name, Mapped(outcome), Text);
+        var tokenId = channel.TokenId ?? throw new InvalidOperationException("MCP 通道沒有權杖 id");
+        var decision = await rate.TryReserveAsync(tokenId, snapshot.CallsPerMinute, snapshot.CallsPerDay, c => usage.CountTodayAsync(tokenId, c), ct);
+        if (!decision.Allowed)
+            return decision.Denial == McpRateDenial.Minute
+                ? McpResultFormatter.Error(McpErrorCodes.RateLimited, Text(McpMessages.RateLimitedMinute(snapshot.CallsPerMinute)),
+                    retryAfterSeconds: decision.RetryAfterSeconds)
+                : McpResultFormatter.Error(McpErrorCodes.RateLimited, Text(McpMessages.RateLimitedDay(snapshot.CallsPerDay)),
+                    retryAfterSeconds: SecondsUntil(usage.NextResetUtc));
+        try
+        {
+            var outcome = await tool.RunAsync(new McpToolCall(args, snapshot, lc.Locale), ct);
+            return Format(tool.Descriptor.Name, Mapped(outcome), Text);
+        }
+        finally
+        {
+            decision.Reservation!.Release();
+        }
     }
+
+    private int SecondsUntil(DateTime utc) => Math.Max(1, (int)Math.Ceiling((utc - time.GetUtcNow().UtcDateTime).TotalSeconds));
 
     private static readonly JsonElement EmptyObject = JsonDocument.Parse("{}").RootElement.Clone();
 
