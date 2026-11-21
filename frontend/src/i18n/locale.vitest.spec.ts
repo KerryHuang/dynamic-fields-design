@@ -128,6 +128,14 @@ describe('applyDocumentLocale（Quasar 語言包全開）', () => {
     await vi.waitFor(() => expect(lastSet(setLang)).toBe('vi'));
     expect(document.documentElement.lang).toBe('vi');
   });
+  it('#73 語言包載入失敗改載 en-US 後，<html lang> 仍是 ja', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null, uiHash: '' }]);
+    quasarPacks[pack('ja')] = () => Promise.reject(new Error('chunk failed'));
+    const setLang = quasarLikeSet();
+    applyDocumentLocale('ja');
+    await vi.waitFor(() => expect(lastSet(setLang)).toBe('en-US'));
+    expect(document.documentElement.lang).toBe('ja');
+  });
   it('快速連切：較早的載入較晚完成也不蓋掉後選的語言', async () => {
     let releaseTh!: () => void;
     const th = saved[pack('th')]!;
