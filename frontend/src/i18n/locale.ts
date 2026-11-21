@@ -45,7 +45,7 @@ const QUASAR_FALLBACK = 'en-US';
 let loadSeq = 0;
 
 /**
- * 設定 <html lang> 與 Quasar 內建文字（日期選擇器、表格分頁等）的語言包：取語系資訊的 quasarLang，沒有資訊時用代碼本身；
+ * 設定 <html lang>（一律是使用者目前的語系代碼）與 Quasar 內建文字（日期選擇器、表格分頁等）的語言包：取語系資訊的 quasarLang，沒有資訊時用代碼本身；
  * 找不到檔或載入失敗改載 en-US。快速連切時只有最後一次呼叫的結果會套用。
  */
 export function applyDocumentLocale(code: LocaleCode) {
@@ -55,7 +55,12 @@ export function applyDocumentLocale(code: LocaleCode) {
   const lang = info ? info.quasarLang : code;
   const fallback = quasarPacks[packPath(QUASAR_FALLBACK)];
   const load = (lang && quasarPacks[packPath(lang)]) || fallback;
-  const apply = (m: QuasarPack) => { if (seq === loadSeq) Quasar.lang.set(m.default); };
+  // Quasar 的 lang.set 會把 <html lang> 寫成語言包的 isoName（退回 en-US 時就變 en-US），所以載完要寫回使用者的語系（#73）
+  const apply = (m: QuasarPack) => {
+    if (seq !== loadSeq) return;
+    Quasar.lang.set(m.default);
+    document.documentElement.lang = code;
+  };
   void load?.().then(apply)
     .catch(() => fallback?.().then(apply))
     .catch(() => { /* 退路也載不到：維持原本的內建文字 */ });

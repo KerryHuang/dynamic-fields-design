@@ -101,6 +101,33 @@ describe('applyDocumentLocale（Quasar 語言包全開）', () => {
     applyDocumentLocale('ja');
     await vi.waitFor(() => expect(lastSet(setLang)).toBe('en-US'));
   });
+  // 模擬 Quasar 的 Lang.set：會把 <html lang> 寫成語言包的 isoName（#73）
+  const quasarLikeSet = () => vi.spyOn(quasar.Quasar.lang, 'set').mockImplementation((p: { isoName: string }) => { document.documentElement.lang = p.isoName; });
+  it('#73 載入完語言包後 <html lang> 仍是使用者的語系（ja 有 Quasar 包）', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: 'ja', fallbackCode: null, uiHash: '' }]);
+    const setLang = quasarLikeSet();
+    applyDocumentLocale('ja');
+    await vi.waitFor(() => expect(lastSet(setLang)).toBe('ja'));
+    expect(document.documentElement.lang).toBe('ja');
+  });
+  it('#73 沒有 Quasar 語言包退回 en-US 載入，<html lang> 仍是 xx', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'xx', nativeName: 'X', quasarLang: null, fallbackCode: null, uiHash: '' }]);
+    const setLang = quasarLikeSet();
+    applyDocumentLocale('xx');
+    await vi.waitFor(() => expect(lastSet(setLang)).toBe('en-US'));
+    expect(document.documentElement.lang).toBe('xx');
+  });
+  it('#73 執行期從 zh-TW 切到 ja 再切 vi：每次載完 <html lang> 都是當下語系', async () => {
+    setLocaleInfos([...BUILTIN_LOCALES, { code: 'ja', nativeName: '日本語', quasarLang: null, fallbackCode: 'en-US', uiHash: '' }]);
+    const setLang = quasarLikeSet();
+    const locale = { value: 'zh-TW' };
+    applyLocale('ja', locale, false);
+    await vi.waitFor(() => expect(lastSet(setLang)).toBe('en-US'));
+    expect(document.documentElement.lang).toBe('ja');
+    applyLocale('vi', locale, false);
+    await vi.waitFor(() => expect(lastSet(setLang)).toBe('vi'));
+    expect(document.documentElement.lang).toBe('vi');
+  });
   it('快速連切：較早的載入較晚完成也不蓋掉後選的語言', async () => {
     let releaseTh!: () => void;
     const th = saved[pack('th')]!;
